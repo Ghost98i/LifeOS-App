@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { LifeOSState, ViewType } from '../types';
 import { NAV_ITEMS } from './Sidebar';
-import { defaultState } from '../lib/storage';
+import {
+  CURRENT_SCHEMA_VERSION,
+  defaultState,
+  getStorageDiagnostics,
+  StorageDiagnostics,
+} from '../lib/storage';
 
 interface ConfigViewProps {
   state: LifeOSState;
@@ -19,6 +24,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   const [profileName, setProfileName] = useState(state.profile.name || '');
   const [profileHeight, setProfileHeight] = useState(String(state.profile.height || 170));
   const [streamGoal, setStreamGoal] = useState(String(state.streaming.monthlyGoal || 12));
+  const [diagnostics, setDiagnostics] = useState<StorageDiagnostics | null>(null);
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,7 +50,9 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   const handleResetData = () => {
     if (confirm('⚠️ ¿Estás seguro de reiniciar TODOS tus datos? Esta acción borra el estado local.')) {
       const def = defaultState();
-      onUpdateState(() => def);
+      onUpdateState((draft) => {
+        Object.assign(draft, def);
+      });
       alert('Datos reiniciados a los valores por defecto.');
     }
   };
@@ -56,6 +64,33 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
         <p className="text-sm text-[var(--text-soft)]">
           Ajustá tu perfil, módulos visibles y backups de datos.
         </p>
+      </div>
+
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1">
+            <h2 className="text-sm font-bold text-[var(--text)]">Estado del almacenamiento</h2>
+            <p className="text-xs text-[var(--text-soft)]">
+              Esquema de datos v{CURRENT_SCHEMA_VERSION}. LifeOS conserva una copia local anterior para recuperación.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDiagnostics(getStorageDiagnostics())}
+            className="px-3.5 py-2 bg-[var(--bg-elevated)] border border-[var(--border)] text-xs font-bold rounded-xl hover:border-[var(--blue)] cursor-pointer"
+          >
+            🔍 Diagnosticar
+          </button>
+        </div>
+
+        {diagnostics && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
+            <div className="rounded-xl bg-[var(--bg)] p-3"><span className="block text-[10px] uppercase text-[var(--text-faint)]">Backend</span><strong>{diagnostics.backend}</strong></div>
+            <div className="rounded-xl bg-[var(--bg)] p-3"><span className="block text-[10px] uppercase text-[var(--text-faint)]">Esquema</span><strong>v{diagnostics.schemaVersion}</strong></div>
+            <div className="rounded-xl bg-[var(--bg)] p-3"><span className="block text-[10px] uppercase text-[var(--text-faint)]">Datos actuales</span><strong>{diagnostics.primaryBytes.toLocaleString('es-UY')} bytes</strong></div>
+            <div className="rounded-xl bg-[var(--bg)] p-3"><span className="block text-[10px] uppercase text-[var(--text-faint)]">Recuperación</span><strong>{diagnostics.recoveryAvailable ? `${diagnostics.recoveryBytes.toLocaleString('es-UY')} bytes` : 'Todavía no creada'}</strong></div>
+          </div>
+        )}
       </div>
 
       {/* Profile Form */}
