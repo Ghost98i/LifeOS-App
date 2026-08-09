@@ -167,6 +167,7 @@ export interface JobApplication {
   link?: string;
   nextAction?: string;
   nextActionDate?: string;
+  sourceOpportunityId?: string;
 }
 
 export interface Jobs {
@@ -193,6 +194,8 @@ export interface ResaleItem {
   sellDate?: string | null;
   status: 'comprado' | 'vendido';
   financeTxId?: string | null;
+  note?: string;
+  sourceOpportunityId?: string;
 }
 
 export interface Resale {
@@ -262,6 +265,7 @@ export interface CheckoutLogDay {
 }
 
 export interface LifeOSState {
+  schemaVersion: number;
   profile: Profile;
   agenda: AgendaWeek;
   tasksRecurring: TaskRecurring[];
