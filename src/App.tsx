@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ViewType, LifeOSState } from './types';
-import { loadStoredState, saveStoredState, todayISO } from './lib/storage';
+import { loadStoredState, parseBackupJSON, saveStoredState, todayISO } from './lib/storage';
 
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
@@ -19,24 +19,25 @@ import { ConfigView } from './components/ConfigView';
 import { CheckoutModal } from './components/CheckoutModal';
 
 export default function App() {
-  const [{ state }, setStateObj] = useState(() => {
+  const [{ state, storageBackend }, setStateObj] = useState(() => {
     const loaded = loadStoredState();
-    return { state: loaded.state };
+    return { state: loaded.state, storageBackend: loaded.backend };
   });
 
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isOpenMobile, setIsOpenMobile] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [quickTransactionType, setQuickTransactionType] = useState<'gasto' | 'ingreso'>('gasto');
 
   // Sync state mutations to state and localStorage
   const updateState = (updater: (draft: LifeOSState) => void) => {
-    setStateObj(({ state: oldState }) => {
+    setStateObj(({ state: oldState, storageBackend: currentBackend }) => {
       // Deep clone draft for immutability
       const draft = JSON.parse(JSON.stringify(oldState)) as LifeOSState;
       updater(draft);
-      saveStoredState(draft);
-      return { state: draft };
+      const saved = saveStoredState(draft);
+      return { state: draft, storageBackend: saved ? 'localStorage' : currentBackend };
     });
   };
 
@@ -64,6 +65,7 @@ export default function App() {
   };
 
   const handleQuickAction = (view: ViewType, focusId: string, txType?: 'gasto' | 'ingreso') => {
+    if (txType) setQuickTransactionType(txType);
     setCurrentView(view);
     setTimeout(() => {
       const el = document.getElementById(focusId);
@@ -98,17 +100,15 @@ export default function App() {
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const parsed = JSON.parse(event.target?.result as string);
-        if (parsed && typeof parsed === 'object') {
-          updateState((draft) => {
-            Object.assign(draft, parsed);
-          });
-          alert('¡Backup importado correctamente!');
-        } else {
-          alert('El archivo no tiene un formato válido.');
-        }
-      } catch (err) {
-        alert('Error al leer el archivo JSON.');
+        const imported = parseBackupJSON(event.target?.result as string);
+        updateState((draft) => {
+          Object.assign(draft, imported);
+        });
+        alert('¡Backup validado e importado correctamente!');
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Error al leer el archivo JSON.');
+      } finally {
+        e.target.value = '';
       }
     };
     reader.readAsText(file);
@@ -154,6 +154,11 @@ export default function App() {
         />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+          {storageBackend === 'recovery' && (
+            <div className="rounded-2xl border border-amber-500/25 bg-amber-500/10 p-4 text-xs font-semibold text-amber-700 dark:text-amber-300">
+              LifeOS recuperó automáticamente la última copia local válida. Exportá un backup antes de seguir cargando datos.
+            </div>
+          )}
           {/* Global Search Results Overlay Banner if search active */}
           {searchResults && (
             <div className="bg-[var(--card)] border border-[var(--blue)] rounded-2xl p-5 space-y-4 shadow-lg relative">
@@ -242,7 +247,11 @@ export default function App() {
           )}
 
           {currentView === 'finanzas' && (
-            <FinanzasView state={state} onUpdateState={updateState} />
+            <FinanzasView
+              state={state}
+              onUpdateState={updateState}
+              initialTransactionType={quickTransactionType}
+            />
           )}
 
           {currentView === 'gimnasio' && (
