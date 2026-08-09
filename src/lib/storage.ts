@@ -26,6 +26,18 @@ export const ESTADO_LABELS = {
 };
 
 export const STORAGE_KEY = 'lifeos-state-v1';
+export const STORAGE_RECOVERY_KEY = 'lifeos-state-recovery-v1';
+export const CURRENT_SCHEMA_VERSION = 2;
+
+type StorageBackend = 'localStorage' | 'recovery' | 'ninguno';
+
+export interface StorageDiagnostics {
+  backend: StorageBackend;
+  schemaVersion: number;
+  primaryBytes: number;
+  recoveryBytes: number;
+  recoveryAvailable: boolean;
+}
 
 export function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -164,6 +176,7 @@ export function defaultState(): LifeOSState {
   const accBancoId = uid();
 
   return {
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     profile: { name: '', height: 170 },
     agenda: {
       lunes: [],
@@ -219,6 +232,116 @@ export function defaultState(): LifeOSState {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function arrayOr<T>(value: unknown, fallback: T[]): T[] {
+  return Array.isArray(value) ? (value as T[]) : fallback;
+}
+
+export function normalizeStoredState(value: unknown): LifeOSState {
+  if (!isRecord(value)) throw new Error('El backup debe contener un objeto de LifeOS.');
+
+  const def = defaultState();
+  const profile = isRecord(value.profile) ? value.profile : {};
+  const agenda = isRecord(value.agenda) ? value.agenda : {};
+  const finance = isRecord(value.finance) ? value.finance : {};
+  const gym = isRecord(value.gym) ? value.gym : {};
+  const study = isRecord(value.study) ? value.study : {};
+  const streaming = isRecord(value.streaming) ? value.streaming : {};
+  const jobs = isRecord(value.jobs) ? value.jobs : {};
+  const resale = isRecord(value.resale) ? value.resale : {};
+  const notes = isRecord(value.notes) ? value.notes : {};
+  const settings = isRecord(value.settings) ? value.settings : {};
+
+  const merged: LifeOSState = {
+    ...def,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    profile: { ...def.profile, ...profile },
+    agenda: { ...def.agenda, ...agenda },
+    tasksRecurring: arrayOr(value.tasksRecurring, def.tasksRecurring),
+    taskLog: isRecord(value.taskLog) ? (value.taskLog as LifeOSState['taskLog']) : def.taskLog,
+    todayExtras: arrayOr(value.todayExtras, def.todayExtras),
+    finance: {
+      ...def.finance,
+      ...finance,
+      transactions: arrayOr(finance.transactions, def.finance.transactions),
+      categories: arrayOr(finance.categories, def.finance.categories),
+      budgets: isRecord(finance.budgets) ? (finance.budgets as Record<string, number>) : def.finance.budgets,
+      accounts: arrayOr(finance.accounts, def.finance.accounts),
+      debts: arrayOr(finance.debts, def.finance.debts),
+      investments: arrayOr(finance.investments, def.finance.investments),
+      subscriptions: arrayOr(finance.subscriptions, def.finance.subscriptions),
+    },
+    gym: {
+      ...def.gym,
+      ...gym,
+      weight: arrayOr(gym.weight, def.gym.weight),
+      measurements: arrayOr(gym.measurements, def.gym.measurements),
+      sessions: arrayOr(gym.sessions, def.gym.sessions),
+      routineTemplates: arrayOr(gym.routineTemplates, def.gym.routineTemplates),
+    },
+    study: {
+      ...def.study,
+      ...study,
+      subjects: arrayOr(study.subjects, def.study.subjects),
+      exams: arrayOr(study.exams, def.study.exams),
+      studyLog: arrayOr(study.studyLog, def.study.studyLog),
+    },
+    streaming: {
+      ...def.streaming,
+      ...streaming,
+      sessions: arrayOr(streaming.sessions, def.streaming.sessions),
+    },
+    jobs: {
+      ...def.jobs,
+      ...jobs,
+      opportunities: arrayOr(jobs.opportunities, def.jobs.opportunities),
+      applications: arrayOr(jobs.applications, def.jobs.applications),
+    },
+    resale: {
+      ...def.resale,
+      ...resale,
+      opportunities: arrayOr(resale.opportunities, def.resale.opportunities),
+      inventory: arrayOr(resale.inventory, def.resale.inventory),
+    },
+    ideas: arrayOr(value.ideas, def.ideas),
+    calendarEvents: arrayOr(value.calendarEvents, def.calendarEvents),
+    goals: arrayOr(value.goals, def.goals),
+    notes: {
+      ...def.notes,
+      ...notes,
+      postits: arrayOr(notes.postits, def.notes.postits),
+      shopping: arrayOr(notes.shopping, def.notes.shopping),
+      links: arrayOr(notes.links, def.notes.links),
+    },
+    settings: {
+      ...def.settings,
+      ...settings,
+      hiddenTabs: arrayOr(settings.hiddenTabs, def.settings.hiddenTabs),
+    },
+    checkoutLog: isRecord(value.checkoutLog)
+      ? (value.checkoutLog as LifeOSState['checkoutLog'])
+      : def.checkoutLog,
+  };
+
+  if (!merged.finance.categories.includes('Reventa')) merged.finance.categories.push('Reventa');
+  return merged;
+}
+
+export function parseBackupJSON(raw: string): LifeOSState {
+  const parsed: unknown = JSON.parse(raw);
+  if (!isRecord(parsed)) throw new Error('El archivo no contiene un backup válido.');
+
+  const recognizedKeys = ['profile', 'agenda', 'finance', 'gym', 'study', 'jobs', 'resale', 'notes'];
+  if (!recognizedKeys.some((key) => Object.prototype.hasOwnProperty.call(parsed, key))) {
+    throw new Error('El archivo no parece pertenecer a LifeOS.');
+  }
+
+  return normalizeStoredState(parsed);
+}
+
 export function syncResaleSaleToFinance(state: LifeOSState, item: ResaleItem): void {
   const isVendido = Boolean(item.sellPrice && item.sellDate);
   if (isVendido) {
@@ -264,50 +387,62 @@ export function syncResaleSaleToFinance(state: LifeOSState, item: ResaleItem): v
   }
 }
 
-export function loadStoredState(): { state: LifeOSState; backend: 'claude' | 'localStorage' | 'ninguno' } {
-  const def = defaultState();
+export function loadStoredState(): { state: LifeOSState; backend: StorageBackend } {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      const merged: LifeOSState = {
-        ...def,
-        ...parsed,
-        profile: { ...def.profile, ...(parsed.profile || {}) },
-        agenda: { ...def.agenda, ...(parsed.agenda || {}) },
-        finance: { ...def.finance, ...(parsed.finance || {}) },
-        gym: { ...def.gym, ...(parsed.gym || {}) },
-        study: { ...def.study, ...(parsed.study || {}) },
-        streaming: { ...def.streaming, ...(parsed.streaming || {}) },
-        jobs: { ...def.jobs, ...(parsed.jobs || {}) },
-        resale: { ...def.resale, ...(parsed.resale || {}) },
-        notes: { ...def.notes, ...(parsed.notes || {}) },
-        settings: { ...def.settings, ...(parsed.settings || {}) },
-        checkoutLog: parsed.checkoutLog || def.checkoutLog,
-        ideas: parsed.ideas || def.ideas,
-        calendarEvents: parsed.calendarEvents || def.calendarEvents,
-        goals: parsed.goals || def.goals,
-        todayExtras: parsed.todayExtras || def.todayExtras,
-      };
-
-      if (!merged.finance.categories.includes('Reventa')) {
-        merged.finance.categories.push('Reventa');
-      }
-
-      return { state: merged, backend: 'localStorage' };
-    }
+    if (raw) return { state: normalizeStoredState(JSON.parse(raw)), backend: 'localStorage' };
   } catch (e) {
     console.error('Error reading localStorage:', e);
+    try {
+      const recovery = localStorage.getItem(STORAGE_RECOVERY_KEY);
+      if (recovery) return { state: normalizeStoredState(JSON.parse(recovery)), backend: 'recovery' };
+    } catch (recoveryError) {
+      console.error('Error reading recovery snapshot:', recoveryError);
+    }
   }
-  return { state: def, backend: 'ninguno' };
+  return { state: defaultState(), backend: 'ninguno' };
 }
 
 export function saveStoredState(state: LifeOSState): boolean {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const previous = localStorage.getItem(STORAGE_KEY);
+    if (previous) {
+      try {
+        normalizeStoredState(JSON.parse(previous));
+        localStorage.setItem(STORAGE_RECOVERY_KEY, previous);
+      } catch {
+        // Never replace a valid recovery snapshot with corrupt data.
+      }
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, schemaVersion: CURRENT_SCHEMA_VERSION }));
     return true;
   } catch (e) {
     console.error('Error saving to localStorage:', e);
     return false;
+  }
+}
+
+export function getStorageDiagnostics(): StorageDiagnostics {
+  try {
+    const primary = localStorage.getItem(STORAGE_KEY) || '';
+    const recovery = localStorage.getItem(STORAGE_RECOVERY_KEY) || '';
+    let schemaVersion = CURRENT_SCHEMA_VERSION;
+    if (primary) schemaVersion = normalizeStoredState(JSON.parse(primary)).schemaVersion;
+    return {
+      backend: primary ? 'localStorage' : 'ninguno',
+      schemaVersion,
+      primaryBytes: new Blob([primary]).size,
+      recoveryBytes: new Blob([recovery]).size,
+      recoveryAvailable: Boolean(recovery),
+    };
+  } catch {
+    const recovery = localStorage.getItem(STORAGE_RECOVERY_KEY) || '';
+    return {
+      backend: recovery ? 'recovery' : 'ninguno',
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      primaryBytes: 0,
+      recoveryBytes: new Blob([recovery]).size,
+      recoveryAvailable: Boolean(recovery),
+    };
   }
 }
