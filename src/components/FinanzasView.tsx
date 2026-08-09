@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ResponsiveContainer,
   PieChart,
@@ -41,10 +41,15 @@ import {
 interface FinanzasViewProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => void;
+  initialTransactionType?: 'gasto' | 'ingreso';
 }
 
-export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState }) => {
-  const [txType, setTxType] = useState<'gasto' | 'ingreso'>('gasto');
+export const FinanzasView: React.FC<FinanzasViewProps> = ({
+  state,
+  onUpdateState,
+  initialTransactionType = 'gasto',
+}) => {
+  const [txType, setTxType] = useState<'gasto' | 'ingreso'>(initialTransactionType);
   const [txAmount, setTxAmount] = useState('');
   const [txAccount, setTxAccount] = useState<string>(defaultAccountId(state) || '');
   const [txCategory, setTxCategory] = useState<string>(state.finance.categories[0] || 'Comida');
@@ -64,6 +69,10 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
 
   const [invName, setInvName] = useState('');
   const [invAmount, setInvAmount] = useState('');
+
+  useEffect(() => {
+    setTxType(initialTransactionType);
+  }, [initialTransactionType]);
 
   const disponible = calcAccountsTotal(state);
   const patrimonio = calcNetWorth(state);
