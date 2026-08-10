@@ -10,6 +10,14 @@ LifeOS es un centro de operaciones personal. No busca almacenar información por
 
 No requiere instalar Node.js, ejecutar comandos ni mantener una terminal abierta. Antes de reemplazar el archivo por una versión nueva conviene exportar un backup desde Configuración.
 
+## LifeOS Anywhere
+
+La versión alojada puede instalarse como PWA en Windows y Android y comparte los datos usando la misma cuenta de Google. Mantiene una copia local para funcionar sin conexión y sincroniza los cambios cuando vuelve Internet.
+
+Para activarla se necesita un proyecto Firebase del propietario con Authentication (Google), Firestore y Hosting. La configuración pública de la aplicación web se copia desde `.env.example` a `.env.local`. Las reglas incluidas limitan cada documento al usuario autenticado correspondiente.
+
+El primer dispositivo con datos puede subir su estado existente. Si LifeOS detecta datos distintos en el dispositivo y en la nube, pide elegir antes de reemplazar cualquiera de las versiones.
+
 ## Principios
 
 - El Dashboard es el único lugar que interpreta y prioriza.
@@ -32,6 +40,7 @@ Validaciones disponibles:
 npm run lint
 npm test
 npm run build
+npm run build:portable
 ```
 
 ## Datos y backups

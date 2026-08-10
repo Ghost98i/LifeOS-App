@@ -1,12 +1,18 @@
 import React, { useState } from 'react';
 import { ViewType, LifeOSState } from '../types';
 import { isSoundEnabled, setSoundEnabled, playSound } from '../lib/audio';
+import type { CloudSyncStatus, CloudUser } from '../lib/cloudSync';
 
 interface TopbarProps {
   state: LifeOSState;
   onOpenMobileNav: () => void;
   onQuickAction: (view: ViewType, focusId: string, txType?: 'gasto' | 'ingreso') => void;
   onSearch: (query: string) => void;
+  cloudConfigured: boolean;
+  cloudUser: CloudUser | null;
+  syncStatus: CloudSyncStatus;
+  onCloudSignIn: () => void;
+  onCloudSignOut: () => void;
 }
 
 export const QUICK_ACTIONS: { label: string; view: ViewType; focusId: string; txType?: 'gasto' | 'ingreso' }[] = [
@@ -23,9 +29,15 @@ export const Topbar: React.FC<TopbarProps> = ({
   onOpenMobileNav,
   onQuickAction,
   onSearch,
+  cloudConfigured,
+  cloudUser,
+  syncStatus,
+  onCloudSignIn,
+  onCloudSignOut,
 }) => {
   const [query, setQuery] = useState('');
   const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
+  const [showCloudMenu, setShowCloudMenu] = useState(false);
   const hidden = state.settings.hiddenTabs || [];
   const actions = QUICK_ACTIONS.filter((q) => !hidden.includes(q.view));
 
@@ -44,6 +56,17 @@ export const Topbar: React.FC<TopbarProps> = ({
     }
   };
 
+  const syncLabel: Record<CloudSyncStatus, string> = {
+    unavailable: 'Solo local',
+    'signed-out': 'Conectar',
+    connecting: 'Conectando',
+    saving: 'Guardando',
+    synced: 'Sincronizado',
+    offline: 'Sin conexión',
+    conflict: 'Revisar datos',
+    error: 'Error de sync',
+  };
+
   return (
     <header className="sticky top-0 z-30 bg-[var(--bg)]/85 backdrop-blur-md border-b border-[var(--border)] px-4 lg:px-7 py-3 flex items-center gap-3">
       <button
@@ -54,7 +77,7 @@ export const Topbar: React.FC<TopbarProps> = ({
         ☰
       </button>
 
-      <div className="relative w-40 sm:w-52 lg:w-72 shrink-0">
+      <div className="hidden sm:block relative w-52 lg:w-72 shrink-0">
         <input
           type="text"
           value={query}
@@ -68,7 +91,31 @@ export const Topbar: React.FC<TopbarProps> = ({
         </span>
       </div>
 
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar ml-auto">
+      <span className="sm:hidden text-sm font-extrabold tracking-tight text-[var(--text)]">LifeOS</span>
+
+      <div className="flex items-center gap-2 ml-auto">
+        {cloudConfigured && (
+          <div className="relative shrink-0">
+            <button
+              onClick={() => cloudUser ? setShowCloudMenu((value) => !value) : onCloudSignIn()}
+              className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-[10px] font-bold text-[var(--text-soft)]"
+              title={syncLabel[syncStatus]}
+            >
+              <span className={`h-2 w-2 rounded-full ${syncStatus === 'synced' ? 'bg-emerald-500' : syncStatus === 'saving' || syncStatus === 'connecting' ? 'bg-amber-500' : syncStatus === 'offline' ? 'bg-slate-400' : syncStatus === 'error' || syncStatus === 'conflict' ? 'bg-rose-500' : 'bg-blue-500'}`} />
+              <span className="hidden xs:inline sm:inline">{syncLabel[syncStatus]}</span>
+            </button>
+            {cloudUser && showCloudMenu && (
+              <div className="absolute right-0 top-11 z-50 w-64 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl">
+                <p className="truncate text-xs font-extrabold text-[var(--text)]">{cloudUser.name || 'Cuenta Google'}</p>
+                <p className="mt-0.5 truncate text-[10px] text-[var(--text-faint)]">{cloudUser.email}</p>
+                <p className="mt-3 text-[11px] font-bold text-[var(--text-soft)]">☁️ {syncLabel[syncStatus]}</p>
+                <button onClick={() => { setShowCloudMenu(false); onCloudSignOut(); }} className="mt-3 w-full rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-bold text-[var(--text-soft)]">Cerrar sesión</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="hidden lg:flex items-center gap-2 overflow-x-auto no-scrollbar">
         <button
           onClick={toggleSound}
           title={soundOn ? 'Sonidos activados' : 'Sonidos desactivados'}
@@ -90,6 +137,7 @@ export const Topbar: React.FC<TopbarProps> = ({
             {q.label}
           </button>
         ))}
+        </div>
       </div>
     </header>
   );
