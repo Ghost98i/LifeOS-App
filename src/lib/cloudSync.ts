@@ -116,7 +116,11 @@ export function hasMeaningfulData(state: LifeOSState): boolean {
   const hasAccountBalance = state.finance.accounts.some((account) => Number(account.balance) !== 0);
   const collections = [
     state.todayExtras,
+    state.dailyPriorities,
+    state.dailyContext,
     state.finance.transactions,
+    state.finance.transfers,
+    state.finance.reconciliations,
     state.finance.debts,
     state.finance.investments,
     state.finance.subscriptions,
