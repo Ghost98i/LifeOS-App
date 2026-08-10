@@ -58,11 +58,32 @@ export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState }) => {
   const resaleOpportunities = state.resale.opportunities.filter((item) => item.status === 'nueva');
 
   const copyText = async (kind: 'prompt' | 'schema', content: string) => {
+    let copiedSuccessfully = false;
+
     try {
-      await navigator.clipboard.writeText(content);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(content);
+        copiedSuccessfully = true;
+      }
+    } catch {
+      // file:// can block the modern Clipboard API. Use the local fallback below.
+    }
+
+    if (!copiedSuccessfully) {
+      const textarea = document.createElement('textarea');
+      textarea.value = content;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      copiedSuccessfully = document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+
+    if (copiedSuccessfully) {
       setCopied(kind);
       window.setTimeout(() => setCopied(null), 1400);
-    } catch {
+    } else {
       setMessage('No pude copiar automáticamente. Seleccioná el texto y usá Ctrl+C.');
     }
   };
