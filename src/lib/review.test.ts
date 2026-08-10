@@ -15,3 +15,17 @@ test('la revisión semanal muestra excepciones y omite actividad normal', () => 
   assert.ok(results.some((item) => item.id === 'job-followups'));
   assert.ok(!results.some((item) => item.id === 'old-stock'));
 });
+
+test('la revisión avisa al acumular tres noches cortas consecutivas', () => {
+  const state = defaultState();
+  const reference = new Date();
+  state.dailyContext = [2, 1, 0].map((daysAgo) => {
+    const date = new Date(reference);
+    date.setDate(date.getDate() - daysAgo);
+    const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    return { date: iso, sleepHours: 6, energy: null, mood: null, connection: null };
+  });
+
+  const results = weeklyReviewExceptions(state);
+  assert.ok(results.some((item) => item.id === 'short-sleep-streak'));
+});
