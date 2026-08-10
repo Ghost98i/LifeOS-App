@@ -113,7 +113,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
             <div>
               <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
-                Altura (cm) — para IMC
+                Altura (cm) — composición corporal
               </label>
               <input
                 type="number"
