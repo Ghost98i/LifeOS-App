@@ -12,6 +12,8 @@ import {
 } from 'recharts';
 import { LifeOSState } from '../types';
 import { RestTimer } from './RestTimer';
+import { BodyCompositionCard } from './BodyCompositionCard';
+import { bodyCompositionEstimate } from '../lib/bodyComposition';
 import {
   todayISO,
   fmtDate,
@@ -20,8 +22,6 @@ import {
 import {
   currentWeight,
   weightVariation,
-  calcIMC,
-  imcCategory,
   calcGymStreak,
   calcPRs,
   sortedWeight,
@@ -56,8 +56,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
 
   const peso = currentWeight(state);
   const variacion = weightVariation(state);
-  const imc = calcIMC(state);
-  const imcCat = imcCategory(imc);
+  const composition = bodyCompositionEstimate(state);
   const streak = calcGymStreak(state);
   const prs = calcPRs(state);
   const weightPts = sortedWeight(state);
@@ -130,6 +129,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
     if (!waist) return;
     onUpdateState((draft) => {
       const date = waistDate || todayISO();
+      draft.gym.measurements = draft.gym.measurements.filter((measurement) => measurement.date !== date);
       draft.gym.measurements.push({ date, waist });
     });
     setWaistCm('');
@@ -329,7 +329,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text)]">Gimnasio</h1>
         <p className="text-sm text-[var(--text-soft)]">
-          Peso, medidas, entrenamientos, temporizador de descanso y récords personales.
+          Composición corporal, entrenamientos, temporizador de descanso y récords personales.
         </p>
       </div>
 
@@ -351,25 +351,11 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
         </div>
 
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">📐 IMC</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">📐 Grasa estimada · RFM</span>
           <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">
-            {imc != null ? imc.toFixed(1) : '—'}
+            {composition ? `${composition.rfmPercent.toFixed(1)}%` : '—'}
           </div>
-          <span
-            className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 ${
-              imcCat.color === 'green'
-                ? 'bg-emerald-500/10 text-emerald-500'
-                : imcCat.color === 'blue'
-                ? 'bg-blue-500/10 text-blue-500'
-                : imcCat.color === 'amber'
-                ? 'bg-amber-500/10 text-amber-500'
-                : imcCat.color === 'red'
-                ? 'bg-red-500/10 text-red-500'
-                : 'text-[var(--text-soft)]'
-            }`}
-          >
-            {imcCat.label}
-          </span>
+          <p className="mt-0.5 text-[11px] text-[var(--text-soft)]">{composition ? `FFMI ${composition.ffmi.toFixed(1)}` : 'completá peso + cintura'}</p>
         </div>
 
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
@@ -384,6 +370,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
           <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{diasEntrenadosAnio}</div>
         </div>
       </div>
+
+      <BodyCompositionCard state={state} onUpdateState={onUpdateState} />
 
       {/* Bodyweight Progression Chart with Recharts */}
       <div id="qa-focus-peso" className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
