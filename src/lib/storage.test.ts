@@ -13,6 +13,10 @@ test('migra un estado antiguo conservando datos y agregando defaults', () => {
   assert.deepEqual(migrated.finance.transfers, []);
   assert.deepEqual(migrated.dailyPriorities, []);
   assert.deepEqual(migrated.dailyContext, []);
+  assert.equal(migrated.profile.bodyCompositionSex, null);
+
+  const invalidFormula = normalizeStoredState({ profile: { bodyCompositionSex: 'unknown' } });
+  assert.equal(invalidFormula.profile.bodyCompositionSex, null);
 });
 
 test('rechaza archivos JSON que no pertenecen a LifeOS', () => {
