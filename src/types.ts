@@ -28,6 +28,23 @@ export interface TodayExtra {
   priority: 'alta' | 'media' | 'baja';
 }
 
+export interface DailyPriority {
+  id: string;
+  date: string;
+  text: string;
+  done: boolean;
+  rank: 1 | 2 | 3;
+}
+
+export interface DailyContextEntry {
+  date: string;
+  sleepHours: number | null;
+  energy: 1 | 2 | 3 | 4 | 5 | null;
+  mood: 1 | 2 | 3 | 4 | 5 | null;
+  connection: 'solo' | 'mensaje' | 'encuentro' | null;
+  note?: string;
+}
+
 export interface Transaction {
   id: string;
   type: 'gasto' | 'ingreso';
@@ -37,12 +54,34 @@ export interface Transaction {
   date: string;
   note?: string;
   accountId?: string | null;
+  origin?: 'manual' | 'quick' | 'adjustment' | 'resale_purchase' | 'resale_sale';
 }
 
 export interface Account {
   id: string;
   name: string;
   balance: number;
+  lastReconciledAt?: string | null;
+}
+
+export interface FinanceTransfer {
+  id: string;
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  date: string;
+  note?: string;
+}
+
+export interface AccountReconciliation {
+  id: string;
+  accountId: string;
+  date: string;
+  systemBalance: number;
+  actualBalance: number;
+  difference: number;
+  adjustmentTxId?: string | null;
+  note?: string;
 }
 
 export interface Subscription {
@@ -65,6 +104,8 @@ export interface Investment {
 
 export interface Finance {
   transactions: Transaction[];
+  transfers: FinanceTransfer[];
+  reconciliations: AccountReconciliation[];
   categories: string[];
   budgets: Record<string, number>;
   accounts: Account[];
@@ -193,6 +234,13 @@ export interface ResaleItem {
   sellPrice?: number | null;
   sellDate?: string | null;
   status: 'comprado' | 'vendido';
+  purchaseTxId?: string | null;
+  saleTxId?: string | null;
+  feeTxId?: string | null;
+  fees?: number;
+  saleAccountId?: string | null;
+  purchaseAccountId?: string | null;
+  /** @deprecated Conservado para migrar ventas creadas por versiones anteriores. */
   financeTxId?: string | null;
   note?: string;
   sourceOpportunityId?: string;
@@ -255,6 +303,7 @@ export interface Settings {
   darkMode: boolean;
   lastBackupAt?: string | null;
   hiddenTabs: string[];
+  lastWeeklyReviewAt?: string | null;
 }
 
 export interface CheckoutLogDay {
@@ -271,6 +320,8 @@ export interface LifeOSState {
   tasksRecurring: TaskRecurring[];
   taskLog: Record<string, Record<string, boolean>>; // date -> taskID -> boolean
   todayExtras: TodayExtra[];
+  dailyPriorities: DailyPriority[];
+  dailyContext: DailyContextEntry[];
   finance: Finance;
   gym: Gym;
   study: Study;

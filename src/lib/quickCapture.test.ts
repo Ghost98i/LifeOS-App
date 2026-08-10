@@ -1,23 +1,23 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { defaultState } from './storage';
-import { addQuickTransaction, suggestedQuickAccountId } from './quickCapture';
+import { addQuickNote, addQuickTask, addQuickTransaction, suggestedQuickAccountId } from './quickCapture';
 
 test('captura un ingreso y actualiza la cuenta elegida', () => {
   const state = defaultState();
   const account = state.finance.accounts[1];
   const transaction = addQuickTransaction(state, {
     type: 'ingreso',
-    amount: 13728,
+    amount: 500,
     accountId: account.id,
     category: 'Otros',
-    note: 'Beca UTEC',
+    note: 'Ingreso de prueba',
     date: '2026-08-10',
   });
 
   assert.equal(transaction.type, 'ingreso');
-  assert.equal(transaction.note, 'Beca UTEC');
-  assert.equal(account.balance, 13728);
+  assert.equal(transaction.note, 'Ingreso de prueba');
+  assert.equal(account.balance, 500);
 });
 
 test('rechaza montos vacíos o negativos', () => {
@@ -34,4 +34,13 @@ test('sugiere el banco y luego recuerda la última cuenta usada para ese tipo', 
 
   addQuickTransaction(state, { type: 'ingreso', amount: 500, accountId: cash.id });
   assert.equal(suggestedQuickAccountId(state, 'ingreso'), cash.id);
+});
+
+test('captura una tarea para hoy y una nota sin abrir otros módulos', () => {
+  const state = defaultState();
+  addQuickTask(state, 'Llamar a mamá', 'alta', '2026-08-10');
+  addQuickNote(state, 'Idea para el escritorio', '2026-08-10');
+  assert.equal(state.todayExtras[0].text, 'Llamar a mamá');
+  assert.equal(state.todayExtras[0].priority, 'alta');
+  assert.equal(state.notes.postits[0].text, 'Idea para el escritorio');
 });

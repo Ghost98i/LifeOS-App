@@ -8,6 +8,8 @@ interface TopbarProps {
   onOpenMobileNav: () => void;
   onQuickAction: (view: ViewType, focusId: string, txType?: 'gasto' | 'ingreso') => void;
   onSearch: (query: string) => void;
+  onOpenSearch: () => void;
+  onOpenCapture: () => void;
   cloudConfigured: boolean;
   cloudUser: CloudUser | null;
   syncStatus: CloudSyncStatus;
@@ -29,6 +31,8 @@ export const Topbar: React.FC<TopbarProps> = ({
   onOpenMobileNav,
   onQuickAction,
   onSearch,
+  onOpenSearch,
+  onOpenCapture,
   cloudConfigured,
   cloudUser,
   syncStatus,
@@ -94,6 +98,8 @@ export const Topbar: React.FC<TopbarProps> = ({
       <span className="sm:hidden text-sm font-extrabold tracking-tight text-[var(--text)]">LifeOS</span>
 
       <div className="flex items-center gap-2 ml-auto">
+        <button onClick={onOpenSearch} className="sm:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] text-sm" aria-label="Buscar en LifeOS">⌕</button>
+        <button onClick={onOpenCapture} className="hidden sm:flex items-center gap-1.5 rounded-xl bg-[var(--blue)] px-3 py-2 text-xs font-extrabold text-white shadow-sm"><span className="text-base leading-none">＋</span> Capturar</button>
         {cloudConfigured && (
           <div className="relative shrink-0">
             <button

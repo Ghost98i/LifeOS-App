@@ -1,4 +1,5 @@
 import { LifeOSState } from '../types';
+import { recordResalePurchase } from './resaleFlows';
 import { todayISO, uid } from './storage';
 
 export interface ImportedJobOpportunity {
@@ -144,19 +145,15 @@ export function applyJobOpportunity(state: LifeOSState, opportunityId: string, d
   return true;
 }
 
-export function buyResaleOpportunity(state: LifeOSState, opportunityId: string, date = todayISO()): boolean {
+export function buyResaleOpportunity(state: LifeOSState, opportunityId: string, date = todayISO(), accountId?: string | null): boolean {
   const opportunity = state.resale.opportunities.find((item) => item.id === opportunityId);
   if (!opportunity || opportunity.status !== 'nueva') return false;
 
-  state.resale.inventory.push({
-    id: uid(),
+  recordResalePurchase(state, {
     item: opportunity.item,
     buyPrice: opportunity.buyPrice,
     buyDate: date,
-    sellPrice: null,
-    sellDate: null,
-    status: 'comprado',
-    financeTxId: null,
+    accountId,
     note: opportunity.nota || '',
     sourceOpportunityId: opportunity.id,
   });

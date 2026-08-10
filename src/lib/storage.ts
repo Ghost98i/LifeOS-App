@@ -1,4 +1,4 @@
-import { LifeOSState, DayKey, ResaleItem, Transaction } from '../types';
+import { LifeOSState, DayKey } from '../types';
 
 export const DAYS: DayKey[] = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
 export const DAY_LABELS: Record<DayKey, string> = {
@@ -27,7 +27,7 @@ export const ESTADO_LABELS = {
 
 export const STORAGE_KEY = 'lifeos-state-v1';
 export const STORAGE_RECOVERY_KEY = 'lifeos-state-recovery-v1';
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 type StorageBackend = 'localStorage' | 'recovery' | 'ninguno';
 
@@ -195,8 +195,12 @@ export function defaultState(): LifeOSState {
     ],
     taskLog: {},
     todayExtras: [],
+    dailyPriorities: [],
+    dailyContext: [],
     finance: {
       transactions: [],
+      transfers: [],
+      reconciliations: [],
       categories: [
         'Comida',
         'Gimnasio',
@@ -227,7 +231,7 @@ export function defaultState(): LifeOSState {
     calendarEvents: [],
     goals: [],
     notes: { postits: [], shopping: [], links: [] },
-    settings: { darkMode: false, lastBackupAt: null, hiddenTabs: [] },
+    settings: { darkMode: false, lastBackupAt: null, hiddenTabs: [], lastWeeklyReviewAt: null },
     checkoutLog: {},
   };
 }
@@ -263,13 +267,20 @@ export function normalizeStoredState(value: unknown): LifeOSState {
     tasksRecurring: arrayOr(value.tasksRecurring, def.tasksRecurring),
     taskLog: isRecord(value.taskLog) ? (value.taskLog as LifeOSState['taskLog']) : def.taskLog,
     todayExtras: arrayOr(value.todayExtras, def.todayExtras),
+    dailyPriorities: arrayOr(value.dailyPriorities, def.dailyPriorities),
+    dailyContext: arrayOr(value.dailyContext, def.dailyContext),
     finance: {
       ...def.finance,
       ...finance,
       transactions: arrayOr(finance.transactions, def.finance.transactions),
+      transfers: arrayOr(finance.transfers, def.finance.transfers),
+      reconciliations: arrayOr(finance.reconciliations, def.finance.reconciliations),
       categories: arrayOr(finance.categories, def.finance.categories),
       budgets: isRecord(finance.budgets) ? (finance.budgets as Record<string, number>) : def.finance.budgets,
-      accounts: arrayOr(finance.accounts, def.finance.accounts),
+      accounts: arrayOr(finance.accounts, def.finance.accounts).map((account) => ({
+        ...account,
+        lastReconciledAt: account.lastReconciledAt ?? null,
+      })),
       debts: arrayOr(finance.debts, def.finance.debts),
       investments: arrayOr(finance.investments, def.finance.investments),
       subscriptions: arrayOr(finance.subscriptions, def.finance.subscriptions),
@@ -304,7 +315,13 @@ export function normalizeStoredState(value: unknown): LifeOSState {
       ...def.resale,
       ...resale,
       opportunities: arrayOr(resale.opportunities, def.resale.opportunities),
-      inventory: arrayOr(resale.inventory, def.resale.inventory),
+      inventory: arrayOr(resale.inventory, def.resale.inventory).map((item) => ({
+        ...item,
+        purchaseTxId: item.purchaseTxId ?? null,
+        saleTxId: item.saleTxId ?? item.financeTxId ?? null,
+        feeTxId: item.feeTxId ?? null,
+        fees: Number(item.fees || 0),
+      })),
     },
     ideas: arrayOr(value.ideas, def.ideas),
     calendarEvents: arrayOr(value.calendarEvents, def.calendarEvents),
@@ -340,51 +357,6 @@ export function parseBackupJSON(raw: string): LifeOSState {
   }
 
   return normalizeStoredState(parsed);
-}
-
-export function syncResaleSaleToFinance(state: LifeOSState, item: ResaleItem): void {
-  const isVendido = Boolean(item.sellPrice && item.sellDate);
-  if (isVendido) {
-    const tx = item.financeTxId ? state.finance.transactions.find((t) => t.id === item.financeTxId) : null;
-    if (tx) {
-      const oldAmount = Number(tx.amount) || 0;
-      const newAmount = Number(item.sellPrice) || 0;
-      const delta = newAmount - oldAmount;
-      if (tx.accountId) {
-        const acc = state.finance.accounts.find((a) => a.id === tx.accountId);
-        if (acc) acc.balance = Number(acc.balance || 0) + delta;
-      }
-      tx.amount = newAmount;
-      tx.date = item.sellDate!;
-      tx.note = 'Venta: ' + item.item;
-    } else {
-      const accountId = state.finance.accounts.length ? state.finance.accounts[0].id : null;
-      const newTx: Transaction = {
-        id: uid(),
-        type: 'ingreso',
-        amount: Number(item.sellPrice) || 0,
-        category: 'Reventa',
-        fixed: 'variable',
-        date: item.sellDate!,
-        note: 'Venta: ' + item.item,
-        accountId,
-      };
-      state.finance.transactions.push(newTx);
-      if (accountId) {
-        const acc = state.finance.accounts.find((a) => a.id === accountId);
-        if (acc) acc.balance = Number(acc.balance || 0) + newTx.amount;
-      }
-      item.financeTxId = newTx.id;
-    }
-  } else if (item.financeTxId) {
-    const tx = state.finance.transactions.find((t) => t.id === item.financeTxId);
-    if (tx && tx.accountId) {
-      const acc = state.finance.accounts.find((a) => a.id === tx.accountId);
-      if (acc) acc.balance = Number(acc.balance || 0) - Number(tx.amount || 0);
-    }
-    state.finance.transactions = state.finance.transactions.filter((t) => t.id !== item.financeTxId);
-    item.financeTxId = null;
-  }
 }
 
 export function loadStoredState(): { state: LifeOSState; backend: StorageBackend } {

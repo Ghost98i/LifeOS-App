@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { LifeOSState, ViewType } from '../types';
 import { playSound } from '../lib/audio';
 import { WeatherWidget } from './WeatherWidget';
+import { TodayFocus } from './TodayFocus';
+import { PersonalContextCard } from './PersonalContextCard';
+import { WeeklyReviewCard } from './WeeklyReviewCard';
 import {
   todayISO,
   daysBetween,
@@ -117,7 +120,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {backupUrgent && (
         <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="text-xs sm:text-sm font-semibold text-red-600 dark:text-red-400">
-            ⚠️ {daysSinceBackup === null ? 'Todavía no exportaste ningún backup.' : `Hace ${daysSinceBackup} día(s) que no exportás un backup.`} Tus datos solo existen acá — exportalos por las dudas.
+            ⚠️ {daysSinceBackup === null ? 'Todavía no exportaste ningún backup.' : `Hace ${daysSinceBackup} día(s) que no exportás un backup.`} Guardá una copia portátil por las dudas.
           </div>
           <button
             onClick={onExportJSON}
@@ -127,6 +130,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         </div>
       )}
+
+      <TodayFocus state={state} onUpdateState={onUpdateState} />
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <PersonalContextCard state={state} onUpdateState={onUpdateState} />
+        <WeeklyReviewCard state={state} onUpdateState={onUpdateState} onNavigate={onNavigate} />
+      </div>
 
       {/* Now & Next Banner */}
       <div className="rounded-2xl p-5 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-violet-500/10 border border-[var(--border)] hover:border-[var(--border-hover)] transition-all shadow-xs flex flex-col sm:flex-row items-start sm:items-center gap-4 relative overflow-hidden group">

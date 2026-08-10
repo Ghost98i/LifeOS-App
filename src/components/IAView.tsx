@@ -16,7 +16,7 @@ interface IAViewProps {
 }
 
 const AI_PROMPT = `Actuá como mi motor de oportunidades. Buscá:
-1. Empleos junior o de soporte técnico relevantes para un estudiante de TI en Uruguay.
+1. Empleos junior o de soporte técnico con requisitos claros y una fuente verificable.
 2. Hardware o tecnología usada con margen de reventa atractivo.
 3. Becas, descuentos o ideas realistas para generar ingresos.
 

@@ -37,9 +37,31 @@ export function addQuickTransaction(state: LifeOSState, input: QuickTransactionI
     date: input.date || todayISO(),
     note: input.note?.trim() || '',
     accountId,
+    origin: 'quick',
   };
 
   state.finance.transactions.push(transaction);
   adjustAccountBalance(state, accountId, input.type === 'ingreso' ? amount : -amount);
   return transaction;
+}
+
+export function addQuickTask(
+  state: LifeOSState,
+  text: string,
+  priority: 'alta' | 'media' | 'baja' = 'media',
+  date = todayISO()
+): string {
+  const cleanText = text.trim();
+  if (!cleanText) throw new Error('Escribí qué querés recordar.');
+  const id = uid();
+  state.todayExtras.push({ id, text: cleanText, priority, date, done: false });
+  return id;
+}
+
+export function addQuickNote(state: LifeOSState, text: string, date = todayISO()): string {
+  const cleanText = text.trim();
+  if (!cleanText) throw new Error('Escribí la nota.');
+  const id = uid();
+  state.notes.postits.push({ id, text: cleanText, date });
+  return id;
 }

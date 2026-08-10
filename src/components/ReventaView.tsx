@@ -1,281 +1,97 @@
 import React, { useState } from 'react';
-import { LifeOSState } from '../types';
-import {
-  todayISO,
-  fmtDate,
-  fmtMoney,
-  uid,
-  syncResaleSaleToFinance,
-} from '../lib/storage';
+import type { LifeOSState, ResaleItem } from '../types';
 import { resaleStats } from '../lib/calculations';
+import { deleteResaleItem, recordResalePurchase, recordResaleSale, resaleProfit } from '../lib/resaleFlows';
+import { fmtDate, fmtMoney, todayISO } from '../lib/storage';
 
 interface ReventaViewProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => void;
 }
 
+interface SellFormProps {
+  item: ResaleItem;
+  state: LifeOSState;
+  onUpdateState: ReventaViewProps['onUpdateState'];
+  onClose: () => void;
+}
+
+const SellForm: React.FC<SellFormProps> = ({ item, state, onUpdateState, onClose }) => {
+  const [price, setPrice] = useState(item.sellPrice ? String(item.sellPrice) : '');
+  const [fees, setFees] = useState(item.fees ? String(item.fees) : '');
+  const [date, setDate] = useState(item.sellDate || todayISO());
+  const [accountId, setAccountId] = useState(item.saleAccountId || state.finance.accounts[0]?.id || '');
+  const [message, setMessage] = useState('');
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      onUpdateState((draft) => recordResaleSale(draft, item.id, { sellPrice: Number(price), fees: Number(fees || 0), sellDate: date, accountId }));
+      onClose();
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudo registrar.'); }
+  };
+  return (
+    <form onSubmit={submit} className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3 sm:grid-cols-4">
+      <label><span className="mb-1 block text-[10px] font-bold text-[var(--text-faint)]">Venta</span><input autoFocus required type="number" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="0" className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs font-mono" /></label>
+      <label><span className="mb-1 block text-[10px] font-bold text-[var(--text-faint)]">Comisiones/costos</span><input type="number" value={fees} onChange={(event) => setFees(event.target.value)} placeholder="0" className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs font-mono" /></label>
+      <label><span className="mb-1 block text-[10px] font-bold text-[var(--text-faint)]">Cuenta</span><select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs">{state.finance.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
+      <label><span className="mb-1 block text-[10px] font-bold text-[var(--text-faint)]">Fecha</span><input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs" /></label>
+      {message && <p className="col-span-2 text-[11px] font-bold text-red-500 sm:col-span-4">{message}</p>}
+      <div className="col-span-2 flex gap-2 sm:col-span-4"><button className="flex-1 rounded-lg bg-emerald-600 py-2 text-xs font-extrabold text-white">Confirmar venta</button><button type="button" onClick={onClose} className="rounded-lg border border-[var(--border)] px-4 text-xs font-bold text-[var(--text-soft)]">Cancelar</button></div>
+    </form>
+  );
+};
+
 export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState }) => {
   const [item, setItem] = useState('');
   const [buyPrice, setBuyPrice] = useState('');
   const [buyDate, setBuyDate] = useState(todayISO());
+  const [accountId, setAccountId] = useState(state.finance.accounts[0]?.id || '');
+  const [sellingId, setSellingId] = useState<string | null>(null);
+  const [message, setMessage] = useState('');
+  const stats = resaleStats(state);
+  const stockValue = state.resale.inventory.filter((candidate) => candidate.status === 'comprado').reduce((sum, candidate) => sum + Number(candidate.buyPrice || 0), 0);
 
-  const r = resaleStats(state);
-
-  const handleAddItem = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!item.trim()) return;
-    onUpdateState((draft) => {
-      draft.resale.inventory.push({
-        id: uid(),
-        item: item.trim(),
-        buyPrice: Number(buyPrice) || 0,
-        buyDate: buyDate || todayISO(),
-        sellPrice: null,
-        sellDate: null,
-        status: 'comprado',
-        financeTxId: null,
-      });
-    });
-    setItem('');
-    setBuyPrice('');
-  };
-
-  const handleSetSellPrice = (id: string, priceStr: string) => {
-    onUpdateState((draft) => {
-      const inv = draft.resale.inventory.find((i) => i.id === id);
-      if (inv) {
-        inv.sellPrice = priceStr ? Number(priceStr) : null;
-        inv.status = inv.sellPrice && inv.sellDate ? 'vendido' : 'comprado';
-        syncResaleSaleToFinance(draft, inv);
-      }
-    });
-  };
-
-  const handleSetSellDate = (id: string, dateStr: string) => {
-    onUpdateState((draft) => {
-      const inv = draft.resale.inventory.find((i) => i.id === id);
-      if (inv) {
-        inv.sellDate = dateStr || null;
-        inv.status = inv.sellPrice && inv.sellDate ? 'vendido' : 'comprado';
-        syncResaleSaleToFinance(draft, inv);
-      }
-    });
-  };
-
-  const handleDeleteItem = (id: string) => {
-    onUpdateState((draft) => {
-      const inv = draft.resale.inventory.find((i) => i.id === id);
-      if (inv && inv.financeTxId) {
-        draft.finance.transactions = draft.finance.transactions.filter((t) => t.id !== inv.financeTxId);
-      }
-      draft.resale.inventory = draft.resale.inventory.filter((i) => i.id !== id);
-    });
+  const addPurchase = (event: React.FormEvent) => {
+    event.preventDefault();
+    try {
+      onUpdateState((draft) => recordResalePurchase(draft, { item, buyPrice: Number(buyPrice), buyDate, accountId }));
+      setItem(''); setBuyPrice(''); setMessage('✓ Compra registrada también en Finanzas.');
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudo registrar.'); }
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text)]">Reventa</h1>
-        <p className="text-sm text-[var(--text-soft)]">
-          Productos, oportunidades y rentabilidad de tus operaciones.
-        </p>
+      <div><h1 className="text-2xl font-extrabold tracking-tight text-[var(--text)]">Reventa</h1><p className="text-sm text-[var(--text-soft)]">De la compra al cobro, con la ganancia real y Finanzas sincronizadas.</p></div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {[['📦 Stock', stats.stock], ['💼 Capital en stock', fmtMoney(stockValue)], ['🤝 Ventas', stats.ventas], ['💵 Ganancia realizada', fmtMoney(stats.gananciaTotal)], ['📈 ROI realizado', `${stats.roi.toFixed(0)}%`], ['⏱ Venta promedio', stats.tiempoPromedio == null ? '—' : `${stats.tiempoPromedio.toFixed(0)} d`]].map(([label, value]) => <div key={String(label)} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xs"><span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">{label}</span><div className="mt-1 text-xl font-extrabold font-mono text-[var(--text)]">{value}</div></div>)}
       </div>
 
-      {/* Metrics Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">📦 Stock actual</span>
-          <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{r.stock}</div>
-        </div>
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">🤝 Ventas</span>
-          <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{r.ventas}</div>
-        </div>
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">🛒 Compras totales</span>
-          <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{r.compras}</div>
-        </div>
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">📈 ROI</span>
-          <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{r.roi.toFixed(0)}%</div>
-        </div>
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">💵 Ganancia total</span>
-          <div className="text-xl font-extrabold font-mono mt-1 text-[var(--text)]">{fmtMoney(r.gananciaTotal)}</div>
-        </div>
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">📊 Ganancia promedio</span>
-          <div className="text-xl font-extrabold font-mono mt-1 text-[var(--text)]">{fmtMoney(r.gananciaPromedio)}</div>
-        </div>
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">⏱ Tiempo prom. venta</span>
-          <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">
-            {r.tiempoPromedio != null ? `${r.tiempoPromedio.toFixed(0)} d` : '—'}
-          </div>
-        </div>
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">🆕 Oportunidades</span>
-          <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{r.oportunidadesNuevas}</div>
-          <p className="text-[11px] text-[var(--text-soft)] mt-0.5">ver en pestaña IA</p>
-        </div>
-      </div>
-
-      {/* Form */}
-      <div id="qa-focus-reventa" className="space-y-2">
-        <h2 className="text-sm font-bold text-[var(--text)]">Registrar compra</h2>
-        <form onSubmit={handleAddItem} className="flex flex-wrap items-end gap-2 p-3.5 bg-[var(--bg)] border border-dashed border-[var(--border)] rounded-xl">
-          <div className="min-w-[160px] flex-1">
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Producto</label>
-            <input
-              type="text"
-              value={item}
-              onChange={(e) => setItem(e.target.value)}
-              placeholder="Ej: RTX 3060"
-              className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
-            />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Precio compra</label>
-            <input
-              type="number"
-              value={buyPrice}
-              onChange={(e) => setBuyPrice(e.target.value)}
-              placeholder="0"
-              className="w-28 px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden font-mono"
-            />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Fecha compra</label>
-            <input
-              type="date"
-              value={buyDate}
-              onChange={(e) => setBuyDate(e.target.value)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
-            />
-          </div>
-          <button
-            type="submit"
-            className="px-3.5 py-1.5 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
-          >
-            ＋ Agregar
-          </button>
+      <section id="qa-focus-reventa" className="space-y-2">
+        <div><h2 className="text-sm font-bold text-[var(--text)]">Registrar compra</h2><p className="text-xs text-[var(--text-soft)]">Crea el producto y descuenta el dinero de la cuenta elegida.</p></div>
+        <form onSubmit={addPurchase} className="flex flex-wrap items-end gap-2 rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg)] p-3.5">
+          <label className="min-w-[170px] flex-1"><span className="mb-1 block text-[10px] font-bold uppercase text-[var(--text-faint)]">Producto</span><input required value={item} onChange={(event) => setItem(event.target.value)} placeholder="Ej.: RTX 3060" className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs" /></label>
+          <label><span className="mb-1 block text-[10px] font-bold uppercase text-[var(--text-faint)]">Compra</span><input required type="number" value={buyPrice} onChange={(event) => setBuyPrice(event.target.value)} placeholder="0" className="w-28 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs font-mono" /></label>
+          <label><span className="mb-1 block text-[10px] font-bold uppercase text-[var(--text-faint)]">Cuenta</span><select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs">{state.finance.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
+          <label><span className="mb-1 block text-[10px] font-bold uppercase text-[var(--text-faint)]">Fecha</span><input type="date" value={buyDate} onChange={(event) => setBuyDate(event.target.value)} className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs" /></label>
+          <button className="rounded-lg bg-[var(--text)] px-4 py-2 text-xs font-extrabold text-[var(--bg-elevated)]">＋ Comprar</button>
         </form>
-      </div>
+        {message && <p className="text-xs font-bold text-[var(--text-soft)]">{message}</p>}
+      </section>
 
-      {/* Inventory Table */}
-      <div className="space-y-2">
-        <h2 className="text-base font-bold text-[var(--text)] flex items-center gap-2">
-          Inventario
-          <span className="text-xs font-semibold text-[var(--text-faint)] bg-[var(--bg)] px-2.5 py-0.5 rounded-md border border-[var(--border)]">
-            {state.resale.inventory.length}
-          </span>
-        </h2>
+      <section className="space-y-3">
+        <div className="flex items-center justify-between"><h2 className="text-base font-extrabold text-[var(--text)]">Operaciones</h2><span className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1 text-xs font-bold text-[var(--text-soft)]">{state.resale.inventory.length}</span></div>
+        {state.resale.inventory.length === 0 ? <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-xs text-[var(--text-faint)]">Todavía no registraste compras.</div> : <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">{[...state.resale.inventory].sort((a, b) => b.buyDate.localeCompare(a.buyDate)).map((candidate) => {
+          const profit = resaleProfit(candidate);
+          return <article key={candidate.id} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xs">
+            <div className="flex items-start gap-3"><div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--bg)] text-xl">{candidate.status === 'vendido' ? '✓' : '📦'}</div><div className="min-w-0 flex-1"><h3 className="truncate text-sm font-extrabold text-[var(--text)]">{candidate.item}</h3><p className="text-[11px] text-[var(--text-soft)]">Compra {fmtMoney(candidate.buyPrice)} · {fmtDate(candidate.buyDate)}{candidate.purchaseTxId ? ' · ✓ Finanzas' : ''}</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${candidate.status === 'vendido' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-blue-500/10 text-blue-600'}`}>{candidate.status}</span></div>
+            {candidate.status === 'vendido' && <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-[var(--bg)] p-3 text-xs"><div><span className="block text-[10px] text-[var(--text-faint)]">Cobrado</span><strong className="font-mono">{fmtMoney(candidate.sellPrice)}</strong></div><div><span className="block text-[10px] text-[var(--text-faint)]">Costos</span><strong className="font-mono">{fmtMoney(candidate.fees)}</strong></div><div><span className="block text-[10px] text-[var(--text-faint)]">Ganancia</span><strong className={`font-mono ${profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{fmtMoney(profit)}</strong></div></div>}
+            {sellingId === candidate.id ? <SellForm item={candidate} state={state} onUpdateState={onUpdateState} onClose={() => setSellingId(null)} /> : <div className="mt-3 flex gap-2"><button onClick={() => setSellingId(candidate.id)} className={`flex-1 rounded-xl py-2 text-xs font-extrabold ${candidate.status === 'vendido' ? 'border border-[var(--border)] text-[var(--text-soft)]' : 'bg-emerald-600 text-white'}`}>{candidate.status === 'vendido' ? 'Editar venta' : 'Registrar venta'}</button><button onClick={() => onUpdateState((draft) => deleteResaleItem(draft, candidate.id))} className="rounded-xl border border-[var(--border)] px-3 text-xs text-[var(--text-faint)] hover:text-red-500">Eliminar</button></div>}
+          </article>;
+        })}</div>}
+      </section>
 
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 overflow-x-auto">
-          {state.resale.inventory.length === 0 ? (
-            <p className="text-center py-8 text-xs text-[var(--text-faint)]">Sin productos cargados.</p>
-          ) : (
-            <table className="w-full text-xs text-left border-collapse">
-              <thead>
-                <tr className="border-b border-[var(--border)] text-[var(--text-faint)] uppercase text-[10px]">
-                  <th className="py-2 px-2">Producto</th>
-                  <th className="py-2 px-2">Compra</th>
-                  <th className="py-2 px-2">Venta</th>
-                  <th className="py-2 px-2">Ganancia</th>
-                  <th className="py-2 px-2">Estado</th>
-                  <th className="py-2 px-2"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--border)]">
-                {[...state.resale.inventory]
-                  .sort((a, b) => b.buyDate.localeCompare(a.buyDate))
-                  .map((i) => {
-                    const ganancia = (i.sellPrice ? Number(i.sellPrice) : 0) - Number(i.buyPrice || 0);
-                    return (
-                      <tr key={i.id} className="hover:bg-[var(--bg)]/50 transition-colors">
-                        <td className="py-2.5 px-2 font-bold text-[var(--text)]">{i.item}</td>
-                        <td className="py-2.5 px-2 font-mono">
-                          <div>{fmtMoney(i.buyPrice)}</div>
-                          <div className="text-[10px] text-[var(--text-faint)]">{fmtDate(i.buyDate)}</div>
-                        </td>
-                        <td className="py-2.5 px-2 space-y-1">
-                          <input
-                            type="number"
-                            value={i.sellPrice ?? ''}
-                            onChange={(e) => handleSetSellPrice(i.id, e.target.value)}
-                            placeholder="precio"
-                            className="w-24 px-2 py-1 text-xs font-mono rounded-md bg-[var(--bg-elevated)] border border-[var(--border)]"
-                          />
-                          <input
-                            type="date"
-                            value={i.sellDate ?? ''}
-                            onChange={(e) => handleSetSellDate(i.id, e.target.value)}
-                            className="w-32 px-2 py-1 text-xs rounded-md bg-[var(--bg-elevated)] border border-[var(--border)] block"
-                          />
-                        </td>
-                        <td
-                          className={`py-2.5 px-2 font-mono font-bold ${
-                            i.sellPrice
-                              ? ganancia > 0
-                                ? 'text-emerald-500'
-                                : ganancia < 0
-                                ? 'text-red-500'
-                                : 'text-[var(--text)]'
-                              : 'text-[var(--text-faint)]'
-                          }`}
-                        >
-                          {i.sellPrice ? fmtMoney(ganancia) : '—'}
-                        </td>
-                        <td className="py-2.5 px-2">
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                              i.status === 'vendido'
-                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                : 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                            }`}
-                          >
-                            {i.status}
-                          </span>
-                          {i.financeTxId && (
-                            <div className="text-[10px] text-[var(--text-faint)] mt-0.5">✓ en Finanzas</div>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-2 text-right">
-                          <button
-                            onClick={() => handleDeleteItem(i.id)}
-                            className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1.5 py-1"
-                          >
-                            ✕
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      {/* Top Sales Ranking */}
-      <div className="space-y-2">
-        <h2 className="text-sm font-bold text-[var(--text)]">Ranking de mejores ventas</h2>
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 divide-y divide-[var(--border)]">
-          {r.ranking.length === 0 ? (
-            <p className="text-center py-6 text-xs text-[var(--text-faint)]">Todavía no hay ventas registradas.</p>
-          ) : (
-            r.ranking.map((i, idx) => (
-              <div key={i.id} className="py-2 flex items-center justify-between text-xs sm:text-sm">
-                <span className="font-bold w-6 text-[var(--text-faint)]">{idx + 1}.</span>
-                <span className="flex-1 font-medium text-[var(--text)]">{i.item}</span>
-                <span className="font-mono font-bold text-emerald-500">
-                  {fmtMoney(Number(i.sellPrice) - Number(i.buyPrice))}
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
+      {stats.ranking.length > 0 && <section className="space-y-2"><h2 className="text-sm font-bold text-[var(--text)]">Mejores ventas</h2><div className="divide-y divide-[var(--border)] rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">{stats.ranking.map((candidate, index) => <div key={candidate.id} className="flex items-center gap-3 py-2 text-xs"><span className="font-black text-[var(--text-faint)]">{index + 1}</span><span className="flex-1 font-bold text-[var(--text)]">{candidate.item}</span><span className="font-mono font-bold text-emerald-500">{fmtMoney(resaleProfit(candidate))}</span></div>)}</div></section>}
     </div>
   );
 };

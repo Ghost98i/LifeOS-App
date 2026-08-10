@@ -37,6 +37,7 @@ import {
   adjustAccountBalance,
   defaultAccountId,
 } from '../lib/calculations';
+import { FinanceOperationsCard } from './FinanceOperationsCard';
 
 interface FinanzasViewProps {
   state: LifeOSState;
@@ -85,7 +86,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   const rstats = resaleStats(state);
   const ref = new Date();
   const totalGastadoAnio = state.finance.transactions
-    .filter((t) => t.type === 'gasto' && sameYear(t.date, ref))
+    .filter((t) => t.type === 'gasto' && t.origin !== 'adjustment' && sameYear(t.date, ref))
     .reduce((s, t) => s + Number(t.amount || 0), 0);
   const fijoMes = calcFixedSpentMonth(state, 0);
   const margenDiscrecional = disponible - fijoMes;
@@ -149,13 +150,6 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
     });
     setAccName('');
     setAccBalance('');
-  };
-
-  const handleSetAccountBalance = (id: string, valStr: string) => {
-    onUpdateState((draft) => {
-      const acc = draft.finance.accounts.find((a) => a.id === id);
-      if (acc) acc.balance = Number(valStr) || 0;
-    });
   };
 
   const handleDeleteAccount = (id: string) => {
@@ -436,6 +430,8 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
           </button>
         </form>
       </div>
+
+      <FinanceOperationsCard state={state} onUpdateState={onUpdateState} />
 
       {/* Transaction History grouped by month */}
       <div className="space-y-2">
@@ -765,12 +761,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                 <div key={a.id} className="py-2 flex items-center justify-between text-xs sm:text-sm">
                   <span className="font-medium text-[var(--text)]">{a.name}</span>
                   <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={a.balance}
-                      onChange={(e) => handleSetAccountBalance(a.id, e.target.value)}
-                      className="w-28 px-2 py-1 text-xs font-mono text-right rounded-md bg-[var(--bg-elevated)] border border-[var(--border)]"
-                    />
+                    <span className="text-right"><strong className="block font-mono text-xs">{fmtMoney(a.balance)}</strong><span className="text-[10px] text-[var(--text-faint)]">{a.lastReconciledAt ? `Conciliada ${fmtDate(a.lastReconciledAt)}` : 'Sin conciliar'}</span></span>
                     <button
                       onClick={() => handleDeleteAccount(a.id)}
                       className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1"

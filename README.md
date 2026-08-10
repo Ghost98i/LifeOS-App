@@ -27,6 +27,15 @@ El primer dispositivo con datos puede subir su estado existente. Si LifeOS detec
 - La IA es opcional y externa: LifeOS genera un prompt, cualquier IA devuelve JSON y la persona revisa la importación.
 - Las funciones nuevas deben aportar una mejora concreta al uso diario.
 
+## Flujos cotidianos
+
+- **Captura universal:** el botón central guarda tareas, notas, ingresos o gastos sin buscar una pestaña.
+- **Hoy:** separa tres prioridades reales del resto de la lista y registra sueño, energía y conexión personal.
+- **Finanzas:** distingue movimientos de transferencias, permite conciliar cuentas y conserva los ajustes fuera del gasto mensual.
+- **Reventa:** una compra descuenta la cuenta; una venta registra cobro, costos y ganancia realizada sin duplicar datos.
+- **Búsqueda global:** `Ctrl+K` en PC o la lupa en el celular encuentra información en todos los módulos.
+- **Revisión semanal:** muestra únicamente vencimientos, stock inmóvil, cuentas sin conciliar, presupuestos excedidos y otras excepciones.
+
 ## Desarrollo interno
 
 ```bash

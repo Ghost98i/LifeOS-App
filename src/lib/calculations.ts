@@ -57,7 +57,11 @@ export function calcSubscriptionsTotal(state: LifeOSState): number {
 export function resaleGananciaTotal(state: LifeOSState): number {
   return state.resale.inventory
     .filter((i) => i.status === 'vendido')
-    .reduce((s, i) => s + (Number(i.sellPrice || 0) - Number(i.buyPrice || 0)), 0);
+    .reduce((s, i) => s + (Number(i.sellPrice || 0) - Number(i.buyPrice || 0) - Number(i.fees || 0)), 0);
+}
+
+function isOperationalTransaction(transaction: Transaction): boolean {
+  return transaction.origin !== 'adjustment';
 }
 
 export function txInMonth(state: LifeOSState, offset = 0): Transaction[] {
@@ -67,19 +71,19 @@ export function txInMonth(state: LifeOSState, offset = 0): Transaction[] {
 
 export function calcSpentMonth(state: LifeOSState, offset = 0): number {
   return txInMonth(state, offset)
-    .filter((t) => t.type === 'gasto')
+    .filter((t) => t.type === 'gasto' && isOperationalTransaction(t))
     .reduce((s, t) => s + Number(t.amount || 0), 0);
 }
 
 export function calcIncomeMonth(state: LifeOSState, offset = 0): number {
   return txInMonth(state, offset)
-    .filter((t) => t.type === 'ingreso')
+    .filter((t) => t.type === 'ingreso' && isOperationalTransaction(t))
     .reduce((s, t) => s + Number(t.amount || 0), 0);
 }
 
 export function calcFixedSpentMonth(state: LifeOSState, offset = 0): number {
   return txInMonth(state, offset)
-    .filter((t) => t.type === 'gasto' && t.fixed === 'fijo')
+    .filter((t) => t.type === 'gasto' && t.fixed === 'fijo' && isOperationalTransaction(t))
     .reduce((s, t) => s + Number(t.amount || 0), 0);
 }
 
@@ -96,7 +100,7 @@ export function calcMonthComparison(state: LifeOSState): { pct: number; dir: 'up
 export function calcSpentByCategory(state: LifeOSState, offset = 0): Record<string, number> {
   const map: Record<string, number> = {};
   txInMonth(state, offset)
-    .filter((t) => t.type === 'gasto')
+    .filter((t) => t.type === 'gasto' && isOperationalTransaction(t))
     .forEach((t) => {
       map[t.category] = (map[t.category] || 0) + Number(t.amount || 0);
     });
@@ -106,7 +110,7 @@ export function calcSpentByCategory(state: LifeOSState, offset = 0): Record<stri
 export function calcSpentByCategoryAllTime(state: LifeOSState): Record<string, number> {
   const map: Record<string, number> = {};
   state.finance.transactions
-    .filter((t) => t.type === 'gasto')
+    .filter((t) => t.type === 'gasto' && isOperationalTransaction(t))
     .forEach((t) => {
       map[t.category] = (map[t.category] || 0) + Number(t.amount || 0);
     });
@@ -134,8 +138,8 @@ export function groupTransactionsByMonth(state: LifeOSState): MonthTransactionGr
     .sort((a,b) => b.localeCompare(a))
     .map((key) => {
       const txs = groups[key].sort((a, b) => b.date.localeCompare(a.date));
-      const totalGasto = txs.filter((t) => t.type === 'gasto').reduce((s, t) => s + Number(t.amount || 0), 0);
-      const totalIngreso = txs.filter((t) => t.type === 'ingreso').reduce((s, t) => s + Number(t.amount || 0), 0);
+      const totalGasto = txs.filter((t) => t.type === 'gasto' && isOperationalTransaction(t)).reduce((s, t) => s + Number(t.amount || 0), 0);
+      const totalIngreso = txs.filter((t) => t.type === 'ingreso' && isOperationalTransaction(t)).reduce((s, t) => s + Number(t.amount || 0), 0);
       const parts = key.split('-');
       const y = parseInt(parts[0], 10);
       const m = parseInt(parts[1], 10) - 1;
@@ -367,16 +371,16 @@ export function resaleStats(state: LifeOSState) {
   const vendidos = inv.filter((i) => i.status === 'vendido');
   const ventas = vendidos.length;
   const compras = inv.length;
-  const gananciaTotal = vendidos.reduce((s, i) => s + (Number(i.sellPrice || 0) - Number(i.buyPrice || 0)), 0);
+  const gananciaTotal = vendidos.reduce((s, i) => s + (Number(i.sellPrice || 0) - Number(i.buyPrice || 0) - Number(i.fees || 0)), 0);
   const gananciaPromedio = ventas ? gananciaTotal / ventas : 0;
-  const costoTotal = inv.reduce((s, i) => s + Number(i.buyPrice || 0), 0);
+  const costoTotal = vendidos.reduce((s, i) => s + Number(i.buyPrice || 0) + Number(i.fees || 0), 0);
   const roi = costoTotal > 0 ? (gananciaTotal / costoTotal) * 100 : 0;
   const tiempos = vendidos
     .filter((i) => i.buyDate && i.sellDate)
     .map((i) => daysBetween(i.buyDate, i.sellDate!));
   const tiempoPromedio = tiempos.length ? tiempos.reduce((a, b) => a + b, 0) / tiempos.length : null;
   const ranking = [...vendidos]
-    .sort((a, b) => Number(b.sellPrice || 0) - Number(b.buyPrice || 0) - (Number(a.sellPrice || 0) - Number(a.buyPrice || 0)))
+    .sort((a, b) => (Number(b.sellPrice || 0) - Number(b.buyPrice || 0) - Number(b.fees || 0)) - (Number(a.sellPrice || 0) - Number(a.buyPrice || 0) - Number(a.fees || 0)))
     .slice(0, 5);
   return {
     stock,
