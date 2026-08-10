@@ -27,7 +27,7 @@ export const ESTADO_LABELS = {
 
 export const STORAGE_KEY = 'lifeos-state-v1';
 export const STORAGE_RECOVERY_KEY = 'lifeos-state-recovery-v1';
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 type StorageBackend = 'localStorage' | 'recovery' | 'ninguno';
 
@@ -177,7 +177,7 @@ export function defaultState(): LifeOSState {
 
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
-    profile: { name: '', height: 170 },
+    profile: { name: '', height: 170, bodyCompositionSex: null },
     agenda: {
       lunes: [],
       martes: [],
@@ -262,7 +262,13 @@ export function normalizeStoredState(value: unknown): LifeOSState {
   const merged: LifeOSState = {
     ...def,
     schemaVersion: CURRENT_SCHEMA_VERSION,
-    profile: { ...def.profile, ...profile },
+    profile: {
+      ...def.profile,
+      ...profile,
+      bodyCompositionSex: profile.bodyCompositionSex === 'male' || profile.bodyCompositionSex === 'female'
+        ? profile.bodyCompositionSex
+        : null,
+    },
     agenda: { ...def.agenda, ...agenda },
     tasksRecurring: arrayOr(value.tasksRecurring, def.tasksRecurring),
     taskLog: isRecord(value.taskLog) ? (value.taskLog as LifeOSState['taskLog']) : def.taskLog,
