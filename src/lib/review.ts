@@ -1,5 +1,6 @@
 import type { LifeOSState, ViewType } from '../types';
 import { daysBetween, todayISO } from './storage';
+import { sleepSummary } from './contextInsights';
 
 export interface ReviewException {
   id: string;
@@ -14,6 +15,15 @@ export function weeklyReviewExceptions(state: LifeOSState): ReviewException[] {
   const exceptions: ReviewException[] = [];
   const overdueTasks = state.todayExtras.filter((item) => !item.done && item.date < today);
   if (overdueTasks.length) exceptions.push({ id: 'overdue-tasks', title: `${overdueTasks.length} tarea(s) quedaron atrás`, detail: 'Reprogramalas o descartalas para limpiar Hoy.', view: 'dashboard', tone: 'attention' });
+
+  const sleep = sleepSummary(state, today);
+  if (sleep.shouldAlert) exceptions.push({
+    id: 'short-sleep-streak',
+    title: `${sleep.currentShortStreak} noches seguidas durmiendo poco`,
+    detail: `Están por debajo de 7 h. El promedio de los últimos 7 días registrados es ${sleep.averageHours?.toFixed(1)} h.`,
+    view: 'dashboard',
+    tone: 'urgent',
+  });
 
   const dueFollowups = state.jobs.applications.filter((item) => item.nextActionDate && item.nextActionDate <= today);
   if (dueFollowups.length) exceptions.push({ id: 'job-followups', title: `${dueFollowups.length} seguimiento(s) laboral(es) vencidos`, detail: dueFollowups.slice(0, 2).map((item) => item.empresa).join(' · '), view: 'trabajo', tone: 'urgent' });
