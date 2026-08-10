@@ -23,6 +23,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 }) => {
   const [profileName, setProfileName] = useState(state.profile.name || '');
   const [profileHeight, setProfileHeight] = useState(String(state.profile.height || 170));
+  const [profileBodySex, setProfileBodySex] = useState<'' | 'male' | 'female'>(state.profile.bodyCompositionSex || '');
   const [streamGoal, setStreamGoal] = useState(String(state.streaming.monthlyGoal || 12));
   const [diagnostics, setDiagnostics] = useState<StorageDiagnostics | null>(null);
 
@@ -31,6 +32,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
     onUpdateState((draft) => {
       draft.profile.name = profileName.trim();
       draft.profile.height = Number(profileHeight) || 170;
+      draft.profile.bodyCompositionSex = profileBodySex || null;
       draft.streaming.monthlyGoal = Number(streamGoal) || 12;
     });
     alert('Configuración guardada.');
@@ -97,7 +99,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
       <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
         <h2 className="text-sm font-bold text-[var(--text)]">Perfil y Metas Básicas</h2>
         <form onSubmit={handleSaveProfile} className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
                 Nombre / Apodo
@@ -122,6 +124,22 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 placeholder="175"
                 className="w-full px-3 py-1.5 text-xs font-mono rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
               />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
+                Sexo para cálculos corporales
+              </label>
+              <select
+                value={profileBodySex}
+                onChange={(e) => setProfileBodySex(e.target.value as '' | 'male' | 'female')}
+                className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+              >
+                <option value="">Elegir una vez…</option>
+                <option value="male">Masculino</option>
+                <option value="female">Femenino</option>
+              </select>
+              <p className="mt-1 text-[10px] text-[var(--text-faint)]">Solo se usa para estimar RFM; no se muestra como identidad.</p>
             </div>
 
             <div>
@@ -189,7 +207,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
         <div>
           <h2 className="text-sm font-bold text-[var(--text)]">Backup y Gestión de Datos</h2>
           <p className="text-xs text-[var(--text-soft)]">
-            Tus datos se guardan en el navegador. Exportá un archivo JSON con frecuencia para respaldar tu información.
+            LifeOS conserva una copia en este navegador y, si conectaste Google, la sincroniza entre dispositivos. El JSON sigue siendo tu respaldo portátil independiente.
           </p>
           {state.settings.lastBackupAt && (
             <p className="text-[11px] font-mono text-[var(--blue)] mt-1">

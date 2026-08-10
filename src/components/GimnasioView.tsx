@@ -14,6 +14,7 @@ import { LifeOSState } from '../types';
 import { RestTimer } from './RestTimer';
 import { BodyCompositionCard } from './BodyCompositionCard';
 import { bodyCompositionEstimate } from '../lib/bodyComposition';
+import { buildGymHistory, type GymWeekGroup } from '../lib/gymHistory';
 import {
   todayISO,
   fmtDate,
@@ -256,73 +257,23 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
     });
   };
 
-  // Group sessions by week (e.g. Semana 1: 27 Jul - 2 Ago)
-  const weekGroups = React.useMemo(() => {
-    const sessions = [...state.gym.sessions].sort((a, b) => a.date.localeCompare(b.date));
+  const gymHistory = React.useMemo(() => buildGymHistory(state.gym.sessions), [state.gym.sessions]);
 
-    // Get unique Monday dates for auto week calculation
-    const mondaySet = Array.from(
-      new Set(
-        sessions.map((s) => {
-          const d = new Date(s.date + 'T00:00:00');
-          if (isNaN(d.getTime())) return 'nodate';
-          const day = d.getDay();
-          const diffToMon = day === 0 ? -6 : 1 - day;
-          const monday = new Date(d);
-          monday.setDate(d.getDate() + diffToMon);
-          return monday.toISOString().slice(0, 10);
-        })
-      )
-    ).sort();
-
-    const groupsMap = new Map<
-      string,
-      {
-        weekName: string;
-        rangeLabel: string;
-        sessions: typeof sessions;
-      }
-    >();
-
-    sessions.forEach((s) => {
-      let weekName = s.weekLabel?.trim();
-      let rangeLabel = '';
-
-      if (!weekName) {
-        const d = new Date(s.date + 'T00:00:00');
-        if (!isNaN(d.getTime())) {
-          const day = d.getDay();
-          const diffToMon = day === 0 ? -6 : 1 - day;
-          const monday = new Date(d);
-          monday.setDate(d.getDate() + diffToMon);
-          const sunday = new Date(monday);
-          sunday.setDate(monday.getDate() + 6);
-
-          const monISO = monday.toISOString().slice(0, 10);
-          const idx = mondaySet.indexOf(monISO);
-          weekName = `Semana ${idx !== -1 ? idx + 1 : 1}`;
-
-          const fmtShort = (dt: Date) =>
-            dt.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
-          rangeLabel = `${fmtShort(monday)} - ${fmtShort(sunday)}`;
-        } else {
-          weekName = 'Semana sin fecha';
-        }
-      }
-
-      if (!groupsMap.has(weekName)) {
-        groupsMap.set(weekName, {
-          weekName,
-          rangeLabel,
-          sessions: [],
-        });
-      }
-
-      groupsMap.get(weekName)!.sessions.push(s);
-    });
-
-    return Array.from(groupsMap.values()).reverse();
-  }, [state.gym.sessions]);
+  const renderWeekGroup = (group: GymWeekGroup) => (
+    <div key={group.key} className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+      <div className="flex flex-col gap-2 border-b border-[var(--border)] pb-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 text-xs font-extrabold text-blue-600 dark:text-blue-400">🗓️ {group.weekName}</span>
+          <span className="text-xs font-mono text-[var(--text-soft)]">{group.rangeLabel}</span>
+          <span className="rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-0.5 text-xs font-bold text-[var(--text-faint)]">{group.sessions.length} sesión{group.sessions.length === 1 ? '' : 'es'}</span>
+        </div>
+        <button type="button" onClick={() => handleAddSession(group.weekName)} className="text-left text-xs font-bold text-blue-600 hover:underline dark:text-blue-400">＋ Agregar sesión</button>
+      </div>
+      <div className="grid grid-cols-1 gap-3">
+        {group.sessions.map((session) => <SessionCard key={session.id} session={session} onDeleteSession={() => handleDeleteSession(session.id)} onEditSessionWeek={(week) => handleEditSessionWeek(session.id, week)} onEditSessionDate={(date) => handleEditSessionDate(session.id, date)} onAddExercise={(name, weight, reps) => handleAddExerciseToSession(session.id, name, weight, reps)} onEditExercise={(index, weight, reps) => handleEditExercise(session.id, index, weight, reps)} onDeleteExercise={(index) => handleDeleteExercise(session.id, index)} />)}
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -623,13 +574,13 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
       </div>
 
       {/* Routine Templates */}
-      <div className="space-y-3">
-        <div>
-          <h2 className="text-base font-bold text-[var(--text)]">Plantillas de rutina</h2>
-          <p className="text-xs text-[var(--text-soft)]">
-            Armá tus rutinas una vez (ej: "Lunes/Jueves", "Martes/Viernes") y aplicalas con un clic en vez de escribir todo de nuevo.
-          </p>
-        </div>
+      <details className="group overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xs">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+          <div><h2 className="text-base font-bold text-[var(--text)]">Plantillas de rutina</h2><p className="text-xs text-[var(--text-soft)]">{state.gym.routineTemplates.length} plantilla(s) guardada(s) · abrí solo cuando quieras administrarlas.</p></div>
+          <span className="text-xs font-bold text-[var(--blue)]"><span className="group-open:hidden">Abrir ▾</span><span className="hidden group-open:inline">Cerrar ▴</span></span>
+        </summary>
+
+        <div className="space-y-3 border-t border-[var(--border)] p-4">
 
         <form onSubmit={handleAddTemplate} className="flex gap-2">
           <input
@@ -664,7 +615,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
             ))
           )}
         </div>
-      </div>
+        </div>
+      </details>
 
       {/* Session Log Grouped by Weeks */}
       <div className="space-y-4">
@@ -672,7 +624,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
           <div>
             <h2 className="text-base font-bold text-[var(--text)]">Sesiones de entrenamiento</h2>
             <p className="text-xs text-[var(--text-soft)]">
-              Organizadas y desplegadas por semanas (Semana 1: 27 jul, 28 jul, 30 jul... Semana 2: 2 ago, 3 ago...)
+              Las últimas cuatro semanas quedan a mano; las anteriores se archivan por mes.
             </p>
           </div>
         </div>
@@ -737,55 +689,26 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
 
         {/* Sessions by Week Groups */}
         <div className="space-y-4">
-          {weekGroups.length === 0 ? (
+          {gymHistory.recentWeeks.length === 0 && gymHistory.archivedMonths.length === 0 ? (
             <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-8 text-center text-xs text-[var(--text-faint)]">
               Sin sesiones cargadas todavía.
             </div>
           ) : (
-            weekGroups.map((group) => (
-              <div
-                key={group.weekName}
-                className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3"
-              >
-                <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-1 bg-blue-500/10 text-blue-600 dark:text-blue-400 font-extrabold text-xs rounded-xl border border-blue-500/20">
-                      🗓️ {group.weekName}
-                    </span>
-                    {group.rangeLabel && (
-                      <span className="text-xs font-mono text-[var(--text-soft)]">
-                        ({group.rangeLabel})
-                      </span>
-                    )}
-                    <span className="text-xs font-bold text-[var(--text-faint)] bg-[var(--bg)] px-2 py-0.5 rounded-lg border border-[var(--border)]">
-                      {group.sessions.length} sesión{group.sessions.length === 1 ? '' : 'es'}
-                    </span>
-                  </div>
-
-                  <button
-                    onClick={() => handleAddSession(group.weekName)}
-                    className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
-                  >
-                    ＋ Agregar sesión a {group.weekName}
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3">
-                  {group.sessions.map((session) => (
-                    <SessionCard
-                      key={session.id}
-                      session={session}
-                      onDeleteSession={() => handleDeleteSession(session.id)}
-                      onEditSessionWeek={(week) => handleEditSessionWeek(session.id, week)}
-                      onEditSessionDate={(date) => handleEditSessionDate(session.id, date)}
-                      onAddExercise={(name, w, r) => handleAddExerciseToSession(session.id, name, w, r)}
-                      onEditExercise={(idx, w, r) => handleEditExercise(session.id, idx, w, r)}
-                      onDeleteExercise={(idx) => handleDeleteExercise(session.id, idx)}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))
+            <>
+              {gymHistory.recentWeeks.map(renderWeekGroup)}
+              {gymHistory.archivedMonths.length > 0 && <div className="space-y-3 pt-2">
+                <h3 className="text-xs font-black uppercase tracking-wider text-[var(--text-faint)]">Meses anteriores</h3>
+                {gymHistory.archivedMonths.map((month) => (
+                  <details key={month.key} className="group overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+                      <div><strong className="text-sm text-[var(--text)]">{month.label}</strong><p className="text-xs text-[var(--text-soft)]">{month.sessionsCount} entrenamiento(s) · {month.weeks.length} semana(s)</p></div>
+                      <span className="text-xs font-bold text-[var(--blue)]"><span className="group-open:hidden">Abrir ▾</span><span className="hidden group-open:inline">Cerrar ▴</span></span>
+                    </summary>
+                    <div className="space-y-3 border-t border-[var(--border)] p-3">{month.weeks.map(renderWeekGroup)}</div>
+                  </details>
+                ))}
+              </div>}
+            </>
           )}
         </div>
       </div>

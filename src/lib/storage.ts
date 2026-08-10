@@ -27,7 +27,7 @@ export const ESTADO_LABELS = {
 
 export const STORAGE_KEY = 'lifeos-state-v1';
 export const STORAGE_RECOVERY_KEY = 'lifeos-state-recovery-v1';
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 type StorageBackend = 'localStorage' | 'recovery' | 'ninguno';
 
@@ -273,7 +273,15 @@ export function normalizeStoredState(value: unknown): LifeOSState {
     tasksRecurring: arrayOr(value.tasksRecurring, def.tasksRecurring),
     taskLog: isRecord(value.taskLog) ? (value.taskLog as LifeOSState['taskLog']) : def.taskLog,
     todayExtras: arrayOr(value.todayExtras, def.todayExtras),
-    dailyPriorities: arrayOr(value.dailyPriorities, def.dailyPriorities),
+    dailyPriorities: arrayOr(value.dailyPriorities, def.dailyPriorities).map((priority) => ({
+      ...priority,
+      sourceItemId: priority.sourceItemId || null,
+      sourceKind: priority.sourceKind === 'toggle-task-today'
+        || priority.sourceKind === 'toggle-extra-today'
+        || priority.sourceKind === 'complete-followup'
+        ? priority.sourceKind
+        : null,
+    })),
     dailyContext: arrayOr(value.dailyContext, def.dailyContext),
     finance: {
       ...def.finance,

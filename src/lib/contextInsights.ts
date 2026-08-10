@@ -113,8 +113,8 @@ export function buildContextInsights(state: LifeOSState): ContextInsight[] {
       insights.push({
         id: 'connection-energy',
         text: delta > 0
-          ? `El contacto útil con alguien coincidió con ${delta.toFixed(1)} puntos más de energía.`
-          : `Los días más solitarios coincidieron con ${Math.abs(delta).toFixed(1)} puntos más de energía; puede ser descanso que te hace bien.`,
+          ? `Hablar o encontrarte con alguien coincidió con ${delta.toFixed(1)} puntos más de energía.`
+          : `Los días con más tiempo a solas coincidieron con ${Math.abs(delta).toFixed(1)} puntos más de energía; puede ser descanso que te hace bien.`,
       });
     }
   }

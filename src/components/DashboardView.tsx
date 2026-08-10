@@ -1,17 +1,11 @@
 import React, { useState } from 'react';
-import { LifeOSState, ViewType } from '../types';
+import type { DailyPriority, LifeOSState, ViewType } from '../types';
 import { playSound } from '../lib/audio';
 import { WeatherWidget } from './WeatherWidget';
 import { TodayFocus } from './TodayFocus';
 import { PersonalContextCard } from './PersonalContextCard';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
-import {
-  todayISO,
-  daysBetween,
-  fmtMoney,
-  stars,
-  uid,
-} from '../lib/storage';
+import { todayISO, daysBetween, fmtMoney, stars, uid } from '../lib/storage';
 import {
   findNowAndNext,
   todayItems,
@@ -21,6 +15,7 @@ import {
   nextExam,
   currentWeight,
   studyMinutesForDate,
+  type TodayItem,
 } from '../lib/calculations';
 
 interface DashboardViewProps {
@@ -30,311 +25,191 @@ interface DashboardViewProps {
   onExportJSON: () => void;
 }
 
-export const DashboardView: React.FC<DashboardViewProps> = ({
-  state,
-  onUpdateState,
-  onNavigate,
-  onExportJSON,
-}) => {
+export const DashboardView: React.FC<DashboardViewProps> = ({ state, onUpdateState, onNavigate, onExportJSON }) => {
   const [extraText, setExtraText] = useState('');
   const [extraPriority, setExtraPriority] = useState<'alta' | 'media' | 'baja'>('media');
+  const iso = todayISO();
+  const { current, next } = findNowAndNext(state);
+  const items = todayItems(state);
+  const priorities = state.dailyPriorities.filter((item) => item.date === iso);
+  const dayClosed = Boolean(state.checkoutLog[iso]?.closedAt);
+  const daysSinceBackup = state.settings.lastBackupAt ? daysBetween(state.settings.lastBackupAt, iso) : null;
+  const showBackupReminder = daysSinceBackup === null || daysSinceBackup >= 7;
 
   const greeting = () => {
-    const h = new Date().getHours();
-    let g = 'Buenas noches';
-    if (h >= 5 && h < 12) g = 'Buenos días';
-    else if (h >= 12 && h < 19) g = 'Buenas tardes';
-    const name = state.profile.name ? `, ${state.profile.name}` : '';
-    return g + name;
+    const hour = new Date().getHours();
+    const phrase = hour >= 5 && hour < 12 ? 'Buenos días' : hour >= 12 && hour < 19 ? 'Buenas tardes' : 'Buenas noches';
+    return `${phrase}${state.profile.name ? `, ${state.profile.name}` : ''}`;
   };
 
-  const { current, next } = findNowAndNext(state);
-  const disponible = calcAccountsTotal(state);
-  const jstats = jobStats(state);
-  const rstats = resaleStats(state);
-  const exam = nextExam(state);
-  const items = todayItems(state);
-  const weight = currentWeight(state);
-  const studyMin = studyMinutesForDate(state, todayISO());
-
-  const daysSinceBackup = state.settings.lastBackupAt
-    ? daysBetween(state.settings.lastBackupAt, todayISO())
-    : null;
-  const backupUrgent = daysSinceBackup === null || daysSinceBackup >= 3;
-
-  const handleAddExtra = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddExtra = (event: React.FormEvent) => {
+    event.preventDefault();
     if (!extraText.trim()) return;
     onUpdateState((draft) => {
-      draft.todayExtras.push({
-        id: uid(),
-        date: todayISO(),
-        text: extraText.trim(),
-        done: false,
-        priority: extraPriority,
-      });
+      draft.todayExtras.push({ id: uid(), date: iso, text: extraText.trim(), done: false, priority: extraPriority });
     });
     setExtraText('');
   };
 
-  const handleToggleItem = (item: ReturnType<typeof todayItems>[0]) => {
-    playSound('success');
+  const handleToggleItem = (item: TodayItem) => {
     onUpdateState((draft) => {
-      const iso = todayISO();
+      let done = true;
       if (item.kind === 'toggle-task-today') {
         if (!draft.taskLog[iso]) draft.taskLog[iso] = {};
-        draft.taskLog[iso][item.id] = !draft.taskLog[iso][item.id];
+        done = !Boolean(draft.taskLog[iso][item.id]);
+        draft.taskLog[iso][item.id] = done;
       } else if (item.kind === 'toggle-extra-today') {
-        const extra = draft.todayExtras.find((x) => x.id === item.id);
-        if (extra) extra.done = !extra.done;
-      } else if (item.kind === 'complete-followup') {
-        const app = draft.jobs.applications.find((a) => a.id === item.id);
-        if (app) {
-          app.nextAction = '';
-          app.nextActionDate = '';
-        }
+        const extra = draft.todayExtras.find((candidate) => candidate.id === item.id);
+        if (extra) { extra.done = !extra.done; done = extra.done; }
+      } else {
+        const application = draft.jobs.applications.find((candidate) => candidate.id === item.id);
+        if (application) { application.nextAction = ''; application.nextActionDate = ''; }
       }
+      draft.dailyPriorities
+        .filter((priority) => priority.date === iso && priority.sourceItemId === item.id && priority.sourceKind === item.kind)
+        .forEach((priority) => { priority.done = done; });
+      if (done) playSound('success');
+    });
+  };
+
+  const handlePinItem = (item: TodayItem) => {
+    onUpdateState((draft) => {
+      const dayPriorities = draft.dailyPriorities.filter((priority) => priority.date === iso);
+      const existing = dayPriorities.find((priority) => priority.sourceItemId === item.id && priority.sourceKind === item.kind);
+      if (existing) {
+        draft.dailyPriorities = draft.dailyPriorities.filter((priority) => priority.id !== existing.id);
+      } else if (dayPriorities.length < 3) {
+        draft.dailyPriorities.push({
+          id: uid(), date: iso, text: item.text, done: item.done,
+          rank: (dayPriorities.length + 1) as 1 | 2 | 3,
+          sourceItemId: item.id, sourceKind: item.kind,
+        });
+      }
+      draft.dailyPriorities.filter((priority) => priority.date === iso).sort((a, b) => a.rank - b.rank).forEach((priority, index) => { priority.rank = (index + 1) as 1 | 2 | 3; });
+    });
+  };
+
+  const handleAddPriority = (text: string) => {
+    onUpdateState((draft) => {
+      const dayPriorities = draft.dailyPriorities.filter((priority) => priority.date === iso);
+      if (dayPriorities.length >= 3) return;
+      const extraId = uid();
+      draft.todayExtras.push({ id: extraId, date: iso, text, done: false, priority: 'alta' });
+      draft.dailyPriorities.push({
+        id: uid(), date: iso, text, done: false,
+        rank: (dayPriorities.length + 1) as 1 | 2 | 3,
+        sourceItemId: extraId, sourceKind: 'toggle-extra-today',
+      });
+    });
+  };
+
+  const handleTogglePriority = (priority: DailyPriority) => {
+    const linked = priority.sourceItemId && priority.sourceKind
+      ? items.find((item) => item.id === priority.sourceItemId && item.kind === priority.sourceKind)
+      : null;
+    if (linked) { handleToggleItem(linked); return; }
+    onUpdateState((draft) => {
+      const target = draft.dailyPriorities.find((item) => item.id === priority.id);
+      if (target) { target.done = !target.done; if (target.done) playSound('success'); }
+    });
+  };
+
+  const handleRemovePriority = (id: string) => {
+    onUpdateState((draft) => {
+      draft.dailyPriorities = draft.dailyPriorities.filter((priority) => priority.id !== id);
+      draft.dailyPriorities.filter((priority) => priority.date === iso).sort((a, b) => a.rank - b.rank).forEach((priority, index) => { priority.rank = (index + 1) as 1 | 2 | 3; });
     });
   };
 
   const handleDeleteExtra = (id: string) => {
     onUpdateState((draft) => {
-      draft.todayExtras = draft.todayExtras.filter((x) => x.id !== id);
+      draft.todayExtras = draft.todayExtras.filter((item) => item.id !== id);
+      draft.dailyPriorities = draft.dailyPriorities.filter((priority) => priority.sourceItemId !== id);
+      draft.dailyPriorities.filter((priority) => priority.date === iso).sort((a, b) => a.rank - b.rank).forEach((priority, index) => { priority.rank = (index + 1) as 1 | 2 | 3; });
     });
   };
 
+  const panorama = [
+    { label: '💰 Disponible', value: fmtMoney(calcAccountsTotal(state)), detail: 'en tus cuentas', view: 'finanzas' as ViewType, accent: 'text-emerald-600 dark:text-emerald-400' },
+    { label: '💼 Empleo', value: String(jobStats(state).ofertasNuevas), detail: 'oferta(s) nueva(s)', view: 'trabajo' as ViewType },
+    { label: '🔁 Reventa', value: String(resaleStats(state).oportunidadesNuevas), detail: 'oportunidad(es)', view: 'reventa' as ViewType },
+    { label: '📚 Próximo examen', value: nextExam(state) ? state.study.subjects.find((subject) => subject.id === nextExam(state)?.subjectId)?.name || '—' : '—', detail: nextExam(state) ? `${daysBetween(iso, nextExam(state)!.date)} día(s)` : 'sin exámenes', view: 'estudios' as ViewType },
+    { label: '📖 Estudio hoy', value: `${studyMinutesForDate(state, iso)} min`, detail: 'tiempo registrado', view: 'estudios' as ViewType },
+    { label: '⚖️ Peso / cuerpo', value: currentWeight(state) != null ? `${currentWeight(state)} kg` : '—', detail: 'último registro', view: 'gimnasio' as ViewType },
+  ];
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-5">
+      <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text)]">{greeting()} 👋</h1>
-          <p className="text-sm text-[var(--text-soft)]">
-            {new Date().toLocaleDateString('es-UY', { weekday: 'long', day: 'numeric', month: 'long' })}
-          </p>
+          <p className="text-sm text-[var(--text-soft)]">{new Date().toLocaleDateString('es-UY', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
         </div>
-        <div className="w-full md:w-auto md:min-w-[320px]">
-          <WeatherWidget />
-        </div>
-      </div>
-
-      {backupUrgent && (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="text-xs sm:text-sm font-semibold text-red-600 dark:text-red-400">
-            ⚠️ {daysSinceBackup === null ? 'Todavía no exportaste ningún backup.' : `Hace ${daysSinceBackup} día(s) que no exportás un backup.`} Guardá una copia portátil por las dudas.
-          </div>
-          <button
-            onClick={onExportJSON}
-            className="px-3 py-1.5 bg-red-600 text-white rounded-xl text-xs font-semibold hover:bg-red-700 transition-colors shrink-0 cursor-pointer"
-          >
-            ⬇ Exportar backup ahora
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+          <div className="min-w-0 sm:min-w-[300px]"><WeatherWidget /></div>
+          <button onClick={() => onNavigate('checkout')} className={`rounded-2xl px-4 py-3 text-sm font-extrabold text-white shadow-sm ${dayClosed ? 'bg-emerald-600' : 'bg-gradient-to-r from-blue-600 to-indigo-600'}`}>
+            {dayClosed ? 'Día cerrado ✓' : '🌙 Cerrar día'}
           </button>
+        </div>
+      </header>
+
+      {showBackupReminder && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/25 bg-amber-500/8 px-3 py-2 text-xs text-[var(--text-soft)]">
+          <span>Respaldo portátil: {daysSinceBackup === null ? 'todavía no hiciste uno' : `último hace ${daysSinceBackup} días`}.</span>
+          <button onClick={onExportJSON} className="font-bold text-amber-700 hover:underline dark:text-amber-300">Exportar ahora</button>
         </div>
       )}
 
-      <TodayFocus state={state} onUpdateState={onUpdateState} />
+      <section className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-violet-500/10 p-4 shadow-xs">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <span className="h-3.5 w-3.5 shrink-0 rounded-full bg-blue-500 ring-4 ring-blue-500/15" />
+          <div><span className="text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">Ahora</span><p className="font-extrabold text-[var(--text)]">{current ? `${current.activity} · ${current.time}` : 'Sin actividad programada'}</p></div>
+          <div className="sm:ml-auto sm:text-right"><span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Próximo</span><p className="text-sm font-extrabold text-[var(--text)]">{next ? `${next.time} — ${next.activity}` : '—'}</p></div>
+        </div>
+      </section>
+
+      <section className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xs sm:p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div><h2 className="text-base font-extrabold text-[var(--text)]">Hoy <span className="ml-1 rounded-lg border border-blue-500/20 bg-[var(--blue-soft)] px-2 py-0.5 text-xs text-[var(--blue)]">{items.filter((item) => !item.done).length} pendiente(s)</span></h2><p className="mt-0.5 text-xs text-[var(--text-soft)]">Tu agenda, rutina, extras y seguimientos en un solo lugar.</p></div>
+        </div>
+
+        <TodayFocus priorities={priorities} onAdd={handleAddPriority} onToggle={handleTogglePriority} onRemove={handleRemovePriority} />
+
+        <form onSubmit={handleAddExtra} className="flex flex-wrap items-end gap-2 rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg)] p-3">
+          <label className="min-w-[190px] flex-1"><span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Agregar algo para hoy</span><input value={extraText} onChange={(event) => setExtraText(event.target.value)} placeholder="Ej: Enviar 2 CV" className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs outline-none focus:border-[var(--blue)]" /></label>
+          <label><span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Prioridad</span><select value={extraPriority} onChange={(event) => setExtraPriority(event.target.value as typeof extraPriority)} className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-2 text-xs"><option value="alta">Alta</option><option value="media">Media</option><option value="baja">Baja</option></select></label>
+          <button className="rounded-lg bg-[var(--blue)] px-3.5 py-2 text-xs font-bold text-white">＋ Agregar</button>
+        </form>
+
+        <div className="divide-y divide-[var(--border)]">
+          {items.length === 0 ? <p className="py-5 text-center text-xs text-[var(--text-faint)]">No tenés nada cargado para hoy todavía.</p> : items.map((item) => {
+            const pinned = priorities.some((priority) => priority.sourceItemId === item.id && priority.sourceKind === item.kind);
+            return <div key={`${item.kind}-${item.id}`} className="group flex items-center gap-2 rounded-xl px-1 py-2.5 hover:bg-[var(--bg)] sm:gap-3">
+              <button type="button" onClick={() => handleToggleItem(item)} className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 text-xs ${item.done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-[var(--border)] text-transparent hover:border-[var(--blue)]'}`}>✓</button>
+              <span className="hidden min-w-[65px] text-xs tracking-wider text-amber-500 sm:inline">{item.done ? '' : stars(item.priority)}</span>
+              <span className={`min-w-0 flex-1 text-xs sm:text-sm ${item.done ? 'text-[var(--text-faint)] line-through' : 'font-semibold text-[var(--text)]'}`}>{item.text}</span>
+              <button type="button" onClick={() => handlePinItem(item)} disabled={!pinned && priorities.length >= 3} title={pinned ? 'Quitar de las tres' : priorities.length >= 3 ? 'Ya elegiste tres prioridades' : 'Elegir como una de las tres'} className={`px-1 text-base ${pinned ? 'text-amber-500' : 'text-[var(--text-faint)] hover:text-amber-500'} disabled:cursor-not-allowed disabled:opacity-25`}>{pinned ? '★' : '☆'}</button>
+              <span className="hidden rounded-lg border border-[var(--border)] px-2 py-0.5 text-[10px] font-bold text-[var(--text-soft)] sm:inline-block">{item.source === 'agenda' ? '📅 agenda' : item.source === 'rutina' ? '🔁 rutina' : item.source === 'trabajo' ? '💼 seguimiento' : '✏️ extra'}</span>
+              {item.source === 'extra' && <button type="button" onClick={() => handleDeleteExtra(item.id)} className="px-1 text-xs text-[var(--text-faint)] hover:text-red-500">✕</button>}
+            </div>;
+          })}
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <PersonalContextCard state={state} onUpdateState={onUpdateState} />
         <WeeklyReviewCard state={state} onUpdateState={onUpdateState} onNavigate={onNavigate} />
       </div>
 
-      {/* Now & Next Banner */}
-      <div className="rounded-2xl p-5 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-violet-500/10 border border-[var(--border)] hover:border-[var(--border-hover)] transition-all shadow-xs flex flex-col sm:flex-row items-start sm:items-center gap-4 relative overflow-hidden group">
-        <div className="absolute -right-10 -bottom-10 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform" />
-        <div className="relative flex-shrink-0 z-10">
-          <div className="w-3.5 h-3.5 rounded-full bg-blue-500 relative">
-            <div className="absolute -inset-1 rounded-full border-2 border-blue-500 animate-ping opacity-75" />
-          </div>
+      <section>
+        <h2 className="mb-3 text-sm font-bold text-[var(--text)]">Panorama</h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+          {panorama.map((card) => <button key={card.label} type="button" onClick={() => onNavigate(card.view)} className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 text-left shadow-xs hover:border-[var(--blue)] hover:shadow-md"><span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">{card.label}</span><strong className={`mt-1 block truncate text-xl font-black ${card.accent || 'text-[var(--text)]'}`} title={card.value}>{card.value}</strong><span className="mt-1 block text-xs text-[var(--text-soft)]">{card.detail}</span></button>)}
         </div>
-        <div className="z-10">
-          <span className="text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">Ahora</span>
-          <p className="text-base font-extrabold text-[var(--text)] tracking-tight">
-            {current ? `${current.activity} · ${current.time}` : 'Sin actividad programada'}
-          </p>
-        </div>
-        <div className="sm:ml-auto text-left sm:text-right text-xs text-[var(--text-soft)] z-10">
-          <span className="text-[10px] uppercase font-bold tracking-wider text-[var(--text-faint)]">Próximo</span>
-          <div className="font-extrabold text-[var(--text)] text-sm">
-            {next ? `${next.time} — ${next.activity}` : '—'}
-          </div>
-        </div>
-      </div>
+      </section>
 
-      {/* Today Checklist */}
-      <div className="bg-[var(--card)] border border-[var(--border)] hover:border-[var(--border-hover)] transition-all rounded-2xl p-5 shadow-xs space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-extrabold text-[var(--text)] flex items-center gap-2">
-              Hoy
-              <span className="text-xs font-bold text-[var(--blue)] bg-[var(--blue-soft)] px-2.5 py-0.5 rounded-lg border border-blue-500/20">
-                {items.filter((i) => !i.done).length} pendiente(s)
-              </span>
-            </h2>
-            <p className="text-xs text-[var(--text-soft)] mt-0.5">Ordenado automáticamente por prioridad — lo más urgente, arriba.</p>
-          </div>
-        </div>
-
-        <form onSubmit={handleAddExtra} className="flex flex-wrap items-end gap-2 p-3 bg-[var(--bg)] border border-dashed border-[var(--border)] rounded-xl">
-          <div className="flex-1 min-w-[200px]">
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Agregar algo para hoy</label>
-            <input
-              type="text"
-              value={extraText}
-              onChange={(e) => setExtraText(e.target.value)}
-              placeholder="Ej: Enviar 2 CV, Reparar laptop..."
-              className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
-            />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Prioridad</label>
-            <select
-              value={extraPriority}
-              onChange={(e) => setExtraPriority(e.target.value as 'alta' | 'media' | 'baja')}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)] cursor-pointer"
-            >
-              <option value="alta">Alta</option>
-              <option value="media">Media</option>
-              <option value="baja">Baja</option>
-            </select>
-          </div>
-          <button
-            type="submit"
-            className="px-3.5 py-1.5 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-lg transition-all cursor-pointer shadow-2xs"
-          >
-            ＋ Agregar
-          </button>
-        </form>
-
-        <div className="divide-y divide-[var(--border)]">
-          {items.length === 0 ? (
-            <p className="text-center py-6 text-xs text-[var(--text-faint)] font-medium">No tenés nada cargado para hoy todavía.</p>
-          ) : (
-            items.map((item) => (
-              <div key={item.id} className="py-2.5 flex items-center gap-3 group/item hover:bg-[var(--bg)]/50 px-2 rounded-xl transition-colors">
-                <button
-                  type="button"
-                  onClick={() => handleToggleItem(item)}
-                  className={`w-5 h-5 rounded-md border-2 flex items-center justify-center text-xs transition-all shrink-0 cursor-pointer ${
-                    item.done
-                      ? 'bg-emerald-500 border-emerald-500 text-white scale-105'
-                      : 'border-[var(--border)] bg-[var(--bg-elevated)] text-transparent hover:border-[var(--blue)]'
-                  }`}
-                >
-                  ✓
-                </button>
-                <span className="text-amber-500 text-xs tracking-wider min-w-[65px]">
-                  {item.done ? '' : stars(item.priority)}
-                </span>
-                <span className={`flex-1 text-xs sm:text-sm ${item.done ? 'line-through text-[var(--text-faint)]' : 'text-[var(--text)] font-semibold'}`}>
-                  {item.text}
-                </span>
-                <span
-                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-lg border ${
-                    item.source === 'agenda'
-                      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
-                      : item.source === 'rutina'
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                      : item.source === 'trabajo'
-                      ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
-                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                  }`}
-                >
-                  {item.source === 'agenda'
-                    ? '📅 agenda'
-                    : item.source === 'rutina'
-                    ? '🔁 rutina'
-                    : item.source === 'trabajo'
-                    ? '💼 seguimiento'
-                    : '✏️ extra'}
-                </span>
-                {item.source === 'extra' && (
-                  <button
-                    onClick={() => handleDeleteExtra(item.id)}
-                    className="text-xs text-[var(--text-faint)] hover:text-red-500 px-1 py-0.5 rounded-xs transition-colors cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
-      {/* Panorama Grid */}
-      <div>
-        <h2 className="text-sm font-bold text-[var(--text)] mb-3">Panorama General</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div
-            onClick={() => onNavigate('trabajo')}
-            className="bg-[var(--card)] border border-[var(--border)] hover:border-[var(--blue)] rounded-2xl p-4 shadow-xs hover:shadow-md transition-all cursor-pointer group"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">💼 Empleo</span>
-            <div className="text-2xl font-black font-mono mt-1 text-[var(--text)] group-hover:text-[var(--blue)] transition-colors">{jstats.ofertasNuevas}</div>
-            <p className="text-xs text-[var(--text-soft)] mt-1 font-medium">oferta(s) nueva(s)</p>
-          </div>
-
-          <div
-            onClick={() => onNavigate('reventa')}
-            className="bg-[var(--card)] border border-[var(--border)] hover:border-[var(--blue)] rounded-2xl p-4 shadow-xs hover:shadow-md transition-all cursor-pointer group"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">🔁 Reventa</span>
-            <div className="text-2xl font-black font-mono mt-1 text-[var(--text)] group-hover:text-[var(--blue)] transition-colors">{rstats.oportunidadesNuevas}</div>
-            <p className="text-xs text-[var(--text-soft)] mt-1 font-medium">oportunidad(es)</p>
-          </div>
-
-          <div
-            onClick={() => onNavigate('finanzas')}
-            className="bg-[var(--card)] border border-[var(--border)] hover:border-[var(--blue)] rounded-2xl p-4 shadow-xs hover:shadow-md transition-all cursor-pointer group"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">💰 Disponible</span>
-            <div className="text-xl sm:text-2xl font-black font-mono mt-1 text-emerald-600 dark:text-emerald-400">{fmtMoney(disponible)}</div>
-          </div>
-
-          <div
-            onClick={() => onNavigate('estudios')}
-            className="bg-[var(--card)] border border-[var(--border)] hover:border-[var(--blue)] rounded-2xl p-4 shadow-xs hover:shadow-md transition-all cursor-pointer group"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">📚 Próximo examen</span>
-            <div className="text-sm font-extrabold mt-1 text-[var(--text)] truncate group-hover:text-[var(--blue)] transition-colors">
-              {exam ? state.study.subjects.find((s) => s.id === exam.subjectId)?.name || '—' : '—'}
-            </div>
-            <p className="text-xs text-[var(--text-soft)] mt-1 font-medium">
-              {exam ? `${daysBetween(todayISO(), exam.date)} día(s)` : 'sin exámenes'}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Quick stats */}
-      <div>
-        <h2 className="text-sm font-bold text-[var(--text)] mb-3">Resumen Rápido</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <div
-            onClick={() => onNavigate('gimnasio')}
-            className="bg-[var(--card)] border border-[var(--border)] hover:border-[var(--blue)] rounded-2xl p-4 shadow-xs hover:shadow-md transition-all cursor-pointer group"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">⚖️ Peso Corporal</span>
-            <div className="text-xl font-black font-mono mt-1 text-[var(--text)] group-hover:text-[var(--blue)] transition-colors">
-              {weight != null ? `${weight} kg` : '—'}
-            </div>
-          </div>
-
-          <div
-            onClick={() => onNavigate('estudios')}
-            className="bg-[var(--card)] border border-[var(--border)] hover:border-[var(--blue)] rounded-2xl p-4 shadow-xs hover:shadow-md transition-all cursor-pointer group"
-          >
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">📖 Estudio Hoy</span>
-            <div className="text-xl font-black font-mono mt-1 text-[var(--text)] group-hover:text-[var(--blue)] transition-colors">{studyMin} min</div>
-          </div>
-        </div>
-      </div>
-
-      <button
-        onClick={() => onNavigate('checkout')}
-        className="w-full py-4 px-5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold rounded-2xl text-sm transition-all shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
-      >
-        <span>🌙</span> Check-out del Día
+      <button onClick={() => onNavigate('checkout')} className="w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 py-3 text-sm font-extrabold text-[var(--text)] hover:border-[var(--blue)]">
+        {dayClosed ? '✓ El día ya está cerrado · ver resumen' : '🌙 Revisar y cerrar el día'}
       </button>
     </div>
   );

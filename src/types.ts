@@ -35,6 +35,8 @@ export interface DailyPriority {
   text: string;
   done: boolean;
   rank: 1 | 2 | 3;
+  sourceItemId?: string | null;
+  sourceKind?: 'toggle-task-today' | 'toggle-extra-today' | 'complete-followup' | null;
 }
 
 export interface DailyContextEntry {

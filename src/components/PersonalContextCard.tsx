@@ -19,6 +19,7 @@ function dayLabel(date: string): string {
 }
 
 export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({ state, onUpdateState }) => {
+  const [showAnalysis, setShowAnalysis] = useState(false);
   const [entryDate, setEntryDate] = useState(todayISO());
   const current = contextForDate(state, entryDate);
   const [sleep, setSleep] = useState(current.sleepHours == null ? '' : String(current.sleepHours));
@@ -80,15 +81,28 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({ state,
           <div className="flex gap-1">{([1, 2, 3, 4, 5] as const).map((value) => <button type="button" key={value} onClick={() => setEnergy(value)} className={`flex h-10 flex-1 items-center justify-center rounded-xl border text-xs font-black ${energy === value ? 'border-amber-500 bg-amber-500/15 text-amber-600' : 'border-[var(--border)] text-[var(--text-soft)]'}`}>{value}</button>)}</div>
         </div>
         <label>
-          <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-[var(--text-faint)]">Conexión útil</span>
+          <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-[var(--text-faint)]">Contacto social</span>
           <select value={connection || ''} onChange={(event) => setConnection((event.target.value || null) as DailyContextEntry['connection'])} className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2.5 text-sm">
-            <option value="">Sin registrar</option><option value="solo">Tiempo solo</option><option value="mensaje">Mensaje / llamada</option><option value="encuentro">Encuentro</option>
+            <option value="">Sin registrar</option><option value="solo">Día más bien solo</option><option value="mensaje">Mensaje o llamada</option><option value="encuentro">Encuentro en persona</option>
           </select>
+          <span className="mt-1 block text-[10px] text-[var(--text-faint)]">Para ver si hablar o estar con alguien influye en tu energía.</span>
         </label>
       </div>
       <button type="button" onClick={save} className="mt-4 w-full rounded-xl border border-[var(--blue)] bg-[var(--blue-soft)] py-2.5 text-xs font-extrabold text-[var(--blue)]">Guardar contexto</button>
 
-      <div className="mt-4 border-t border-[var(--border)] pt-4">
+      <button
+        type="button"
+        onClick={() => setShowAnalysis((value) => !value)}
+        className="mt-4 flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2.5 text-left"
+      >
+        <span>
+          <span className="block text-[10px] font-black uppercase tracking-wider text-[var(--text-faint)]">Sueño · últimos 7 días</span>
+          <strong className="text-sm text-[var(--text)]">{summary.averageHours == null ? 'Sin promedio todavía' : `${summary.averageHours.toFixed(1)} h promedio`} · {summary.recordedNights}/7 registrados</strong>
+        </span>
+        <span className="text-xs font-bold text-[var(--blue)]">{showAnalysis ? 'Ocultar ▴' : 'Ver análisis ▾'}</span>
+      </button>
+
+      {showAnalysis && <div className="mt-3 border-t border-[var(--border)] pt-4">
         <div className="flex items-end justify-between gap-3">
           <div>
             <span className="block text-[10px] font-black uppercase tracking-wider text-[var(--text-faint)]">Promedio · últimos 7 días</span>
@@ -108,9 +122,9 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({ state,
           ))}
         </div>
         {summary.recordedNights < 3 && <p className="mt-2 text-[10px] text-[var(--text-faint)]">Con tres noches seguidas LifeOS ya puede avisarte si estás acumulando poco sueño. Referencia general para adultos: 7 h o más.</p>}
-      </div>
+      </div>}
 
-      {insights.length > 0 && <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4">{insights.map((insight) => <p key={insight.id} className="rounded-xl bg-[var(--bg)] px-3 py-2.5 text-xs font-semibold text-[var(--text-soft)]">↗ {insight.text}</p>)}<p className="text-[10px] text-[var(--text-faint)]">Son coincidencias personales, no pruebas de causa.</p></div>}
+      {showAnalysis && insights.length > 0 && <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-4">{insights.map((insight) => <p key={insight.id} className="rounded-xl bg-[var(--bg)] px-3 py-2.5 text-xs font-semibold text-[var(--text-soft)]">↗ {insight.text}</p>)}<p className="text-[10px] text-[var(--text-faint)]">Son coincidencias personales, no pruebas de causa.</p></div>}
     </section>
   );
 };

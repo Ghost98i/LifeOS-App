@@ -30,12 +30,15 @@ El primer dispositivo con datos puede subir su estado existente. Si LifeOS detec
 ## Flujos cotidianos
 
 - **Captura universal:** el botón central guarda tareas, notas, ingresos o gastos sin buscar una pestaña.
-- **Hoy:** separa tres prioridades reales del resto de la lista y registra sueño, energía y conexión personal. Resume los últimos siete días y avisa al detectar tres noches cortas consecutivas.
+- **Hoy:** permite fijar tres tareas reales como resultados clave —sin duplicarlas— y registra sueño, energía y contacto social. Resume los últimos siete días y avisa al detectar tres noches cortas consecutivas.
 - **Finanzas:** distingue movimientos de transferencias, permite conciliar cuentas y conserva los ajustes fuera del gasto mensual.
 - **Reventa:** una compra descuenta la cuenta; una venta registra cobro, costos y ganancia realizada sin duplicar datos.
 - **Búsqueda global:** `Ctrl+K` en PC o la lupa en el celular encuentra información en todos los módulos.
 - **Revisión semanal:** muestra únicamente vencimientos, stock inmóvil, cuentas sin conciliar, presupuestos excedidos y otras excepciones.
 - **Composición corporal:** reemplaza el IMC visible por una estimación RFM basada en altura y cintura, y usa ese resultado junto con el peso para calcular masa grasa, masa magra y FFMI.
+- **Historial de gimnasio:** mantiene a mano las últimas cuatro semanas y archiva automáticamente las anteriores en meses desplegables.
+
+Las herramientas menos cotidianas —transferencias y conciliación, presupuestos, plantillas y análisis personal— permanecen disponibles en paneles compactos que se abren cuando hacen falta. El modo oscuro usa una paleta azul noche para mejorar legibilidad y confort.
 
 ## Desarrollo interno
 
@@ -63,7 +66,7 @@ Configuración permite:
 - importar únicamente backups reconocidos como LifeOS;
 - diagnosticar tamaño, versión y disponibilidad de la copia de recuperación.
 
-El almacenamiento local sigue ligado al navegador y dispositivo. El backup JSON es la copia portátil.
+El almacenamiento local sigue ligado al navegador y dispositivo. En LifeOS Anywhere, la cuenta de Google sincroniza el estado; el backup JSON sigue siendo la copia portátil independiente.
 
 ## Flujo de IA
 

@@ -82,6 +82,15 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   const balance = ingreso - gastado;
   const cmp = calcMonthComparison(state);
   const catSpent = calcSpentByCategory(state, 0);
+  const budgetEntries = state.finance.categories.map((category) => ({
+    category,
+    spent: catSpent[category] || 0,
+    budget: Number(state.finance.budgets[category] || 0),
+  }));
+  const configuredBudgets = budgetEntries.filter((entry) => entry.budget > 0);
+  const budgetTotal = configuredBudgets.reduce((sum, entry) => sum + entry.budget, 0);
+  const budgetSpent = configuredBudgets.reduce((sum, entry) => sum + entry.spent, 0);
+  const exceededBudgets = configuredBudgets.filter((entry) => entry.spent > entry.budget).length;
   const subsTotal = calcSubscriptionsTotal(state);
   const rstats = resaleStats(state);
   const ref = new Date();
@@ -530,9 +539,21 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       </div>
 
       {/* Category Budgets */}
-      <div className="space-y-2">
-        <h2 className="text-sm font-bold text-[var(--text)]">Presupuesto por categoría (mes actual)</h2>
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 divide-y divide-[var(--border)] space-y-3">
+      <details className="group overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xs">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+          <div>
+            <h2 className="text-sm font-bold text-[var(--text)]">Presupuesto por categoría</h2>
+            <p className="mt-0.5 text-xs text-[var(--text-soft)]">
+              {configuredBudgets.length === 0 ? 'Sin presupuestos configurados' : `${fmtMoney(budgetSpent)} de ${fmtMoney(budgetTotal)} este mes`}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {exceededBudgets > 0 && <span className="rounded-lg bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-500">⚠ {exceededBudgets} excedido(s)</span>}
+            <span className="text-xs font-bold text-[var(--blue)] group-open:hidden">Abrir ▾</span>
+            <span className="hidden text-xs font-bold text-[var(--blue)] group-open:inline">Cerrar ▴</span>
+          </div>
+        </summary>
+        <div className="divide-y divide-[var(--border)] space-y-3 border-t border-[var(--border)] p-4">
           {state.finance.categories.map((cat) => {
             const spent = catSpent[cat] || 0;
             const budget = Number(state.finance.budgets[cat] || 0);
@@ -568,7 +589,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
             );
           })}
         </div>
-      </div>
+      </details>
 
       {/* Expense Charts with Recharts */}
       <div className="space-y-6">

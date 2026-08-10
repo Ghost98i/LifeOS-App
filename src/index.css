@@ -17,19 +17,19 @@
 }
 
 .dark {
-  --bg: #0b0f19;
-  --bg-elevated: #111827;
-  --card: #131b2e;
-  --border: #1e293b;
-  --border-hover: #334155;
-  --text: #f8fafc;
+  --bg: #0f172a;
+  --bg-elevated: #1c2a42;
+  --card: #162238;
+  --border: #2a3a55;
+  --border-hover: #3b4f70;
+  --text: #f1f5f9;
   --text-soft: #94a3b8;
-  --text-faint: #64748b;
-  --blue: #3b82f6;
-  --blue-hover: #60a5fa;
-  --blue-soft: rgba(59, 130, 246, 0.14);
-  --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3);
-  --card-shadow-hover: 0 12px 24px -4px rgb(0 0 0 / 0.45);
+  --text-faint: #71819a;
+  --blue: #4c9aff;
+  --blue-hover: #74b4ff;
+  --blue-soft: rgba(76, 154, 255, 0.14);
+  --card-shadow: 0 1px 3px 0 rgb(2 8 23 / 0.22);
+  --card-shadow-hover: 0 12px 24px -4px rgb(2 8 23 / 0.32);
 }
 
 body {
@@ -90,4 +90,3 @@ input, select, textarea, button {
 button:active {
   transform: scale(0.98);
 }
-

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import type { LifeOSState } from '../types';
 import { bodyCompositionEstimate } from '../lib/bodyComposition';
 import { fmtDate, todayISO } from '../lib/storage';
@@ -9,7 +9,6 @@ interface BodyCompositionCardProps {
 }
 
 export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state, onUpdateState }) => {
-  const [height, setHeight] = useState(String(state.profile.height || ''));
   const [date, setDate] = useState(todayISO());
   const [weight, setWeight] = useState('');
   const [waist, setWaist] = useState('');
@@ -17,20 +16,6 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state,
   const estimate = bodyCompositionEstimate(state);
   const latestWeight = [...state.gym.weight].sort((a, b) => b.date.localeCompare(a.date))[0] || null;
   const latestWaist = [...state.gym.measurements].sort((a, b) => b.date.localeCompare(a.date))[0] || null;
-
-  useEffect(() => setHeight(String(state.profile.height || '')), [state.profile.height]);
-
-  const saveHeight = () => {
-    const value = Number(height);
-    if (!Number.isFinite(value) || value < 100 || value > 250) return;
-    onUpdateState((draft) => { draft.profile.height = value; });
-    setSaved(true);
-    window.setTimeout(() => setSaved(false), 1200);
-  };
-
-  const setFormula = (value: 'male' | 'female') => {
-    onUpdateState((draft) => { draft.profile.bodyCompositionSex = value; });
-  };
 
   const saveSnapshot = (event: React.FormEvent) => {
     event.preventDefault();
@@ -50,7 +35,8 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state,
   };
 
   const missing = [
-    !state.profile.bodyCompositionSex && 'elegir fórmula',
+    !state.profile.bodyCompositionSex && 'completar el perfil corporal en Configuración',
+    (!state.profile.height || state.profile.height < 100) && 'configurar tu altura',
     !latestWeight && 'registrar peso',
     !latestWaist && 'registrar cintura',
   ].filter(Boolean) as string[];
@@ -65,24 +51,11 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state,
         {saved && <span className="text-xs font-bold text-emerald-500">✓ Guardado</span>}
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[160px_1fr_auto] lg:items-end">
-        <label>
-          <span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-[var(--text-faint)]">Altura</span>
-          <div className="flex gap-2">
-            <input type="number" min="100" max="250" step="0.1" inputMode="decimal" value={height} onChange={(event) => setHeight(event.target.value)} className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm font-mono" />
-            <span className="self-center text-xs text-[var(--text-soft)]">cm</span>
-          </div>
-        </label>
-        <div>
-          <span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-[var(--text-faint)]">Fórmula corporal</span>
-          <div className="grid grid-cols-2 gap-2">
-            <button type="button" onClick={() => setFormula('male')} className={`rounded-xl border px-3 py-2 text-xs font-bold ${state.profile.bodyCompositionSex === 'male' ? 'border-[var(--blue)] bg-[var(--blue-soft)] text-[var(--blue)]' : 'border-[var(--border)] text-[var(--text-soft)]'}`}>Masculina</button>
-            <button type="button" onClick={() => setFormula('female')} className={`rounded-xl border px-3 py-2 text-xs font-bold ${state.profile.bodyCompositionSex === 'female' ? 'border-[var(--blue)] bg-[var(--blue-soft)] text-[var(--blue)]' : 'border-[var(--border)] text-[var(--text-soft)]'}`}>Femenina</button>
-          </div>
-        </div>
-        <button type="button" onClick={saveHeight} className="rounded-xl bg-[var(--text)] px-4 py-2 text-xs font-bold text-[var(--bg-elevated)]">Guardar altura</button>
-      </div>
-      <p className="mt-2 text-[10px] text-[var(--text-faint)]">La ecuación RFM usa una constante corporal masculina o femenina. Esta elección solo se usa para el cálculo, no como identidad.</p>
+      {!state.profile.bodyCompositionSex && (
+        <p className="mt-4 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-xs font-semibold text-amber-700 dark:text-amber-300">
+          Completá una sola vez “Sexo para cálculos corporales” en Configuración → Perfil. Después no volveremos a preguntarlo acá.
+        </p>
+      )}
 
       <form onSubmit={saveSnapshot} className="mt-4 grid grid-cols-2 gap-2 rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg)] p-3 sm:grid-cols-[150px_1fr_1fr_auto] sm:items-end">
         <label className="col-span-2 sm:col-span-1">
