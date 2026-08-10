@@ -30,11 +30,12 @@ El primer dispositivo con datos puede subir su estado existente. Si LifeOS detec
 ## Flujos cotidianos
 
 - **Captura universal:** el botón central guarda tareas, notas, ingresos o gastos sin buscar una pestaña.
-- **Hoy:** separa tres prioridades reales del resto de la lista y registra sueño, energía y conexión personal.
+- **Hoy:** separa tres prioridades reales del resto de la lista y registra sueño, energía y conexión personal. Resume los últimos siete días y avisa al detectar tres noches cortas consecutivas.
 - **Finanzas:** distingue movimientos de transferencias, permite conciliar cuentas y conserva los ajustes fuera del gasto mensual.
 - **Reventa:** una compra descuenta la cuenta; una venta registra cobro, costos y ganancia realizada sin duplicar datos.
 - **Búsqueda global:** `Ctrl+K` en PC o la lupa en el celular encuentra información en todos los módulos.
 - **Revisión semanal:** muestra únicamente vencimientos, stock inmóvil, cuentas sin conciliar, presupuestos excedidos y otras excepciones.
+- **Composición corporal:** reemplaza el IMC visible por una estimación RFM basada en altura y cintura, y usa ese resultado junto con el peso para calcular masa grasa, masa magra y FFMI.
 
 ## Desarrollo interno
 
