@@ -2,6 +2,14 @@
 
 LifeOS es un centro de operaciones personal. No busca almacenar información por acumularla: conecta datos y los convierte en próximas acciones con la menor fricción posible.
 
+## Uso diario
+
+1. Descargar `LifeOS.html`.
+2. Abrirlo con doble clic en Chrome, Edge o Firefox.
+3. Usar siempre ese mismo archivo para conservar los datos del navegador.
+
+No requiere instalar Node.js, ejecutar comandos ni mantener una terminal abierta. Antes de reemplazar el archivo por una versión nueva conviene exportar un backup desde Configuración.
+
 ## Principios
 
 - El Dashboard es el único lugar que interpreta y prioriza.
@@ -11,7 +19,7 @@ LifeOS es un centro de operaciones personal. No busca almacenar información por
 - La IA es opcional y externa: LifeOS genera un prompt, cualquier IA devuelve JSON y la persona revisa la importación.
 - Las funciones nuevas deben aportar una mejora concreta al uso diario.
 
-## Desarrollo
+## Desarrollo interno
 
 ```bash
 npm install
