@@ -3,6 +3,7 @@ export type DayKey = 'lunes' | 'martes' | 'miercoles' | 'jueves' | 'viernes' | '
 export interface Profile {
   name: string;
   height: number;
+  bodyCompositionSex: 'male' | 'female' | null;
 }
 
 export interface AgendaBlock {
