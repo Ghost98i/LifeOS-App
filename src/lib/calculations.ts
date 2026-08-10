@@ -171,21 +171,6 @@ export function weightVariation(state: LifeOSState): number | null {
   return c - f;
 }
 
-export function calcIMC(state: LifeOSState): number | null {
-  const w = currentWeight(state);
-  const h = Number(state.profile.height || 0) / 100;
-  if (!w || !h) return null;
-  return w / (h * h);
-}
-
-export function imcCategory(imc: number | null): { label: string; color: 'blue' | 'green' | 'amber' | 'red' | 'flat' } {
-  if (imc == null) return { label: '—', color: 'flat' };
-  if (imc < 18.5) return { label: 'Bajo peso', color: 'blue' };
-  if (imc < 25) return { label: 'Normal', color: 'green' };
-  if (imc < 30) return { label: 'Sobrepeso', color: 'amber' };
-  return { label: 'Obesidad', color: 'red' };
-}
-
 export function trainedDatesSet(state: LifeOSState): Set<string> {
   return new Set(state.gym.sessions.map((s) => s.date));
 }
