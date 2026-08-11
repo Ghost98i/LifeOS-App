@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
   --bg: #f8fafc;
   --bg-elevated: #ffffff;
   --card: #ffffff;
@@ -17,6 +18,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --bg: #0f172a;
   --bg-elevated: #1c2a42;
   --card: #162238;
@@ -34,11 +36,16 @@
 
 body {
   background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 88% -10%, color-mix(in srgb, var(--blue) 9%, transparent), transparent 32rem),
+    radial-gradient(circle at -10% 45%, color-mix(in srgb, #8b5cf6 5%, transparent), transparent 28rem);
+  background-attachment: fixed;
   color: var(--text);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
+  min-width: 320px;
 }
 
 /* Glassmorphism & Card styling helpers */
@@ -87,6 +94,47 @@ input, select, textarea, button {
   transition: all 0.15s ease-in-out;
 }
 
+button:not(:disabled), summary, a {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--blue) !important;
+  outline-offset: 2px;
+}
+
+input, select, textarea {
+  accent-color: var(--blue);
+}
+
 button:active {
   transform: scale(0.98);
+}
+
+.toast-enter {
+  animation: toast-enter 180ms ease-out both;
+}
+
+@keyframes toast-enter {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

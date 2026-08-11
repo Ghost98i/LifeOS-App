@@ -35,6 +35,8 @@ import { MobileQuickCapture } from './components/MobileQuickCapture';
 import { MobileNav } from './components/MobileNav';
 import { CloudConflictModal } from './components/CloudConflictModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
+import { ToastViewport } from './components/ToastViewport';
+import { showToast } from './lib/toast';
 
 export default function App() {
   const [{ state, storageBackend }, setStateObj] = useState(() => {
@@ -171,7 +173,7 @@ export default function App() {
       await signInToCloud();
     } catch (error) {
       setSyncStatus('signed-out');
-      alert(error instanceof Error ? error.message : 'No se pudo iniciar sesión con Google.');
+      showToast(error instanceof Error ? error.message : 'No se pudo iniciar sesión con Google.', 'error');
     }
   };
 
@@ -211,14 +213,28 @@ export default function App() {
   }, [state.settings.darkMode]);
 
   useEffect(() => {
-    const openSearch = (event: KeyboardEvent) => {
+    const handleShortcuts = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         setIsSearchOpen(true);
+        return;
+      }
+      if (event.key === 'Escape') {
+        setIsSearchOpen(false);
+        setIsQuickCaptureOpen(false);
+        setIsOpenMobile(false);
+        setIsCheckoutOpen(false);
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      const typing = target?.matches('input, textarea, select, [contenteditable="true"]');
+      if (!typing && !event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === 'c') {
+        event.preventDefault();
+        setIsQuickCaptureOpen(true);
       }
     };
-    window.addEventListener('keydown', openSearch);
-    return () => window.removeEventListener('keydown', openSearch);
+    window.addEventListener('keydown', handleShortcuts);
+    return () => window.removeEventListener('keydown', handleShortcuts);
   }, []);
 
   const handleToggleTheme = () => {
@@ -232,6 +248,7 @@ export default function App() {
       setIsCheckoutOpen(true);
     } else {
       setCurrentView(view);
+      window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     }
   };
 
@@ -275,9 +292,9 @@ export default function App() {
         updateState((draft) => {
           Object.assign(draft, imported);
         });
-        alert('¡Backup validado e importado correctamente!');
+        showToast('Backup validado e importado correctamente.');
       } catch (error) {
-        alert(error instanceof Error ? error.message : 'Error al leer el archivo JSON.');
+        showToast(error instanceof Error ? error.message : 'Error al leer el archivo JSON.', 'error');
       } finally {
         e.target.value = '';
       }
@@ -300,6 +317,7 @@ export default function App() {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         <Topbar
+          currentView={currentView}
           state={state}
           onOpenMobileNav={() => setIsOpenMobile(true)}
           onQuickAction={handleQuickAction}
@@ -428,6 +446,7 @@ export default function App() {
         onClose={() => setIsSearchOpen(false)}
         onNavigate={handleNavigate}
       />
+      <ToastViewport />
     </div>
   );
 }

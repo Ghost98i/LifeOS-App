@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { showToast } from '../lib/toast';
 import { LifeOSState, Exam } from '../types';
 import { FocusTimer } from './FocusTimer';
 import { playSound } from '../lib/audio';
@@ -82,7 +83,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
     e.preventDefault();
     const subId = examSubjectId || (state.study.subjects.length ? state.study.subjects[0].id : '');
     if (!subId) {
-      alert('Primero agregá una materia.');
+      showToast('Primero agregá una materia.', 'info');
       return;
     }
     onUpdateState((draft) => {

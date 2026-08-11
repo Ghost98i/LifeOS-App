@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { ViewType, LifeOSState } from '../types';
 import { isSoundEnabled, setSoundEnabled, playSound } from '../lib/audio';
 import type { CloudSyncStatus, CloudUser } from '../lib/cloudSync';
+import lifeOSIcon from '../assets/lifeos-icon.png';
 
 interface TopbarProps {
+  currentView: ViewType;
   state: LifeOSState;
   onOpenMobileNav: () => void;
   onQuickAction: (view: ViewType, focusId: string, txType?: 'gasto' | 'ingreso') => void;
@@ -27,6 +29,7 @@ export const QUICK_ACTIONS: { label: string; view: ViewType; focusId: string; tx
 ];
 
 export const Topbar: React.FC<TopbarProps> = ({
+  currentView,
   state,
   onOpenMobileNav,
   onQuickAction,
@@ -44,6 +47,12 @@ export const Topbar: React.FC<TopbarProps> = ({
   const [showCloudMenu, setShowCloudMenu] = useState(false);
   const hidden = state.settings.hiddenTabs || [];
   const actions = QUICK_ACTIONS.filter((q) => !hidden.includes(q.view));
+  const currentMeta: Record<ViewType, { icon: string; label: string }> = {
+    dashboard: { icon: '🏠', label: 'Hoy' }, agenda: { icon: '📅', label: 'Agenda' }, calendario: { icon: '🗓️', label: 'Calendario' },
+    trabajo: { icon: '💼', label: 'Trabajo' }, reventa: { icon: '🔁', label: 'Reventa' }, finanzas: { icon: '💰', label: 'Finanzas' },
+    gimnasio: { icon: '🏋️', label: 'Gimnasio' }, estudios: { icon: '📚', label: 'Estudios' }, notas: { icon: '📝', label: 'Notas' },
+    ia: { icon: '✦', label: 'IA' }, config: { icon: '⚙️', label: 'Configuración' }, checkout: { icon: '🌙', label: 'Cerrar día' },
+  };
 
   const toggleSound = () => {
     const next = !soundOn;
@@ -61,14 +70,14 @@ export const Topbar: React.FC<TopbarProps> = ({
   };
 
   const syncLabel: Record<CloudSyncStatus, string> = {
-    unavailable: 'Solo local',
-    'signed-out': 'Conectar',
+    unavailable: 'Guardado local',
+    'signed-out': 'Conectar dispositivos',
     connecting: 'Conectando',
     saving: 'Guardando',
-    synced: 'Sincronizado',
-    offline: 'Sin conexión',
-    conflict: 'Revisar datos',
-    error: 'Error de sync',
+    synced: 'Datos al día',
+    offline: 'Guardado sin internet',
+    conflict: 'Elegir versión',
+    error: 'Sincronización pendiente',
   };
 
   return (
@@ -76,7 +85,7 @@ export const Topbar: React.FC<TopbarProps> = ({
       <button
         onClick={onOpenMobileNav}
         className="lg:hidden p-2 text-lg rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text)] hover:bg-[var(--bg)] cursor-pointer"
-        aria-label="Menu"
+        aria-label="Abrir menú"
       >
         ☰
       </button>
@@ -87,7 +96,7 @@ export const Topbar: React.FC<TopbarProps> = ({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Buscar todo en LifeOS (presioná Enter)..."
+          placeholder="Buscar en LifeOS… Ctrl K"
           className="w-full pl-9 pr-3 py-1.5 text-xs lg:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue)]/20 outline-hidden transition-all text-[var(--text)] placeholder-[var(--text-faint)]"
         />
         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[var(--text-faint)] pointer-events-none">
@@ -95,11 +104,14 @@ export const Topbar: React.FC<TopbarProps> = ({
         </span>
       </div>
 
-      <span className="sm:hidden text-sm font-extrabold tracking-tight text-[var(--text)]">LifeOS</span>
+      <div className="flex min-w-0 items-center gap-2 sm:hidden">
+        <img src={lifeOSIcon} alt="" className="h-7 w-7 shrink-0 rounded-lg" />
+        <span className="truncate text-sm font-extrabold tracking-tight text-[var(--text)]">{currentMeta[currentView].icon} {currentMeta[currentView].label}</span>
+      </div>
 
       <div className="flex items-center gap-2 ml-auto">
         <button onClick={onOpenSearch} className="sm:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] text-sm" aria-label="Buscar en LifeOS">⌕</button>
-        <button onClick={onOpenCapture} className="hidden sm:flex items-center gap-1.5 rounded-xl bg-[var(--blue)] px-3 py-2 text-xs font-extrabold text-white shadow-sm"><span className="text-base leading-none">＋</span> Capturar</button>
+        <button onClick={onOpenCapture} title="Capturar (C)" className="hidden sm:flex items-center gap-1.5 rounded-xl bg-[var(--blue)] px-3 py-2 text-xs font-extrabold text-white shadow-sm"><span className="text-base leading-none">＋</span> Capturar <kbd className="ml-1 rounded bg-white/15 px-1 text-[9px]">C</kbd></button>
         {cloudConfigured && (
           <div className="relative shrink-0">
             <button
@@ -120,6 +132,7 @@ export const Topbar: React.FC<TopbarProps> = ({
             )}
           </div>
         )}
+        {!cloudConfigured && <span title="Los datos se guardan en este dispositivo" className="hidden items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-[10px] font-bold text-[var(--text-soft)] sm:flex"><span className="h-2 w-2 rounded-full bg-emerald-500" />Guardado local</span>}
 
         <div className="hidden lg:flex items-center gap-2 overflow-x-auto no-scrollbar">
         <button

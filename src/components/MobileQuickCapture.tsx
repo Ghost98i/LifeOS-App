@@ -40,6 +40,13 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({ state, o
     setMessage('');
   }, [open, kind]);
 
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [open]);
+
   if (!open) return null;
 
   const handleSubmit = (event: React.FormEvent) => {

@@ -34,11 +34,14 @@ El primer dispositivo con datos puede subir su estado existente. Si LifeOS detec
 - **Finanzas:** distingue movimientos de transferencias, permite conciliar cuentas y conserva los ajustes fuera del gasto mensual.
 - **Reventa:** una compra descuenta la cuenta; una venta registra cobro, costos y ganancia realizada sin duplicar datos.
 - **Búsqueda global:** `Ctrl+K` en PC o la lupa en el celular encuentra información en todos los módulos.
+- **Atajos cómodos:** `C` abre la captura universal y `Esc` cierra cualquier panel abierto sin usar el mouse.
 - **Revisión semanal:** muestra únicamente vencimientos, stock inmóvil, cuentas sin conciliar, presupuestos excedidos y otras excepciones.
 - **Composición corporal:** reemplaza el IMC visible por una estimación RFM basada en altura y cintura, y usa ese resultado junto con el peso para calcular masa grasa, masa magra y FFMI.
 - **Historial de gimnasio:** mantiene a mano las últimas cuatro semanas y archiva automáticamente las anteriores en meses desplegables.
 
 Las herramientas menos cotidianas —transferencias y conciliación, presupuestos, plantillas y análisis personal— permanecen disponibles en paneles compactos que se abren cuando hacen falta. El modo oscuro usa una paleta azul noche para mejorar legibilidad y confort.
+
+El clima usa Open-Meteo. LifeOS solicita la ubicación precisa únicamente al tocar “Ubicación (opcional)”; también se puede buscar una ciudad manualmente. La consulta ya no utiliza un segundo servicio de geolocalización.
 
 ## Desarrollo interno
 

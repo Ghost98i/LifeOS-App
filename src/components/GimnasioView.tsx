@@ -15,6 +15,7 @@ import { RestTimer } from './RestTimer';
 import { BodyCompositionCard } from './BodyCompositionCard';
 import { bodyCompositionEstimate } from '../lib/bodyComposition';
 import { buildGymHistory, type GymWeekGroup } from '../lib/gymHistory';
+import { showToast } from '../lib/toast';
 import {
   todayISO,
   fmtDate,
@@ -206,7 +207,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
 
   const handleApplyTemplate = () => {
     if (!sessionTemplate) {
-      alert('Elegí una plantilla primero.');
+      showToast('Elegí una plantilla primero.', 'info');
       return;
     }
     const t = state.gym.routineTemplates.find((x) => x.id === sessionTemplate);

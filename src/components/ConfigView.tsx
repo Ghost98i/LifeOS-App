@@ -7,6 +7,7 @@ import {
   getStorageDiagnostics,
   StorageDiagnostics,
 } from '../lib/storage';
+import { showToast } from '../lib/toast';
 
 interface ConfigViewProps {
   state: LifeOSState;
@@ -35,7 +36,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
       draft.profile.bodyCompositionSex = profileBodySex || null;
       draft.streaming.monthlyGoal = Number(streamGoal) || 12;
     });
-    alert('Configuración guardada.');
+    showToast('Configuración guardada.');
   };
 
   const handleToggleTab = (tabId: string) => {
@@ -55,7 +56,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
       onUpdateState((draft) => {
         Object.assign(draft, def);
       });
-      alert('Datos reiniciados a los valores por defecto.');
+      showToast('Datos reiniciados a los valores por defecto.', 'info');
     }
   };
 

@@ -70,20 +70,6 @@ export const WeatherWidget: React.FC = () => {
     }
   };
 
-  const reverseGeocode = async (lat: number, lon: number) => {
-    try {
-      const res = await fetch(
-        `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=es`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        const city = data.city || data.locality || data.principalSubdivision || 'Tu ubicación';
-        return city;
-      }
-    } catch (_) {}
-    return 'Tu ubicación';
-  };
-
   const getLocationAndFetch = () => {
     if (!navigator.geolocation) {
       setError('La geolocalización no está soportada por el navegador.');
@@ -92,11 +78,10 @@ export const WeatherWidget: React.FC = () => {
     setLoading(true);
     setError(null);
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
+      (pos) => {
         const lat = pos.coords.latitude;
         const lon = pos.coords.longitude;
-        const city = await reverseGeocode(lat, lon);
-        await fetchWeather(lat, lon, city);
+        fetchWeather(lat, lon, 'Ubicación actual');
       },
       (err) => {
         console.warn('Geolocation denied/error:', err);
@@ -223,9 +208,10 @@ export const WeatherWidget: React.FC = () => {
           <button
             onClick={getLocationAndFetch}
             disabled={loading}
+            title="Solo se solicita permiso al tocar este botón. La ubicación se envía a Open-Meteo para consultar el clima."
             className="text-[10px] font-semibold text-[var(--blue)] hover:underline flex items-center gap-1 cursor-pointer transition-opacity disabled:opacity-50"
           >
-            {loading ? '🔄 Actualizando...' : '📍 Usar mi ubicación'}
+            {loading ? '🔄 Actualizando...' : '📍 Ubicación (opcional)'}
           </button>
         </div>
       </div>
@@ -257,6 +243,14 @@ export const WeatherWidget: React.FC = () => {
           ⚠️ {error}
         </p>
       )}
+      <a
+        href="https://open-meteo.com/"
+        target="_blank"
+        rel="noreferrer"
+        className="relative z-10 mt-2 inline-block text-[9px] font-medium text-[var(--text-faint)] hover:text-[var(--blue)]"
+      >
+        Datos del clima: Open-Meteo
+      </a>
     </div>
   );
 };

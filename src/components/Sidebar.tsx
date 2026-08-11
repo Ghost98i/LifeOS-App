@@ -1,5 +1,6 @@
 import React from 'react';
 import { ViewType, LifeOSState } from '../types';
+import lifeOSIcon from '../assets/lifeos-icon.png';
 
 interface SidebarProps {
   currentView: ViewType;
@@ -51,12 +52,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }`}
       >
         <div className="flex items-center gap-3 pb-5 px-2">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 flex items-center justify-center text-white text-lg font-black shadow-md shadow-blue-500/25 shrink-0">
-            ◈
-          </div>
+          <img src={lifeOSIcon} alt="" className="h-9 w-9 shrink-0 rounded-xl shadow-md shadow-blue-500/20" />
           <div className="flex flex-col">
             <span className="font-extrabold text-lg tracking-tight text-[var(--text)] leading-none">LifeOS</span>
-            <span className="text-[10px] font-semibold text-[var(--text-faint)] tracking-wider uppercase mt-1">Control Center</span>
+            <span className="text-[10px] font-semibold text-[var(--text-faint)] tracking-wider uppercase mt-1">Tu centro personal</span>
           </div>
         </div>
 
@@ -70,6 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onNavigate(item.id);
                   onCloseMobile();
                 }}
+                aria-current={isActive ? 'page' : undefined}
                 className={`relative w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all text-left cursor-pointer ${
                   isActive
                     ? 'bg-[var(--blue-soft)] text-[var(--blue)] font-bold shadow-xs'
