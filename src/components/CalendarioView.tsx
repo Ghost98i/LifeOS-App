@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LifeOSState, CalendarEvent } from '../types';
+import { LifeOSState } from '../types';
 import {
   todayISO,
   daysBetween,

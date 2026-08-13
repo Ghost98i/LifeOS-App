@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { defaultState } from './storage';
-import { addTransfer, deleteTransfer, reconcileAccount } from './financeFlows';
+import { addAccount, addTransaction, addTransfer, deleteAccount, deleteTransaction, deleteTransfer, reconcileAccount } from './financeFlows';
 
 test('una transferencia mueve saldo sin crear ingreso ni gasto', () => {
   const state = defaultState();
@@ -26,4 +26,22 @@ test('conciliar registra la diferencia pero la marca como ajuste', () => {
   assert.equal(result.difference, -60);
   assert.equal(state.finance.accounts[0].balance, 940);
   assert.equal(state.finance.transactions[0].origin, 'adjustment');
+});
+
+test('un movimiento exige monto positivo y una cuenta existente', () => {
+  const state = defaultState();
+  assert.throws(() => addTransaction(state, { type: 'gasto', amount: -5, category: 'Comida', fixed: 'variable', accountId: state.finance.accounts[0].id }));
+  assert.throws(() => addTransaction(state, { type: 'gasto', amount: 5, category: 'Comida', fixed: 'variable', accountId: 'inexistente' }));
+});
+
+test('no borra movimientos conciliados ni cuentas con historial', () => {
+  const state = defaultState();
+  const account = state.finance.accounts[0];
+  const transaction = addTransaction(state, { type: 'gasto', amount: 50, category: 'Comida', fixed: 'variable', date: '2026-08-01', accountId: account.id });
+  reconcileAccount(state, { accountId: account.id, actualBalance: account.balance, date: '2026-08-02' });
+  assert.throws(() => deleteTransaction(state, transaction.id), /conciliada/);
+  assert.throws(() => deleteAccount(state, account.id), /movimientos vinculados/);
+  const empty = addAccount(state, 'Vacía', 0);
+  deleteAccount(state, empty.id);
+  assert.equal(state.finance.accounts.some((item) => item.id === empty.id), false);
 });

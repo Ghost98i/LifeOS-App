@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LifeOSState, ViewType } from '../types';
+import { LifeOSState } from '../types';
 import { NAV_ITEMS } from './Sidebar';
 import {
   CURRENT_SCHEMA_VERSION,
@@ -14,6 +14,8 @@ interface ConfigViewProps {
   onUpdateState: (updater: (draft: LifeOSState) => void) => void;
   onExportJSON: () => void;
   onImportJSON: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  storageUserId?: string | null;
+  cloudConnected?: boolean;
 }
 
 export const ConfigView: React.FC<ConfigViewProps> = ({
@@ -21,6 +23,8 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   onUpdateState,
   onExportJSON,
   onImportJSON,
+  storageUserId,
+  cloudConnected = false,
 }) => {
   const [profileName, setProfileName] = useState(state.profile.name || '');
   const [profileHeight, setProfileHeight] = useState(String(state.profile.height || 170));
@@ -51,7 +55,10 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   };
 
   const handleResetData = () => {
-    if (confirm('⚠️ ¿Estás seguro de reiniciar TODOS tus datos? Esta acción borra el estado local.')) {
+    const scope = cloudConnected
+      ? 'Se guardará una copia de recuperación y el reinicio se sincronizará con tus otros dispositivos.'
+      : 'Se guardará una copia local de recuperación.';
+    if (confirm(`⚠️ ¿Estás seguro de reiniciar TODOS tus datos? ${scope}`)) {
       const def = defaultState();
       onUpdateState((draft) => {
         Object.assign(draft, def);
@@ -79,7 +86,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           </div>
           <button
             type="button"
-            onClick={() => setDiagnostics(getStorageDiagnostics())}
+            onClick={() => setDiagnostics(getStorageDiagnostics(storageUserId))}
             className="px-3.5 py-2 bg-[var(--bg-elevated)] border border-[var(--border)] text-xs font-bold rounded-xl hover:border-[var(--blue)] cursor-pointer"
           >
             🔍 Diagnosticar

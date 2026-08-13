@@ -11,7 +11,7 @@ import {
   Tooltip,
   Legend,
 } from 'recharts';
-import { LifeOSState, Transaction } from '../types';
+import { LifeOSState } from '../types';
 import { playSound } from '../lib/audio';
 import {
   todayISO,
@@ -34,10 +34,11 @@ import {
   calcInvestmentsTotal,
   groupTransactionsByMonth,
   resaleStats,
-  adjustAccountBalance,
   defaultAccountId,
 } from '../lib/calculations';
 import { FinanceOperationsCard } from './FinanceOperationsCard';
+import { addAccount, addTransaction, deleteAccount, deleteTransaction } from '../lib/financeFlows';
+import { showToast } from '../lib/toast';
 
 interface FinanzasViewProps {
   state: LifeOSState;
@@ -98,46 +99,39 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
     .filter((t) => t.type === 'gasto' && t.origin !== 'adjustment' && sameYear(t.date, ref))
     .reduce((s, t) => s + Number(t.amount || 0), 0);
   const fijoMes = calcFixedSpentMonth(state, 0);
-  const margenDiscrecional = disponible - fijoMes;
+  const gastoVariable = Math.max(0, gastado - fijoMes);
 
   const handleAddTx = (e: React.FormEvent) => {
     e.preventDefault();
-    const amountNum = Number(txAmount);
-    if (!amountNum) return;
-    const accountId = txAccount || defaultAccountId(state);
-
-    playSound('coins');
-
-    onUpdateState((draft) => {
-      draft.finance.transactions.push({
-        id: uid(),
-        type: txType,
-        amount: amountNum,
-        category: txCategory,
-        fixed: txFixed,
-        date: txDate || todayISO(),
-        note: txNote.trim(),
-        accountId,
+    try {
+      const accountId = txAccount || defaultAccountId(state);
+      onUpdateState((draft) => {
+        addTransaction(draft, {
+          type: txType,
+          amount: Number(txAmount),
+          category: txCategory,
+          fixed: txFixed,
+          date: txDate,
+          note: txNote,
+          accountId,
+        });
       });
-      adjustAccountBalance(draft, accountId, txType === 'ingreso' ? amountNum : -amountNum);
-    });
-
-    setTxAmount('');
-    setTxNote('');
+      playSound('coins');
+      setTxAmount('');
+      setTxNote('');
+      showToast(`${txType === 'ingreso' ? 'Ingreso' : 'Gasto'} guardado.`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No se pudo guardar el movimiento.', 'error');
+    }
   };
 
   const handleDeleteTx = (id: string) => {
-    onUpdateState((draft) => {
-      const tx = draft.finance.transactions.find((t) => t.id === id);
-      if (tx) {
-        adjustAccountBalance(
-          draft,
-          tx.accountId,
-          tx.type === 'ingreso' ? -Number(tx.amount) : Number(tx.amount)
-        );
-      }
-      draft.finance.transactions = draft.finance.transactions.filter((t) => t.id !== id);
-    });
+    try {
+      onUpdateState((draft) => deleteTransaction(draft, id));
+      showToast('Movimiento eliminado.', 'info');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No se puede eliminar este movimiento.', 'error');
+    }
   };
 
   const handleSetBudget = (category: string, amountStr: string) => {
@@ -149,22 +143,23 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   // Sub-items forms
   const handleAddAccount = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!accName.trim()) return;
-    onUpdateState((draft) => {
-      draft.finance.accounts.push({
-        id: uid(),
-        name: accName.trim(),
-        balance: Number(accBalance) || 0,
-      });
-    });
-    setAccName('');
-    setAccBalance('');
+    try {
+      onUpdateState((draft) => { addAccount(draft, accName, Number(accBalance || 0)); });
+      setAccName('');
+      setAccBalance('');
+      showToast('Cuenta agregada.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No se pudo agregar la cuenta.', 'error');
+    }
   };
 
   const handleDeleteAccount = (id: string) => {
-    onUpdateState((draft) => {
-      draft.finance.accounts = draft.finance.accounts.filter((a) => a.id !== id);
-    });
+    try {
+      onUpdateState((draft) => deleteAccount(draft, id));
+      showToast('Cuenta eliminada.', 'info');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No se puede eliminar esta cuenta.', 'error');
+    }
   };
 
   const handleAddSubscription = (e: React.FormEvent) => {
@@ -328,11 +323,11 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
           <p className="text-[10px] text-[var(--text-faint)] mt-0.5">comprometido de antemano</p>
         </div>
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">🟢 Margen discrecional</span>
-          <div className={`text-xl font-extrabold font-mono mt-1 ${margenDiscrecional < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-            {fmtMoney(margenDiscrecional)}
+          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">🛒 Gasto variable</span>
+          <div className="text-xl font-extrabold font-mono mt-1 text-[var(--text)]">
+            {fmtMoney(gastoVariable)}
           </div>
-          <p className="text-[10px] text-[var(--text-faint)] mt-0.5">disponible − gasto fijo</p>
+          <p className="text-[10px] text-[var(--text-faint)] mt-0.5">gastos del mes que no son fijos</p>
         </div>
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
           <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">🔁 Ganancia reventa</span>
@@ -367,6 +362,8 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
             <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Monto</label>
             <input
               type="number"
+              min="0.01"
+              step="0.01"
               value={txAmount}
               onChange={(e) => setTxAmount(e.target.value)}
               placeholder="0"
@@ -466,7 +463,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                 open={g.isCurrent}
                 className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden group"
               >
-                <summary className="p-3.5 bg-[var(--bg)] flex items-center justify-between font-semibold text-xs sm:text-sm cursor-pointer select-none">
+                <summary className="p-3.5 bg-[var(--bg)] flex flex-wrap items-center justify-between gap-2 font-semibold text-xs sm:text-sm cursor-pointer select-none">
                   <span className="text-[var(--text)]">{g.label}</span>
                   <div className="flex items-center gap-3 font-mono text-xs">
                     <span className="text-[var(--text-soft)]">{g.txs.length} mov.</span>
@@ -475,7 +472,25 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   </div>
                 </summary>
 
-                <div className="p-3 overflow-x-auto">
+                <div className="p-3">
+                  <div className="space-y-2 md:hidden">
+                    {g.txs.map((t) => (
+                      <article key={t.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-extrabold text-[var(--text)]">{t.note || t.category}</p>
+                            <p className="mt-1 text-[11px] text-[var(--text-soft)]">{fmtDate(t.date)} · {state.finance.accounts.find((a) => a.id === t.accountId)?.name || 'Sin cuenta'} · {t.category}</p>
+                          </div>
+                          <strong className={`shrink-0 font-mono text-sm ${t.type === 'gasto' ? 'text-red-500' : 'text-emerald-500'}`}>{t.type === 'gasto' ? '−' : '+'} {fmtMoney(t.amount)}</strong>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between">
+                          <span className="rounded-full bg-blue-500/10 px-2 py-1 text-[10px] font-bold text-blue-500">{t.fixed}{t.origin === 'adjustment' ? ' · conciliación' : ''}</span>
+                          <button onClick={() => handleDeleteTx(t.id)} aria-label={`Eliminar movimiento ${t.note || t.category}`} className="rounded-lg px-3 py-1 text-xs font-bold text-[var(--text-faint)] hover:bg-red-500/10 hover:text-red-500">Eliminar</button>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                  <div className="hidden overflow-x-auto md:block">
                   <table className="w-full text-xs text-left border-collapse">
                     <thead>
                       <tr className="border-b border-[var(--border)] text-[var(--text-faint)] uppercase text-[10px]">
@@ -522,6 +537,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                           <td className="py-2 px-2 text-right">
                             <button
                               onClick={() => handleDeleteTx(t.id)}
+                              aria-label={`Eliminar movimiento ${t.note || t.category}`}
                               className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1"
                             >
                               ✕
@@ -531,6 +547,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               </details>
             ))}

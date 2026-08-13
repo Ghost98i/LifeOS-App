@@ -38,7 +38,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({ state, o
     setAccountId(suggestedQuickAccountId(state, transactionType));
     setDate(todayISO());
     setMessage('');
-  }, [open, kind]);
+  }, [open, kind, state]);
 
   useEffect(() => {
     if (!open) return;

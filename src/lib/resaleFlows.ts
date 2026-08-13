@@ -41,6 +41,7 @@ export function recordResalePurchase(state: LifeOSState, input: ResalePurchaseIn
   if (!name) throw new Error('Escribí el producto.');
   if (!Number.isFinite(buyPrice) || buyPrice < 0) throw new Error('Ingresá un precio de compra válido.');
   const accountId = input.accountId || defaultAccountId(state);
+  if (!accountId || !state.finance.accounts.some((account) => account.id === accountId)) throw new Error('Elegí una cuenta válida para la compra.');
   const buyDate = input.buyDate || todayISO();
 
   const item: ResaleItem = {
@@ -96,6 +97,7 @@ export function recordResaleSale(state: LifeOSState, itemId: string, input: Resa
   removeLinkedTransaction(state, item.feeTxId);
 
   const accountId = input.accountId || item.saleAccountId || defaultAccountId(state);
+  if (!accountId || !state.finance.accounts.some((account) => account.id === accountId)) throw new Error('Elegí una cuenta válida para la venta.');
   const sellDate = input.sellDate || todayISO();
   const sale = addLinkedTransaction(state, {
     type: 'ingreso',

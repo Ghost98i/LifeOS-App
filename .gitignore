@@ -5,3 +5,8 @@ dist/
 .firebase/
 firebase-debug.log
 *-debug.log
+release/
+*.zip
+deploy-package/
+deploy-*/
+lifeos-*-202*/

@@ -12,11 +12,13 @@ No requiere instalar Node.js, ejecutar comandos ni mantener una terminal abierta
 
 ## LifeOS Anywhere
 
-La versión alojada puede instalarse como PWA en Windows y Android y comparte los datos usando la misma cuenta de Google. Mantiene una copia local para funcionar sin conexión y sincroniza los cambios cuando vuelve Internet.
+La versión alojada puede instalarse como PWA en Windows y Android y comparte los datos usando la misma cuenta de Google. Mantiene una copia local por cuenta para funcionar sin conexión y sincroniza los cambios cuando vuelve Internet.
 
 Para activarla se necesita un proyecto Firebase del propietario con Authentication (Google), Firestore y Hosting. La configuración pública de la aplicación web se copia desde `.env.example` a `.env.local`. Las reglas incluidas limitan cada documento al usuario autenticado correspondiente.
 
-El primer dispositivo con datos puede subir su estado existente. Si LifeOS detecta datos distintos en el dispositivo y en la nube, pide elegir antes de reemplazar cualquiera de las versiones.
+LifeOS sincroniza por módulos (finanzas, agenda, gimnasio, notas, etc.), no como un bloque único. Cada cambio conserva una revisión inmutable y una huella local. Así puede combinar cambios hechos en módulos diferentes desde PC y celular; si ambos modificaron el mismo módulo sin verse, pide elegir y guarda la versión descartada como recuperación.
+
+Las actualizaciones de la PWA tampoco interrumpen una carga: LifeOS avisa que hay una versión nueva y deja decidir cuándo recargar.
 
 ## Principios
 
@@ -57,11 +59,12 @@ npm run lint
 npm test
 npm run build
 npm run build:portable
+npm run release
 ```
 
 ## Datos y backups
 
-Los datos se guardan localmente en el navegador bajo la clave `lifeos-state-v1`. El esquema actual tiene versión explícita y migra estados anteriores al cargarlos. Antes de reemplazar el estado guardado se conserva una copia local de recuperación.
+Los datos se guardan localmente en el navegador. Sin sesión se usa el almacenamiento general; con Google se usa un espacio separado por UID para impedir que una cuenta cargue datos locales de otra. El esquema actual tiene versión explícita y migra estados anteriores al cargarlos. Antes de reemplazar el estado guardado se conserva una copia local de recuperación.
 
 Configuración permite:
 

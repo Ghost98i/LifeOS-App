@@ -13,11 +13,10 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tailwindcss(),
-      portable
-        ? viteSingleFile()
-        : VitePWA({
-            registerType: 'autoUpdate',
-            injectRegister: 'auto',
+      VitePWA({
+            disable: portable,
+            registerType: 'prompt',
+            injectRegister: false,
             includeAssets: ['lifeos-icon-16.png', 'lifeos-icon-32.png', 'lifeos-icon-180.png', 'lifeos-icon-192.png', 'lifeos-icon-512.png'],
             manifest: {
               id: '/',
@@ -39,10 +38,11 @@ export default defineConfig(({ mode }) => {
             workbox: {
               navigateFallback: '/index.html',
               cleanupOutdatedCaches: true,
-              clientsClaim: true,
-              skipWaiting: true,
+              clientsClaim: false,
+              skipWaiting: false,
             },
           }),
+      ...(portable ? [viteSingleFile()] : []),
     ],
     define: {
       __LIFEOS_PORTABLE__: JSON.stringify(portable),

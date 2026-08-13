@@ -16,3 +16,8 @@ test('reventa registra compra, venta, costos y ganancia una sola vez', () => {
   deleteResaleItem(state, item.id);
   assert.equal(account.balance, 1000);
 });
+
+test('reventa no registra dinero en una cuenta inexistente', () => {
+  const state = defaultState();
+  assert.throws(() => recordResalePurchase(state, { item: 'GPU', buyPrice: 400, accountId: 'otra' }), /cuenta válida/);
+});

@@ -7,18 +7,15 @@ import {
   Goal,
   CalendarEvent,
   ResaleOpportunity,
-  ResaleItem,
-  DayKey,
 } from '../types';
 import {
-  DAYS,
   todayISO,
   sameMonth,
-  sameYear,
   monthLabel,
   daysBetween,
   withinCurrentWeek,
   dayKeyFromDate,
+  isoWeekMonday,
   clamp,
 } from './storage';
 
@@ -451,6 +448,22 @@ export interface TodayItem {
   priority: number;
 }
 
+export function routineScheduledFor(state: LifeOSState, task: TaskRecurring, iso: string): boolean {
+  const day = dayKeyFromDate(new Date(`${iso}T00:00:00`));
+  if (task.days?.length) return task.days.includes(day);
+  if (task.freq === 'daily') return true;
+  if (state.taskLog[iso]?.[task.id]) return true;
+
+  const monday = isoWeekMonday(new Date(`${iso}T00:00:00`));
+  const sunday = new Date(monday);
+  sunday.setDate(sunday.getDate() + 6);
+  const completedThisWeek = Object.entries(state.taskLog).filter(([date, log]) => {
+    const parsed = new Date(`${date}T00:00:00`);
+    return parsed >= monday && parsed <= sunday && Boolean(log[task.id]);
+  }).length;
+  return completedThisWeek < (task.freq === 'weekly' ? 1 : 3);
+}
+
 export function todayItems(state: LifeOSState, dateIso?: string, includeFollowups?: boolean): TodayItem[] {
   const iso = dateIso || todayISO();
   if (includeFollowups === undefined) includeFollowups = iso === todayISO();
@@ -473,6 +486,7 @@ export function todayItems(state: LifeOSState, dateIso?: string, includeFollowup
     });
 
   state.tasksRecurring.forEach((t) => {
+    if (!routineScheduledFor(state, t, iso)) return;
     const done = Boolean(log[t.id]);
     items.push({
       id: t.id,

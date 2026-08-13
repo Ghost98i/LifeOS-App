@@ -9,7 +9,7 @@
   --border-hover: #cbd5e1;
   --text: #0f172a;
   --text-soft: #475569;
-  --text-faint: #94a3b8;
+  --text-faint: #64748b;
   --blue: #2563eb;
   --blue-hover: #1d4ed8;
   --blue-soft: #eff6ff;
@@ -26,7 +26,7 @@
   --border-hover: #3b4f70;
   --text: #f1f5f9;
   --text-soft: #94a3b8;
-  --text-faint: #71819a;
+  --text-faint: #8493aa;
   --blue: #4c9aff;
   --blue-hover: #74b4ff;
   --blue-soft: rgba(76, 154, 255, 0.14);
@@ -53,7 +53,7 @@ body {
   background: var(--card);
   border: 1px solid var(--border);
   box-shadow: var(--card-shadow);
-  transition: all 0.2s ease-in-out;
+  transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
 }
 
 .glass-panel:hover {
@@ -91,7 +91,7 @@ body {
 
 /* Focus and Active polish */
 input, select, textarea, button {
-  transition: all 0.15s ease-in-out;
+  transition: border-color 0.15s ease-in-out, background-color 0.15s ease-in-out, color 0.15s ease-in-out, opacity 0.15s ease-in-out, transform 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
 }
 
 button:not(:disabled), summary, a {
@@ -127,6 +127,12 @@ button:active {
 @media (max-width: 767px) {
   input:not([type="checkbox"]):not([type="radio"]), select, textarea {
     font-size: 16px !important;
+  }
+}
+
+@media (pointer: coarse) {
+  button, summary, input, select {
+    min-height: 40px;
   }
 }
 

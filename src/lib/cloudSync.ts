@@ -6,22 +6,33 @@ import {
   onAuthStateChanged,
   setPersistence,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   type User,
 } from 'firebase/auth';
 import {
+  collection,
   doc,
+  getDoc,
   getFirestore,
   initializeFirestore,
   onSnapshot,
   persistentLocalCache,
   persistentMultipleTabManager,
   serverTimestamp,
-  setDoc,
+  writeBatch,
   type Firestore,
 } from 'firebase/firestore';
 import type { LifeOSState } from '../types';
-import { normalizeStoredState } from './storage';
+import { defaultState, normalizeStoredState, uid } from './storage';
+import {
+  SYNC_MODULES,
+  isSyncModuleKey,
+  syncModuleData,
+  type SyncModuleKey,
+  type SyncBaselineMap,
+  type SyncRevisionMap,
+} from './syncModel';
 
 export type CloudSyncStatus =
   | 'unavailable'
@@ -40,11 +51,32 @@ export interface CloudUser {
   photoURL: string;
 }
 
-export interface CloudStateSnapshot {
-  state: LifeOSState;
+export interface CloudModuleHead {
+  module: SyncModuleKey;
+  data: unknown;
+  revision: string;
+  parentRevision: string | null;
   deviceId: string;
+  clientUpdatedAt: number;
   fromCache: boolean;
   pendingWrites: boolean;
+}
+
+export interface CloudModulesSnapshot {
+  heads: CloudModuleHead[];
+  fromCache: boolean;
+  pendingWrites: boolean;
+}
+
+export interface PreparedCloudWrite {
+  module: SyncModuleKey;
+  revision: string;
+  parentRevision: string | null;
+}
+
+export interface CloudWriteBatch {
+  writes: PreparedCloudWrite[];
+  completion: Promise<void>;
 }
 
 const config = {
@@ -61,7 +93,10 @@ export const cloudSyncConfigured =
   Boolean(config.apiKey && config.authDomain && config.projectId && config.appId);
 
 const DEVICE_KEY = 'lifeos-device-id-v1';
-const PAIRED_USER_KEY = 'lifeos-cloud-paired-user-v1';
+const PAIRED_USER_KEY = 'lifeos-cloud-paired-user-v2';
+const LAST_USER_KEY = 'lifeos-cloud-last-user-v2';
+const REVISION_KEY = 'lifeos-cloud-revisions-v2';
+const BASELINE_KEY = 'lifeos-cloud-baselines-v2';
 
 let firestore: Firestore | null = null;
 let persistenceReady: Promise<void> | null = null;
@@ -99,57 +134,86 @@ function toCloudUser(user: User | null): CloudUser | null {
 export function getOrCreateDeviceId(): string {
   const current = localStorage.getItem(DEVICE_KEY);
   if (current) return current;
-  const generated = globalThis.crypto?.randomUUID?.() || `device-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const generated = uid();
   localStorage.setItem(DEVICE_KEY, generated);
   return generated;
 }
 
+export function getLastCloudUserId(): string | null {
+  return localStorage.getItem(LAST_USER_KEY);
+}
+
+export function markLastCloudUserId(userId: string): void {
+  localStorage.setItem(LAST_USER_KEY, userId);
+}
+
 export function isCloudPaired(userId: string): boolean {
-  return localStorage.getItem(PAIRED_USER_KEY) === userId;
+  return localStorage.getItem(`${PAIRED_USER_KEY}:${userId}`) === 'true';
 }
 
 export function markCloudPaired(userId: string): void {
-  localStorage.setItem(PAIRED_USER_KEY, userId);
+  localStorage.setItem(`${PAIRED_USER_KEY}:${userId}`, 'true');
+}
+
+export function loadCloudRevisions(userId: string): SyncRevisionMap {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(`${REVISION_KEY}:${userId}`) || '{}') as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(parsed).filter(([key, value]) => isSyncModuleKey(key) && typeof value === 'string')) as SyncRevisionMap;
+  } catch {
+    return {};
+  }
+}
+
+export function saveCloudRevisions(userId: string, revisions: SyncRevisionMap): void {
+  localStorage.setItem(`${REVISION_KEY}:${userId}`, JSON.stringify(revisions));
+}
+
+export function loadCloudBaselines(userId: string): SyncBaselineMap {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(`${BASELINE_KEY}:${userId}`) || '{}') as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(parsed).filter(([key, value]) => isSyncModuleKey(key) && typeof value === 'string')) as SyncBaselineMap;
+  } catch {
+    return {};
+  }
+}
+
+export function saveCloudBaselines(userId: string, baselines: SyncBaselineMap): void {
+  localStorage.setItem(`${BASELINE_KEY}:${userId}`, JSON.stringify(baselines));
 }
 
 export function hasMeaningfulData(state: LifeOSState): boolean {
-  const hasAccountBalance = state.finance.accounts.some((account) => Number(account.balance) !== 0);
+  const def = defaultState();
+  const agendaHasData = Object.values(state.agenda).some((blocks) => blocks.length > 0);
+  const recurringSignature = (items: LifeOSState['tasksRecurring']) => items.map(({ name, freq, days }) => ({ name, freq, days: days || [] }));
+  const defaultAccounts = state.finance.accounts.length === 2
+    && state.finance.accounts[0]?.name === 'Efectivo'
+    && state.finance.accounts[1]?.name === 'Banco'
+    && state.finance.accounts.every((account) => Number(account.balance) === 0);
   const collections = [
-    state.todayExtras,
-    state.dailyPriorities,
-    state.dailyContext,
-    state.finance.transactions,
-    state.finance.transfers,
-    state.finance.reconciliations,
-    state.finance.debts,
-    state.finance.investments,
-    state.finance.subscriptions,
-    state.gym.weight,
-    state.gym.measurements,
-    state.gym.sessions,
-    state.gym.routineTemplates,
-    state.study.subjects,
-    state.study.exams,
-    state.study.studyLog,
-    state.streaming.sessions,
-    state.jobs.opportunities,
-    state.jobs.applications,
-    state.resale.opportunities,
-    state.resale.inventory,
-    state.ideas,
-    state.calendarEvents,
-    state.goals,
-    state.notes.postits,
-    state.notes.shopping,
-    state.notes.links,
+    state.todayExtras, state.dailyPriorities, state.dailyContext,
+    state.finance.transactions, state.finance.transfers, state.finance.reconciliations,
+    state.finance.debts, state.finance.investments, state.finance.subscriptions,
+    state.gym.weight, state.gym.measurements, state.gym.sessions, state.gym.routineTemplates,
+    state.study.subjects, state.study.exams, state.study.studyLog,
+    state.streaming.sessions, state.jobs.opportunities, state.jobs.applications,
+    state.resale.opportunities, state.resale.inventory, state.ideas, state.calendarEvents,
+    state.goals, state.notes.postits, state.notes.shopping, state.notes.links,
   ];
 
   return Boolean(
-    state.profile.name.trim() ||
-      hasAccountBalance ||
-      collections.some((collection) => collection.length > 0) ||
-      Object.keys(state.checkoutLog).length > 0 ||
-      Object.keys(state.taskLog).length > 0
+    state.profile.name.trim()
+      || state.profile.height !== def.profile.height
+      || state.profile.bodyCompositionSex
+      || agendaHasData
+      || JSON.stringify(recurringSignature(state.tasksRecurring)) !== JSON.stringify(recurringSignature(def.tasksRecurring))
+      || !defaultAccounts
+      || Object.keys(state.finance.budgets).some((key) => Number(state.finance.budgets[key]) !== 0)
+      || state.streaming.monthlyGoal !== def.streaming.monthlyGoal
+      || state.settings.darkMode
+      || state.settings.hiddenTabs.length > 0
+      || collections.some((items) => items.length > 0)
+      || Object.keys(state.checkoutLog).length > 0
+      || Object.keys(state.taskLog).length > 0
   );
 }
 
@@ -167,7 +231,22 @@ export async function signInToCloud(): Promise<void> {
   await persistenceReady;
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  await signInWithPopup(auth, provider);
+  const mobileLike = window.matchMedia('(max-width: 767px)').matches
+    || window.matchMedia('(display-mode: standalone)').matches;
+  if (mobileLike) {
+    await signInWithRedirect(auth, provider);
+    return;
+  }
+  try {
+    await signInWithPopup(auth, provider);
+  } catch (error) {
+    const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
+    if (code.includes('popup-blocked')) {
+      await signInWithRedirect(auth, provider);
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function signOutFromCloud(): Promise<void> {
@@ -175,50 +254,96 @@ export async function signOutFromCloud(): Promise<void> {
   await signOut(auth);
 }
 
-function stateDocument(userId: string) {
+function modulesCollection(userId: string) {
   const { db } = services();
-  return doc(db, 'users', userId, 'lifeos', 'state');
+  return collection(db, 'users', userId, 'lifeosModules');
 }
 
-export function subscribeCloudState(
+function revisionsCollection(userId: string) {
+  const { db } = services();
+  return collection(db, 'users', userId, 'lifeosRevisions');
+}
+
+export function subscribeCloudModules(
   userId: string,
   handlers: {
-    onState: (snapshot: CloudStateSnapshot) => void;
-    onMissing: () => void;
+    onSnapshot: (snapshot: CloudModulesSnapshot) => void;
     onError: (error: Error) => void;
   }
 ): () => void {
   return onSnapshot(
-    stateDocument(userId),
+    modulesCollection(userId),
     { includeMetadataChanges: true },
     (snapshot) => {
-      const fromCache = snapshot.metadata.fromCache;
-      if (!snapshot.exists()) {
-        if (!fromCache) handlers.onMissing();
-        return;
-      }
-
-      try {
-        const data = snapshot.data();
-        handlers.onState({
-          state: normalizeStoredState(data.state),
+      const heads: CloudModuleHead[] = [];
+      for (const moduleDoc of snapshot.docs) {
+        if (!isSyncModuleKey(moduleDoc.id)) continue;
+        const data = moduleDoc.data();
+        if (typeof data.revision !== 'string' || !('data' in data)) continue;
+        heads.push({
+          module: moduleDoc.id,
+          data: data.data,
+          revision: data.revision,
+          parentRevision: typeof data.parentRevision === 'string' ? data.parentRevision : null,
           deviceId: typeof data.deviceId === 'string' ? data.deviceId : '',
-          fromCache,
-          pendingWrites: snapshot.metadata.hasPendingWrites,
+          clientUpdatedAt: Number(data.clientUpdatedAt || 0),
+          fromCache: moduleDoc.metadata.fromCache,
+          pendingWrites: moduleDoc.metadata.hasPendingWrites,
         });
-      } catch (error) {
-        handlers.onError(error instanceof Error ? error : new Error('No se pudieron validar los datos sincronizados.'));
       }
+      handlers.onSnapshot({
+        heads,
+        fromCache: snapshot.metadata.fromCache,
+        pendingWrites: snapshot.metadata.hasPendingWrites,
+      });
     },
     (error) => handlers.onError(error)
   );
 }
 
-export async function writeCloudState(userId: string, state: LifeOSState, deviceId: string): Promise<void> {
-  await setDoc(stateDocument(userId), {
-    schemaVersion: state.schemaVersion,
-    state,
-    deviceId,
-    updatedAt: serverTimestamp(),
+export function writeCloudModules(
+  userId: string,
+  state: LifeOSState,
+  modules: SyncModuleKey[],
+  deviceId: string,
+  baseRevisions: SyncRevisionMap
+): CloudWriteBatch {
+  const { db } = services();
+  const batch = writeBatch(db);
+  const clientUpdatedAt = Date.now();
+  const writes = modules.map((module, index) => {
+    const revision = `${clientUpdatedAt + index}-${deviceId}-${uid()}`;
+    const parentRevision = baseRevisions[module] || null;
+    const payload = {
+      schemaVersion: state.schemaVersion,
+      module,
+      data: syncModuleData(state, module),
+      revision,
+      parentRevision,
+      deviceId,
+      clientUpdatedAt: clientUpdatedAt + index,
+      updatedAt: serverTimestamp(),
+    };
+    batch.set(doc(modulesCollection(userId), module), payload);
+    batch.set(doc(revisionsCollection(userId), revision), payload);
+    return { module, revision, parentRevision };
   });
+  return { writes, completion: batch.commit() };
+}
+
+export function writeAllCloudModules(
+  userId: string,
+  state: LifeOSState,
+  deviceId: string,
+  baseRevisions: SyncRevisionMap
+): CloudWriteBatch {
+  return writeCloudModules(userId, state, [...SYNC_MODULES], deviceId, baseRevisions);
+}
+
+export async function readLegacyCloudState(userId: string): Promise<LifeOSState | null> {
+  const { db } = services();
+  const snapshot = await getDoc(doc(db, 'users', userId, 'lifeos', 'state'));
+  if (!snapshot.exists()) return null;
+  const data = snapshot.data();
+  return normalizeStoredState(data.state);
 }

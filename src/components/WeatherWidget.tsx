@@ -63,7 +63,7 @@ export const WeatherWidget: React.FC = () => {
 
       setWeather(wData);
       localStorage.setItem('lifeos_last_weather', JSON.stringify({ ...wData, lat, lon }));
-    } catch (err: any) {
+    } catch {
       setError('No se pudo cargar el clima.');
     } finally {
       setLoading(false);
@@ -92,7 +92,7 @@ export const WeatherWidget: React.FC = () => {
             const parsed = JSON.parse(saved);
             fetchWeather(parsed.lat, parsed.lon, parsed.locationName || 'Melo, Cerro Largo');
             return;
-          } catch (_) {}
+          } catch {}
         }
         // Default to Melo, Cerro Largo (-32.3683, -54.1681)
         fetchWeather(-32.3683, -54.1681, 'Melo, Cerro Largo');
@@ -124,7 +124,7 @@ export const WeatherWidget: React.FC = () => {
       await fetchWeather(city.latitude, city.longitude, name);
       setIsSearching(false);
       setCityInput('');
-    } catch (err) {
+    } catch {
       setError('Error al buscar la ciudad.');
       setLoading(false);
     }
@@ -140,7 +140,7 @@ export const WeatherWidget: React.FC = () => {
         } else {
           setWeather(parsed);
         }
-      } catch (_) {
+      } catch {
         fetchWeather(-32.3683, -54.1681, 'Melo, Cerro Largo');
       }
     } else {

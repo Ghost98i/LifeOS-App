@@ -56,7 +56,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ state, onUpdateSta
       let done = true;
       if (item.kind === 'toggle-task-today') {
         if (!draft.taskLog[iso]) draft.taskLog[iso] = {};
-        done = !Boolean(draft.taskLog[iso][item.id]);
+        done = !draft.taskLog[iso][item.id];
         draft.taskLog[iso][item.id] = done;
       } else if (item.kind === 'toggle-extra-today') {
         const extra = draft.todayExtras.find((candidate) => candidate.id === item.id);
@@ -208,9 +208,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ state, onUpdateSta
         </div>
       </section>
 
-      <button onClick={() => onNavigate('checkout')} className="w-full rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 py-3 text-sm font-extrabold text-[var(--text)] hover:border-[var(--blue)]">
-        {dayClosed ? '✓ El día ya está cerrado · ver resumen' : '🌙 Revisar y cerrar el día'}
-      </button>
     </div>
   );
 };

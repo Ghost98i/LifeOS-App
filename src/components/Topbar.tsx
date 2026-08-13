@@ -15,6 +15,7 @@ interface TopbarProps {
   cloudConfigured: boolean;
   cloudUser: CloudUser | null;
   syncStatus: CloudSyncStatus;
+  lastSyncedAt?: string | null;
   onCloudSignIn: () => void;
   onCloudSignOut: () => void;
 }
@@ -39,6 +40,7 @@ export const Topbar: React.FC<TopbarProps> = ({
   cloudConfigured,
   cloudUser,
   syncStatus,
+  lastSyncedAt,
   onCloudSignIn,
   onCloudSignOut,
 }) => {
@@ -117,7 +119,7 @@ export const Topbar: React.FC<TopbarProps> = ({
             <button
               onClick={() => cloudUser ? setShowCloudMenu((value) => !value) : onCloudSignIn()}
               className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-[10px] font-bold text-[var(--text-soft)]"
-              title={syncLabel[syncStatus]}
+              title={lastSyncedAt && syncStatus === 'synced' ? `${syncLabel[syncStatus]} · última confirmación ${lastSyncedAt}` : syncLabel[syncStatus]}
             >
               <span className={`h-2 w-2 rounded-full ${syncStatus === 'synced' ? 'bg-emerald-500' : syncStatus === 'saving' || syncStatus === 'connecting' ? 'bg-amber-500' : syncStatus === 'offline' ? 'bg-slate-400' : syncStatus === 'error' || syncStatus === 'conflict' ? 'bg-rose-500' : 'bg-blue-500'}`} />
               <span className="hidden xs:inline sm:inline">{syncLabel[syncStatus]}</span>
@@ -127,6 +129,7 @@ export const Topbar: React.FC<TopbarProps> = ({
                 <p className="truncate text-xs font-extrabold text-[var(--text)]">{cloudUser.name || 'Cuenta Google'}</p>
                 <p className="mt-0.5 truncate text-[10px] text-[var(--text-faint)]">{cloudUser.email}</p>
                 <p className="mt-3 text-[11px] font-bold text-[var(--text-soft)]">☁️ {syncLabel[syncStatus]}</p>
+                {lastSyncedAt && <p className="mt-1 text-[10px] text-[var(--text-faint)]">Última confirmación: {lastSyncedAt}</p>}
                 <button onClick={() => { setShowCloudMenu(false); onCloudSignOut(); }} className="mt-3 w-full rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-bold text-[var(--text-soft)]">Cerrar sesión</button>
               </div>
             )}

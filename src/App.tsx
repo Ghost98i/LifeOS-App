@@ -1,42 +1,66 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { ViewType, LifeOSState } from './types';
-import { loadStoredState, parseBackupJSON, saveStoredState, todayISO } from './lib/storage';
+import { defaultState, loadStoredState, parseBackupJSON, saveRecoveryState, saveStoredState, todayISO } from './lib/storage';
 import {
   cloudSyncConfigured,
+  getLastCloudUserId,
   getOrCreateDeviceId,
   hasMeaningfulData,
   isCloudPaired,
+  loadCloudBaselines,
+  loadCloudRevisions,
   markCloudPaired,
+  markLastCloudUserId,
   observeCloudUser,
+  readLegacyCloudState,
+  saveCloudRevisions,
+  saveCloudBaselines,
   signInToCloud,
   signOutFromCloud,
-  subscribeCloudState,
-  writeCloudState,
+  subscribeCloudModules,
+  writeAllCloudModules,
+  writeCloudModules,
   type CloudSyncStatus,
   type CloudUser,
 } from './lib/cloudSync';
+import {
+  SYNC_MODULES,
+  applySyncModule,
+  buildStateFromModules,
+  changedSyncModules,
+  classifyInitialModuleChanges,
+  equivalentLifeOSState,
+  syncDataFingerprint,
+  syncModuleData,
+  syncModuleFingerprint,
+  type SyncBaselineMap,
+  type SyncModuleKey,
+  type SyncRevisionMap,
+} from './lib/syncModel';
 
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 
 import { DashboardView } from './components/DashboardView';
-import { AgendaView } from './components/AgendaView';
-import { CalendarioView } from './components/CalendarioView';
-import { TrabajoView } from './components/TrabajoView';
-import { ReventaView } from './components/ReventaView';
-import { FinanzasView } from './components/FinanzasView';
-import { GimnasioView } from './components/GimnasioView';
-import { EstudiosView } from './components/EstudiosView';
-import { NotasView } from './components/NotasView';
-import { IAView } from './components/IAView';
-import { ConfigView } from './components/ConfigView';
 import { CheckoutModal } from './components/CheckoutModal';
 import { MobileQuickCapture } from './components/MobileQuickCapture';
 import { MobileNav } from './components/MobileNav';
 import { CloudConflictModal } from './components/CloudConflictModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { ToastViewport } from './components/ToastViewport';
+import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { showToast } from './lib/toast';
+
+const AgendaView = lazy(() => import('./components/AgendaView').then((module) => ({ default: module.AgendaView })));
+const CalendarioView = lazy(() => import('./components/CalendarioView').then((module) => ({ default: module.CalendarioView })));
+const TrabajoView = lazy(() => import('./components/TrabajoView').then((module) => ({ default: module.TrabajoView })));
+const ReventaView = lazy(() => import('./components/ReventaView').then((module) => ({ default: module.ReventaView })));
+const FinanzasView = lazy(() => import('./components/FinanzasView').then((module) => ({ default: module.FinanzasView })));
+const GimnasioView = lazy(() => import('./components/GimnasioView').then((module) => ({ default: module.GimnasioView })));
+const EstudiosView = lazy(() => import('./components/EstudiosView').then((module) => ({ default: module.EstudiosView })));
+const NotasView = lazy(() => import('./components/NotasView').then((module) => ({ default: module.NotasView })));
+const IAView = lazy(() => import('./components/IAView').then((module) => ({ default: module.IAView })));
+const ConfigView = lazy(() => import('./components/ConfigView').then((module) => ({ default: module.ConfigView })));
 
 export default function App() {
   const [{ state, storageBackend }, setStateObj] = useState(() => {
@@ -52,108 +76,311 @@ export default function App() {
   const [quickTransactionType, setQuickTransactionType] = useState<'gasto' | 'ingreso'>('gasto');
   const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false);
   const [cloudUser, setCloudUser] = useState<CloudUser | null>(null);
+  const [storageUserId, setStorageUserId] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<CloudSyncStatus>(cloudSyncConfigured ? 'connecting' : 'unavailable');
-  const [cloudConflict, setCloudConflict] = useState<LifeOSState | null>(null);
+  const [cloudConflict, setCloudConflict] = useState<{
+    remoteState: LifeOSState;
+    modules: SyncModuleKey[];
+    remoteRevisions: SyncRevisionMap;
+    localModules?: SyncModuleKey[];
+    needsMigration?: boolean;
+  } | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
 
   const stateRef = useRef(state);
   const cloudUserRef = useRef<CloudUser | null>(null);
+  const storageUserIdRef = useRef<string | null>(null);
+  const revisionsRef = useRef<SyncRevisionMap>({});
+  const baselinesRef = useRef<SyncBaselineMap>({});
+  const pendingRevisionsRef = useRef<Partial<Record<SyncModuleKey, string>>>({});
+  const initializedUserRef = useRef<string | null>(null);
+  const legacyReadUserRef = useRef<string | null>(null);
   const conflictPendingRef = useRef(false);
-  const preferLocalUploadRef = useRef(false);
-  const syncTimerRef = useRef<number | null>(null);
   const deviceIdRef = useRef(getOrCreateDeviceId());
 
-  const applyRemoteState = (remoteState: LifeOSState) => {
-    const saved = saveStoredState(remoteState);
+  const applyRemoteState = (remoteState: LifeOSState, userId = storageUserIdRef.current) => {
+    const saved = saveStoredState(remoteState, userId);
     stateRef.current = remoteState;
     setStateObj({ state: remoteState, storageBackend: saved ? 'localStorage' : 'ninguno' });
   };
 
-  const queueCloudSave = (nextState: LifeOSState, immediate = false) => {
-    const user = cloudUserRef.current;
-    if (!cloudSyncConfigured || !user) return;
-    if (syncTimerRef.current) window.clearTimeout(syncTimerRef.current);
-    setSyncStatus(navigator.onLine ? 'saving' : 'offline');
+  const persistRevisionMap = (userId: string, revisions: SyncRevisionMap) => {
+    revisionsRef.current = revisions;
+    saveCloudRevisions(userId, revisions);
+  };
 
-    syncTimerRef.current = window.setTimeout(() => {
-      void writeCloudState(user.uid, nextState, deviceIdRef.current).catch(() => setSyncStatus('error'));
-    }, immediate ? 0 : 600);
+  const persistBaselines = (userId: string, baselines: SyncBaselineMap) => {
+    baselinesRef.current = baselines;
+    saveCloudBaselines(userId, baselines);
+  };
+
+  const queueCloudSave = (nextState: LifeOSState, modules: SyncModuleKey[]) => {
+    const user = cloudUserRef.current;
+    if (!cloudSyncConfigured || !user || modules.length === 0 || storageUserIdRef.current !== user.uid) return;
+    setSyncStatus(navigator.onLine ? 'saving' : 'offline');
+    const optimisticBase = { ...revisionsRef.current, ...pendingRevisionsRef.current } as SyncRevisionMap;
+    const batch = writeCloudModules(user.uid, nextState, modules, deviceIdRef.current, optimisticBase);
+    batch.writes.forEach((write) => { pendingRevisionsRef.current[write.module] = write.revision; });
+    void batch.completion.catch(() => setSyncStatus(navigator.onLine ? 'error' : 'offline'));
   };
 
   // Apply locally first; LifeOS remains usable even before the cloud acknowledges the change.
   const updateState = (updater: (draft: LifeOSState) => void) => {
-    const draft = JSON.parse(JSON.stringify(stateRef.current)) as LifeOSState;
+    const previous = stateRef.current;
+    const draft = structuredClone(previous) as LifeOSState;
     updater(draft);
-    const saved = saveStoredState(draft);
+    const saved = saveStoredState(draft, storageUserIdRef.current);
     stateRef.current = draft;
     setStateObj(({ storageBackend: currentBackend }) => ({
       state: draft,
       storageBackend: saved ? 'localStorage' : currentBackend,
     }));
-    queueCloudSave(draft);
+    queueCloudSave(draft, changedSyncModules(previous, draft));
   };
 
   useEffect(() => {
     if (!cloudSyncConfigured) return;
     setSyncStatus('connecting');
     return observeCloudUser((user) => {
+      const previousUser = cloudUserRef.current;
       cloudUserRef.current = user;
-      setCloudUser(user);
-      setSyncStatus(user ? (navigator.onLine ? 'connecting' : 'offline') : 'signed-out');
+      pendingRevisionsRef.current = {};
+      initializedUserRef.current = null;
+      legacyReadUserRef.current = null;
+
+      if (user) {
+        const lastUserId = getLastCloudUserId();
+        const scoped = loadStoredState(user.uid);
+        storageUserIdRef.current = user.uid;
+        revisionsRef.current = loadCloudRevisions(user.uid);
+        baselinesRef.current = loadCloudBaselines(user.uid);
+
+        if (scoped.backend !== 'ninguno') {
+          stateRef.current = scoped.state;
+          setStateObj({ state: scoped.state, storageBackend: scoped.backend });
+        } else if (!lastUserId || lastUserId === user.uid) {
+          saveStoredState(stateRef.current, user.uid);
+        } else {
+          const cleanState = defaultState();
+          saveStoredState(cleanState, user.uid);
+          stateRef.current = cleanState;
+          setStateObj({ state: cleanState, storageBackend: 'localStorage' });
+        }
+
+        markLastCloudUserId(user.uid);
+        setStorageUserId(user.uid);
+        setCloudUser(user);
+        setSyncStatus(navigator.onLine ? 'connecting' : 'offline');
+        return;
+      }
+
+      storageUserIdRef.current = null;
+      revisionsRef.current = {};
+      baselinesRef.current = {};
+      setStorageUserId(null);
+      setCloudUser(null);
+      setSyncStatus('signed-out');
+      if (previousUser) {
+        const local = loadStoredState();
+        stateRef.current = local.state;
+        setStateObj({ state: local.state, storageBackend: local.backend });
+      }
     });
   }, []);
 
   useEffect(() => {
-    if (!cloudSyncConfigured || !cloudUser) return;
+    if (!cloudSyncConfigured || !cloudUser || storageUserId !== cloudUser.uid) return;
     conflictPendingRef.current = false;
 
-    return subscribeCloudState(cloudUser.uid, {
-      onMissing: () => {
+    const storeRevisions = (next: SyncRevisionMap) => persistRevisionMap(cloudUser.uid, next);
+
+    const uploadAll = (nextState: LifeOSState) => {
+      const optimisticBase = { ...revisionsRef.current, ...pendingRevisionsRef.current } as SyncRevisionMap;
+      const batch = writeAllCloudModules(cloudUser.uid, nextState, deviceIdRef.current, optimisticBase);
+      batch.writes.forEach((write) => { pendingRevisionsRef.current[write.module] = write.revision; });
+      setSyncStatus(navigator.onLine ? 'saving' : 'offline');
+      void batch.completion.catch(() => setSyncStatus(navigator.onLine ? 'error' : 'offline'));
+    };
+
+    const uploadModules = (nextState: LifeOSState, modules: SyncModuleKey[]) => {
+      if (modules.length === 0) return;
+      queueCloudSave(nextState, modules);
+    };
+
+    const reconcileInitialState = (
+      remoteState: LifeOSState,
+      remoteRevisions: SyncRevisionMap,
+      needsMigration = false
+    ) => {
+      const localState = stateRef.current;
+      const statesDiffer = !equivalentLifeOSState(localState, remoteState);
+      const localHasData = hasMeaningfulData(localState);
+      const remoteHasData = hasMeaningfulData(remoteState);
+      const hasKnownRevisions = Object.keys(revisionsRef.current).length > 0;
+      const paired = isCloudPaired(cloudUser.uid) && hasKnownRevisions;
+
+      if (statesDiffer && localHasData && remoteHasData && !paired) {
+        if (!conflictPendingRef.current) {
+          conflictPendingRef.current = true;
+          setCloudConflict({
+            remoteState,
+            modules: changedSyncModules(localState, remoteState),
+            remoteRevisions,
+            needsMigration,
+          });
+          setSyncStatus('conflict');
+        }
+        return;
+      }
+
+      if (statesDiffer && paired && !needsMigration) {
+        const classification = classifyInitialModuleChanges(localState, remoteState, revisionsRef.current, baselinesRef.current, remoteRevisions);
+        const localModules = classification.local;
+        const conflictModules = classification.conflicts;
+        const conflictRevisions: SyncRevisionMap = {};
+        const nextRevisions = { ...revisionsRef.current };
+        const nextBaselines = { ...baselinesRef.current };
+        let mergedState = localState;
+
+        conflictModules.forEach((module) => { conflictRevisions[module] = remoteRevisions[module]; });
+        classification.remote.forEach((module) => {
+          mergedState = applySyncModule(mergedState, module, syncModuleData(remoteState, module));
+          nextRevisions[module] = remoteRevisions[module];
+          nextBaselines[module] = syncModuleFingerprint(remoteState, module);
+        });
+
+        storeRevisions(nextRevisions);
+        persistBaselines(cloudUser.uid, nextBaselines);
+        applyRemoteState(mergedState, cloudUser.uid);
         markCloudPaired(cloudUser.uid);
-        queueCloudSave(stateRef.current, true);
-      },
-      onState: (snapshot) => {
+        initializedUserRef.current = cloudUser.uid;
+
+        if (conflictModules.length > 0) {
+          let remoteConflictState = mergedState;
+          conflictModules.forEach((module) => {
+            remoteConflictState = applySyncModule(remoteConflictState, module, syncModuleData(remoteState, module));
+          });
+          conflictPendingRef.current = true;
+          setCloudConflict({ remoteState: remoteConflictState, modules: conflictModules, remoteRevisions: conflictRevisions, localModules });
+          setSyncStatus('conflict');
+        } else {
+          uploadModules(mergedState, localModules);
+          if (localModules.length === 0) setSyncStatus(navigator.onLine ? 'synced' : 'offline');
+        }
+        return;
+      }
+
+      storeRevisions(remoteRevisions);
+      persistBaselines(cloudUser.uid, Object.fromEntries(SYNC_MODULES.map((module) => [module, syncModuleFingerprint(remoteState, module)])) as SyncBaselineMap);
+      markCloudPaired(cloudUser.uid);
+      initializedUserRef.current = cloudUser.uid;
+
+      if (localHasData && !remoteHasData) {
+        uploadAll(localState);
+      } else if (remoteHasData) {
+        applyRemoteState(remoteState, cloudUser.uid);
+        if (needsMigration) uploadAll(remoteState);
+        else setSyncStatus(navigator.onLine ? 'synced' : 'offline');
+      } else {
+        uploadAll(localState);
+      }
+    };
+
+    return subscribeCloudModules(cloudUser.uid, {
+      onSnapshot: (snapshot) => {
         const nextStatus: CloudSyncStatus = snapshot.pendingWrites
           ? navigator.onLine ? 'saving' : 'offline'
           : navigator.onLine ? 'synced' : 'offline';
 
-        if (snapshot.deviceId === deviceIdRef.current) {
-          preferLocalUploadRef.current = false;
-          markCloudPaired(cloudUser.uid);
-          setSyncStatus(nextStatus);
+        if (initializedUserRef.current !== cloudUser.uid) {
+          if (snapshot.fromCache) {
+            setSyncStatus(navigator.onLine ? 'connecting' : 'offline');
+            return;
+          }
+
+          if (snapshot.heads.length === 0) {
+            if (legacyReadUserRef.current === cloudUser.uid) return;
+            legacyReadUserRef.current = cloudUser.uid;
+            void readLegacyCloudState(cloudUser.uid)
+              .then((legacyState) => {
+                if (cloudUserRef.current?.uid !== cloudUser.uid) return;
+                if (legacyState) reconcileInitialState(legacyState, {}, true);
+                else reconcileInitialState(defaultState(), {});
+              })
+              .catch(() => setSyncStatus(navigator.onLine ? 'error' : 'offline'));
+            return;
+          }
+
+          const moduleData = Object.fromEntries(snapshot.heads.map((head) => [head.module, head.data]));
+          const remoteRevisions = Object.fromEntries(snapshot.heads.map((head) => [head.module, head.revision])) as SyncRevisionMap;
+          reconcileInitialState(buildStateFromModules(moduleData), remoteRevisions);
           return;
         }
 
-        if (preferLocalUploadRef.current) {
-          setSyncStatus(navigator.onLine ? 'saving' : 'offline');
-          return;
+        let nextState = stateRef.current;
+        const nextRevisions = { ...revisionsRef.current };
+        const nextBaselines = { ...baselinesRef.current };
+        const conflictModules: SyncModuleKey[] = [];
+        const conflictRevisions: SyncRevisionMap = {};
+        const conflictHeads: typeof snapshot.heads = [];
+        let appliedRemote = false;
+
+        for (const head of snapshot.heads) {
+          const pendingRevision = pendingRevisionsRef.current[head.module];
+          const knownRevision = nextRevisions[head.module] || null;
+
+          if (pendingRevision === head.revision) {
+            if (!head.pendingWrites) {
+              delete pendingRevisionsRef.current[head.module];
+              nextRevisions[head.module] = head.revision;
+              nextBaselines[head.module] = syncDataFingerprint(head.data);
+            }
+            continue;
+          }
+
+          if (knownRevision === head.revision) {
+            if (!nextBaselines[head.module]) nextBaselines[head.module] = syncDataFingerprint(head.data);
+            continue;
+          }
+          if (head.fromCache && !knownRevision) continue;
+
+          if (!pendingRevision && (!knownRevision || head.parentRevision === knownRevision)) {
+            nextState = applySyncModule(nextState, head.module, head.data);
+            nextRevisions[head.module] = head.revision;
+            nextBaselines[head.module] = syncDataFingerprint(head.data);
+            appliedRemote = true;
+            continue;
+          }
+
+          conflictModules.push(head.module);
+          conflictRevisions[head.module] = head.revision;
+          conflictHeads.push(head);
         }
 
-        const localState = stateRef.current;
-        const alreadyPaired = isCloudPaired(cloudUser.uid);
-        const statesDiffer = JSON.stringify(localState) !== JSON.stringify(snapshot.state);
+        let remoteConflictState = nextState;
+        conflictHeads.forEach((head) => {
+          remoteConflictState = applySyncModule(remoteConflictState, head.module, head.data);
+        });
 
-        if (!alreadyPaired && statesDiffer && hasMeaningfulData(localState) && hasMeaningfulData(snapshot.state)) {
+        storeRevisions(nextRevisions);
+        persistBaselines(cloudUser.uid, nextBaselines);
+        if (appliedRemote) applyRemoteState(nextState, cloudUser.uid);
+        markCloudPaired(cloudUser.uid);
+
+        if (conflictModules.length > 0) {
           if (!conflictPendingRef.current) {
             conflictPendingRef.current = true;
-            setCloudConflict(snapshot.state);
-            setSyncStatus('conflict');
+            setCloudConflict({ remoteState: remoteConflictState, modules: conflictModules, remoteRevisions: conflictRevisions });
           }
-          return;
+          setSyncStatus('conflict');
+        } else {
+          setSyncStatus(nextStatus);
+          if (nextStatus === 'synced') setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         }
-
-        if (!alreadyPaired && hasMeaningfulData(localState) && !hasMeaningfulData(snapshot.state)) {
-          markCloudPaired(cloudUser.uid);
-          queueCloudSave(localState, true);
-          return;
-        }
-
-        applyRemoteState(snapshot.state);
-        markCloudPaired(cloudUser.uid);
-        setSyncStatus(nextStatus);
       },
       onError: () => setSyncStatus(navigator.onLine ? 'error' : 'offline'),
     });
-  }, [cloudUser?.uid]);
+  }, [cloudUser, storageUserId]);
 
   useEffect(() => {
     const handleOnline = () => setSyncStatus(cloudUserRef.current ? 'connecting' : cloudSyncConfigured ? 'signed-out' : 'unavailable');
@@ -163,7 +390,6 @@ export default function App() {
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      if (syncTimerRef.current) window.clearTimeout(syncTimerRef.current);
     };
   }, []);
 
@@ -186,21 +412,36 @@ export default function App() {
   };
 
   const handleUseLocalState = () => {
-    if (!cloudUser) return;
-    preferLocalUploadRef.current = true;
+    if (!cloudUser || !cloudConflict) return;
+    saveRecoveryState(cloudConflict.remoteState, cloudUser.uid);
+    const baseRevisions = { ...revisionsRef.current, ...cloudConflict.remoteRevisions };
+    persistRevisionMap(cloudUser.uid, baseRevisions);
+    pendingRevisionsRef.current = {};
     markCloudPaired(cloudUser.uid);
+    initializedUserRef.current = cloudUser.uid;
     conflictPendingRef.current = false;
     setCloudConflict(null);
-    queueCloudSave(stateRef.current, true);
+    queueCloudSave(stateRef.current, [...SYNC_MODULES]);
   };
 
   const handleUseCloudState = () => {
     if (!cloudUser || !cloudConflict) return;
-    applyRemoteState(cloudConflict);
+    saveRecoveryState(stateRef.current, cloudUser.uid);
+    applyRemoteState(cloudConflict.remoteState, cloudUser.uid);
+    persistRevisionMap(cloudUser.uid, { ...revisionsRef.current, ...cloudConflict.remoteRevisions });
+    const nextBaselines = { ...baselinesRef.current };
+    cloudConflict.modules.forEach((module) => {
+      nextBaselines[module] = syncModuleFingerprint(cloudConflict.remoteState, module);
+    });
+    persistBaselines(cloudUser.uid, nextBaselines);
     markCloudPaired(cloudUser.uid);
+    initializedUserRef.current = cloudUser.uid;
     conflictPendingRef.current = false;
+    const needsMigration = cloudConflict.needsMigration;
     setCloudConflict(null);
-    setSyncStatus(navigator.onLine ? 'synced' : 'offline');
+    if (needsMigration) queueCloudSave(cloudConflict.remoteState, [...SYNC_MODULES]);
+    else if (cloudConflict.localModules?.length) queueCloudSave(cloudConflict.remoteState, cloudConflict.localModules);
+    else setSyncStatus(navigator.onLine ? 'synced' : 'offline');
   };
 
   // Sync dark mode class to html document
@@ -267,6 +508,11 @@ export default function App() {
     }, 150);
   };
 
+  const handleSearchNavigate = (view: ViewType, focusId?: string) => {
+    if (focusId) handleQuickAction(view, focusId);
+    else handleNavigate(view);
+  };
+
   const handleExportJSON = () => {
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(state, null, 2));
     const downloadAnchor = document.createElement('a');
@@ -327,6 +573,7 @@ export default function App() {
           cloudConfigured={cloudSyncConfigured}
           cloudUser={cloudUser}
           syncStatus={syncStatus}
+          lastSyncedAt={lastSyncedAt}
           onCloudSignIn={handleCloudSignIn}
           onCloudSignOut={handleCloudSignOut}
         />
@@ -352,6 +599,7 @@ export default function App() {
             </div>
           )}
           {/* View Router */}
+          <Suspense fallback={<div role="status" className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-sm font-bold text-[var(--text-soft)]">Abriendo módulo…</div>}>
           {currentView === 'dashboard' && (
             <DashboardView
               state={state}
@@ -407,8 +655,11 @@ export default function App() {
               onUpdateState={updateState}
               onExportJSON={handleExportJSON}
               onImportJSON={handleImportJSON}
+              storageUserId={storageUserId}
+              cloudConnected={Boolean(cloudUser)}
             />
           )}
+          </Suspense>
         </main>
       </div>
 
@@ -436,7 +687,7 @@ export default function App() {
       />
 
       {cloudConflict && (
-        <CloudConflictModal onUseLocal={handleUseLocalState} onUseCloud={handleUseCloudState} />
+        <CloudConflictModal modules={cloudConflict.modules} onUseLocal={handleUseLocalState} onUseCloud={handleUseCloudState} />
       )}
 
       <GlobalSearchModal
@@ -444,9 +695,10 @@ export default function App() {
         open={isSearchOpen}
         initialQuery={searchQuery}
         onClose={() => setIsSearchOpen(false)}
-        onNavigate={handleNavigate}
+        onNavigate={handleSearchNavigate}
       />
       <ToastViewport />
+      {!__LIFEOS_PORTABLE__ && <PwaUpdatePrompt />}
     </div>
   );
 }

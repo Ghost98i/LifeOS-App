@@ -27,7 +27,7 @@ export const ESTADO_LABELS = {
 
 export const STORAGE_KEY = 'lifeos-state-v1';
 export const STORAGE_RECOVERY_KEY = 'lifeos-state-recovery-v1';
-export const CURRENT_SCHEMA_VERSION = 5;
+export const CURRENT_SCHEMA_VERSION = 6;
 
 type StorageBackend = 'localStorage' | 'recovery' | 'ninguno';
 
@@ -40,7 +40,11 @@ export interface StorageDiagnostics {
 }
 
 export function uid(): string {
-  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+  return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function scopedStorageKey(base: string, userId?: string | null): string {
+  return userId ? `${base}:user:${userId}` : base;
 }
 
 export function todayISO(): string {
@@ -81,9 +85,9 @@ export function clamp(n: number, min: number, max: number): number {
 }
 
 export function daysBetween(a: string, b: string): number {
-  const da = new Date(a + 'T00:00:00');
-  const db = new Date(b + 'T00:00:00');
-  const ms = db.getTime() - da.getTime();
+  const [ay, am, ad] = a.split('-').map(Number);
+  const [by, bm, bd] = b.split('-').map(Number);
+  const ms = Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad);
   return Math.round(ms / 86400000);
 }
 
@@ -373,14 +377,16 @@ export function parseBackupJSON(raw: string): LifeOSState {
   return normalizeStoredState(parsed);
 }
 
-export function loadStoredState(): { state: LifeOSState; backend: StorageBackend } {
+export function loadStoredState(userId?: string | null): { state: LifeOSState; backend: StorageBackend } {
+  const primaryKey = scopedStorageKey(STORAGE_KEY, userId);
+  const recoveryKey = scopedStorageKey(STORAGE_RECOVERY_KEY, userId);
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(primaryKey);
     if (raw) return { state: normalizeStoredState(JSON.parse(raw)), backend: 'localStorage' };
   } catch (e) {
     console.error('Error reading localStorage:', e);
     try {
-      const recovery = localStorage.getItem(STORAGE_RECOVERY_KEY);
+      const recovery = localStorage.getItem(recoveryKey);
       if (recovery) return { state: normalizeStoredState(JSON.parse(recovery)), backend: 'recovery' };
     } catch (recoveryError) {
       console.error('Error reading recovery snapshot:', recoveryError);
@@ -389,18 +395,20 @@ export function loadStoredState(): { state: LifeOSState; backend: StorageBackend
   return { state: defaultState(), backend: 'ninguno' };
 }
 
-export function saveStoredState(state: LifeOSState): boolean {
+export function saveStoredState(state: LifeOSState, userId?: string | null): boolean {
+  const primaryKey = scopedStorageKey(STORAGE_KEY, userId);
+  const recoveryKey = scopedStorageKey(STORAGE_RECOVERY_KEY, userId);
   try {
-    const previous = localStorage.getItem(STORAGE_KEY);
+    const previous = localStorage.getItem(primaryKey);
     if (previous) {
       try {
         normalizeStoredState(JSON.parse(previous));
-        localStorage.setItem(STORAGE_RECOVERY_KEY, previous);
+        localStorage.setItem(recoveryKey, previous);
       } catch {
         // Never replace a valid recovery snapshot with corrupt data.
       }
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...state, schemaVersion: CURRENT_SCHEMA_VERSION }));
+    localStorage.setItem(primaryKey, JSON.stringify({ ...state, schemaVersion: CURRENT_SCHEMA_VERSION }));
     return true;
   } catch (e) {
     console.error('Error saving to localStorage:', e);
@@ -408,10 +416,23 @@ export function saveStoredState(state: LifeOSState): boolean {
   }
 }
 
-export function getStorageDiagnostics(): StorageDiagnostics {
+export function saveRecoveryState(state: LifeOSState, userId?: string | null): boolean {
   try {
-    const primary = localStorage.getItem(STORAGE_KEY) || '';
-    const recovery = localStorage.getItem(STORAGE_RECOVERY_KEY) || '';
+    const normalized = normalizeStoredState(state);
+    localStorage.setItem(scopedStorageKey(STORAGE_RECOVERY_KEY, userId), JSON.stringify(normalized));
+    return true;
+  } catch (error) {
+    console.error('Error saving recovery state:', error);
+    return false;
+  }
+}
+
+export function getStorageDiagnostics(userId?: string | null): StorageDiagnostics {
+  const primaryKey = scopedStorageKey(STORAGE_KEY, userId);
+  const recoveryKey = scopedStorageKey(STORAGE_RECOVERY_KEY, userId);
+  try {
+    const primary = localStorage.getItem(primaryKey) || '';
+    const recovery = localStorage.getItem(recoveryKey) || '';
     let schemaVersion = CURRENT_SCHEMA_VERSION;
     if (primary) schemaVersion = normalizeStoredState(JSON.parse(primary)).schemaVersion;
     return {
@@ -422,7 +443,7 @@ export function getStorageDiagnostics(): StorageDiagnostics {
       recoveryAvailable: Boolean(recovery),
     };
   } catch {
-    const recovery = localStorage.getItem(STORAGE_RECOVERY_KEY) || '';
+    const recovery = localStorage.getItem(recoveryKey) || '';
     return {
       backend: recovery ? 'recovery' : 'ninguno',
       schemaVersion: CURRENT_SCHEMA_VERSION,

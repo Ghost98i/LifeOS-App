@@ -25,7 +25,7 @@ export const FinanceOperationsCard: React.FC<FinanceOperationsCardProps> = ({ st
     if (!accounts.some((item) => item.id === fromId)) setFromId(accounts[0]?.id || '');
     if (!accounts.some((item) => item.id === toId)) setToId(accounts[1]?.id || accounts[0]?.id || '');
     if (!accounts.some((item) => item.id === accountId)) setAccountId(accounts[0]?.id || '');
-  }, [accounts.length]);
+  }, [accountId, accounts, fromId, toId]);
 
   const submitTransfer = (event: React.FormEvent) => {
     event.preventDefault();

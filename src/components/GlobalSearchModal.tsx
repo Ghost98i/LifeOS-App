@@ -7,7 +7,7 @@ interface GlobalSearchModalProps {
   open: boolean;
   initialQuery?: string;
   onClose: () => void;
-  onNavigate: (view: ViewType) => void;
+  onNavigate: (view: ViewType, focusId?: string) => void;
 }
 
 export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ state, open, initialQuery = '', onClose, onNavigate }) => {
@@ -33,7 +33,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({ state, ope
   const choose = (index: number) => {
     const result = results[index];
     if (!result) return;
-    onNavigate(result.view);
+    onNavigate(result.view, result.focusId);
     onClose();
   };
 
