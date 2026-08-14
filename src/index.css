@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
   --bg: #f8fafc;
   --bg-elevated: #ffffff;
   --card: #ffffff;
@@ -8,7 +9,7 @@
   --border-hover: #cbd5e1;
   --text: #0f172a;
   --text-soft: #475569;
-  --text-faint: #94a3b8;
+  --text-faint: #64748b;
   --blue: #2563eb;
   --blue-hover: #1d4ed8;
   --blue-soft: #eff6ff;
@@ -17,28 +18,34 @@
 }
 
 .dark {
-  --bg: #0b0f19;
-  --bg-elevated: #111827;
-  --card: #131b2e;
-  --border: #1e293b;
-  --border-hover: #334155;
-  --text: #f8fafc;
+  color-scheme: dark;
+  --bg: #0f172a;
+  --bg-elevated: #1c2a42;
+  --card: #162238;
+  --border: #2a3a55;
+  --border-hover: #3b4f70;
+  --text: #f1f5f9;
   --text-soft: #94a3b8;
-  --text-faint: #64748b;
-  --blue: #3b82f6;
-  --blue-hover: #60a5fa;
-  --blue-soft: rgba(59, 130, 246, 0.14);
-  --card-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.3);
-  --card-shadow-hover: 0 12px 24px -4px rgb(0 0 0 / 0.45);
+  --text-faint: #8493aa;
+  --blue: #4c9aff;
+  --blue-hover: #74b4ff;
+  --blue-soft: rgba(76, 154, 255, 0.14);
+  --card-shadow: 0 1px 3px 0 rgb(2 8 23 / 0.22);
+  --card-shadow-hover: 0 12px 24px -4px rgb(2 8 23 / 0.32);
 }
 
 body {
   background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 88% -10%, color-mix(in srgb, var(--blue) 9%, transparent), transparent 32rem),
+    radial-gradient(circle at -10% 45%, color-mix(in srgb, #8b5cf6 5%, transparent), transparent 28rem);
+  background-attachment: fixed;
   color: var(--text);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
+  min-width: 320px;
 }
 
 /* Glassmorphism & Card styling helpers */
@@ -46,7 +53,7 @@ body {
   background: var(--card);
   border: 1px solid var(--border);
   box-shadow: var(--card-shadow);
-  transition: all 0.2s ease-in-out;
+  transition: border-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
 }
 
 .glass-panel:hover {
@@ -84,10 +91,56 @@ body {
 
 /* Focus and Active polish */
 input, select, textarea, button {
-  transition: all 0.15s ease-in-out;
+  transition: border-color 0.15s ease-in-out, background-color 0.15s ease-in-out, color 0.15s ease-in-out, opacity 0.15s ease-in-out, transform 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+button:not(:disabled), summary, a {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+:where(button, a, input, select, textarea, summary):focus-visible {
+  outline: 2px solid var(--blue) !important;
+  outline-offset: 2px;
+}
+
+input, select, textarea {
+  accent-color: var(--blue);
 }
 
 button:active {
   transform: scale(0.98);
 }
 
+.toast-enter {
+  animation: toast-enter 180ms ease-out both;
+}
+
+@keyframes toast-enter {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+@media (pointer: coarse) {
+  button, summary, input, select {
+    min-height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

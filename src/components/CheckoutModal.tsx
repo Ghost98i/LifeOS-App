@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { LifeOSState } from '../types';
 import { todayISO, fmtDate } from '../lib/storage';
 import { playSound } from '../lib/audio';
+import { showToast } from '../lib/toast';
 
 interface CheckoutModalProps {
   state: LifeOSState;
@@ -21,6 +22,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
   const hasStudyToday = state.study.studyLog.some((l) => l.date === iso);
   const hasTxToday = state.finance.transactions.some((t) => t.date === iso);
 
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, []);
+
   const handleFinishCheckout = () => {
     playSound('night');
     onUpdateState((draft) => {
@@ -31,13 +38,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
         closedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
     });
-    alert('¡Día cerrado con éxito! 🌙 Great job.');
+    showToast('Día cerrado. Lo importante ya quedó registrado. 🌙');
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl relative">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-label="Cerrar el día" className="bg-[var(--card)] border border-[var(--border)] rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl relative" onClick={(event) => event.stopPropagation()}>
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-sm text-[var(--text-faint)] hover:text-[var(--text)]"

@@ -2,18 +2,61 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { defineConfig } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
+import { viteSingleFile } from 'vite-plugin-singlefile';
 
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, '.'),
+export default defineConfig(({ mode }) => {
+  const portable = mode === 'portable';
+
+  return {
+    base: portable ? './' : '/',
+    plugins: [
+      react(),
+      tailwindcss(),
+      VitePWA({
+            disable: portable,
+            registerType: 'prompt',
+            injectRegister: false,
+            includeAssets: ['lifeos-icon-16.png', 'lifeos-icon-32.png', 'lifeos-icon-180.png', 'lifeos-icon-192.png', 'lifeos-icon-512.png'],
+            manifest: {
+              id: '/',
+              name: 'LifeOS de Christian',
+              short_name: 'LifeOS',
+              description: 'Centro de operaciones personal, local y sincronizado.',
+              lang: 'es',
+              theme_color: '#0f172a',
+              background_color: '#0f172a',
+              display: 'standalone',
+              start_url: '/',
+              scope: '/',
+              icons: [
+                { src: '/lifeos-icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+                { src: '/lifeos-icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+                { src: '/lifeos-icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+              ],
+            },
+            workbox: {
+              navigateFallback: '/index.html',
+              cleanupOutdatedCaches: true,
+              clientsClaim: false,
+              skipWaiting: false,
+            },
+          }),
+      ...(portable ? [viteSingleFile()] : []),
+    ],
+    define: {
+      __LIFEOS_PORTABLE__: JSON.stringify(portable),
     },
-  },
-  server: {
-    port: 3000,
-    host: '0.0.0.0',
-    hmr: process.env.DISABLE_HMR !== 'true',
-    watch: process.env.DISABLE_HMR === 'true' ? null : {},
-  },
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, '.'),
+      },
+    },
+    server: {
+      port: 3000,
+      host: '0.0.0.0',
+      hmr: process.env.DISABLE_HMR !== 'true',
+      watch: process.env.DISABLE_HMR === 'true' ? null : {},
+    },
+  };
 });

@@ -1,4 +1,4 @@
-import { LifeOSState, DayKey, ResaleItem, Transaction } from '../types';
+import { LifeOSState, DayKey } from '../types';
 
 export const DAYS: DayKey[] = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
 export const DAY_LABELS: Record<DayKey, string> = {
@@ -26,9 +26,25 @@ export const ESTADO_LABELS = {
 };
 
 export const STORAGE_KEY = 'lifeos-state-v1';
+export const STORAGE_RECOVERY_KEY = 'lifeos-state-recovery-v1';
+export const CURRENT_SCHEMA_VERSION = 6;
+
+type StorageBackend = 'localStorage' | 'recovery' | 'ninguno';
+
+export interface StorageDiagnostics {
+  backend: StorageBackend;
+  schemaVersion: number;
+  primaryBytes: number;
+  recoveryBytes: number;
+  recoveryAvailable: boolean;
+}
 
 export function uid(): string {
-  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+  return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function scopedStorageKey(base: string, userId?: string | null): string {
+  return userId ? `${base}:user:${userId}` : base;
 }
 
 export function todayISO(): string {
@@ -69,9 +85,9 @@ export function clamp(n: number, min: number, max: number): number {
 }
 
 export function daysBetween(a: string, b: string): number {
-  const da = new Date(a + 'T00:00:00');
-  const db = new Date(b + 'T00:00:00');
-  const ms = db.getTime() - da.getTime();
+  const [ay, am, ad] = a.split('-').map(Number);
+  const [by, bm, bd] = b.split('-').map(Number);
+  const ms = Date.UTC(by, bm - 1, bd) - Date.UTC(ay, am - 1, ad);
   return Math.round(ms / 86400000);
 }
 
@@ -164,7 +180,8 @@ export function defaultState(): LifeOSState {
   const accBancoId = uid();
 
   return {
-    profile: { name: '', height: 170 },
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    profile: { name: '', height: 170, bodyCompositionSex: null },
     agenda: {
       lunes: [],
       martes: [],
@@ -182,8 +199,12 @@ export function defaultState(): LifeOSState {
     ],
     taskLog: {},
     todayExtras: [],
+    dailyPriorities: [],
+    dailyContext: [],
     finance: {
       transactions: [],
+      transfers: [],
+      reconciliations: [],
       categories: [
         'Comida',
         'Gimnasio',
@@ -214,100 +235,221 @@ export function defaultState(): LifeOSState {
     calendarEvents: [],
     goals: [],
     notes: { postits: [], shopping: [], links: [] },
-    settings: { darkMode: false, lastBackupAt: null, hiddenTabs: [] },
+    settings: { darkMode: false, lastBackupAt: null, hiddenTabs: [], lastWeeklyReviewAt: null },
     checkoutLog: {},
   };
 }
 
-export function syncResaleSaleToFinance(state: LifeOSState, item: ResaleItem): void {
-  const isVendido = Boolean(item.sellPrice && item.sellDate);
-  if (isVendido) {
-    const tx = item.financeTxId ? state.finance.transactions.find((t) => t.id === item.financeTxId) : null;
-    if (tx) {
-      const oldAmount = Number(tx.amount) || 0;
-      const newAmount = Number(item.sellPrice) || 0;
-      const delta = newAmount - oldAmount;
-      if (tx.accountId) {
-        const acc = state.finance.accounts.find((a) => a.id === tx.accountId);
-        if (acc) acc.balance = Number(acc.balance || 0) + delta;
-      }
-      tx.amount = newAmount;
-      tx.date = item.sellDate!;
-      tx.note = 'Venta: ' + item.item;
-    } else {
-      const accountId = state.finance.accounts.length ? state.finance.accounts[0].id : null;
-      const newTx: Transaction = {
-        id: uid(),
-        type: 'ingreso',
-        amount: Number(item.sellPrice) || 0,
-        category: 'Reventa',
-        fixed: 'variable',
-        date: item.sellDate!,
-        note: 'Venta: ' + item.item,
-        accountId,
-      };
-      state.finance.transactions.push(newTx);
-      if (accountId) {
-        const acc = state.finance.accounts.find((a) => a.id === accountId);
-        if (acc) acc.balance = Number(acc.balance || 0) + newTx.amount;
-      }
-      item.financeTxId = newTx.id;
-    }
-  } else if (item.financeTxId) {
-    const tx = state.finance.transactions.find((t) => t.id === item.financeTxId);
-    if (tx && tx.accountId) {
-      const acc = state.finance.accounts.find((a) => a.id === tx.accountId);
-      if (acc) acc.balance = Number(acc.balance || 0) - Number(tx.amount || 0);
-    }
-    state.finance.transactions = state.finance.transactions.filter((t) => t.id !== item.financeTxId);
-    item.financeTxId = null;
-  }
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-export function loadStoredState(): { state: LifeOSState; backend: 'claude' | 'localStorage' | 'ninguno' } {
+function arrayOr<T>(value: unknown, fallback: T[]): T[] {
+  return Array.isArray(value) ? (value as T[]) : fallback;
+}
+
+export function normalizeStoredState(value: unknown): LifeOSState {
+  if (!isRecord(value)) throw new Error('El backup debe contener un objeto de LifeOS.');
+
   const def = defaultState();
+  const profile = isRecord(value.profile) ? value.profile : {};
+  const agenda = isRecord(value.agenda) ? value.agenda : {};
+  const finance = isRecord(value.finance) ? value.finance : {};
+  const gym = isRecord(value.gym) ? value.gym : {};
+  const study = isRecord(value.study) ? value.study : {};
+  const streaming = isRecord(value.streaming) ? value.streaming : {};
+  const jobs = isRecord(value.jobs) ? value.jobs : {};
+  const resale = isRecord(value.resale) ? value.resale : {};
+  const notes = isRecord(value.notes) ? value.notes : {};
+  const settings = isRecord(value.settings) ? value.settings : {};
+
+  const merged: LifeOSState = {
+    ...def,
+    schemaVersion: CURRENT_SCHEMA_VERSION,
+    profile: {
+      ...def.profile,
+      ...profile,
+      bodyCompositionSex: profile.bodyCompositionSex === 'male' || profile.bodyCompositionSex === 'female'
+        ? profile.bodyCompositionSex
+        : null,
+    },
+    agenda: { ...def.agenda, ...agenda },
+    tasksRecurring: arrayOr(value.tasksRecurring, def.tasksRecurring),
+    taskLog: isRecord(value.taskLog) ? (value.taskLog as LifeOSState['taskLog']) : def.taskLog,
+    todayExtras: arrayOr(value.todayExtras, def.todayExtras),
+    dailyPriorities: arrayOr(value.dailyPriorities, def.dailyPriorities).map((priority) => ({
+      ...priority,
+      sourceItemId: priority.sourceItemId || null,
+      sourceKind: priority.sourceKind === 'toggle-task-today'
+        || priority.sourceKind === 'toggle-extra-today'
+        || priority.sourceKind === 'complete-followup'
+        ? priority.sourceKind
+        : null,
+    })),
+    dailyContext: arrayOr(value.dailyContext, def.dailyContext),
+    finance: {
+      ...def.finance,
+      ...finance,
+      transactions: arrayOr(finance.transactions, def.finance.transactions),
+      transfers: arrayOr(finance.transfers, def.finance.transfers),
+      reconciliations: arrayOr(finance.reconciliations, def.finance.reconciliations),
+      categories: arrayOr(finance.categories, def.finance.categories),
+      budgets: isRecord(finance.budgets) ? (finance.budgets as Record<string, number>) : def.finance.budgets,
+      accounts: arrayOr(finance.accounts, def.finance.accounts).map((account) => ({
+        ...account,
+        lastReconciledAt: account.lastReconciledAt ?? null,
+      })),
+      debts: arrayOr(finance.debts, def.finance.debts),
+      investments: arrayOr(finance.investments, def.finance.investments),
+      subscriptions: arrayOr(finance.subscriptions, def.finance.subscriptions),
+    },
+    gym: {
+      ...def.gym,
+      ...gym,
+      weight: arrayOr(gym.weight, def.gym.weight),
+      measurements: arrayOr(gym.measurements, def.gym.measurements),
+      sessions: arrayOr(gym.sessions, def.gym.sessions),
+      routineTemplates: arrayOr(gym.routineTemplates, def.gym.routineTemplates),
+    },
+    study: {
+      ...def.study,
+      ...study,
+      subjects: arrayOr(study.subjects, def.study.subjects),
+      exams: arrayOr(study.exams, def.study.exams),
+      studyLog: arrayOr(study.studyLog, def.study.studyLog),
+    },
+    streaming: {
+      ...def.streaming,
+      ...streaming,
+      sessions: arrayOr(streaming.sessions, def.streaming.sessions),
+    },
+    jobs: {
+      ...def.jobs,
+      ...jobs,
+      opportunities: arrayOr(jobs.opportunities, def.jobs.opportunities),
+      applications: arrayOr(jobs.applications, def.jobs.applications),
+    },
+    resale: {
+      ...def.resale,
+      ...resale,
+      opportunities: arrayOr(resale.opportunities, def.resale.opportunities),
+      inventory: arrayOr(resale.inventory, def.resale.inventory).map((item) => ({
+        ...item,
+        purchaseTxId: item.purchaseTxId ?? null,
+        saleTxId: item.saleTxId ?? item.financeTxId ?? null,
+        feeTxId: item.feeTxId ?? null,
+        fees: Number(item.fees || 0),
+      })),
+    },
+    ideas: arrayOr(value.ideas, def.ideas),
+    calendarEvents: arrayOr(value.calendarEvents, def.calendarEvents),
+    goals: arrayOr(value.goals, def.goals),
+    notes: {
+      ...def.notes,
+      ...notes,
+      postits: arrayOr(notes.postits, def.notes.postits),
+      shopping: arrayOr(notes.shopping, def.notes.shopping),
+      links: arrayOr(notes.links, def.notes.links),
+    },
+    settings: {
+      ...def.settings,
+      ...settings,
+      hiddenTabs: arrayOr(settings.hiddenTabs, def.settings.hiddenTabs),
+    },
+    checkoutLog: isRecord(value.checkoutLog)
+      ? (value.checkoutLog as LifeOSState['checkoutLog'])
+      : def.checkoutLog,
+  };
+
+  if (!merged.finance.categories.includes('Reventa')) merged.finance.categories.push('Reventa');
+  return merged;
+}
+
+export function parseBackupJSON(raw: string): LifeOSState {
+  const parsed: unknown = JSON.parse(raw);
+  if (!isRecord(parsed)) throw new Error('El archivo no contiene un backup válido.');
+
+  const recognizedKeys = ['profile', 'agenda', 'finance', 'gym', 'study', 'jobs', 'resale', 'notes'];
+  if (!recognizedKeys.some((key) => Object.prototype.hasOwnProperty.call(parsed, key))) {
+    throw new Error('El archivo no parece pertenecer a LifeOS.');
+  }
+
+  return normalizeStoredState(parsed);
+}
+
+export function loadStoredState(userId?: string | null): { state: LifeOSState; backend: StorageBackend } {
+  const primaryKey = scopedStorageKey(STORAGE_KEY, userId);
+  const recoveryKey = scopedStorageKey(STORAGE_RECOVERY_KEY, userId);
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      const merged: LifeOSState = {
-        ...def,
-        ...parsed,
-        profile: { ...def.profile, ...(parsed.profile || {}) },
-        agenda: { ...def.agenda, ...(parsed.agenda || {}) },
-        finance: { ...def.finance, ...(parsed.finance || {}) },
-        gym: { ...def.gym, ...(parsed.gym || {}) },
-        study: { ...def.study, ...(parsed.study || {}) },
-        streaming: { ...def.streaming, ...(parsed.streaming || {}) },
-        jobs: { ...def.jobs, ...(parsed.jobs || {}) },
-        resale: { ...def.resale, ...(parsed.resale || {}) },
-        notes: { ...def.notes, ...(parsed.notes || {}) },
-        settings: { ...def.settings, ...(parsed.settings || {}) },
-        checkoutLog: parsed.checkoutLog || def.checkoutLog,
-        ideas: parsed.ideas || def.ideas,
-        calendarEvents: parsed.calendarEvents || def.calendarEvents,
-        goals: parsed.goals || def.goals,
-        todayExtras: parsed.todayExtras || def.todayExtras,
-      };
-
-      if (!merged.finance.categories.includes('Reventa')) {
-        merged.finance.categories.push('Reventa');
-      }
-
-      return { state: merged, backend: 'localStorage' };
-    }
+    const raw = localStorage.getItem(primaryKey);
+    if (raw) return { state: normalizeStoredState(JSON.parse(raw)), backend: 'localStorage' };
   } catch (e) {
     console.error('Error reading localStorage:', e);
+    try {
+      const recovery = localStorage.getItem(recoveryKey);
+      if (recovery) return { state: normalizeStoredState(JSON.parse(recovery)), backend: 'recovery' };
+    } catch (recoveryError) {
+      console.error('Error reading recovery snapshot:', recoveryError);
+    }
   }
-  return { state: def, backend: 'ninguno' };
+  return { state: defaultState(), backend: 'ninguno' };
 }
 
-export function saveStoredState(state: LifeOSState): boolean {
+export function saveStoredState(state: LifeOSState, userId?: string | null): boolean {
+  const primaryKey = scopedStorageKey(STORAGE_KEY, userId);
+  const recoveryKey = scopedStorageKey(STORAGE_RECOVERY_KEY, userId);
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    const previous = localStorage.getItem(primaryKey);
+    if (previous) {
+      try {
+        normalizeStoredState(JSON.parse(previous));
+        localStorage.setItem(recoveryKey, previous);
+      } catch {
+        // Never replace a valid recovery snapshot with corrupt data.
+      }
+    }
+    localStorage.setItem(primaryKey, JSON.stringify({ ...state, schemaVersion: CURRENT_SCHEMA_VERSION }));
     return true;
   } catch (e) {
     console.error('Error saving to localStorage:', e);
     return false;
+  }
+}
+
+export function saveRecoveryState(state: LifeOSState, userId?: string | null): boolean {
+  try {
+    const normalized = normalizeStoredState(state);
+    localStorage.setItem(scopedStorageKey(STORAGE_RECOVERY_KEY, userId), JSON.stringify(normalized));
+    return true;
+  } catch (error) {
+    console.error('Error saving recovery state:', error);
+    return false;
+  }
+}
+
+export function getStorageDiagnostics(userId?: string | null): StorageDiagnostics {
+  const primaryKey = scopedStorageKey(STORAGE_KEY, userId);
+  const recoveryKey = scopedStorageKey(STORAGE_RECOVERY_KEY, userId);
+  try {
+    const primary = localStorage.getItem(primaryKey) || '';
+    const recovery = localStorage.getItem(recoveryKey) || '';
+    let schemaVersion = CURRENT_SCHEMA_VERSION;
+    if (primary) schemaVersion = normalizeStoredState(JSON.parse(primary)).schemaVersion;
+    return {
+      backend: primary ? 'localStorage' : 'ninguno',
+      schemaVersion,
+      primaryBytes: new Blob([primary]).size,
+      recoveryBytes: new Blob([recovery]).size,
+      recoveryAvailable: Boolean(recovery),
+    };
+  } catch {
+    const recovery = localStorage.getItem(recoveryKey) || '';
+    return {
+      backend: recovery ? 'recovery' : 'ninguno',
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+      primaryBytes: 0,
+      recoveryBytes: new Blob([recovery]).size,
+      recoveryAvailable: Boolean(recovery),
+    };
   }
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LifeOSState, DayKey, AgendaBlock, TaskRecurring } from '../types';
+import { LifeOSState, DayKey, TaskRecurring } from '../types';
 import {
   DAYS,
   DAY_LABELS,
