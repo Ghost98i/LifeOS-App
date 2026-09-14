@@ -1,14 +1,17 @@
 export type DayKey = 'lunes' | 'martes' | 'miercoles' | 'jueves' | 'viernes' | 'sabado' | 'domingo';
+export type EffortLevel = 'low' | 'medium' | 'high';
 
 export interface Profile {
   name: string;
   height: number;
+  bodyCompositionSex: 'male' | 'female' | null;
 }
 
 export interface AgendaBlock {
   id: string;
   time: string;
   activity: string;
+  effort?: EffortLevel;
 }
 
 export type AgendaWeek = Record<DayKey, AgendaBlock[]>;
@@ -18,6 +21,7 @@ export interface TaskRecurring {
   name: string;
   freq: 'daily' | '2-3x' | 'weekly';
   days?: DayKey[];
+  effort?: EffortLevel;
 }
 
 export interface TodayExtra {
@@ -26,6 +30,27 @@ export interface TodayExtra {
   text: string;
   done: boolean;
   priority: 'alta' | 'media' | 'baja';
+  effort?: EffortLevel;
+}
+
+export interface DailyPriority {
+  id: string;
+  date: string;
+  text: string;
+  done: boolean;
+  rank: 1 | 2 | 3;
+  sourceItemId?: string | null;
+  sourceKind?: 'toggle-task-today' | 'toggle-extra-today' | 'complete-followup' | null;
+  effort?: EffortLevel;
+}
+
+export interface DailyContextEntry {
+  date: string;
+  sleepHours: number | null;
+  energy: 1 | 2 | 3 | 4 | 5 | null;
+  mood: 1 | 2 | 3 | 4 | 5 | null;
+  connection: 'solo' | 'mensaje' | 'encuentro' | null;
+  note?: string;
 }
 
 export interface Transaction {
@@ -37,24 +62,49 @@ export interface Transaction {
   date: string;
   note?: string;
   accountId?: string | null;
+  origin?: 'manual' | 'quick' | 'adjustment' | 'resale_purchase' | 'resale_sale';
 }
 
 export interface Account {
   id: string;
   name: string;
   balance: number;
+  lastReconciledAt?: string | null;
+}
+
+export interface FinanceTransfer {
+  id: string;
+  fromAccountId: string;
+  toAccountId: string;
+  amount: number;
+  date: string;
+  note?: string;
+}
+
+export interface AccountReconciliation {
+  id: string;
+  accountId: string;
+  date: string;
+  systemBalance: number;
+  actualBalance: number;
+  difference: number;
+  adjustmentTxId?: string | null;
+  note?: string;
 }
 
 export interface Subscription {
   id: string;
   name: string;
   amount: number;
+  dueDay?: number | null;
 }
 
 export interface Debt {
   id: string;
   name: string;
   amount: number;
+  dueDate?: string | null;
+  monthlyPayment?: number;
 }
 
 export interface Investment {
@@ -65,6 +115,8 @@ export interface Investment {
 
 export interface Finance {
   transactions: Transaction[];
+  transfers: FinanceTransfer[];
+  reconciliations: AccountReconciliation[];
   categories: string[];
   budgets: Record<string, number>;
   accounts: Account[];
@@ -83,16 +135,30 @@ export interface MeasurementPoint {
   waist: number;
 }
 
-export interface Exercise {
-  name: string;
+export type MuscleGroup = 'Pecho' | 'Espalda' | 'Piernas' | 'Hombros' | 'Brazos' | 'Core' | 'Cardio' | 'Otros';
+
+export interface GymSet {
+  id: string;
   weight: number;
-  reps: string;
+  reps: number;
+  completedAt?: string | null;
+}
+
+export interface Exercise {
+  id: string;
+  name: string;
+  muscleGroup?: MuscleGroup;
+  sets: GymSet[];
+  restSeconds?: number;
+  timerEnabled?: boolean;
+  legacyReps?: string | null;
 }
 
 export interface RoutineTemplate {
   id: string;
   name: string;
   exercises: Exercise[];
+  days?: DayKey[];
 }
 
 export interface GymSession {
@@ -100,6 +166,17 @@ export interface GymSession {
   date: string;
   exercises: Exercise[];
   weekLabel?: string;
+  status: 'active' | 'completed';
+  startedAt?: string | null;
+  finishedAt?: string | null;
+}
+
+export interface GymRestTimer {
+  endsAt: number;
+  durationSeconds: number;
+  sessionId: string;
+  exerciseId?: string | null;
+  setId?: string | null;
 }
 
 export interface Gym {
@@ -107,6 +184,7 @@ export interface Gym {
   measurements: MeasurementPoint[];
   sessions: GymSession[];
   routineTemplates: RoutineTemplate[];
+  activeTimer?: GymRestTimer | null;
 }
 
 export interface Subject {
@@ -143,6 +221,14 @@ export interface StreamSession {
 export interface Streaming {
   sessions: StreamSession[];
   monthlyGoal: number;
+  preStreamChecklist: { id: string; label: string; done: boolean }[];
+  contentPipeline: {
+    id: string;
+    title: string;
+    status: 'idea' | 'outline' | 'recording' | 'editing' | 'published';
+    note?: string;
+    updatedAt: string;
+  }[];
 }
 
 export interface JobOpportunity {
@@ -167,6 +253,7 @@ export interface JobApplication {
   link?: string;
   nextAction?: string;
   nextActionDate?: string;
+  sourceOpportunityId?: string;
 }
 
 export interface Jobs {
@@ -192,7 +279,19 @@ export interface ResaleItem {
   sellPrice?: number | null;
   sellDate?: string | null;
   status: 'comprado' | 'vendido';
+  purchaseTxId?: string | null;
+  saleTxId?: string | null;
+  feeTxId?: string | null;
+  fees?: number;
+  shippingCost?: number;
+  platformFees?: number;
+  taxes?: number;
+  saleAccountId?: string | null;
+  purchaseAccountId?: string | null;
+  /** @deprecated Conservado para migrar ventas creadas por versiones anteriores. */
   financeTxId?: string | null;
+  note?: string;
+  sourceOpportunityId?: string;
 }
 
 export interface Resale {
@@ -242,16 +341,28 @@ export interface UsefulLink {
   url: string;
 }
 
+export interface Possession {
+  id: string;
+  name: string;
+  category: string;
+  location?: string;
+  receivedAt?: string | null;
+  note?: string;
+}
+
 export interface Notes {
   postits: Postit[];
   shopping: ShoppingItem[];
   links: UsefulLink[];
+  possessions: Possession[];
 }
 
 export interface Settings {
   darkMode: boolean;
   lastBackupAt?: string | null;
   hiddenTabs: string[];
+  lastWeeklyReviewAt?: string | null;
+  privacyMode: boolean;
 }
 
 export interface CheckoutLogDay {
@@ -259,14 +370,20 @@ export interface CheckoutLogDay {
   studiedSkipped?: boolean;
   expensesSkipped?: boolean;
   closedAt?: string;
+  mainWin?: string;
+  carryOver?: string;
+  endEnergy?: 1 | 2 | 3 | 4 | 5 | null;
 }
 
 export interface LifeOSState {
+  schemaVersion: number;
   profile: Profile;
   agenda: AgendaWeek;
   tasksRecurring: TaskRecurring[];
   taskLog: Record<string, Record<string, boolean>>; // date -> taskID -> boolean
   todayExtras: TodayExtra[];
+  dailyPriorities: DailyPriority[];
+  dailyContext: DailyContextEntry[];
   finance: Finance;
   gym: Gym;
   study: Study;

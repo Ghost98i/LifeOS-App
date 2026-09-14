@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { playSound, startAmbientNoise, stopAmbientNoise, setAmbientVolume } from '../lib/audio';
 
 interface FocusTimerProps {
-  onSessionComplete?: (minutesLogged: number) => void;
+  targets?: { id: string; label: string }[];
+  onSessionComplete?: (minutesLogged: number, targetId?: string) => void;
 }
 
-export const FocusTimer: React.FC<FocusTimerProps> = ({ onSessionComplete }) => {
+export const FocusTimer: React.FC<FocusTimerProps> = ({ targets = [], onSessionComplete }) => {
   const [minutesSetting, setMinutesSetting] = useState(25);
   const [timeLeft, setTimeLeft] = useState(25 * 60);
   const [isRunning, setIsRunning] = useState(false);
@@ -13,44 +14,48 @@ export const FocusTimer: React.FC<FocusTimerProps> = ({ onSessionComplete }) => 
   const [ambientType, setAmbientType] = useState<'rain' | 'brown' | 'white'>('rain');
   const [volume, setVolume] = useState(0.04);
   const [completedSessions, setCompletedSessions] = useState(0);
+  const [targetId, setTargetId] = useState('');
+  const [endsAt, setEndsAt] = useState<number | null>(null);
 
   const initialSecondsRef = useRef(25 * 60);
 
   useEffect(() => {
-    let timer: any = null;
-    if (isRunning && timeLeft > 0) {
-      timer = setInterval(() => {
-        setTimeLeft((prev) => prev - 1);
-      }, 1000);
-    } else if (isRunning && timeLeft === 0) {
-      setIsRunning(false);
-      playSound('beep');
-      const loggedMin = Math.round(initialSecondsRef.current / 60);
-      setCompletedSessions((c) => c + 1);
-      if (onSessionComplete) {
-        onSessionComplete(loggedMin);
-      }
-      if (isAmbientActive) {
-        stopAmbientNoise();
-        setIsAmbientActive(false);
-      }
+    let timer: ReturnType<typeof setInterval> | null = null;
+    if (isRunning && endsAt) {
+      const update = () => {
+        const remaining = Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+        setTimeLeft(remaining);
+        if (remaining > 0) return;
+        setIsRunning(false);
+        setEndsAt(null);
+        playSound('beep');
+        const loggedMin = Math.round(initialSecondsRef.current / 60);
+        setCompletedSessions((c) => c + 1);
+        onSessionComplete?.(loggedMin, targetId || undefined);
+        if (isAmbientActive) { stopAmbientNoise(); setIsAmbientActive(false); }
+      };
+      update();
+      timer = setInterval(update, 250);
     }
 
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [isRunning, timeLeft, onSessionComplete, isAmbientActive]);
+  }, [isRunning, endsAt, onSessionComplete, isAmbientActive, targetId]);
 
   const handleStartPause = () => {
     if (!isRunning) {
       playSound('click');
       setIsRunning(true);
+      setEndsAt(Date.now() + timeLeft * 1000);
       if (isAmbientActive) {
         startAmbientNoise(ambientType);
       }
     } else {
       playSound('click');
+      if (endsAt) setTimeLeft(Math.max(0, Math.ceil((endsAt - Date.now()) / 1000)));
       setIsRunning(false);
+      setEndsAt(null);
       if (isAmbientActive) {
         stopAmbientNoise();
       }
@@ -60,6 +65,7 @@ export const FocusTimer: React.FC<FocusTimerProps> = ({ onSessionComplete }) => 
   const handleReset = (newMins?: number) => {
     playSound('click');
     setIsRunning(false);
+    setEndsAt(null);
     if (isAmbientActive) {
       stopAmbientNoise();
       setIsAmbientActive(false);
@@ -136,6 +142,8 @@ export const FocusTimer: React.FC<FocusTimerProps> = ({ onSessionComplete }) => 
           <span className="text-4xl font-extrabold font-mono tracking-wider text-[var(--text)]">
             {formatTime(timeLeft)}
           </span>
+
+          {targets.length > 0 && <label className="w-full max-w-xs"><span className="mb-1 block text-center text-[9px] font-black uppercase tracking-wider text-[var(--text-faint)]">Bloque enfocado en</span><select disabled={isRunning} value={targetId} onChange={(event) => setTargetId(event.target.value)} className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-center text-xs"><option value="">General</option>{targets.map((target) => <option key={target.id} value={target.id}>{target.label}</option>)}</select></label>}
 
           {/* Preset Buttons */}
           <div className="flex gap-1.5 text-xs">

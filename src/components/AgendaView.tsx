@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LifeOSState, DayKey, AgendaBlock, TaskRecurring } from '../types';
+import { LifeOSState, DayKey, EffortLevel, TaskRecurring } from '../types';
 import {
   DAYS,
   DAY_LABELS,
@@ -17,6 +17,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
   const [taskName, setTaskName] = useState('');
   const [taskFreq, setTaskFreq] = useState<'daily' | '2-3x' | 'weekly'>('daily');
   const [taskDays, setTaskDays] = useState<DayKey[]>([]);
+  const [taskEffort, setTaskEffort] = useState<EffortLevel>('medium');
 
   // Editing state for Agenda Block
   const [editingBlock, setEditingBlock] = useState<{
@@ -25,6 +26,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
     newDay: DayKey;
     time: string;
     activity: string;
+    effort: EffortLevel;
   } | null>(null);
 
   // Editing state for Recurring Task
@@ -38,6 +40,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
             id: uid(),
             time: b.time,
             activity: b.activity,
+            effort: 'medium',
           }));
         });
       });
@@ -60,7 +63,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
     const activity = prompt('Actividad:');
     if (!activity) return;
     onUpdateState((draft) => {
-      draft.agenda[day].push({ id: uid(), time, activity });
+      draft.agenda[day].push({ id: uid(), time, activity, effort: 'medium' });
     });
   };
 
@@ -73,7 +76,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
   const handleSaveEditedBlock = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingBlock || !editingBlock.activity.trim()) return;
-    const { id, currentDay, newDay, time, activity } = editingBlock;
+    const { id, currentDay, newDay, time, activity, effort } = editingBlock;
 
     onUpdateState((draft) => {
       // Remove from current day
@@ -83,6 +86,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
         id,
         time: time || '09:00',
         activity: activity.trim(),
+        effort,
       });
     });
 
@@ -106,10 +110,12 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
         name: taskName.trim(),
         freq: taskFreq,
         days: taskDays.length > 0 ? taskDays : undefined,
+        effort: taskEffort,
       });
     });
     setTaskName('');
     setTaskDays([]);
+    setTaskEffort('medium');
   };
 
   const handleSaveEditedTask = (e: React.FormEvent) => {
@@ -201,6 +207,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
                               newDay: day,
                               time: b.time,
                               activity: b.activity,
+                              effort: b.effort || 'medium',
                             })
                           }
                           className="text-[var(--text-faint)] hover:text-[var(--blue)] text-xs px-1"
@@ -256,6 +263,13 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
                       {DAY_LABELS[d]}
                     </option>
                   ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold uppercase text-[var(--text-faint)] block mb-1">Esfuerzo mental</label>
+                <select value={editingBlock.effort} onChange={(e) => setEditingBlock({ ...editingBlock, effort: e.target.value as EffortLevel })} className="w-full px-3 py-2 text-xs font-semibold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]">
+                  <option value="low">Bajo</option><option value="medium">Medio</option><option value="high">Alto</option>
                 </select>
               </div>
 
@@ -344,6 +358,12 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
                 <option value="weekly">Semanal</option>
               </select>
             </div>
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Esfuerzo</label>
+              <select value={taskEffort} onChange={(e) => setTaskEffort(e.target.value as EffortLevel)} className="px-3 py-2 text-xs font-semibold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]">
+                <option value="low">Bajo</option><option value="medium">Medio</option><option value="high">Alto</option>
+              </select>
+            </div>
             <button
               type="submit"
               className="px-4 py-2 bg-[var(--blue)] text-white text-xs font-bold rounded-xl hover:bg-[var(--blue-hover)] transition-all cursor-pointer shadow-2xs"
@@ -403,6 +423,13 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
                     onChange={(e) => setEditingTask({ ...editingTask, name: e.target.value })}
                     className="w-full px-3 py-2 text-xs font-semibold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden"
                   />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-[var(--text-faint)] block mb-1">Esfuerzo mental</label>
+                  <select value={editingTask.effort || 'medium'} onChange={(e) => setEditingTask({ ...editingTask, effort: e.target.value as EffortLevel })} className="w-full px-3 py-2 text-xs font-semibold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]">
+                    <option value="low">Bajo</option><option value="medium">Medio</option><option value="high">Alto</option>
+                  </select>
                 </div>
 
                 <div>
@@ -490,6 +517,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
                     <div key={t.id} className="py-2.5 flex items-center justify-between text-xs sm:text-sm text-[var(--text)]">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
                         <span className="font-semibold">{t.name}</span>
+                        <span className={`w-fit rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase ${t.effort === 'low' ? 'bg-emerald-500/10 text-emerald-600' : t.effort === 'high' ? 'bg-rose-500/10 text-rose-600' : 'bg-amber-500/10 text-amber-600'}`}>{t.effort === 'low' ? 'bajo' : t.effort === 'high' ? 'alto' : 'medio'}</span>
                         {t.days && t.days.length > 0 && (
                           <div className="flex flex-wrap gap-1">
                             {t.days.map((d) => (

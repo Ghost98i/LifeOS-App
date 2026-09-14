@@ -178,7 +178,7 @@ export function stopAmbientNoise(): void {
     try {
       (ambientSource as any).stop();
       ambientSource.disconnect();
-    } catch (_) {}
+    } catch {}
     ambientSource = null;
   }
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ResponsiveContainer,
   PieChart,
@@ -34,23 +34,34 @@ import {
   calcInvestmentsTotal,
   groupTransactionsByMonth,
   resaleStats,
-  adjustAccountBalance,
   defaultAccountId,
+  cashFlow30Days,
 } from '../lib/calculations';
+import { FinanceOperationsCard } from './FinanceOperationsCard';
+import { addAccount, addTransaction, deleteAccount, deleteTransaction, updateTransaction } from '../lib/financeFlows';
+import { showToast } from '../lib/toast';
+import { AppIcon } from './AppIcon';
 
 interface FinanzasViewProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => void;
+  initialTransactionType?: 'gasto' | 'ingreso';
 }
 
-export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState }) => {
-  const [txType, setTxType] = useState<'gasto' | 'ingreso'>('gasto');
+export const FinanzasView: React.FC<FinanzasViewProps> = ({
+  state,
+  onUpdateState,
+  initialTransactionType = 'gasto',
+}) => {
+  const [txType, setTxType] = useState<'gasto' | 'ingreso'>(initialTransactionType);
   const [txAmount, setTxAmount] = useState('');
   const [txAccount, setTxAccount] = useState<string>(defaultAccountId(state) || '');
   const [txCategory, setTxCategory] = useState<string>(state.finance.categories[0] || 'Comida');
   const [txFixed, setTxFixed] = useState<'variable' | 'fijo'>('variable');
   const [txDate, setTxDate] = useState(todayISO());
   const [txNote, setTxNote] = useState('');
+  const [editingTxId, setEditingTxId] = useState<string | null>(null);
+  const [calmMode, setCalmMode] = useState(false);
 
   // Accounts, Subs, Debts, Invs forms
   const [accName, setAccName] = useState('');
@@ -58,12 +69,19 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
 
   const [subName, setSubName] = useState('');
   const [subAmount, setSubAmount] = useState('');
+  const [subDueDay, setSubDueDay] = useState('');
 
   const [debtName, setDebtName] = useState('');
   const [debtAmount, setDebtAmount] = useState('');
+  const [debtMonthlyPayment, setDebtMonthlyPayment] = useState('');
+  const [debtDueDate, setDebtDueDate] = useState('');
 
   const [invName, setInvName] = useState('');
   const [invAmount, setInvAmount] = useState('');
+
+  useEffect(() => {
+    setTxType(initialTransactionType);
+  }, [initialTransactionType]);
 
   const disponible = calcAccountsTotal(state);
   const patrimonio = calcNetWorth(state);
@@ -72,53 +90,78 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
   const balance = ingreso - gastado;
   const cmp = calcMonthComparison(state);
   const catSpent = calcSpentByCategory(state, 0);
+  const budgetEntries = state.finance.categories.map((category) => ({
+    category,
+    spent: catSpent[category] || 0,
+    budget: Number(state.finance.budgets[category] || 0),
+  }));
+  const configuredBudgets = budgetEntries.filter((entry) => entry.budget > 0);
+  const budgetTotal = configuredBudgets.reduce((sum, entry) => sum + entry.budget, 0);
+  const budgetSpent = configuredBudgets.reduce((sum, entry) => sum + entry.spent, 0);
+  const exceededBudgets = configuredBudgets.filter((entry) => entry.spent > entry.budget).length;
   const subsTotal = calcSubscriptionsTotal(state);
+  const cashFlow = cashFlow30Days(state);
   const rstats = resaleStats(state);
   const ref = new Date();
   const totalGastadoAnio = state.finance.transactions
-    .filter((t) => t.type === 'gasto' && sameYear(t.date, ref))
+    .filter((t) => t.type === 'gasto' && t.origin !== 'adjustment' && sameYear(t.date, ref))
     .reduce((s, t) => s + Number(t.amount || 0), 0);
   const fijoMes = calcFixedSpentMonth(state, 0);
-  const margenDiscrecional = disponible - fijoMes;
+  const gastoVariable = Math.max(0, gastado - fijoMes);
 
   const handleAddTx = (e: React.FormEvent) => {
     e.preventDefault();
-    const amountNum = Number(txAmount);
-    if (!amountNum) return;
-    const accountId = txAccount || defaultAccountId(state);
-
-    playSound('coins');
-
-    onUpdateState((draft) => {
-      draft.finance.transactions.push({
-        id: uid(),
-        type: txType,
-        amount: amountNum,
-        category: txCategory,
-        fixed: txFixed,
-        date: txDate || todayISO(),
-        note: txNote.trim(),
-        accountId,
+    try {
+      const accountId = txAccount || defaultAccountId(state);
+      onUpdateState((draft) => {
+        const input = {
+          type: txType,
+          amount: Number(txAmount),
+          category: txCategory,
+          fixed: txFixed,
+          date: txDate,
+          note: txNote,
+          accountId,
+        };
+        if (editingTxId) updateTransaction(draft, editingTxId, input);
+        else addTransaction(draft, input);
       });
-      adjustAccountBalance(draft, accountId, txType === 'ingreso' ? amountNum : -amountNum);
-    });
+      playSound('coins');
+      setTxAmount('');
+      setTxNote('');
+      setEditingTxId(null);
+      showToast(editingTxId ? 'Movimiento actualizado.' : `${txType === 'ingreso' ? 'Ingreso' : 'Gasto'} guardado.`);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No se pudo guardar el movimiento.', 'error');
+    }
+  };
 
+  const beginEditTx = (transaction: Transaction) => {
+    setEditingTxId(transaction.id);
+    setTxType(transaction.type);
+    setTxAmount(String(transaction.amount));
+    setTxAccount(transaction.accountId || defaultAccountId(state) || '');
+    setTxCategory(transaction.category);
+    setTxFixed(transaction.fixed);
+    setTxDate(transaction.date);
+    setTxNote(transaction.note || '');
+    document.getElementById('qa-focus-tx')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  const cancelEditTx = () => {
+    setEditingTxId(null);
     setTxAmount('');
     setTxNote('');
+    setTxDate(todayISO());
   };
 
   const handleDeleteTx = (id: string) => {
-    onUpdateState((draft) => {
-      const tx = draft.finance.transactions.find((t) => t.id === id);
-      if (tx) {
-        adjustAccountBalance(
-          draft,
-          tx.accountId,
-          tx.type === 'ingreso' ? -Number(tx.amount) : Number(tx.amount)
-        );
-      }
-      draft.finance.transactions = draft.finance.transactions.filter((t) => t.id !== id);
-    });
+    try {
+      onUpdateState((draft) => deleteTransaction(draft, id));
+      showToast('Movimiento eliminado.', 'info');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No se puede eliminar este movimiento.', 'error');
+    }
   };
 
   const handleSetBudget = (category: string, amountStr: string) => {
@@ -130,29 +173,23 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
   // Sub-items forms
   const handleAddAccount = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!accName.trim()) return;
-    onUpdateState((draft) => {
-      draft.finance.accounts.push({
-        id: uid(),
-        name: accName.trim(),
-        balance: Number(accBalance) || 0,
-      });
-    });
-    setAccName('');
-    setAccBalance('');
-  };
-
-  const handleSetAccountBalance = (id: string, valStr: string) => {
-    onUpdateState((draft) => {
-      const acc = draft.finance.accounts.find((a) => a.id === id);
-      if (acc) acc.balance = Number(valStr) || 0;
-    });
+    try {
+      onUpdateState((draft) => { addAccount(draft, accName, Number(accBalance || 0)); });
+      setAccName('');
+      setAccBalance('');
+      showToast('Cuenta agregada.');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No se pudo agregar la cuenta.', 'error');
+    }
   };
 
   const handleDeleteAccount = (id: string) => {
-    onUpdateState((draft) => {
-      draft.finance.accounts = draft.finance.accounts.filter((a) => a.id !== id);
-    });
+    try {
+      onUpdateState((draft) => deleteAccount(draft, id));
+      showToast('Cuenta eliminada.', 'info');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No se puede eliminar esta cuenta.', 'error');
+    }
   };
 
   const handleAddSubscription = (e: React.FormEvent) => {
@@ -163,10 +200,12 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
         id: uid(),
         name: subName.trim(),
         amount: Number(subAmount) || 0,
+        dueDay: subDueDay ? Math.min(31, Math.max(1, Number(subDueDay))) : null,
       });
     });
     setSubName('');
     setSubAmount('');
+    setSubDueDay('');
   };
 
   const handleDeleteSubscription = (id: string) => {
@@ -183,10 +222,14 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
         id: uid(),
         name: debtName.trim(),
         amount: Number(debtAmount) || 0,
+        monthlyPayment: Number(debtMonthlyPayment) || 0,
+        dueDate: debtDueDate || null,
       });
     });
     setDebtName('');
     setDebtAmount('');
+    setDebtMonthlyPayment('');
+    setDebtDueDate('');
   };
 
   const handleDeleteDebt = (id: string) => {
@@ -267,26 +310,37 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text)]">Finanzas</h1>
-        <p className="text-sm text-[var(--text-soft)]">
-          Tu panorama financiero completo, en un solo lugar.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div><p className="eyebrow">Tu dinero</p><h1 className="page-heading mt-1">Finanzas</h1>
+        <p className="page-subtitle">
+          Primero lo que tenés y lo que viene. El análisis queda disponible sin ocupar toda la pantalla.
+        </p></div>
+        <button type="button" onClick={() => setCalmMode((value) => !value)} className="secondary-button">{calmMode ? 'Mostrar saldos' : 'Ocultar saldos'}</button>
       </div>
 
+      <section className="surface privacy-sensitive p-4 sm:p-6">
+        <div className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]">
+          <div className="min-w-0"><span className="eyebrow">Disponible ahora</span><h2 className="number-value mt-2 text-3xl font-bold tracking-tight text-[var(--text)] sm:text-4xl">{calmMode ? '$U ••••' : fmtMoney(disponible)}</h2><p className="mt-2 text-sm text-[var(--text-soft)]">Suma de las cuentas activas. Las conciliaciones mantienen este total alineado con el dinero real.</p></div>
+          <div className="surface-muted p-4"><div className="flex items-center gap-2 text-[var(--blue)]"><AppIcon name="calendarDays" className="h-4 w-4"/><span className="eyebrow text-current">Después de próximos pagos</span></div><strong className={`number-value mt-2 block text-2xl font-bold ${!calmMode && cashFlow.projectedBalance < 0 ? 'text-rose-500' : 'text-[var(--text)]'}`}>{calmMode ? '$U ••••' : fmtMoney(cashFlow.projectedBalance)}</strong><p className="mt-1 text-xs text-[var(--text-soft)]">{calmMode ? 'Montos ocultos temporalmente.' : `${fmtMoney(cashFlow.committed)} comprometido hasta ${fmtDate(cashFlow.horizonIso)}.`}</p></div>
+        </div>
+        <div className="mt-5 flex items-center justify-between"><h3 className="text-sm font-bold text-[var(--text)]">Próximos pagos</h3><span className="text-xs text-[var(--text-faint)]">30 días</span></div>
+        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">{cashFlow.commitments.map((item) => <div key={item.id} className="min-w-[160px] rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2.5"><span className="block truncate text-xs font-semibold text-[var(--text-soft)]">{item.label}</span><strong className="number-value mt-1 block text-sm">−{calmMode ? '$U ••••' : fmtMoney(item.amount)}</strong><span className="block text-[10px] text-[var(--text-faint)]">{item.dueDate ? fmtDate(item.dueDate) : 'fecha pendiente'}</span></div>)}{!cashFlow.commitments.length && <p className="text-sm text-[var(--text-soft)]">No hay pagos próximos cargados.</p>}</div>
+        <p className="mt-3 text-[10px] text-[var(--text-faint)]">La estimación no presupone ingresos futuros ni marca automáticamente un pago como realizado.</p>
+      </section>
+
       {/* Metrics Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <details className="surface group p-4"><summary className="flex cursor-pointer list-none items-center justify-between"><div><p className="eyebrow">Resumen mensual</p><h2 className="section-title mt-1">Indicadores y patrimonio</h2></div><span className="text-xs font-semibold text-[var(--blue)]">Ver detalle</span></summary><div className="mt-4 grid grid-cols-2 gap-3 border-t border-[var(--border)] pt-4 lg:grid-cols-4">
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">💰 Disponible</span>
-          <div className="text-xl sm:text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{fmtMoney(disponible)}</div>
+          <span className="eyebrow">Ingresado este mes</span>
+          <div className="number-value mt-2 text-xl font-bold text-[var(--text)] sm:text-2xl">{calmMode ? '$U ••••' : fmtMoney(ingreso)}</div>
         </div>
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">📊 Patrimonio</span>
-          <div className="text-xl sm:text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{fmtMoney(patrimonio)}</div>
+          <span className="eyebrow">Patrimonio</span>
+          <div className="text-xl sm:text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{calmMode ? '$U ••••' : fmtMoney(patrimonio)}</div>
           <p className="text-[10px] text-[var(--text-faint)] mt-0.5">cuentas + inversiones − deudas</p>
         </div>
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">🧾 Gastado este mes</span>
+          <span className="eyebrow">Gastado este mes</span>
           <div className="text-xl sm:text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{fmtMoney(gastado)}</div>
           <span
             className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-md mt-1 ${
@@ -305,29 +359,29 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
           </span>
         </div>
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">⚖️ Balance del mes</span>
+          <span className="eyebrow">Balance del mes</span>
           <div className={`text-xl sm:text-2xl font-extrabold font-mono mt-1 ${balance < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
             {fmtMoney(balance)}
           </div>
         </div>
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">📌 Gasto fijo este mes</span>
+          <span className="eyebrow">Gasto fijo</span>
           <div className="text-xl font-extrabold font-mono mt-1 text-[var(--text)]">{fmtMoney(fijoMes)}</div>
           <p className="text-[10px] text-[var(--text-faint)] mt-0.5">comprometido de antemano</p>
         </div>
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">🟢 Margen discrecional</span>
-          <div className={`text-xl font-extrabold font-mono mt-1 ${margenDiscrecional < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-            {fmtMoney(margenDiscrecional)}
+          <span className="eyebrow">Gasto variable</span>
+          <div className="text-xl font-extrabold font-mono mt-1 text-[var(--text)]">
+            {fmtMoney(gastoVariable)}
           </div>
-          <p className="text-[10px] text-[var(--text-faint)] mt-0.5">disponible − gasto fijo</p>
+          <p className="text-[10px] text-[var(--text-faint)] mt-0.5">gastos del mes que no son fijos</p>
         </div>
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">🔁 Ganancia reventa</span>
+          <span className="eyebrow">Ganancia reventa</span>
           <div className="text-xl font-extrabold font-mono mt-1 text-[var(--text)]">{fmtMoney(rstats.gananciaTotal)}</div>
           <p className="text-[10px] text-[var(--text-faint)] mt-0.5">histórico</p>
         </div>
-      </div>
+      </div></details>
 
       {/* Warning if no accounts */}
       {state.finance.accounts.length === 0 && (
@@ -337,9 +391,9 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
       )}
 
       {/* Add Transaction Form */}
-      <div id="qa-focus-tx" className="space-y-2">
-        <h2 className="text-sm font-bold text-[var(--text)]">Nuevo movimiento</h2>
-        <form onSubmit={handleAddTx} className="flex flex-wrap items-end gap-2 p-3.5 bg-[var(--bg)] border border-dashed border-[var(--border)] rounded-xl">
+      <div id="qa-focus-tx" className="surface space-y-3 p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-2"><div><p className="eyebrow">Registro</p><h2 className="section-title mt-1">{editingTxId ? 'Editar movimiento' : 'Nuevo movimiento'}</h2></div>{editingTxId && <button type="button" onClick={cancelEditTx} className="text-xs font-bold text-[var(--text-soft)]">Cancelar edición</button>}</div>
+        <form onSubmit={handleAddTx} className="flex flex-wrap items-end gap-2 rounded-xl bg-[var(--surface-muted)] p-3.5">
           <div>
             <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Tipo</label>
             <select
@@ -355,6 +409,8 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
             <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Monto</label>
             <input
               type="number"
+              min="0.01"
+              step="0.01"
               value={txAmount}
               onChange={(e) => setTxAmount(e.target.value)}
               placeholder="0"
@@ -421,9 +477,9 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
           </div>
           <button
             type="submit"
-            className="px-3.5 py-1.5 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
+            className="primary-button min-h-10 px-4"
           >
-            ＋ Agregar
+            {editingTxId ? 'Guardar cambios' : '＋ Agregar'}
           </button>
         </form>
       </div>
@@ -452,7 +508,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
                 open={g.isCurrent}
                 className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden group"
               >
-                <summary className="p-3.5 bg-[var(--bg)] flex items-center justify-between font-semibold text-xs sm:text-sm cursor-pointer select-none">
+                <summary className="p-3.5 bg-[var(--bg)] flex flex-wrap items-center justify-between gap-2 font-semibold text-xs sm:text-sm cursor-pointer select-none">
                   <span className="text-[var(--text)]">{g.label}</span>
                   <div className="flex items-center gap-3 font-mono text-xs">
                     <span className="text-[var(--text-soft)]">{g.txs.length} mov.</span>
@@ -461,7 +517,25 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
                   </div>
                 </summary>
 
-                <div className="p-3 overflow-x-auto">
+                <div className="p-3">
+                  <div className="space-y-2 md:hidden">
+                    {g.txs.map((t) => (
+                      <article key={t.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-extrabold text-[var(--text)]">{t.note || t.category}</p>
+                            <p className="mt-1 text-[11px] text-[var(--text-soft)]">{fmtDate(t.date)} · {state.finance.accounts.find((a) => a.id === t.accountId)?.name || 'Sin cuenta'} · {t.category}</p>
+                          </div>
+                          <strong className={`shrink-0 font-mono text-sm ${t.type === 'gasto' ? 'text-red-500' : 'text-emerald-500'}`}>{t.type === 'gasto' ? '−' : '+'} {fmtMoney(t.amount)}</strong>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between">
+                          <span className="rounded-full bg-blue-500/10 px-2 py-1 text-[10px] font-bold text-blue-500">{t.fixed}{t.origin === 'adjustment' ? ' · conciliación' : ''}</span>
+                          <div className="flex gap-1"><button onClick={() => beginEditTx(t)} className="rounded-lg px-2 py-1 text-xs font-bold text-[var(--blue)]">Editar</button><button onClick={() => handleDeleteTx(t.id)} aria-label={`Eliminar movimiento ${t.note || t.category}`} className="rounded-lg px-2 py-1 text-xs font-bold text-[var(--text-faint)] hover:bg-red-500/10 hover:text-red-500">Eliminar</button></div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                  <div className="hidden overflow-x-auto md:block">
                   <table className="w-full text-xs text-left border-collapse">
                     <thead>
                       <tr className="border-b border-[var(--border)] text-[var(--text-faint)] uppercase text-[10px]">
@@ -506,8 +580,10 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
                             {fmtMoney(t.amount)}
                           </td>
                           <td className="py-2 px-2 text-right">
+                            <button onClick={() => beginEditTx(t)} className="mr-2 text-[10px] font-bold text-[var(--blue)]">Editar</button>
                             <button
                               onClick={() => handleDeleteTx(t.id)}
+                              aria-label={`Eliminar movimiento ${t.note || t.category}`}
                               className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1"
                             >
                               ✕
@@ -517,6 +593,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               </details>
             ))}
@@ -524,10 +601,24 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
         )}
       </div>
 
+      <details className="surface group"><summary className="flex cursor-pointer list-none items-center justify-between p-4"><div><p className="eyebrow">Mantenimiento</p><h2 className="section-title mt-1">Cuentas, transferencias y conciliaciones</h2><p className="mt-1 text-sm text-[var(--text-soft)]">Herramientas para ordenar saldos; separadas del uso diario.</p></div><span className="text-xs font-semibold text-[var(--blue)]">Abrir</span></summary><div className="border-t border-[var(--border)] p-3 sm:p-4"><FinanceOperationsCard state={state} onUpdateState={onUpdateState} /></div></details>
+
       {/* Category Budgets */}
-      <div className="space-y-2">
-        <h2 className="text-sm font-bold text-[var(--text)]">Presupuesto por categoría (mes actual)</h2>
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 divide-y divide-[var(--border)] space-y-3">
+      <details className="group overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xs">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+          <div>
+            <h2 className="text-sm font-bold text-[var(--text)]">Presupuesto por categoría</h2>
+            <p className="mt-0.5 text-xs text-[var(--text-soft)]">
+              {configuredBudgets.length === 0 ? 'Sin presupuestos configurados' : `${fmtMoney(budgetSpent)} de ${fmtMoney(budgetTotal)} este mes`}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {exceededBudgets > 0 && <span className="rounded-lg bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-500">⚠ {exceededBudgets} excedido(s)</span>}
+            <span className="text-xs font-bold text-[var(--blue)] group-open:hidden">Abrir ▾</span>
+            <span className="hidden text-xs font-bold text-[var(--blue)] group-open:inline">Cerrar ▴</span>
+          </div>
+        </summary>
+        <div className="divide-y divide-[var(--border)] space-y-3 border-t border-[var(--border)] p-4">
           {state.finance.categories.map((cat) => {
             const spent = catSpent[cat] || 0;
             const budget = Number(state.finance.budgets[cat] || 0);
@@ -563,10 +654,10 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
             );
           })}
         </div>
-      </div>
+      </details>
 
       {/* Expense Charts with Recharts */}
-      <div className="space-y-6">
+      <details className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4"><summary className="cursor-pointer list-none text-sm font-extrabold text-[var(--text)]">Análisis y gráficos <span className="ml-1 text-xs font-normal text-[var(--text-soft)]">· abrir cuando los necesites</span></summary><div className="mt-5 space-y-6">
         {/* Row 1: Pie Chart + Legend for This Month */}
         <div>
           <h2 className="text-sm font-bold text-[var(--text)] mb-3 flex items-center justify-between">
@@ -717,7 +808,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
             </div>
           </div>
         )}
-      </div>
+      </div></details>
 
       {/* Sub-components Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
@@ -756,12 +847,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
                 <div key={a.id} className="py-2 flex items-center justify-between text-xs sm:text-sm">
                   <span className="font-medium text-[var(--text)]">{a.name}</span>
                   <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={a.balance}
-                      onChange={(e) => handleSetAccountBalance(a.id, e.target.value)}
-                      className="w-28 px-2 py-1 text-xs font-mono text-right rounded-md bg-[var(--bg-elevated)] border border-[var(--border)]"
-                    />
+                    <span className="text-right"><strong className="block font-mono text-xs">{fmtMoney(a.balance)}</strong><span className="text-[10px] text-[var(--text-faint)]">{a.lastReconciledAt ? `Conciliada ${fmtDate(a.lastReconciledAt)}` : 'Sin conciliar'}</span></span>
                     <button
                       onClick={() => handleDeleteAccount(a.id)}
                       className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1"
@@ -782,7 +868,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
             <span className="text-xs font-mono text-[var(--text-soft)]">{fmtMoney(subsTotal)}/mes</span>
           </h2>
           <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
-            <form onSubmit={handleAddSubscription} className="flex gap-2">
+            <form onSubmit={handleAddSubscription} className="flex flex-wrap gap-2">
               <input
                 type="text"
                 value={subName}
@@ -790,6 +876,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
                 placeholder="Ej: Netflix"
                 className="flex-1 px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
               />
+              <input type="number" min="1" max="31" value={subDueDay} onChange={(e) => setSubDueDay(e.target.value)} placeholder="día" title="Día de vencimiento" className="w-14 px-2 py-1.5 text-xs font-mono rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]" />
               <input
                 type="number"
                 value={subAmount}
@@ -813,7 +900,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
                   <div key={s.id} className="py-2 flex items-center justify-between text-xs sm:text-sm">
                     <span className="font-medium text-[var(--text)]">{s.name}</span>
                     <div className="flex items-center gap-3">
-                      <span className="font-mono text-xs">{fmtMoney(s.amount)}</span>
+                      <span className="text-right font-mono text-xs">{fmtMoney(s.amount)}<small className="block font-sans text-[9px] text-[var(--text-faint)]">{s.dueDay ? `día ${s.dueDay}` : 'sin fecha'}</small></span>
                       <button
                         onClick={() => handleDeleteSubscription(s.id)}
                         className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1"
@@ -835,7 +922,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
             <span className="text-xs font-mono text-[var(--text-soft)]">{fmtMoney(calcDebtsTotal(state))}</span>
           </h2>
           <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
-            <form onSubmit={handleAddDebt} className="flex gap-2">
+            <form onSubmit={handleAddDebt} className="flex flex-wrap gap-2">
               <input
                 type="text"
                 value={debtName}
@@ -843,6 +930,8 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
                 placeholder="Ej: Tarjeta"
                 className="flex-1 px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
               />
+              <input type="number" value={debtMonthlyPayment} onChange={(e) => setDebtMonthlyPayment(e.target.value)} placeholder="cuota" title="Cuota de los próximos 30 días" className="w-20 px-2 py-1.5 text-xs font-mono rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]" />
+              <input type="date" value={debtDueDate} onChange={(e) => setDebtDueDate(e.target.value)} title="Próximo vencimiento" className="w-32 px-2 py-1.5 text-[10px] rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]" />
               <input
                 type="number"
                 value={debtAmount}
@@ -866,7 +955,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({ state, onUpdateState
                   <div key={d.id} className="py-2 flex items-center justify-between text-xs sm:text-sm">
                     <span className="font-medium text-[var(--text)]">{d.name}</span>
                     <div className="flex items-center gap-3">
-                      <span className="font-mono text-xs">{fmtMoney(d.amount)}</span>
+                      <span className="text-right font-mono text-xs">{fmtMoney(d.amount)}<small className="block font-sans text-[9px] text-[var(--text-faint)]">{d.monthlyPayment ? `cuota ${fmtMoney(d.monthlyPayment)}` : 'sin cuota'}{d.dueDate ? ` · ${fmtDate(d.dueDate)}` : ''}</small></span>
                       <button
                         onClick={() => handleDeleteDebt(d.id)}
                         className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1"

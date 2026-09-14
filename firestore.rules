@@ -1,0 +1,70 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function validModule(module) {
+      return module in [
+        'profile', 'agenda', 'tasks', 'context', 'finance', 'gym', 'study',
+        'streaming', 'jobs', 'resale', 'ideas', 'calendar', 'goals', 'notes',
+        'checkout'
+      ];
+    }
+
+    function validSyncPayload(module) {
+      return request.resource.data.keys().hasOnly([
+          'schemaVersion', 'module', 'data', 'revision', 'parentRevision',
+          'deviceId', 'clientUpdatedAt', 'updatedAt'
+        ])
+        && request.resource.data.schemaVersion is int
+        && request.resource.data.module == module
+        && request.resource.data.revision is string
+        && request.resource.data.deviceId is string
+        && request.resource.data.clientUpdatedAt is int;
+    }
+
+    // Lectura temporal para migrar instalaciones que usaban el documento único v1.
+    match /users/{userId}/lifeos/{documentId} {
+      allow read: if isOwner(userId) && documentId == 'state';
+      allow create, update: if isOwner(userId)
+        && documentId == 'state'
+        && request.resource.data.keys().hasOnly(['schemaVersion', 'state', 'deviceId', 'updatedAt'])
+        && request.resource.data.schemaVersion is int
+        && request.resource.data.state is map
+        && request.resource.data.deviceId is string;
+      allow delete: if false;
+    }
+
+    match /users/{userId}/lifeosModules/{module} {
+      // Firestore rules are not filters. A collection listener must be able to
+      // prove that every possible result is readable, so validate ownership for
+      // list queries and keep the module allowlist for direct document reads.
+      allow list: if isOwner(userId);
+      allow get: if isOwner(userId) && validModule(module);
+      allow create: if isOwner(userId)
+        && validModule(module)
+        && validSyncPayload(module)
+        && request.resource.data.parentRevision == null;
+      // Optimistic concurrency: an old client may not replace a newer head.
+      allow update: if isOwner(userId)
+        && validModule(module)
+        && validSyncPayload(module)
+        && request.resource.data.parentRevision == resource.data.revision;
+      allow delete: if false;
+    }
+
+    match /users/{userId}/lifeosRevisions/{revisionId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && validModule(request.resource.data.module)
+        && validSyncPayload(request.resource.data.module)
+        && request.resource.data.revision == revisionId;
+      allow update: if isOwner(userId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt']);
+      allow delete: if false;
+    }
+  }
+}

@@ -22,6 +22,8 @@ interface NotasViewProps {
 export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) => {
   const [streamDate, setStreamDate] = useState(todayISO());
   const [streamHours, setStreamHours] = useState('');
+  const [checklistLabel, setChecklistLabel] = useState('');
+  const [contentTitle, setContentTitle] = useState('');
 
   const [goalName, setGoalName] = useState('');
   const [goalInitial, setGoalInitial] = useState('');
@@ -33,11 +35,24 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
 
   const [linkName, setLinkName] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
+  const [possessionName, setPossessionName] = useState('');
+  const [possessionCategory, setPossessionCategory] = useState('Regalo');
+  const [possessionLocation, setPossessionLocation] = useState('');
+  const [possessionDate, setPossessionDate] = useState(todayISO());
+  const [possessionNote, setPossessionNote] = useState('');
+  const [possessionSearch, setPossessionSearch] = useState('');
 
   const status = todayStreamStatus(state);
   const streamGoal = Number(state.streaming.monthlyGoal || 0);
   const streamCount = streamSessionsInMonth(state, 0).length;
   const streamPct = streamGoal > 0 ? clamp((streamCount / streamGoal) * 100, 0, 100) : 0;
+  const pipelineStages = [
+    { id: 'idea', label: 'Idea' },
+    { id: 'outline', label: 'Guión' },
+    { id: 'recording', label: 'Grabación' },
+    { id: 'editing', label: 'Edición' },
+    { id: 'published', label: 'Publicado' },
+  ] as const;
 
   const handleAddStream = (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +64,20 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
       draft.streaming.sessions.push({ id: uid(), date, hours });
     });
     setStreamHours('');
+  };
+
+  const handleAddChecklistItem = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!checklistLabel.trim()) return;
+    onUpdateState((draft) => draft.streaming.preStreamChecklist.push({ id: uid(), label: checklistLabel.trim(), done: false }));
+    setChecklistLabel('');
+  };
+
+  const handleAddContent = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!contentTitle.trim()) return;
+    onUpdateState((draft) => draft.streaming.contentPipeline.push({ id: uid(), title: contentTitle.trim(), status: 'idea', note: '', updatedAt: new Date().toISOString() }));
+    setContentTitle('');
   };
 
   const handleAddGoal = (e: React.FormEvent) => {
@@ -154,6 +183,23 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
     });
   };
 
+  const handleAddPossession = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!possessionName.trim()) return;
+    onUpdateState((draft) => {
+      draft.notes.possessions.push({
+        id: uid(), name: possessionName.trim(), category: possessionCategory.trim() || 'Otros',
+        location: possessionLocation.trim(), receivedAt: possessionDate || null, note: possessionNote.trim(),
+      });
+    });
+    setPossessionName('');
+    setPossessionLocation('');
+    setPossessionNote('');
+  };
+
+  const possessionQuery = possessionSearch.trim().toLocaleLowerCase('es');
+  const visiblePossessions = state.notes.possessions.filter((item) => !possessionQuery || [item.name, item.category, item.location, item.note].some((value) => String(value || '').toLocaleLowerCase('es').includes(possessionQuery)));
+
   return (
     <div className="space-y-6">
       <div>
@@ -208,6 +254,20 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
               ＋
             </button>
           </form>
+
+          <div className="grid gap-4 border-t border-[var(--border)] pt-4 lg:grid-cols-[0.8fr_1.2fr]">
+            <section className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
+              <div className="flex items-center justify-between gap-2"><div><h3 className="text-xs font-extrabold text-[var(--text)]">Checklist pre-stream</h3><p className="text-[10px] text-[var(--text-faint)]">Un toque por punto; reinicialo antes del próximo directo.</p></div><button type="button" onClick={() => onUpdateState((draft) => draft.streaming.preStreamChecklist.forEach((item) => { item.done = false; }))} className="rounded-lg border border-[var(--border)] px-2 py-1 text-[10px] font-bold text-[var(--blue)]">Reiniciar</button></div>
+              <div className="mt-2 space-y-1.5">{state.streaming.preStreamChecklist.map((item) => <div key={item.id} className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${item.done ? 'border-emerald-500/25 bg-emerald-500/10 opacity-70' : 'border-[var(--border)] bg-[var(--card)]'}`}><button type="button" onClick={() => onUpdateState((draft) => { const target = draft.streaming.preStreamChecklist.find((candidate) => candidate.id === item.id); if (target) target.done = !target.done; })} className={`flex h-6 w-6 items-center justify-center rounded-md border-2 text-xs ${item.done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-[var(--border)] text-transparent'}`}>✓</button><span className={`min-w-0 flex-1 text-xs font-semibold ${item.done ? 'line-through' : ''}`}>{item.label}</span><button type="button" onClick={() => onUpdateState((draft) => { draft.streaming.preStreamChecklist = draft.streaming.preStreamChecklist.filter((candidate) => candidate.id !== item.id); })} className="text-[10px] text-[var(--text-faint)] hover:text-rose-500">✕</button></div>)}</div>
+              <form onSubmit={handleAddChecklistItem} className="mt-2 flex gap-1.5"><input value={checklistLabel} onChange={(event) => setChecklistLabel(event.target.value)} placeholder="Nuevo control…" className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs" /><button className="rounded-lg bg-[var(--text)] px-2.5 text-xs font-bold text-[var(--bg)]">＋</button></form>
+            </section>
+
+            <section className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
+              <div><h3 className="text-xs font-extrabold text-[var(--text)]">Pipeline de contenido</h3><p className="text-[10px] text-[var(--text-faint)]">De la idea a publicado sin abrir otra herramienta.</p></div>
+              <form onSubmit={handleAddContent} className="mt-2 flex gap-1.5"><input value={contentTitle} onChange={(event) => setContentTitle(event.target.value)} placeholder="Nueva idea de contenido…" className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs" /><button className="rounded-lg bg-amber-500 px-3 text-xs font-extrabold text-white">Agregar</button></form>
+              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">{pipelineStages.map((stage) => { const cards = state.streaming.contentPipeline.filter((item) => item.status === stage.id); return <div key={stage.id} className="w-[160px] shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] p-2"><div className="mb-2 flex items-center justify-between"><strong className="text-[10px] uppercase tracking-wider text-[var(--text-soft)]">{stage.label}</strong><span className="rounded-md bg-[var(--bg)] px-1.5 text-[9px] font-bold">{cards.length}</span></div><div className="space-y-1.5">{cards.map((item) => <article key={item.id} className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2"><p className="text-[11px] font-bold text-[var(--text)]">{item.title}</p><div className="mt-1.5 flex gap-1"><select aria-label={`Estado de ${item.title}`} value={item.status} onChange={(event) => onUpdateState((draft) => { const target = draft.streaming.contentPipeline.find((candidate) => candidate.id === item.id); if (target) { target.status = event.target.value as typeof item.status; target.updatedAt = new Date().toISOString(); } })} className="min-w-0 flex-1 rounded-md border border-[var(--border)] bg-[var(--card)] px-1 py-1 text-[9px]">{pipelineStages.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}</select><button type="button" onClick={() => onUpdateState((draft) => { draft.streaming.contentPipeline = draft.streaming.contentPipeline.filter((candidate) => candidate.id !== item.id); })} className="px-1 text-[10px] text-rose-500">✕</button></div></article>)}{!cards.length && <p className="py-3 text-center text-[9px] text-[var(--text-faint)]">Vacío</p>}</div></div>; })}</div>
+            </section>
+          </div>
         </div>
       </div>
 
@@ -277,7 +337,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
               const pct = goalProgressPct(g, cur);
 
               return (
-                <div key={g.id} className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 relative overflow-hidden space-y-3">
+                <div key={g.id} className={`bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 relative overflow-hidden space-y-3 ${g.linked === 'available' ? 'privacy-sensitive' : ''}`}>
                   <div className="absolute top-0 left-0 w-1.5 h-full bg-purple-500" />
                   <div className="flex items-start justify-between">
                     <span className="font-bold text-sm text-[var(--text)]">{g.name}</span>
@@ -320,8 +380,21 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
         </div>
       </div>
 
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-end justify-between gap-2"><div><h2 className="text-sm font-bold text-[var(--text)]">Mis cosas 🎁</h2><p className="text-xs text-[var(--text-soft)]">Registrá regalos y objetos que valorás, dónde están y qué te gusta de tenerlos.</p></div>{state.notes.possessions.length > 4 && <input value={possessionSearch} onChange={(event) => setPossessionSearch(event.target.value)} placeholder="Buscar en mis cosas…" className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />}</div>
+        <form onSubmit={handleAddPossession} className="grid gap-2 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg)] p-3 sm:grid-cols-2 lg:grid-cols-[1.3fr_110px_1fr_135px_auto]">
+          <input value={possessionName} onChange={(event) => setPossessionName(event.target.value)} placeholder="Qué recibiste o querés recordar" className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />
+          <input value={possessionCategory} onChange={(event) => setPossessionCategory(event.target.value)} placeholder="Categoría" className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />
+          <input value={possessionLocation} onChange={(event) => setPossessionLocation(event.target.value)} placeholder="Dónde está (opcional)" className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />
+          <input type="date" max={todayISO()} value={possessionDate} onChange={(event) => setPossessionDate(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />
+          <button className="rounded-xl bg-[var(--blue)] px-4 py-2 text-xs font-extrabold text-white">Guardar</button>
+          <textarea value={possessionNote} onChange={(event) => setPossessionNote(event.target.value)} placeholder="Qué te gusta, quién te lo regaló o por qué lo valorás…" rows={2} className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs sm:col-span-2 lg:col-span-5" />
+        </form>
+        {visiblePossessions.length === 0 ? <div className="rounded-2xl border border-dashed border-[var(--border)] p-5 text-center text-xs text-[var(--text-faint)]">{state.notes.possessions.length ? 'No encontré coincidencias.' : 'Todavía no guardaste nada acá.'}</div> : <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{visiblePossessions.map((item) => <article key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4"><div className="flex items-start justify-between gap-2"><div><span className="text-[9px] font-black uppercase tracking-widest text-[var(--blue)]">{item.category}</span><h3 className="font-extrabold text-[var(--text)]">{item.name}</h3></div><button onClick={() => onUpdateState((draft) => { draft.notes.possessions = draft.notes.possessions.filter((candidate) => candidate.id !== item.id); })} aria-label={`Eliminar ${item.name}`} className="text-xs text-[var(--text-faint)] hover:text-rose-500">✕</button></div>{item.note && <p className="mt-2 whitespace-pre-wrap text-xs text-[var(--text-soft)]">{item.note}</p>}<div className="mt-3 flex flex-wrap gap-2 text-[10px] text-[var(--text-faint)]">{item.location && <span>📍 {item.location}</span>}{item.receivedAt && <span>🎁 {fmtDate(item.receivedAt)}</span>}</div></article>)}</div>}
+      </section>
+
       {/* Post-its Grid */}
-      <div className="space-y-3">
+      <div className="space-y-3 privacy-sensitive">
         <h2 className="text-sm font-bold text-[var(--text)]">Post-its</h2>
 
         <form onSubmit={handleAddPostit} className="flex gap-2 p-3 bg-[var(--bg)] border border-dashed border-[var(--border)] rounded-xl">

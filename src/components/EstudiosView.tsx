@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { showToast } from '../lib/toast';
 import { LifeOSState, Exam } from '../types';
 import { FocusTimer } from './FocusTimer';
 import { playSound } from '../lib/audio';
@@ -82,7 +83,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
     e.preventDefault();
     const subId = examSubjectId || (state.study.subjects.length ? state.study.subjects[0].id : '');
     if (!subId) {
-      alert('Primero agregá una materia.');
+      showToast('Primero agregá una materia.', 'info');
       return;
     }
     onUpdateState((draft) => {
@@ -108,7 +109,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
     });
   };
 
-  const handlePomodoroComplete = (mins: number) => {
+  const handlePomodoroComplete = (mins: number, targetSubjectId?: string) => {
     if (!mins) return;
     playSound('success');
     onUpdateState((draft) => {
@@ -116,7 +117,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
         id: uid(),
         date: todayISO(),
         minutes: mins,
-        subjectId: state.study.subjects.length > 0 ? state.study.subjects[0].id : null,
+        subjectId: targetSubjectId || (state.study.subjects.length > 0 ? state.study.subjects[0].id : null),
       });
     });
   };
@@ -131,7 +132,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
       </div>
 
       {/* Focus / Pomodoro Timer */}
-      <FocusTimer onSessionComplete={handlePomodoroComplete} />
+      <FocusTimer targets={state.study.subjects.map((subject) => ({ id: subject.id, label: subject.name }))} onSessionComplete={handlePomodoroComplete} />
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

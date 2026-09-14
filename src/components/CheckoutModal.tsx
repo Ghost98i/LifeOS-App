@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { LifeOSState } from '../types';
 import { todayISO, fmtDate } from '../lib/storage';
 import { playSound } from '../lib/audio';
+import { showToast } from '../lib/toast';
 
 interface CheckoutModalProps {
   state: LifeOSState;
@@ -16,10 +17,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
   const [trainedSkipped, setTrainedSkipped] = useState(Boolean(existingLog.trainedSkipped));
   const [studiedSkipped, setStudiedSkipped] = useState(Boolean(existingLog.studiedSkipped));
   const [expensesSkipped, setExpensesSkipped] = useState(Boolean(existingLog.expensesSkipped));
+  const [mainWin, setMainWin] = useState(existingLog.mainWin || '');
+  const [carryOver, setCarryOver] = useState(existingLog.carryOver || '');
+  const [endEnergy, setEndEnergy] = useState<1 | 2 | 3 | 4 | 5 | null>(existingLog.endEnergy || null);
 
   const hasGymToday = state.gym.sessions.some((s) => s.date === iso);
   const hasStudyToday = state.study.studyLog.some((l) => l.date === iso);
   const hasTxToday = state.finance.transactions.some((t) => t.date === iso);
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, []);
 
   const handleFinishCheckout = () => {
     playSound('night');
@@ -28,16 +38,19 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
         trainedSkipped,
         studiedSkipped,
         expensesSkipped,
+        mainWin: mainWin.trim(),
+        carryOver: carryOver.trim(),
+        endEnergy,
         closedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
     });
-    alert('¡Día cerrado con éxito! 🌙 Great job.');
+    showToast('Día cerrado. Lo importante ya quedó registrado. 🌙');
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl relative">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-label="Cerrar el día" className="bg-[var(--card)] border border-[var(--border)] rounded-2xl max-h-[90vh] max-w-lg w-full overflow-y-auto p-6 space-y-5 shadow-2xl relative" onClick={(event) => event.stopPropagation()}>
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-sm text-[var(--text-faint)] hover:text-[var(--text)]"
@@ -51,6 +64,12 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
             Resumen de tu jornada del {fmtDate(iso)}. Revisá tus registros antes de cerrar.
           </p>
         </div>
+
+        <section className="space-y-3 rounded-xl border border-blue-500/20 bg-blue-500/8 p-3.5">
+          <label className="block"><span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-[var(--text-faint)]">Logro principal</span><input value={mainWin} onChange={(event) => setMainWin(event.target.value)} placeholder="¿Qué hizo que hoy valiera la pena?" className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2.5 text-xs" /></label>
+          <label className="block"><span className="mb-1 block text-[10px] font-black uppercase tracking-wider text-[var(--text-faint)]">Dejar preparado para mañana</span><input value={carryOver} onChange={(event) => setCarryOver(event.target.value)} placeholder="Una sola cosa para retomar" className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2.5 text-xs" /></label>
+          <div><span className="mb-1.5 block text-[10px] font-black uppercase tracking-wider text-[var(--text-faint)]">Energía al cerrar</span><div className="flex gap-1.5">{([1, 2, 3, 4, 5] as const).map((value) => <button key={value} type="button" onClick={() => setEndEnergy(value)} className={`h-9 flex-1 rounded-xl border text-xs font-black ${endEnergy === value ? 'border-amber-500 bg-amber-500/15 text-amber-600' : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)]'}`}>{value}</button>)}</div></div>
+        </section>
 
         <div className="space-y-4 text-xs">
           {/* Gym Check */}

@@ -1,0 +1,140 @@
+import type { LifeOSState } from '../types';
+import { defaultState, normalizeStoredState } from './storage';
+
+export const SYNC_MODULES = [
+  'profile',
+  'agenda',
+  'tasks',
+  'context',
+  'finance',
+  'gym',
+  'study',
+  'streaming',
+  'jobs',
+  'resale',
+  'ideas',
+  'calendar',
+  'goals',
+  'notes',
+  'checkout',
+] as const;
+
+export type SyncModuleKey = typeof SYNC_MODULES[number];
+export type SyncRevisionMap = Partial<Record<SyncModuleKey, string>>;
+export type SyncBaselineMap = Partial<Record<SyncModuleKey, string>>;
+
+export const SYNC_MODULE_LABELS: Record<SyncModuleKey, string> = {
+  profile: 'Perfil y configuración',
+  agenda: 'Agenda',
+  tasks: 'Hoy y rutinas',
+  context: 'Sueño y contexto personal',
+  finance: 'Finanzas',
+  gym: 'Gimnasio y cuerpo',
+  study: 'Estudios',
+  streaming: 'Streaming',
+  jobs: 'Trabajo',
+  resale: 'Reventa',
+  ideas: 'Ideas',
+  calendar: 'Calendario',
+  goals: 'Objetivos',
+  notes: 'Notas',
+  checkout: 'Cierres del día',
+};
+
+export function isSyncModuleKey(value: unknown): value is SyncModuleKey {
+  return typeof value === 'string' && (SYNC_MODULES as readonly string[]).includes(value);
+}
+
+export function syncModuleData(state: LifeOSState, module: SyncModuleKey): unknown {
+  switch (module) {
+    case 'profile': return { profile: state.profile, settings: state.settings };
+    case 'agenda': return { agenda: state.agenda };
+    case 'tasks': return {
+      tasksRecurring: state.tasksRecurring,
+      taskLog: state.taskLog,
+      todayExtras: state.todayExtras,
+      dailyPriorities: state.dailyPriorities,
+    };
+    case 'context': return { dailyContext: state.dailyContext };
+    case 'finance': return { finance: state.finance };
+    case 'gym': return { gym: state.gym };
+    case 'study': return { study: state.study };
+    case 'streaming': return { streaming: state.streaming };
+    case 'jobs': return { jobs: state.jobs };
+    case 'resale': return { resale: state.resale };
+    case 'ideas': return { ideas: state.ideas };
+    case 'calendar': return { calendarEvents: state.calendarEvents };
+    case 'goals': return { goals: state.goals };
+    case 'notes': return { notes: state.notes };
+    case 'checkout': return { checkoutLog: state.checkoutLog };
+  }
+}
+
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(',')}}`;
+}
+
+export function syncDataFingerprint(data: unknown): string {
+  const input = stableStringify(data);
+  let first = 2166136261;
+  let second = 2246822519;
+  for (let index = 0; index < input.length; index += 1) {
+    const code = input.charCodeAt(index);
+    first = Math.imul(first ^ code, 16777619);
+    second = Math.imul(second ^ code, 3266489917);
+  }
+  return `${input.length}:${(first >>> 0).toString(16)}:${(second >>> 0).toString(16)}`;
+}
+
+export function syncModuleFingerprint(state: LifeOSState, module: SyncModuleKey): string {
+  return syncDataFingerprint(syncModuleData(state, module));
+}
+
+export function applySyncModule(state: LifeOSState, module: SyncModuleKey, data: unknown): LifeOSState {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error(`El módulo sincronizado “${module}” no contiene datos válidos.`);
+  }
+  const candidate = { ...state, ...(data as Partial<LifeOSState>) };
+  return normalizeStoredState(candidate);
+}
+
+export function buildStateFromModules(modules: Partial<Record<SyncModuleKey, unknown>>): LifeOSState {
+  let state = defaultState();
+  for (const module of SYNC_MODULES) {
+    if (modules[module] !== undefined) state = applySyncModule(state, module, modules[module]);
+  }
+  return state;
+}
+
+export function changedSyncModules(before: LifeOSState, after: LifeOSState): SyncModuleKey[] {
+  return SYNC_MODULES.filter((module) => (
+    syncModuleFingerprint(before, module) !== syncModuleFingerprint(after, module)
+  ));
+}
+
+export function classifyInitialModuleChanges(
+  localState: LifeOSState,
+  remoteState: LifeOSState,
+  knownRevisions: SyncRevisionMap,
+  baselines: SyncBaselineMap,
+  remoteRevisions: SyncRevisionMap,
+): { local: SyncModuleKey[]; remote: SyncModuleKey[]; conflicts: SyncModuleKey[] } {
+  const result = { local: [] as SyncModuleKey[], remote: [] as SyncModuleKey[], conflicts: [] as SyncModuleKey[] };
+  changedSyncModules(localState, remoteState).forEach((module) => {
+    const localChanged = syncModuleFingerprint(localState, module) !== baselines[module];
+    const remoteMoved = remoteRevisions[module] !== knownRevisions[module];
+    if (localChanged && remoteMoved) result.conflicts.push(module);
+    else if (localChanged) result.local.push(module);
+    else result.remote.push(module);
+  });
+  return result;
+}
+
+export function equivalentLifeOSState(a: LifeOSState, b: LifeOSState): boolean {
+  return SYNC_MODULES.every((module) => (
+    syncModuleFingerprint(a, module) === syncModuleFingerprint(b, module)
+  ));
+}

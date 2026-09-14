@@ -7,18 +7,16 @@ import {
   Goal,
   CalendarEvent,
   ResaleOpportunity,
-  ResaleItem,
-  DayKey,
+  EffortLevel,
 } from '../types';
 import {
-  DAYS,
   todayISO,
   sameMonth,
-  sameYear,
   monthLabel,
   daysBetween,
   withinCurrentWeek,
   dayKeyFromDate,
+  isoWeekMonday,
   clamp,
 } from './storage';
 
@@ -54,10 +52,59 @@ export function calcSubscriptionsTotal(state: LifeOSState): number {
   return state.finance.subscriptions.reduce((s, x) => s + Number(x.amount || 0), 0);
 }
 
+export interface CashFlowCommitment {
+  id: string;
+  label: string;
+  amount: number;
+  dueDate: string | null;
+  kind: 'subscription' | 'debt';
+}
+
+function nextMonthlyDate(day: number, fromIso: string): string {
+  const from = new Date(`${fromIso}T12:00:00`);
+  const build = (year: number, month: number) => {
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const date = new Date(year, month, Math.min(Math.max(1, day), lastDay), 12);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  };
+  const current = build(from.getFullYear(), from.getMonth());
+  return current >= fromIso ? current : build(from.getFullYear(), from.getMonth() + 1);
+}
+
+export function cashFlow30Days(state: LifeOSState, fromIso = todayISO()) {
+  const horizon = new Date(`${fromIso}T12:00:00`);
+  horizon.setDate(horizon.getDate() + 30);
+  const horizonIso = `${horizon.getFullYear()}-${String(horizon.getMonth() + 1).padStart(2, '0')}-${String(horizon.getDate()).padStart(2, '0')}`;
+  const commitments: CashFlowCommitment[] = state.finance.subscriptions.map((subscription) => ({
+    id: `subscription-${subscription.id}`,
+    label: subscription.name,
+    amount: Number(subscription.amount || 0),
+    dueDate: subscription.dueDay ? nextMonthlyDate(subscription.dueDay, fromIso) : null,
+    kind: 'subscription' as const,
+  }));
+  state.finance.debts.forEach((debt) => {
+    const amount = Number(debt.monthlyPayment || 0);
+    if (amount <= 0) return;
+    if (debt.dueDate && (debt.dueDate < fromIso || debt.dueDate > horizonIso)) return;
+    commitments.push({ id: `debt-${debt.id}`, label: debt.name, amount, dueDate: debt.dueDate || null, kind: 'debt' });
+  });
+  commitments.sort((a, b) => (a.dueDate || '9999').localeCompare(b.dueDate || '9999'));
+  const committed = commitments.reduce((sum, item) => sum + item.amount, 0);
+  const currentBalance = calcAccountsTotal(state);
+  return { currentBalance, committed, projectedBalance: currentBalance - committed, commitments, horizonIso };
+}
+
 export function resaleGananciaTotal(state: LifeOSState): number {
   return state.resale.inventory
     .filter((i) => i.status === 'vendido')
-    .reduce((s, i) => s + (Number(i.sellPrice || 0) - Number(i.buyPrice || 0)), 0);
+    .reduce((s, i) => {
+      const breakdown = Number(i.shippingCost || 0) + Number(i.platformFees || 0) + Number(i.taxes || 0);
+      return s + Number(i.sellPrice || 0) - Number(i.buyPrice || 0) - (breakdown > 0 ? breakdown : Number(i.fees || 0));
+    }, 0);
+}
+
+function isOperationalTransaction(transaction: Transaction): boolean {
+  return transaction.origin !== 'adjustment';
 }
 
 export function txInMonth(state: LifeOSState, offset = 0): Transaction[] {
@@ -67,19 +114,19 @@ export function txInMonth(state: LifeOSState, offset = 0): Transaction[] {
 
 export function calcSpentMonth(state: LifeOSState, offset = 0): number {
   return txInMonth(state, offset)
-    .filter((t) => t.type === 'gasto')
+    .filter((t) => t.type === 'gasto' && isOperationalTransaction(t))
     .reduce((s, t) => s + Number(t.amount || 0), 0);
 }
 
 export function calcIncomeMonth(state: LifeOSState, offset = 0): number {
   return txInMonth(state, offset)
-    .filter((t) => t.type === 'ingreso')
+    .filter((t) => t.type === 'ingreso' && isOperationalTransaction(t))
     .reduce((s, t) => s + Number(t.amount || 0), 0);
 }
 
 export function calcFixedSpentMonth(state: LifeOSState, offset = 0): number {
   return txInMonth(state, offset)
-    .filter((t) => t.type === 'gasto' && t.fixed === 'fijo')
+    .filter((t) => t.type === 'gasto' && t.fixed === 'fijo' && isOperationalTransaction(t))
     .reduce((s, t) => s + Number(t.amount || 0), 0);
 }
 
@@ -96,7 +143,7 @@ export function calcMonthComparison(state: LifeOSState): { pct: number; dir: 'up
 export function calcSpentByCategory(state: LifeOSState, offset = 0): Record<string, number> {
   const map: Record<string, number> = {};
   txInMonth(state, offset)
-    .filter((t) => t.type === 'gasto')
+    .filter((t) => t.type === 'gasto' && isOperationalTransaction(t))
     .forEach((t) => {
       map[t.category] = (map[t.category] || 0) + Number(t.amount || 0);
     });
@@ -106,7 +153,7 @@ export function calcSpentByCategory(state: LifeOSState, offset = 0): Record<stri
 export function calcSpentByCategoryAllTime(state: LifeOSState): Record<string, number> {
   const map: Record<string, number> = {};
   state.finance.transactions
-    .filter((t) => t.type === 'gasto')
+    .filter((t) => t.type === 'gasto' && isOperationalTransaction(t))
     .forEach((t) => {
       map[t.category] = (map[t.category] || 0) + Number(t.amount || 0);
     });
@@ -124,7 +171,7 @@ export interface MonthTransactionGroup {
 
 export function groupTransactionsByMonth(state: LifeOSState): MonthTransactionGroup[] {
   const groups: Record<string, Transaction[]> = {};
-  state.finance.transactions.forEach((t) => {
+  state.finance.transactions.filter(isOperationalTransaction).forEach((t) => {
     const key = t.date.slice(0, 7); // YYYY-MM
     if (!groups[key]) groups[key] = [];
     groups[key].push(t);
@@ -134,8 +181,8 @@ export function groupTransactionsByMonth(state: LifeOSState): MonthTransactionGr
     .sort((a,b) => b.localeCompare(a))
     .map((key) => {
       const txs = groups[key].sort((a, b) => b.date.localeCompare(a.date));
-      const totalGasto = txs.filter((t) => t.type === 'gasto').reduce((s, t) => s + Number(t.amount || 0), 0);
-      const totalIngreso = txs.filter((t) => t.type === 'ingreso').reduce((s, t) => s + Number(t.amount || 0), 0);
+      const totalGasto = txs.filter((t) => t.type === 'gasto' && isOperationalTransaction(t)).reduce((s, t) => s + Number(t.amount || 0), 0);
+      const totalIngreso = txs.filter((t) => t.type === 'ingreso' && isOperationalTransaction(t)).reduce((s, t) => s + Number(t.amount || 0), 0);
       const parts = key.split('-');
       const y = parseInt(parts[0], 10);
       const m = parseInt(parts[1], 10) - 1;
@@ -165,21 +212,6 @@ export function weightVariation(state: LifeOSState): number | null {
   const f = firstWeight(state);
   if (c == null || f == null) return null;
   return c - f;
-}
-
-export function calcIMC(state: LifeOSState): number | null {
-  const w = currentWeight(state);
-  const h = Number(state.profile.height || 0) / 100;
-  if (!w || !h) return null;
-  return w / (h * h);
-}
-
-export function imcCategory(imc: number | null): { label: string; color: 'blue' | 'green' | 'amber' | 'red' | 'flat' } {
-  if (imc == null) return { label: '—', color: 'flat' };
-  if (imc < 18.5) return { label: 'Bajo peso', color: 'blue' };
-  if (imc < 25) return { label: 'Normal', color: 'green' };
-  if (imc < 30) return { label: 'Sobrepeso', color: 'amber' };
-  return { label: 'Obesidad', color: 'red' };
 }
 
 export function trainedDatesSet(state: LifeOSState): Set<string> {
@@ -212,7 +244,7 @@ export function calcGymStreak(state: LifeOSState): number {
 
 export interface PRInfo {
   weight: number;
-  reps: string;
+  reps: number;
   date: string;
 }
 
@@ -220,10 +252,12 @@ export function calcPRs(state: LifeOSState): Record<string, PRInfo> {
   const prs: Record<string, PRInfo> = {};
   state.gym.sessions.forEach((s) => {
     (s.exercises || []).forEach((ex) => {
-      const w = Number(ex.weight || 0);
-      if (!prs[ex.name] || w > prs[ex.name].weight) {
-        prs[ex.name] = { weight: w, reps: ex.reps, date: s.date };
-      }
+      ex.sets.forEach((set) => {
+        const current = prs[ex.name];
+        if (!current || set.weight > current.weight || (set.weight === current.weight && set.reps > current.reps)) {
+          prs[ex.name] = { weight: set.weight, reps: set.reps, date: s.date };
+        }
+      });
     });
   });
   return prs;
@@ -367,16 +401,23 @@ export function resaleStats(state: LifeOSState) {
   const vendidos = inv.filter((i) => i.status === 'vendido');
   const ventas = vendidos.length;
   const compras = inv.length;
-  const gananciaTotal = vendidos.reduce((s, i) => s + (Number(i.sellPrice || 0) - Number(i.buyPrice || 0)), 0);
+  const netProfit = (item: (typeof vendidos)[number]) => {
+    const breakdown = Number(item.shippingCost || 0) + Number(item.platformFees || 0) + Number(item.taxes || 0);
+    return Number(item.sellPrice || 0) - Number(item.buyPrice || 0) - (breakdown > 0 ? breakdown : Number(item.fees || 0));
+  };
+  const gananciaTotal = vendidos.reduce((s, i) => s + netProfit(i), 0);
   const gananciaPromedio = ventas ? gananciaTotal / ventas : 0;
-  const costoTotal = inv.reduce((s, i) => s + Number(i.buyPrice || 0), 0);
+  const costoTotal = vendidos.reduce((s, i) => {
+    const breakdown = Number(i.shippingCost || 0) + Number(i.platformFees || 0) + Number(i.taxes || 0);
+    return s + Number(i.buyPrice || 0) + (breakdown > 0 ? breakdown : Number(i.fees || 0));
+  }, 0);
   const roi = costoTotal > 0 ? (gananciaTotal / costoTotal) * 100 : 0;
   const tiempos = vendidos
     .filter((i) => i.buyDate && i.sellDate)
     .map((i) => daysBetween(i.buyDate, i.sellDate!));
   const tiempoPromedio = tiempos.length ? tiempos.reduce((a, b) => a + b, 0) / tiempos.length : null;
   const ranking = [...vendidos]
-    .sort((a, b) => Number(b.sellPrice || 0) - Number(b.buyPrice || 0) - (Number(a.sellPrice || 0) - Number(a.buyPrice || 0)))
+    .sort((a, b) => netProfit(b) - netProfit(a))
     .slice(0, 5);
   return {
     stock,
@@ -460,6 +501,23 @@ export interface TodayItem {
   source: 'agenda' | 'rutina' | 'extra' | 'trabajo';
   kind: 'toggle-task-today' | 'toggle-extra-today' | 'complete-followup';
   priority: number;
+  effort: EffortLevel;
+}
+
+export function routineScheduledFor(state: LifeOSState, task: TaskRecurring, iso: string): boolean {
+  const day = dayKeyFromDate(new Date(`${iso}T00:00:00`));
+  if (task.days?.length) return task.days.includes(day);
+  if (task.freq === 'daily') return true;
+  if (state.taskLog[iso]?.[task.id]) return true;
+
+  const monday = isoWeekMonday(new Date(`${iso}T00:00:00`));
+  const sunday = new Date(monday);
+  sunday.setDate(sunday.getDate() + 6);
+  const completedThisWeek = Object.entries(state.taskLog).filter(([date, log]) => {
+    const parsed = new Date(`${date}T00:00:00`);
+    return parsed >= monday && parsed <= sunday && Boolean(log[task.id]);
+  }).length;
+  return completedThisWeek < (task.freq === 'weekly' ? 1 : 3);
 }
 
 export function todayItems(state: LifeOSState, dateIso?: string, includeFollowups?: boolean): TodayItem[] {
@@ -480,10 +538,12 @@ export function todayItems(state: LifeOSState, dateIso?: string, includeFollowup
         source: 'agenda',
         kind: 'toggle-task-today',
         priority: computeAgendaPriority(b, done),
+        effort: b.effort || 'medium',
       });
     });
 
   state.tasksRecurring.forEach((t) => {
+    if (!routineScheduledFor(state, t, iso)) return;
     const done = Boolean(log[t.id]);
     items.push({
       id: t.id,
@@ -492,6 +552,7 @@ export function todayItems(state: LifeOSState, dateIso?: string, includeFollowup
       source: 'rutina',
       kind: 'toggle-task-today',
       priority: computeRutinaPriority(t, done),
+      effort: t.effort || 'medium',
     });
   });
 
@@ -505,6 +566,7 @@ export function todayItems(state: LifeOSState, dateIso?: string, includeFollowup
         source: 'extra',
         kind: 'toggle-extra-today',
         priority: computeExtraPriority(x),
+        effort: x.effort || 'medium',
       });
     });
 
@@ -519,6 +581,7 @@ export function todayItems(state: LifeOSState, dateIso?: string, includeFollowup
           source: 'trabajo',
           kind: 'complete-followup',
           priority: computeFollowupPriority(a.nextActionDate!),
+          effort: 'medium',
         });
       });
   }
