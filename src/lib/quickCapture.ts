@@ -66,3 +66,21 @@ export function addQuickNote(state: LifeOSState, text: string, date = todayISO()
   state.notes.postits.push({ id, text: cleanText, date });
   return id;
 }
+
+export function addQuickIdea(state: LifeOSState, text: string): string {
+  const cleanText = text.trim();
+  if (!cleanText) throw new Error('Escribí la idea.');
+  const id = uid();
+  state.notes.postits.push({ id, text: `[Idea] ${cleanText}`, date: todayISO() });
+  return id;
+}
+
+export function addQuickReminder(state: LifeOSState, text: string, date = todayISO(), time?: string): string {
+  const cleanText = text.trim();
+  if (!cleanText) throw new Error('Escribí el recordatorio.');
+  const id = uid();
+  const label = time ? `${cleanText} (${time})` : cleanText;
+  state.todayExtras.push({ id, text: label, priority: 'alta', date, done: false, effort: 'low' });
+  return id;
+}
+

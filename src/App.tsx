@@ -51,6 +51,7 @@ import { ToastViewport } from './components/ToastViewport';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { GymRestOverlay } from './components/GymRestOverlay';
 import { showToast } from './lib/toast';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 const AgendaView = lazy(() => import('./components/AgendaView').then((module) => ({ default: module.AgendaView })));
 const CalendarioView = lazy(() => import('./components/CalendarioView').then((module) => ({ default: module.CalendarioView })));
@@ -530,35 +531,28 @@ export default function App() {
     if (action === 'gym') setCurrentView('gimnasio');
   }, []);
 
-  useEffect(() => {
-    const handleShortcuts = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        setIsSearchOpen((prev) => !prev);
-        return;
-      }
-      if (event.key === 'Escape') {
-        setIsSearchOpen(false);
-        setIsQuickCaptureOpen(false);
-        setIsOpenMobile(false);
-        setIsCheckoutOpen(false);
-        return;
-      }
-      const target = event.target as HTMLElement | null;
-      const typing = target?.matches('input, textarea, select, [contenteditable="true"]');
-      if (!typing && event.shiftKey && event.key.toLowerCase() === 'p') {
-        event.preventDefault();
-        updateStateRef.current((draft) => { draft.settings.privacyMode = !draft.settings.privacyMode; });
-        return;
-      }
-      if (!typing && !event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === 'c') {
-        event.preventDefault();
-        setIsQuickCaptureOpen(true);
-      }
-    };
-    window.addEventListener('keydown', handleShortcuts);
-    return () => window.removeEventListener('keydown', handleShortcuts);
-  }, []);
+  useKeyboardShortcuts({
+    onNavigate: (view) => {
+      handleNavigate(view);
+      setIsSearchOpen(false);
+      setIsQuickCaptureOpen(false);
+      setIsOpenMobile(false);
+    },
+    onOpenQuickCapture: () => setIsQuickCaptureOpen(true),
+    onToggleCommandPalette: () => setIsSearchOpen((prev) => !prev),
+    onTogglePrivacy: () => {
+      updateStateRef.current((draft) => {
+        draft.settings.privacyMode = !draft.settings.privacyMode;
+      });
+    },
+    onCloseModals: () => {
+      setIsSearchOpen(false);
+      setIsQuickCaptureOpen(false);
+      setIsOpenMobile(false);
+      setIsCheckoutOpen(false);
+    },
+    isModalOpen: isSearchOpen || isQuickCaptureOpen || isOpenMobile || isCheckoutOpen,
+  });
 
   const handleToggleTheme = () => {
     updateState((draft) => {
@@ -695,6 +689,7 @@ export default function App() {
               onNavigate={handleNavigate}
               onExportJSON={handleExportJSON}
               onOpenSearch={() => { setSearchQuery(''); setIsSearchOpen(true); }}
+              onOpenCapture={() => setIsQuickCaptureOpen(true)}
             />
           )}
 
@@ -776,6 +771,7 @@ export default function App() {
         open={isQuickCaptureOpen}
         onClose={() => setIsQuickCaptureOpen(false)}
         onUpdateState={updateState}
+        onNavigate={handleNavigate}
       />
 
       {cloudConflict && (

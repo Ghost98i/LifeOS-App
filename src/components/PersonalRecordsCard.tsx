@@ -14,7 +14,7 @@ const MUSCLE_GROUPS: MuscleGroup[] = ['Pecho', 'Espalda', 'Piernas', 'Hombros', 
 export function estimate1RM(weight: number, reps: number): number {
   if (weight <= 0) return 0;
   if (reps <= 1) return weight;
-  // Brzycki formula: weight * (36 / (37 - reps)) or Epley: weight * (1 + reps / 30)
+  // Brzycki formula / Epley: weight * (1 + reps / 30)
   return Math.round(weight * (1 + reps / 30));
 }
 
@@ -30,6 +30,7 @@ const MUSCLE_COLORS: Record<string, { bg: string; text: string; border: string }
 };
 
 export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = ({ state }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
   const prs = useMemo(() => calcPRs(state), [state]);
   const [selectedMuscle, setSelectedMuscle] = useState<string>('Todos');
   const [search, setSearch] = useState('');
@@ -66,144 +67,210 @@ export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = ({ state 
   }, [prList, selectedMuscle, search]);
 
   const totalPRs = prList.length;
+  const compactPRs = prList.slice(0, 4);
 
   return (
-    <section className="surface overflow-hidden p-5 sm:p-6 space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
-            <AppIcon name="trophy" className="h-5 w-5" />
+    <section className="surface overflow-hidden p-4 sm:p-5 space-y-3.5 shadow-xs transition-all">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
+            <AppIcon name="trophy" className="h-4 w-4" />
           </span>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-[var(--text)]">Récords Personales (PRs)</h2>
-              <span className="rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
-                {totalPRs} marcas
-              </span>
+              <h2 className="text-sm font-bold text-[var(--text)]">Récords Personales (PRs)</h2>
+              {totalPRs > 0 && (
+                <span className="rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.2 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                  {totalPRs}
+                </span>
+              )}
             </div>
-            <p className="text-xs text-[var(--text-soft)]">
-              Tus mejores levantamientos con estimación de 1RM calculada.
-            </p>
           </div>
         </div>
 
-        {/* Search input */}
-        <div className="relative min-w-[200px]">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar ejercicio..."
-            className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] py-1.5 pl-8 pr-3 text-xs outline-hidden focus:border-[var(--blue)] transition-colors"
-          />
-          <span className="absolute left-2.5 top-2 text-[var(--text-faint)]">
-            <AppIcon name="search" className="h-3.5 w-3.5" />
-          </span>
-        </div>
-      </div>
-
-      {/* Filter tabs by Muscle Group */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
         <button
           type="button"
-          onClick={() => setSelectedMuscle('Todos')}
-          className={`shrink-0 rounded-lg px-3 py-1.5 font-semibold transition-all ${
-            selectedMuscle === 'Todos'
-              ? 'bg-[var(--text)] text-[var(--bg-elevated)] shadow-xs'
-              : 'bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)] border border-[var(--border)]'
-          }`}
+          onClick={() => setIsExpanded((prev) => !prev)}
+          className="text-xs font-bold text-[var(--blue)] hover:underline cursor-pointer shrink-0"
         >
-          Todos ({totalPRs})
+          {isExpanded ? 'Contraer ↑' : `Ver todos (${totalPRs}) →`}
         </button>
-        {MUSCLE_GROUPS.map((group) => {
-          const count = prList.filter((p) => p.muscle === group).length;
-          if (count === 0 && selectedMuscle !== group) return null;
-          const isSelected = selectedMuscle === group;
-          return (
-            <button
-              key={group}
-              type="button"
-              onClick={() => setSelectedMuscle(group)}
-              className={`shrink-0 rounded-lg px-2.5 py-1.5 font-semibold transition-all ${
-                isSelected
-                  ? 'bg-[var(--text)] text-[var(--bg-elevated)] shadow-xs'
-                  : 'bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)] border border-[var(--border)]'
-              }`}
-            >
-              {group} ({count})
-            </button>
-          );
-        })}
       </div>
 
-      {/* Visual PR Cards Grid */}
-      {filteredPRs.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)] p-8 text-center text-xs text-[var(--text-soft)]">
-          {totalPRs === 0
-            ? 'Completá tu primer entrenamiento para que tus récords aparezcan aquí automáticamente.'
-            : 'No se encontraron ejercicios con los filtros seleccionados.'}
+      {/* COMPACT VIEW (Default: 3-4 top records) */}
+      {!isExpanded ? (
+        <div className="space-y-2.5 pt-1">
+          {totalPRs === 0 ? (
+            <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)] p-5 text-center text-xs text-[var(--text-soft)]">
+              Completá tu primer entrenamiento para registrar tus récords automáticamente.
+            </div>
+          ) : (
+            <>
+              <div className="divide-y divide-[var(--border)]">
+                {compactPRs.map((item) => {
+                  const muscleStyle = MUSCLE_COLORS[item.muscle] || MUSCLE_COLORS.Otros;
+                  return (
+                    <div
+                      key={item.name}
+                      className="flex items-center justify-between py-2 transition"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 pr-2">
+                        <span
+                          className={`inline-block rounded px-1.5 py-0.5 text-[9px] font-bold border shrink-0 ${muscleStyle.bg} ${muscleStyle.text} ${muscleStyle.border}`}
+                        >
+                          {item.muscle}
+                        </span>
+                        <span className="text-xs font-bold text-[var(--text)] truncate">
+                          {item.name}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2.5 shrink-0 font-mono text-xs">
+                        <strong className="font-extrabold text-[var(--text)]">
+                          {item.weight} <span className="text-[10px] font-normal text-[var(--text-soft)]">kg</span>
+                        </strong>
+                        <span className="text-[11px] text-[var(--text-faint)]">
+                          × {item.reps}
+                        </span>
+                        {item.est1RM > 0 && (
+                          <span className="rounded bg-[var(--blue-soft)] px-1.5 py-0.5 text-[10px] font-bold text-[var(--blue)]">
+                            ~{item.est1RM}kg 1RM
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {totalPRs > 4 && (
+                <div className="pt-1 text-right">
+                  <button
+                    type="button"
+                    onClick={() => setIsExpanded(true)}
+                    className="text-[11px] font-semibold text-[var(--text-soft)] hover:text-[var(--blue)] transition cursor-pointer"
+                  >
+                    Ver los {totalPRs - 4} récords restantes y buscador →
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredPRs.map((item, index) => {
-            const muscleStyle = MUSCLE_COLORS[item.muscle] || MUSCLE_COLORS.Otros;
-            const isTop3 = index < 3 && selectedMuscle === 'Todos' && !search;
+        /* EXPANDED VIEW (With Search, Muscle Tabs & Complete Grid) */
+        <div className="space-y-3.5 pt-2 border-t border-[var(--border)]">
+          <div className="flex flex-col sm:flex-row gap-2 sm:items-center sm:justify-between">
+            {/* Search input */}
+            <div className="relative min-w-[180px] flex-1">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar ejercicio..."
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] py-1.5 pl-8 pr-3 text-xs outline-hidden focus:border-[var(--blue)] transition-colors"
+              />
+              <span className="absolute left-2.5 top-2 text-[var(--text-faint)]">
+                <AppIcon name="search" className="h-3.5 w-3.5" />
+              </span>
+            </div>
 
-            return (
-              <div
-                key={item.name}
-                className={`relative rounded-2xl border bg-[var(--card)] p-4 shadow-xs hover:border-[var(--blue)]/40 transition-all ${
-                  isTop3 ? 'border-amber-500/30' : 'border-[var(--border)]'
-                }`}
-              >
-                {/* Top Badge */}
-                <div className="flex items-center justify-between gap-2">
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-bold border ${muscleStyle.bg} ${muscleStyle.text} ${muscleStyle.border}`}
+            <button
+              type="button"
+              onClick={() => setIsExpanded(false)}
+              className="text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer self-end sm:self-auto"
+            >
+              Cerrar lista ↑
+            </button>
+          </div>
+
+          {/* Muscle Group Filter Tabs */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 text-xs no-scrollbar">
+            <button
+              type="button"
+              onClick={() => setSelectedMuscle('Todos')}
+              className={`shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition cursor-pointer ${
+                selectedMuscle === 'Todos'
+                  ? 'bg-[var(--text)] text-[var(--bg-elevated)]'
+                  : 'bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)]'
+              }`}
+            >
+              Todos ({totalPRs})
+            </button>
+            {MUSCLE_GROUPS.map((group) => {
+              const count = prList.filter((p) => p.muscle === group).length;
+              if (count === 0 && selectedMuscle !== group) return null;
+              return (
+                <button
+                  key={group}
+                  type="button"
+                  onClick={() => setSelectedMuscle(group)}
+                  className={`shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold transition cursor-pointer ${
+                    selectedMuscle === group
+                      ? 'bg-[var(--text)] text-[var(--bg-elevated)]'
+                      : 'bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)]'
+                  }`}
+                >
+                  {group} ({count})
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Complete Grid */}
+          {filteredPRs.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)] p-6 text-center text-xs text-[var(--text-soft)]">
+              No se encontraron ejercicios con los filtros seleccionados.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[380px] overflow-y-auto pr-1">
+              {filteredPRs.map((item, index) => {
+                const muscleStyle = MUSCLE_COLORS[item.muscle] || MUSCLE_COLORS.Otros;
+                const isTop3 = index < 3 && selectedMuscle === 'Todos' && !search;
+
+                return (
+                  <div
+                    key={item.name}
+                    className={`rounded-xl border bg-[var(--card)] p-3 space-y-1.5 transition hover:border-[var(--border-hover)] ${
+                      isTop3 ? 'border-amber-500/30' : 'border-[var(--border)]'
+                    }`}
                   >
-                    {item.muscle}
-                  </span>
-                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-faint)]">
-                    <AppIcon name="calendar" className="h-3 w-3" />
-                    <span>{fmtDate(item.date)}</span>
-                  </div>
-                </div>
-
-                {/* Title */}
-                <h3 className="mt-2.5 font-bold text-sm text-[var(--text)] truncate" title={item.name}>
-                  {item.name}
-                </h3>
-
-                {/* Big Stat */}
-                <div className="mt-3 flex items-baseline justify-between border-t border-[var(--border)]/60 pt-3">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block">
-                      Récord
-                    </span>
-                    <div className="mt-0.5 flex items-baseline gap-1">
-                      <strong className="text-xl font-extrabold font-mono text-[var(--text)]">
-                        {item.weight} <span className="text-xs font-semibold">kg</span>
-                      </strong>
-                      <span className="text-xs font-semibold text-[var(--text-soft)]">
-                        × {item.reps} {item.reps === 1 ? 'rep' : 'reps'}
+                    <div className="flex items-center justify-between gap-1">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[9px] font-bold border ${muscleStyle.bg} ${muscleStyle.text} ${muscleStyle.border}`}
+                      >
+                        {item.muscle}
+                      </span>
+                      <span className="text-[10px] text-[var(--text-faint)] font-mono">
+                        {fmtDate(item.date)}
                       </span>
                     </div>
-                  </div>
 
-                  {item.est1RM > 0 && (
-                    <div className="text-right">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block">
-                        1RM Estimado
-                      </span>
-                      <strong className="mt-0.5 inline-block text-sm font-bold font-mono text-[var(--blue)] bg-[var(--blue-soft)] px-2 py-0.5 rounded-md">
-                        ~{item.est1RM} kg
-                      </strong>
+                    <h3 className="text-xs font-bold text-[var(--text)] truncate" title={item.name}>
+                      {item.name}
+                    </h3>
+
+                    <div className="flex items-baseline justify-between pt-1 border-t border-[var(--border)]/60 font-mono">
+                      <div>
+                        <strong className="text-sm font-extrabold text-[var(--text)]">
+                          {item.weight} <span className="text-[10px]">kg</span>
+                        </strong>
+                        <span className="text-[10px] text-[var(--text-soft)] ml-1">
+                          × {item.reps}
+                        </span>
+                      </div>
+                      {item.est1RM > 0 && (
+                        <span className="text-[10px] font-bold text-[var(--blue)] bg-[var(--blue-soft)] px-1.5 py-0.5 rounded">
+                          ~{item.est1RM} kg 1RM
+                        </span>
+                      )}
                     </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </section>

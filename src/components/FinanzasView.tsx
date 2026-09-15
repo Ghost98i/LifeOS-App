@@ -426,94 +426,120 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       {/* Add Transaction Form */}
       <div id="qa-focus-tx" className="surface space-y-3 p-4 sm:p-5">
         <div className="flex items-center justify-between gap-2"><div><p className="eyebrow">Registro</p><h2 className="section-title mt-1">{editingTxId ? 'Editar movimiento' : 'Nuevo movimiento'}</h2></div>{editingTxId && <button type="button" onClick={cancelEditTx} className="text-xs font-bold text-[var(--text-soft)]">Cancelar edición</button>}</div>
-        <form onSubmit={handleAddTx} className="flex flex-wrap items-end gap-2 rounded-xl bg-[var(--surface-muted)] p-3.5">
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Tipo</label>
-            <select
-              value={txType}
-              onChange={(e) => setTxType(e.target.value as any)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden font-semibold"
+        <form onSubmit={handleAddTx} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 space-y-3">
+          {/* Row 1: Primary Transaction Details */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1.5">
+                Tipo
+              </label>
+              <select
+                value={txType}
+                onChange={(e) => setTxType(e.target.value as any)}
+                className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden font-semibold"
+              >
+                <option value="gasto">Gasto</option>
+                <option value="ingreso">Ingreso</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1.5">
+                Monto
+              </label>
+              <input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={txAmount}
+                onChange={(e) => setTxAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden font-mono font-bold"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1.5">
+                Cuenta
+              </label>
+              <select
+                value={txAccount}
+                onChange={(e) => setTxAccount(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+              >
+                {state.finance.accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1.5">
+                Categoría
+              </label>
+              <select
+                value={txCategory}
+                onChange={(e) => setTxCategory(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+              >
+                {state.finance.categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1.5">
+                Fijo / Variable
+              </label>
+              <select
+                value={txFixed}
+                onChange={(e) => setTxFixed(e.target.value as any)}
+                className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+              >
+                <option value="variable">Variable</option>
+                <option value="fijo">Fijo</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1.5">
+                Fecha
+              </label>
+              <input
+                type="date"
+                value={txDate}
+                onChange={(e) => setTxDate(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+              />
+            </div>
+          </div>
+
+          {/* Row 2: Note & Action Button */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 pt-1">
+            <div className="flex-1">
+              <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1.5">
+                Nota descriptiva (opcional)
+              </label>
+              <input
+                type="text"
+                value={txNote}
+                onChange={(e) => setTxNote(e.target.value)}
+                placeholder="Ej.: Supermercado, Combustible, Farmacia..."
+                className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+              />
+            </div>
+            <button
+              type="submit"
+              className="primary-button h-10 px-6 shrink-0 cursor-pointer font-bold"
             >
-              <option value="gasto">Gasto</option>
-              <option value="ingreso">Ingreso</option>
-            </select>
+              {editingTxId ? 'Guardar cambios' : '＋ Agregar movimiento'}
+            </button>
           </div>
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Monto</label>
-            <input
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={txAmount}
-              onChange={(e) => setTxAmount(e.target.value)}
-              placeholder="0"
-              className="w-28 px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden font-mono"
-            />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Cuenta</label>
-            <select
-              value={txAccount}
-              onChange={(e) => setTxAccount(e.target.value)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
-            >
-              {state.finance.accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Categoría</label>
-            <select
-              value={txCategory}
-              onChange={(e) => setTxCategory(e.target.value)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
-            >
-              {state.finance.categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Fijo / Variable</label>
-            <select
-              value={txFixed}
-              onChange={(e) => setTxFixed(e.target.value as any)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
-            >
-              <option value="variable">Variable</option>
-              <option value="fijo">Fijo</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Fecha</label>
-            <input
-              type="date"
-              value={txDate}
-              onChange={(e) => setTxDate(e.target.value)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
-            />
-          </div>
-          <div className="flex-1 min-w-[130px]">
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Nota</label>
-            <input
-              type="text"
-              value={txNote}
-              onChange={(e) => setTxNote(e.target.value)}
-              placeholder="Opcional"
-              className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
-            />
-          </div>
-          <button
-            type="submit"
-            className="primary-button min-h-10 px-4"
-          >
-            {editingTxId ? 'Guardar cambios' : '＋ Agregar'}
-          </button>
         </form>
       </div>
 

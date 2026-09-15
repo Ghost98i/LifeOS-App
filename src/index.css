@@ -23,23 +23,23 @@
 
 .dark {
   color-scheme: dark;
-  --bg: #08111f;
-  --bg-elevated: #101c2d;
-  --card: #101c2d;
-  --sidebar: #0b1626;
-  --topbar: rgb(8 17 31 / 0.88);
-  --nav-mobile: rgb(11 22 38 / 0.95);
-  --surface-muted: #142238;
-  --border: #223149;
-  --border-hover: #344762;
-  --text: #edf3fb;
-  --text-soft: #a3afc2;
-  --text-faint: #7d8ba2;
-  --blue: #6d91ff;
-  --blue-hover: #86a4ff;
-  --blue-soft: rgba(86, 125, 244, 0.16);
-  --card-shadow: 0 1px 2px rgb(0 0 0 / 0.16), 0 10px 30px rgb(0 0 0 / 0.11);
-  --card-shadow-hover: 0 2px 3px rgb(0 0 0 / 0.18), 0 16px 38px rgb(0 0 0 / 0.18);
+  --bg: #0D0F12;
+  --bg-elevated: #15181D;
+  --card: #181C21;
+  --sidebar: #15181D;
+  --topbar: rgb(13 15 18 / 0.90);
+  --nav-mobile: rgb(21 24 29 / 0.95);
+  --surface-muted: #20252C;
+  --border: #2A3038;
+  --border-hover: #3E4652;
+  --text: #F1F3F5;
+  --text-soft: #A6ADB8;
+  --text-faint: #6C7582;
+  --blue: #3B82F6;
+  --blue-hover: #60A5FA;
+  --blue-soft: rgba(59, 130, 246, 0.14);
+  --card-shadow: 0 1px 3px rgb(0 0 0 / 0.35), 0 8px 24px rgb(0 0 0 / 0.25);
+  --card-shadow-hover: 0 2px 5px rgb(0 0 0 / 0.4), 0 12px 30px rgb(0 0 0 / 0.35);
 }
 
 body {
@@ -289,20 +289,18 @@ button:active {
 }
 
 .dark .bento-card {
-  border-color: #1e293b; /* border-slate-800 */
-  background-color: rgba(16, 28, 45, 0.72);
-  backdrop-filter: blur(12px);
+  border-color: var(--border);
+  background-color: var(--card);
 }
 
 .bento-card:hover {
   border-color: var(--border-hover);
   box-shadow: var(--card-shadow-hover);
-  transform: translateY(-1.5px);
 }
 
 .dark .bento-card:hover {
-  border-color: #334155; /* border-slate-700 */
-  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  border-color: var(--border-hover);
+  box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.45);
 }
 
 @keyframes toast-enter {

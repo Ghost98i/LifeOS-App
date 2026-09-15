@@ -35,16 +35,16 @@ interface PaletteItem {
   onSelect: () => void;
 }
 
-const VIEW_METADATA: { view: ViewType; label: string; desc: string; icon: AppIconName; keywords: string[] }[] = [
-  { view: 'dashboard', label: 'Hoy / Dashboard', desc: 'Prioridades, checklist diario y resumen', icon: 'home', keywords: ['inicio', 'hoy', 'dashboard', 'habitos', 'rutina'] },
-  { view: 'finanzas', label: 'Finanzas', desc: 'Gastos, ingresos, presupuestos y cuentas', icon: 'wallet', keywords: ['finanzas', 'gastos', 'plata', 'dinero', 'cuentas', 'tarjetas'] },
-  { view: 'gimnasio', label: 'Gimnasio', desc: 'Rutinas, PRs, temporizador y pesaje', icon: 'dumbbell', keywords: ['gym', 'gimnasio', 'entrenar', 'pesas', 'musculos', 'peso'] },
-  { view: 'trabajo', label: 'Trabajo & Empleo', desc: 'Pipeline Kanban de postulaciones laborales', icon: 'briefcase', keywords: ['trabajo', 'empleo', 'cv', 'postulaciones', 'entrevistas'] },
-  { view: 'agenda', label: 'Agenda Semanal', desc: 'Bloques horarios y rutinas periódicas', icon: 'calendar', keywords: ['agenda', 'horario', 'semana', 'bloques'] },
+const VIEW_METADATA: { view: ViewType; label: string; desc: string; icon: AppIconName; keywords: string[]; shortcut?: string }[] = [
+  { view: 'dashboard', label: 'Hoy / Dashboard', desc: 'Prioridades, checklist diario y resumen', icon: 'home', keywords: ['inicio', 'hoy', 'dashboard', 'habitos', 'rutina'], shortcut: 'G H' },
+  { view: 'finanzas', label: 'Finanzas', desc: 'Gastos, ingresos, presupuestos y cuentas', icon: 'wallet', keywords: ['finanzas', 'gastos', 'plata', 'dinero', 'cuentas', 'tarjetas', 'nuevo gasto'], shortcut: 'G F' },
+  { view: 'gimnasio', label: 'Gimnasio', desc: 'Rutinas, PRs, temporizador y pesaje', icon: 'dumbbell', keywords: ['gym', 'gimnasio', 'entrenar', 'pesas', 'musculos', 'peso', 'entrenamiento'], shortcut: 'G G' },
+  { view: 'trabajo', label: 'Trabajo & Empleo', desc: 'Pipeline Kanban de postulaciones laborales', icon: 'briefcase', keywords: ['trabajo', 'empleo', 'cv', 'postulaciones', 'entrevistas'], shortcut: 'G T' },
+  { view: 'agenda', label: 'Agenda Semanal', desc: 'Bloques horarios y rutinas periódicas', icon: 'calendar', keywords: ['agenda', 'horario', 'semana', 'bloques'], shortcut: 'G A' },
   { view: 'calendario', label: 'Calendario', desc: 'Eventos, hitos y fechas clave del mes', icon: 'calendarDays', keywords: ['calendario', 'eventos', 'mes', 'fechas'] },
   { view: 'estudios', label: 'Estudios', desc: 'Materias, exámenes, pomodoro y horas', icon: 'book', keywords: ['estudio', 'facultad', 'materias', 'examenes', 'pomodoro'] },
   { view: 'reventa', label: 'Reventa', desc: 'Inventario, margen comercial y ventas', icon: 'repeat', keywords: ['reventa', 'ventas', 'inventario', 'productos', 'negocio'] },
-  { view: 'notas', label: 'Notas & Captura', desc: 'Post-its, listas de compras y enlaces', icon: 'note', keywords: ['notas', 'postits', 'compras', 'links', 'enlaces'] },
+  { view: 'notas', label: 'Notas & Captura', desc: 'Post-its, listas de compras y enlaces', icon: 'note', keywords: ['notas', 'postits', 'compras', 'links', 'enlaces', 'nueva nota'], shortcut: 'G N' },
   { view: 'ia', label: 'IA & Proyectos', desc: 'Asistente personal, ideas y proyectos', icon: 'sparkles', keywords: ['ia', 'ai', 'ideas', 'proyectos', 'asistente'] },
   { view: 'config', label: 'Configuración', desc: 'Copias de seguridad, sincronización y ajustes', icon: 'settings', keywords: ['config', 'ajustes', 'backup', 'nube', 'perfil'] },
   { view: 'checkout', label: 'Cerrar Día (Checkout)', desc: 'Revisión nocturna y balance de la jornada', icon: 'moon', keywords: ['checkout', 'cerrar', 'noche', 'balance', 'dia'] },
@@ -152,16 +152,46 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   // Quick action items
   const quickActions: PaletteItem[] = useMemo(() => [
     {
+      id: 'action-task',
+      category: 'Acciones Rápidas',
+      categoryOrder: 1,
+      title: 'Nueva Tarea',
+      subtitle: 'Crear tarea en el día de hoy mediante captura rápida',
+      iconName: 'check',
+      badge: 'Hoy',
+      badgeTone: 'green',
+      shortcutHint: 'N',
+      onSelect: () => {
+        onClose();
+        if (onOpenCapture) onOpenCapture();
+      },
+    },
+    {
       id: 'action-expense',
       category: 'Acciones Rápidas',
       categoryOrder: 1,
-      title: 'Registrar Gasto',
+      title: 'Nuevo Gasto / Registrar Gasto',
       subtitle: 'Abre un micro-formulario para ingresar monto, categoría y cuenta',
       iconName: 'wallet',
       badge: 'Rápido',
       badgeTone: 'blue',
       shortcutHint: '↵ Micro-form',
       onSelect: () => setMode('new-expense'),
+    },
+    {
+      id: 'action-note',
+      category: 'Acciones Rápidas',
+      categoryOrder: 1,
+      title: 'Nueva Nota',
+      subtitle: 'Crear apunte, post-it o idea al instante',
+      iconName: 'note',
+      badge: 'Nota',
+      badgeTone: 'gray',
+      shortcutHint: 'N',
+      onSelect: () => {
+        onClose();
+        if (onOpenCapture) onOpenCapture();
+      },
     },
     {
       id: 'action-gym',
@@ -172,7 +202,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       iconName: 'dumbbell',
       badge: 'Gym',
       badgeTone: 'green',
-      shortcutHint: '↵ Ir a Gym',
+      shortcutHint: 'G G',
       onSelect: () => {
         onNavigate('gimnasio');
         onClose();
@@ -194,10 +224,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       id: 'action-capture',
       category: 'Acciones Rápidas',
       categoryOrder: 1,
-      title: 'Captura Rápida',
-      subtitle: 'Crear tarea del día, post-it o idea al instante',
+      title: 'Captura Rápida Universal',
+      subtitle: 'Crear tarea, gasto, nota, idea o recordatorio',
       iconName: 'plus',
-      shortcutHint: 'C',
+      shortcutHint: 'N',
       onSelect: () => {
         onClose();
         if (onOpenCapture) onOpenCapture();
@@ -241,6 +271,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       title: v.label,
       subtitle: v.desc,
       iconName: v.icon,
+      shortcutHint: v.shortcut,
       onSelect: () => {
         onNavigate(v.view);
         onClose();

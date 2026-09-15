@@ -113,6 +113,59 @@ export function playSound(type: 'success' | 'coins' | 'beep' | 'night' | 'click'
   }
 }
 
+export function playTimerCountdownTone(secondsLeft: number): void {
+  if (!isSoundEnabled()) return;
+  const ctx = getAudioContext();
+
+  // Gentle vibration if supported
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+    try {
+      if (secondsLeft > 0) {
+        navigator.vibrate(40);
+      } else {
+        navigator.vibrate([100, 50, 150]);
+      }
+    } catch {
+      // Ignore vibration errors on unsupported devices
+    }
+  }
+
+  if (!ctx) return;
+
+  try {
+    const now = ctx.currentTime;
+    if (secondsLeft > 0) {
+      // Short subtle tick beep for 3, 2, 1
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, now); // D5
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.08);
+    } else {
+      // High bright celebratory chime for 0s
+      [880, 1174.66].forEach((f, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(f, now + idx * 0.1);
+        gain.gain.setValueAtTime(0.15, now + idx * 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.25);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + idx * 0.1);
+        osc.stop(now + idx * 0.1 + 0.26);
+      });
+    }
+  } catch (err) {
+    console.error('Error playing countdown sound:', err);
+  }
+}
+
 // Ambient Noise Generator
 let ambientSource: AudioNode | null = null;
 let ambientGain: GainNode | null = null;

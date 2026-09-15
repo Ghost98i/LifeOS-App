@@ -39,6 +39,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   const history = useMemo(() => buildGymHistory(completedSessions), [completedSessions]);
   const weightPoints = sortedWeight(state);
   const [selectedExercise, setSelectedExercise] = useState('');
+  const [trendTab, setTrendTab] = useState<'weight' | 'strength'>('weight');
   const [sessionDate, setSessionDate] = useState(todayISO());
   const [sessionTemplateId, setSessionTemplateId] = useState<string | null>(null);
   const allExerciseNames = useMemo(() => Array.from(new Set(completedSessions.flatMap((session) => session.exercises.map((exercise) => exercise.name)))).sort(), [completedSessions]);
@@ -136,60 +137,122 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
         <Metric label="Series última sesión" value={lastCompletedSession ? String(lastSessionSets) : '—'} detail={lastCompletedSession ? `${lastCompletedSession.exercises.length} ejercicios registrados` : 'todavía sin sesiones'} />
       </section>
 
-      {/* Personal Records Cards (PRs) */}
-      <PersonalRecordsCard state={state} />
+      {/* 2-Column Desktop Grid for Core Gym Modules */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+        {/* Row 1, Col 1: Personal Records (Compact + Expandable) */}
+        <PersonalRecordsCard state={state} />
 
-      <BodyCompositionCard state={state} onUpdateState={onUpdateState} />
+        {/* Row 1, Col 2: Body Composition (Compact + Expandable) */}
+        <BodyCompositionCard state={state} onUpdateState={onUpdateState} />
 
-      {/* Trends and Charts */}
-      <details className="surface group p-4">
-        <summary className="flex cursor-pointer list-none items-center justify-between">
-          <div>
-            <p className="eyebrow">Tendencias</p>
-            <h2 className="section-title mt-1">Gráficos de progresión</h2>
-            <p className="mt-1 text-sm text-[var(--text-soft)]">Evolución de peso corporal y fuerza por ejercicio.</p>
+        {/* Row 2, Col 1: Trends & Charts */}
+        <div className="surface p-4 sm:p-5 space-y-3.5 shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-500 border border-indigo-500/20">
+                <AppIcon name="chart" className="h-4 w-4" />
+              </span>
+              <div>
+                <h2 className="text-sm font-bold text-[var(--text)]">Tendencias de Progresión</h2>
+                <p className="text-[11px] text-[var(--text-soft)]">Evolución de peso y fuerza</p>
+              </div>
+            </div>
+
+            {/* Tab Selector: Peso vs Fuerza */}
+            <div className="flex items-center gap-1 rounded-xl bg-[var(--surface-muted)] p-1">
+              <button
+                type="button"
+                onClick={() => setTrendTab('weight')}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition cursor-pointer ${
+                  trendTab === 'weight'
+                    ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
+                    : 'text-[var(--text-soft)] hover:text-[var(--text)]'
+                }`}
+              >
+                Peso
+              </button>
+              <button
+                type="button"
+                onClick={() => setTrendTab('strength')}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition cursor-pointer ${
+                  trendTab === 'strength'
+                    ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
+                    : 'text-[var(--text-soft)] hover:text-[var(--text)]'
+                }`}
+              >
+                Fuerza
+              </button>
+            </div>
           </div>
-          <span className="text-xs font-semibold text-[var(--blue)]">Abrir</span>
-        </summary>
-        <div className="mt-5 space-y-5 border-t border-[var(--border)] pt-5">
-          <section className="grid gap-4 lg:grid-cols-2">
-            <ChartCard title="Evolución de peso" empty={weightPoints.length < 2}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={weightPoints.map((point) => ({ ...point, label: fmtDate(point.date) }))}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis domain={['dataMin - 2', 'dataMax + 2']} tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Area type="monotone" dataKey="kg" stroke="#10b981" fill="#10b98133" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </ChartCard>
-            <ChartCard
-              title="Progresión de fuerza"
-              empty={!liftingData.length}
-              action={
-                allExerciseNames.length ? (
-                  <select value={chartExercise} onChange={(event) => setSelectedExercise(event.target.value)} className="max-w-[180px] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-xs">
-                    {allExerciseNames.map((name) => <option key={name}>{name}</option>)}
-                  </select>
-                ) : null
-              }
-            >
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={liftingData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="label" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="weight" stroke="#6366f1" strokeWidth={3} />
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartCard>
-          </section>
-        </div>
-      </details>
 
-      <TemplateManager templates={state.gym.routineTemplates} onUpdateState={onUpdateState} onStart={(template) => startSession(template, todayISO())} />
+          {trendTab === 'weight' ? (
+            <div>
+              <div className="h-52">
+                {weightPoints.length < 2 ? (
+                  <div className="flex h-full items-center justify-center text-xs text-[var(--text-soft)] rounded-xl border border-dashed border-[var(--border)]">
+                    Registrá al menos 2 pesos para ver la curva de evolución.
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={weightPoints.map((point) => ({ ...point, label: fmtDate(point.date) }))}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                      <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                      <YAxis domain={['dataMin - 2', 'dataMax + 2']} tick={{ fontSize: 10 }} />
+                      <Tooltip />
+                      <Area type="monotone" dataKey="kg" stroke="#10b981" fill="#10b98133" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold text-[var(--text-soft)]">
+                  Ejercicio:
+                </span>
+                {allExerciseNames.length > 0 && (
+                  <select
+                    value={chartExercise}
+                    onChange={(event) => setSelectedExercise(event.target.value)}
+                    className="max-w-[200px] rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 py-1 text-xs font-medium outline-hidden"
+                  >
+                    {allExerciseNames.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              <div className="h-52">
+                {!liftingData.length ? (
+                  <div className="flex h-full items-center justify-center text-xs text-[var(--text-soft)] rounded-xl border border-dashed border-[var(--border)]">
+                    Completá series de este ejercicio para graficar la progresión de cargas.
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={liftingData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                      <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                      <YAxis tick={{ fontSize: 10 }} />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="weight" stroke="#6366f1" strokeWidth={3} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Row 2, Col 2: Routine Templates / Planificación */}
+        <TemplateManager
+          templates={state.gym.routineTemplates}
+          onUpdateState={onUpdateState}
+          onStart={(template) => startSession(template, todayISO())}
+        />
+      </div>
 
       {/* History */}
       <section className="space-y-4">
@@ -224,27 +287,15 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
 };
 
 const Metric = ({ label, value, detail, sensitive = false }: { label: string; value: string; detail: string; sensitive?: boolean }) => (
-  <div className={`surface p-4 ${sensitive ? 'privacy-sensitive' : ''}`}>
-    <span className="eyebrow">{label}</span>
-    <strong className="number-value mt-2 block text-xl font-bold text-[var(--text)]">{value}</strong>
-    <p className="mt-1 text-xs text-[var(--text-soft)]">{detail}</p>
+  <div className={`rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 sm:p-3.5 shadow-xs ${sensitive ? 'privacy-sensitive' : ''}`}>
+    <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block">{label}</span>
+    <strong className="number-value mt-1 block text-lg sm:text-xl font-bold text-[var(--text)]">{value}</strong>
+    <p className="mt-0.5 text-[11px] text-[var(--text-soft)] truncate">{detail}</p>
   </div>
 );
 
 const Empty = ({ text }: { text: string }) => (
   <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] p-6 text-center text-xs text-[var(--text-soft)]">{text}</div>
-);
-
-const ChartCard = ({ title, empty, action, children }: { title: string; empty: boolean; action?: React.ReactNode; children: React.ReactNode }) => (
-  <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-    <div className="mb-3 flex items-center justify-between gap-2">
-      <h2 className="text-sm font-extrabold text-[var(--text)]">{title}</h2>
-      {action}
-    </div>
-    <div className="h-56">
-      {empty ? <div className="flex h-full items-center justify-center text-xs text-[var(--text-soft)]">Faltan registros para mostrar una tendencia.</div> : children}
-    </div>
-  </div>
 );
 
 interface ActiveWorkoutProps extends GimnasioViewProps {
@@ -787,35 +838,150 @@ const ActiveWorkout: React.FC<ActiveWorkoutProps> = ({ session, state, onUpdateS
   );
 };
 
-const TemplateManager = ({ templates, onUpdateState, onStart }: { templates: RoutineTemplate[]; onUpdateState: GimnasioViewProps['onUpdateState']; onStart: (template: RoutineTemplate) => void }) => {
+const TemplateManager = ({
+  templates,
+  onUpdateState,
+  onStart,
+}: {
+  templates: RoutineTemplate[];
+  onUpdateState: GimnasioViewProps['onUpdateState'];
+  onStart: (template: RoutineTemplate) => void;
+}) => {
+  const [isManaging, setIsManaging] = useState(false);
   const [name, setName] = useState('');
+
   const create = (event: React.FormEvent) => {
     event.preventDefault();
     if (!name.trim()) return;
-    onUpdateState((draft) => draft.gym.routineTemplates.push({ id: uid(), name: name.trim(), days: [], exercises: [] }));
+    onUpdateState((draft) =>
+      draft.gym.routineTemplates.push({ id: uid(), name: name.trim(), days: [], exercises: [] })
+    );
     setName('');
   };
+
+  const todayDayIndex = todayDay();
+
   return (
-    <details className="surface group">
-      <summary className="flex cursor-pointer list-none items-center justify-between p-4">
-        <div>
-          <p className="eyebrow">Planificación</p>
-          <h2 className="section-title mt-1">Plantillas de rutina</h2>
-          <p className="mt-1 text-sm text-[var(--text-soft)]">Abrilas cuando quieras editar tus rutinas predeterminadas.</p>
+    <div className="surface p-4 sm:p-5 space-y-3.5 shadow-xs">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-purple-500/10 text-purple-500 border border-purple-500/20">
+            <AppIcon name="calendar" className="h-4 w-4" />
+          </span>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-[var(--text)]">Planificación y Rutinas</h2>
+              {templates.length > 0 && (
+                <span className="rounded-full bg-purple-500/10 border border-purple-500/20 px-2 py-0.2 text-[10px] font-bold text-purple-600 dark:text-purple-400">
+                  {templates.length}
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-[var(--text-soft)]">Plantillas predeterminadas</p>
+          </div>
         </div>
-        <span className="text-xs font-semibold text-[var(--blue)]">Administrar</span>
-      </summary>
-      <div className="space-y-4 border-t border-[var(--border)] p-4">
-        <form onSubmit={create} className="flex gap-2">
-          <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Ej.: Lunes - Pecho y Tríceps" className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm outline-hidden focus:border-[var(--blue)]" />
-          <button className="primary-button">Crear</button>
-        </form>
-        {templates.map((template) => (
-          <TemplateCard key={template.id} template={template} onUpdateState={onUpdateState} onStart={() => onStart(template)} />
-        ))}
-        {!templates.length && <Empty text="Creá una plantilla para iniciar tus rutinas con un toque." />}
+
+        <button
+          type="button"
+          onClick={() => setIsManaging((prev) => !prev)}
+          className="text-xs font-bold text-[var(--blue)] hover:underline cursor-pointer"
+        >
+          {isManaging ? 'Cerrar' : '+ Administrar'}
+        </button>
       </div>
-    </details>
+
+      {!isManaging ? (
+        <div className="space-y-2 pt-1">
+          {templates.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)] p-4 text-center text-xs text-[var(--text-soft)]">
+              <p>No tenés rutinas guardadas todavía.</p>
+              <button
+                type="button"
+                onClick={() => setIsManaging(true)}
+                className="mt-2 text-xs font-bold text-[var(--blue)] hover:underline cursor-pointer"
+              >
+                + Crear primera plantilla
+              </button>
+            </div>
+          ) : (
+            <div className="divide-y divide-[var(--border)]">
+              {templates.map((template) => {
+                const isSuggestedToday = template.days?.includes(todayDayIndex);
+                return (
+                  <div
+                    key={template.id}
+                    className="flex items-center justify-between py-2.5 transition"
+                  >
+                    <div className="min-w-0 pr-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-[var(--text)] truncate">
+                          {template.name}
+                        </span>
+                        {isSuggestedToday && (
+                          <span className="rounded bg-blue-500/15 border border-blue-500/30 px-1.5 py-0.5 text-[9px] font-bold text-[var(--blue)]">
+                            Hoy
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-2 text-[11px] text-[var(--text-soft)]">
+                        <span>{template.exercises.length} ejercicios</span>
+                        {template.days && template.days.length > 0 && (
+                          <>
+                            <span>·</span>
+                            <span>{template.days.map((d) => DAY_LABELS[d].slice(0, 3)).join(', ')}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => onStart(template)}
+                      className="rounded-lg bg-[var(--blue)] px-3 py-1.5 text-xs font-bold text-white hover:bg-[var(--blue-hover)] transition cursor-pointer shrink-0"
+                    >
+                      Iniciar
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-3.5 pt-2 border-t border-[var(--border)]">
+          <form onSubmit={create} className="flex gap-2">
+            <input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Nueva rutina (ej.: Lunes - Pecho y Tríceps)"
+              className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-xs outline-hidden focus:border-[var(--blue)]"
+            />
+            <button className="primary-button text-xs px-3">Crear</button>
+          </form>
+
+          <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+            {templates.map((template) => (
+              <TemplateCard
+                key={template.id}
+                template={template}
+                onUpdateState={onUpdateState}
+                onStart={() => onStart(template)}
+              />
+            ))}
+          </div>
+
+          <div className="text-center pt-1">
+            <button
+              type="button"
+              onClick={() => setIsManaging(false)}
+              className="text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
+            >
+              ↑ Volver a resumen de rutinas
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
 

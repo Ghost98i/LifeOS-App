@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { LifeOSState } from '../types';
 import { AppIcon } from './AppIcon';
-import { playSound } from '../lib/audio';
+import { playTimerCountdownTone } from '../lib/audio';
 
 interface GymRestTimerBarProps {
   state: LifeOSState;
@@ -24,21 +24,50 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
   const [isPaused, setIsPaused] = useState(false);
   const [pausedLeft, setPausedLeft] = useState<number | null>(null);
 
+  // Keep track of countdown beeps (3s, 2s, 1s, 0s) to avoid duplicate sound triggers
+  const lastChimeSecondRef = useRef<number | null>(null);
+
+  // Sync timer with actual timestamps and handle tab wake-up
   useEffect(() => {
     if (isPaused) return;
-    setLeft(remainingSeconds(timerEndsAt));
+    const initialRem = remainingSeconds(timerEndsAt);
+    setLeft(initialRem);
     if (!timerEndsAt) return;
-    const interval = window.setInterval(() => {
+
+    const tick = () => {
       const rem = remainingSeconds(timerEndsAt);
       setLeft(rem);
+
+      // Subtle audio & vibration countdown feedback at 3s, 2s, 1s, 0s
+      if (rem <= 3 && rem >= 0 && lastChimeSecondRef.current !== rem) {
+        lastChimeSecondRef.current = rem;
+        playTimerCountdownTone(rem);
+      }
+
       if (rem <= 0) {
-        playSound('beep');
         onUpdateState((draft) => {
           draft.gym.activeTimer = null;
         });
       }
-    }, 250);
-    return () => window.clearInterval(interval);
+    };
+
+    const interval = window.setInterval(tick, 250);
+
+    // Immediate update when waking from background or screen unlock
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        tick();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleVisibility);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleVisibility);
+    };
   }, [timerEndsAt, isPaused, onUpdateState]);
 
   const progress = useMemo(() => {
@@ -50,6 +79,7 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
   const startTimer = (seconds: number) => {
     setIsPaused(false);
     setPausedLeft(null);
+    lastChimeSecondRef.current = null;
     onUpdateState((draft) => {
       draft.gym.activeTimer = {
         endsAt: Date.now() + seconds * 1000,
@@ -60,6 +90,7 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
   };
 
   const adjustTimer = (deltaSeconds: number) => {
+    lastChimeSecondRef.current = null;
     if (isPaused && pausedLeft !== null) {
       const updated = Math.max(5, pausedLeft + deltaSeconds);
       setPausedLeft(updated);
@@ -79,6 +110,7 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
       const remaining = pausedLeft ?? left;
       setIsPaused(false);
       setPausedLeft(null);
+      lastChimeSecondRef.current = null;
       onUpdateState((draft) => {
         if (draft.gym.activeTimer) {
           draft.gym.activeTimer.endsAt = Date.now() + remaining * 1000;
@@ -94,6 +126,7 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
   const stopTimer = () => {
     setIsPaused(false);
     setPausedLeft(null);
+    lastChimeSecondRef.current = null;
     onUpdateState((draft) => {
       draft.gym.activeTimer = null;
     });
@@ -137,8 +170,16 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
             <div className="flex flex-wrap items-center gap-1.5">
               <button
                 type="button"
+                onClick={() => adjustTimer(-30)}
+                className="h-8 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 text-xs font-bold text-[var(--text)] hover:bg-[var(--bg)] transition-colors cursor-pointer"
+                title="Restar 30 segundos"
+              >
+                -30s
+              </button>
+              <button
+                type="button"
                 onClick={() => adjustTimer(-15)}
-                className="h-8 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 text-xs font-bold text-[var(--text)] hover:bg-[var(--bg)] transition-colors"
+                className="h-8 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 text-xs font-bold text-[var(--text)] hover:bg-[var(--bg)] transition-colors cursor-pointer"
                 title="Restar 15 segundos"
               >
                 -15s
@@ -146,7 +187,7 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
               <button
                 type="button"
                 onClick={() => adjustTimer(15)}
-                className="h-8 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 text-xs font-bold text-[var(--text)] hover:bg-[var(--bg)] transition-colors"
+                className="h-8 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 text-xs font-bold text-[var(--text)] hover:bg-[var(--bg)] transition-colors cursor-pointer"
                 title="Sumar 15 segundos"
               >
                 +15s
@@ -154,7 +195,7 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
               <button
                 type="button"
                 onClick={() => adjustTimer(30)}
-                className="h-8 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 text-xs font-bold text-[var(--text)] hover:bg-[var(--bg)] transition-colors"
+                className="h-8 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 text-xs font-bold text-[var(--text)] hover:bg-[var(--bg)] transition-colors cursor-pointer"
                 title="Sumar 30 segundos"
               >
                 +30s
@@ -162,24 +203,26 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
               <button
                 type="button"
                 onClick={togglePause}
-                className="h-8 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 text-xs font-bold text-[var(--text)] hover:bg-[var(--bg)] transition-colors inline-flex items-center gap-1"
+                className="h-8 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 text-xs font-bold text-[var(--text)] hover:bg-[var(--bg)] transition-colors inline-flex items-center gap-1 cursor-pointer"
               >
                 {isPaused ? <><AppIcon name="play" className="h-3 w-3" /> Reanudar</> : <><AppIcon name="pause" className="h-3 w-3" /> Pausa</>}
               </button>
               <button
                 type="button"
                 onClick={resetTimer}
-                className="h-8 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 text-xs font-bold text-[var(--text)] hover:bg-[var(--bg)] transition-colors"
+                className="h-8 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 text-xs font-bold text-[var(--text)] hover:bg-[var(--bg)] transition-colors cursor-pointer"
                 title="Reiniciar temporizador"
               >
                 <AppIcon name="rotateCcw" className="h-3.5 w-3.5" />
               </button>
+              {/* Omitir descanso button */}
               <button
                 type="button"
                 onClick={stopTimer}
-                className="h-8 rounded-lg bg-rose-500/10 border border-rose-500/20 px-3 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition-colors"
+                className="h-8 rounded-lg bg-[var(--blue-soft)] border border-[var(--blue)]/30 text-[var(--blue)] px-3 text-xs font-bold hover:bg-[var(--blue)] hover:text-white transition-all cursor-pointer"
+                title="Omitir descanso y continuar"
               >
-                Detener
+                Omitir
               </button>
             </div>
           </div>
@@ -188,7 +231,7 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
           <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]">
             <div
               className={`h-full transition-all duration-300 ${
-                displaySeconds <= 10 ? 'bg-amber-500' : 'bg-[var(--blue)]'
+                displaySeconds <= 5 ? 'bg-rose-500 animate-pulse' : displaySeconds <= 10 ? 'bg-amber-500' : 'bg-[var(--blue)]'
               }`}
               style={{ width: `${progress}%` }}
             />
