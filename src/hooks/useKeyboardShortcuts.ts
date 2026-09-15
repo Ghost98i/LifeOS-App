@@ -4,6 +4,7 @@ import type { ViewType } from '../types';
 export interface KeyboardShortcutsHandlers {
   onNavigate: (view: ViewType) => void;
   onOpenQuickCapture: () => void;
+  onOpenQuickNote?: () => void;
   onToggleCommandPalette: () => void;
   onTogglePrivacy?: () => void;
   onCloseModals: () => void;
@@ -25,6 +26,7 @@ function isEditing(target: EventTarget | null): boolean {
 export function useKeyboardShortcuts({
   onNavigate,
   onOpenQuickCapture,
+  onOpenQuickNote,
   onToggleCommandPalette,
   onTogglePrivacy,
   onCloseModals,
@@ -36,6 +38,7 @@ export function useKeyboardShortcuts({
   const handlersRef = useRef({
     onNavigate,
     onOpenQuickCapture,
+    onOpenQuickNote,
     onToggleCommandPalette,
     onTogglePrivacy,
     onCloseModals,
@@ -47,6 +50,7 @@ export function useKeyboardShortcuts({
     handlersRef.current = {
       onNavigate,
       onOpenQuickCapture,
+      onOpenQuickNote,
       onToggleCommandPalette,
       onTogglePrivacy,
       onCloseModals,
@@ -59,6 +63,7 @@ export function useKeyboardShortcuts({
       const {
         onNavigate,
         onOpenQuickCapture,
+        onOpenQuickNote,
         onToggleCommandPalette,
         onTogglePrivacy,
         onCloseModals,
@@ -149,8 +154,17 @@ export function useKeyboardShortcuts({
         return;
       }
 
-      // Quick Capture universal: 'n' (or 'c')
-      if (key === 'n' || key === 'c') {
+      // Quick Note shortcut: Shift + N or Q (if handler provided)
+      if ((event.shiftKey && key === 'n') || key === 'q') {
+        if (onOpenQuickNote) {
+          event.preventDefault();
+          onOpenQuickNote();
+          return;
+        }
+      }
+
+      // Quick Capture universal: 'n' (or 'c') without Shift
+      if (!event.shiftKey && (key === 'n' || key === 'c')) {
         event.preventDefault();
         onOpenQuickCapture();
         return;

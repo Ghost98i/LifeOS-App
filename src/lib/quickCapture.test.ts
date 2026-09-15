@@ -44,3 +44,21 @@ test('captura una tarea para hoy y una nota sin abrir otros módulos', () => {
   assert.equal(state.todayExtras[0].priority, 'alta');
   assert.equal(state.notes.postits[0].text, 'Idea para el escritorio');
 });
+
+test('addQuickNote agrega un fragmento de texto directamente a state.notes.postits y valida texto no vacío', () => {
+  const state = defaultState();
+  const initialCount = state.notes.postits.length;
+  const id1 = addQuickNote(state, 'Comprar repuesto foco cocina', '2026-09-15');
+  assert.ok(id1);
+  assert.equal(state.notes.postits.length, initialCount + 1);
+  assert.equal(state.notes.postits[initialCount].text, 'Comprar repuesto foco cocina');
+  assert.equal(state.notes.postits[initialCount].date, '2026-09-15');
+
+  const id2 = addQuickNote(state, '  Recordar clave wifi invitado  ', '2026-09-15');
+  assert.ok(id2);
+  assert.notEqual(id1, id2);
+  assert.equal(state.notes.postits.length, initialCount + 2);
+  assert.equal(state.notes.postits[initialCount + 1].text, 'Recordar clave wifi invitado');
+
+  assert.throws(() => addQuickNote(state, '   '), /la nota/);
+});

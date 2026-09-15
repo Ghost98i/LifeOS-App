@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import type { DailyPriority, EffortLevel, LifeOSState, ViewType } from '../types';
 import { playSound } from '../lib/audio';
 import { WeatherWidget } from './WeatherWidget';
@@ -34,7 +34,9 @@ import {
   contextForDate,
   upsertDailyContext,
 } from '../lib/contextInsights';
+import { addQuickNote } from '../lib/quickCapture';
 import { AppIcon } from './AppIcon';
+import { QuickNoteModal } from './QuickNoteModal';
 
 export interface DashboardViewProps {
   state: LifeOSState;
@@ -43,6 +45,7 @@ export interface DashboardViewProps {
   onExportJSON: () => void;
   onOpenSearch?: () => void;
   onOpenCapture?: () => void;
+  onOpenQuickNote?: () => void;
 }
 
 /**
@@ -90,11 +93,47 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onExportJSON,
   onOpenSearch,
   onOpenCapture,
+  onOpenQuickNote,
 }) => {
   const [showQuickTaskForm, setShowQuickTaskForm] = useState(false);
   const [taskText, setTaskText] = useState('');
   const [taskPriority, setTaskPriority] = useState<'alta' | 'media' | 'baja'>('media');
   const [taskEffort, setTaskEffort] = useState<EffortLevel>('medium');
+  const [isQuickNoteOpen, setIsQuickNoteOpen] = useState(false);
+
+  const handleOpenQuickNote = useCallback(() => {
+    if (onOpenQuickNote) {
+      onOpenQuickNote();
+    } else {
+      setIsQuickNoteOpen(true);
+    }
+  }, [onOpenQuickNote]);
+
+  // Keyboard shortcut listener for Quick Note (Q or Shift+N)
+  useEffect(() => {
+    const handleDashboardShortcuts = (e: KeyboardEvent) => {
+      if (isQuickNoteOpen) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.matches('input, textarea, select, [contenteditable="true"]')) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      if (e.key.toLowerCase() === 'q' || (e.shiftKey && e.key.toLowerCase() === 'n')) {
+        e.preventDefault();
+        handleOpenQuickNote();
+      }
+    };
+    window.addEventListener('keydown', handleDashboardShortcuts);
+    return () => window.removeEventListener('keydown', handleDashboardShortcuts);
+  }, [isQuickNoteOpen, handleOpenQuickNote]);
+
+  const handleSaveQuickNote = (snippet: string) => {
+    onUpdateState((draft) => {
+      addQuickNote(draft, snippet, todayISO());
+    });
+    playSound('success');
+    showToast('Nota rápida guardada en Notas', 'success');
+    setIsQuickNoteOpen(false);
+  };
 
   // Mini Focus / Pomodoro Timer
   const [timerSeconds, setTimerSeconds] = useState(25 * 60);
@@ -515,6 +554,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Action Controls in Header */}
         <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
           <WeatherWidget />
+          <button
+            type="button"
+            onClick={handleOpenQuickNote}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-bold text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] shadow-xs transition cursor-pointer"
+            title="Nota rápida (Atajo Q o ⇧N)"
+          >
+            <AppIcon name="note" className="h-3.5 w-3.5 text-amber-500" />
+            <span className="hidden sm:inline">Nota rápida</span>
+            <span className="sm:hidden">Nota</span>
+            <kbd className="hidden sm:inline-block rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[9px] font-mono text-[var(--text-faint)]">
+              Q
+            </kbd>
+          </button>
           {onOpenCapture && (
             <button
               type="button"
@@ -1135,6 +1187,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </section>
+
+      <QuickNoteModal
+        open={isQuickNoteOpen}
+        onClose={() => setIsQuickNoteOpen(false)}
+        onSave={handleSaveQuickNote}
+      />
     </div>
   );
 };
