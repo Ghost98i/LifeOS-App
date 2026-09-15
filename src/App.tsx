@@ -37,10 +37,11 @@ import {
   type SyncRevisionMap,
 } from './lib/syncModel';
 
+import { AppIcon } from './components/AppIcon';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 
-import { DashboardView } from './components/DashboardView';
+import { DashboardView, DashboardSkeleton } from './components/DashboardView';
 import { CheckoutModal } from './components/CheckoutModal';
 import { MobileQuickCapture } from './components/MobileQuickCapture';
 import { MobileNav } from './components/MobileNav';
@@ -533,7 +534,7 @@ export default function App() {
     const handleShortcuts = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
-        setIsSearchOpen(true);
+        setIsSearchOpen((prev) => !prev);
         return;
       }
       if (event.key === 'Escape') {
@@ -664,7 +665,7 @@ export default function App() {
           onCloudSignOut={handleCloudSignOut}
         />
 
-        <main className={`mx-auto w-full max-w-[1440px] flex-1 space-y-6 p-4 pb-28 sm:p-6 sm:pb-28 lg:p-8 ${state.settings.privacyMode && ['finanzas', 'reventa', 'config'].includes(currentView) ? 'privacy-screen' : ''}`}>
+        <main className="mx-auto w-full max-w-[1440px] flex-1 space-y-6 p-4 pb-28 sm:p-6 sm:pb-28 lg:p-8">
           {cloudSyncConfigured && !cloudUser && (
             <div className="flex flex-col gap-3 rounded-2xl border border-blue-500/25 bg-blue-500/10 p-4 sm:flex-row sm:items-center">
               <div className="flex-1">
@@ -686,13 +687,14 @@ export default function App() {
             </div>
           )}
           {/* View Router */}
-          <Suspense fallback={<div role="status" className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-sm font-bold text-[var(--text-soft)]">Abriendo módulo…</div>}>
+          <Suspense fallback={<DashboardSkeleton />}>
           {currentView === 'dashboard' && (
             <DashboardView
               state={state}
               onUpdateState={updateState}
               onNavigate={handleNavigate}
               onExportJSON={handleExportJSON}
+              onOpenSearch={() => { setSearchQuery(''); setIsSearchOpen(true); }}
             />
           )}
 
@@ -764,6 +766,9 @@ export default function App() {
         onNavigate={handleNavigate}
         onOpenCapture={() => setIsQuickCaptureOpen(true)}
         onOpenMore={() => setIsOpenMobile(true)}
+        syncStatus={syncStatus}
+        privacyMode={state.settings.privacyMode}
+        onTogglePrivacy={handleTogglePrivacy}
       />
 
       <MobileQuickCapture
@@ -783,7 +788,23 @@ export default function App() {
         initialQuery={searchQuery}
         onClose={() => setIsSearchOpen(false)}
         onNavigate={handleSearchNavigate}
+        onUpdateState={updateState}
+        onOpenCapture={() => setIsQuickCaptureOpen(true)}
+        onToggleTheme={handleToggleTheme}
+        onTogglePrivacy={handleTogglePrivacy}
       />
+      <button
+        type="button"
+        onClick={() => {
+          setSearchQuery('');
+          setIsSearchOpen(true);
+        }}
+        className="fixed bottom-20 right-3.5 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)]/90 text-[var(--text)] shadow-lg backdrop-blur-md transition-all active:scale-95 lg:hidden"
+        aria-label="Abrir Paleta de Comandos (Cmd + K)"
+        title="Paleta de Comandos (Ctrl + K)"
+      >
+        <AppIcon name="search" className="h-4 w-4 text-[var(--blue)]" />
+      </button>
       <ToastViewport />
       <GymRestOverlay state={state} onUpdateState={updateState} onOpenGym={() => handleNavigate('gimnasio')} />
       {!__LIFEOS_PORTABLE__ && <PwaUpdatePrompt />}

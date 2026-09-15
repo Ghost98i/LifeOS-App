@@ -38,9 +38,12 @@ import {
   cashFlow30Days,
 } from '../lib/calculations';
 import { FinanceOperationsCard } from './FinanceOperationsCard';
+import { FinanceTransactionTable } from './FinanceTransactionTable';
+import { FinanceBudgetProgress } from './FinanceBudgetProgress';
 import { addAccount, addTransaction, deleteAccount, deleteTransaction, updateTransaction } from '../lib/financeFlows';
 import { showToast } from '../lib/toast';
 import { AppIcon } from './AppIcon';
+import { PrivacyAmount } from './PrivacyAmount';
 
 interface FinanzasViewProps {
   state: LifeOSState;
@@ -61,7 +64,6 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   const [txDate, setTxDate] = useState(todayISO());
   const [txNote, setTxNote] = useState('');
   const [editingTxId, setEditingTxId] = useState<string | null>(null);
-  const [calmMode, setCalmMode] = useState(false);
 
   // Accounts, Subs, Debts, Invs forms
   const [accName, setAccName] = useState('');
@@ -90,15 +92,6 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   const balance = ingreso - gastado;
   const cmp = calcMonthComparison(state);
   const catSpent = calcSpentByCategory(state, 0);
-  const budgetEntries = state.finance.categories.map((category) => ({
-    category,
-    spent: catSpent[category] || 0,
-    budget: Number(state.finance.budgets[category] || 0),
-  }));
-  const configuredBudgets = budgetEntries.filter((entry) => entry.budget > 0);
-  const budgetTotal = configuredBudgets.reduce((sum, entry) => sum + entry.budget, 0);
-  const budgetSpent = configuredBudgets.reduce((sum, entry) => sum + entry.spent, 0);
-  const exceededBudgets = configuredBudgets.filter((entry) => entry.spent > entry.budget).length;
   const subsTotal = calcSubscriptionsTotal(state);
   const cashFlow = cashFlow30Days(state);
   const rstats = resaleStats(state);
@@ -315,16 +308,56 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         <p className="page-subtitle">
           Primero lo que tenés y lo que viene. El análisis queda disponible sin ocupar toda la pantalla.
         </p></div>
-        <button type="button" onClick={() => setCalmMode((value) => !value)} className="secondary-button">{calmMode ? 'Mostrar saldos' : 'Ocultar saldos'}</button>
+        <button
+          type="button"
+          onClick={() => {
+            onUpdateState((draft) => {
+              draft.settings.privacyMode = !draft.settings.privacyMode;
+            });
+          }}
+          className="secondary-button flex items-center gap-1.5"
+          title="Alternar Stream Guard (Modo Privacidad)"
+        >
+          <AppIcon name={state.settings.privacyMode ? 'eyeOff' : 'eye'} className="h-4 w-4" />
+          <span>{state.settings.privacyMode ? 'Mostrar saldos' : 'Modo Privacidad'}</span>
+        </button>
       </div>
 
-      <section className="surface privacy-sensitive p-4 sm:p-6">
+      <section className="surface p-4 sm:p-6">
         <div className="grid gap-4 lg:grid-cols-[1.2fr_.8fr]">
-          <div className="min-w-0"><span className="eyebrow">Disponible ahora</span><h2 className="number-value mt-2 text-3xl font-bold tracking-tight text-[var(--text)] sm:text-4xl">{calmMode ? '$U ••••' : fmtMoney(disponible)}</h2><p className="mt-2 text-sm text-[var(--text-soft)]">Suma de las cuentas activas. Las conciliaciones mantienen este total alineado con el dinero real.</p></div>
-          <div className="surface-muted p-4"><div className="flex items-center gap-2 text-[var(--blue)]"><AppIcon name="calendarDays" className="h-4 w-4"/><span className="eyebrow text-current">Después de próximos pagos</span></div><strong className={`number-value mt-2 block text-2xl font-bold ${!calmMode && cashFlow.projectedBalance < 0 ? 'text-rose-500' : 'text-[var(--text)]'}`}>{calmMode ? '$U ••••' : fmtMoney(cashFlow.projectedBalance)}</strong><p className="mt-1 text-xs text-[var(--text-soft)]">{calmMode ? 'Montos ocultos temporalmente.' : `${fmtMoney(cashFlow.committed)} comprometido hasta ${fmtDate(cashFlow.horizonIso)}.`}</p></div>
+          <div className="min-w-0">
+            <span className="eyebrow">Disponible ahora</span>
+            <PrivacyAmount as="h2" className="number-value mt-2 text-3xl font-bold tracking-tight text-[var(--text)] sm:text-4xl">
+              {fmtMoney(disponible)}
+            </PrivacyAmount>
+            <p className="mt-2 text-sm text-[var(--text-soft)]">Suma de las cuentas activas. Las conciliaciones mantienen este total alineado con el dinero real.</p>
+          </div>
+          <div className="surface-muted p-4">
+            <div className="flex items-center gap-2 text-[var(--blue)]">
+              <AppIcon name="calendarDays" className="h-4 w-4"/>
+              <span className="eyebrow text-current">Después de próximos pagos</span>
+            </div>
+            <PrivacyAmount as="strong" className={`number-value mt-2 block text-2xl font-bold ${cashFlow.projectedBalance < 0 ? 'text-rose-500' : 'text-[var(--text)]'}`}>
+              {fmtMoney(cashFlow.projectedBalance)}
+            </PrivacyAmount>
+            <p className="mt-1 text-xs text-[var(--text-soft)]">
+              <PrivacyAmount>{fmtMoney(cashFlow.committed)}</PrivacyAmount> comprometido hasta {fmtDate(cashFlow.horizonIso)}.
+            </p>
+          </div>
         </div>
         <div className="mt-5 flex items-center justify-between"><h3 className="text-sm font-bold text-[var(--text)]">Próximos pagos</h3><span className="text-xs text-[var(--text-faint)]">30 días</span></div>
-        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">{cashFlow.commitments.map((item) => <div key={item.id} className="min-w-[160px] rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2.5"><span className="block truncate text-xs font-semibold text-[var(--text-soft)]">{item.label}</span><strong className="number-value mt-1 block text-sm">−{calmMode ? '$U ••••' : fmtMoney(item.amount)}</strong><span className="block text-[10px] text-[var(--text-faint)]">{item.dueDate ? fmtDate(item.dueDate) : 'fecha pendiente'}</span></div>)}{!cashFlow.commitments.length && <p className="text-sm text-[var(--text-soft)]">No hay pagos próximos cargados.</p>}</div>
+        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+          {cashFlow.commitments.map((item) => (
+            <div key={item.id} className="min-w-[160px] rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2.5">
+              <span className="block truncate text-xs font-semibold text-[var(--text-soft)]">{item.label}</span>
+              <PrivacyAmount as="strong" className="number-value mt-1 block text-sm">
+                −{fmtMoney(item.amount)}
+              </PrivacyAmount>
+              <span className="block text-[10px] text-[var(--text-faint)]">{item.dueDate ? fmtDate(item.dueDate) : 'fecha pendiente'}</span>
+            </div>
+          ))}
+          {!cashFlow.commitments.length && <p className="text-sm text-[var(--text-soft)]">No hay pagos próximos cargados.</p>}
+        </div>
         <p className="mt-3 text-[10px] text-[var(--text-faint)]">La estimación no presupone ingresos futuros ni marca automáticamente un pago como realizado.</p>
       </section>
 
@@ -332,16 +365,16 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       <details className="surface group p-4"><summary className="flex cursor-pointer list-none items-center justify-between"><div><p className="eyebrow">Resumen mensual</p><h2 className="section-title mt-1">Indicadores y patrimonio</h2></div><span className="text-xs font-semibold text-[var(--blue)]">Ver detalle</span></summary><div className="mt-4 grid grid-cols-2 gap-3 border-t border-[var(--border)] pt-4 lg:grid-cols-4">
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
           <span className="eyebrow">Ingresado este mes</span>
-          <div className="number-value mt-2 text-xl font-bold text-[var(--text)] sm:text-2xl">{calmMode ? '$U ••••' : fmtMoney(ingreso)}</div>
+          <PrivacyAmount className="number-value mt-2 text-xl font-bold text-[var(--text)] sm:text-2xl">{fmtMoney(ingreso)}</PrivacyAmount>
         </div>
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
           <span className="eyebrow">Patrimonio</span>
-          <div className="text-xl sm:text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{calmMode ? '$U ••••' : fmtMoney(patrimonio)}</div>
+          <PrivacyAmount className="text-xl sm:text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{fmtMoney(patrimonio)}</PrivacyAmount>
           <p className="text-[10px] text-[var(--text-faint)] mt-0.5">cuentas + inversiones − deudas</p>
         </div>
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
           <span className="eyebrow">Gastado este mes</span>
-          <div className="text-xl sm:text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{fmtMoney(gastado)}</div>
+          <PrivacyAmount className="text-xl sm:text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{fmtMoney(gastado)}</PrivacyAmount>
           <span
             className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded-md mt-1 ${
               cmp.dir === 'up'
@@ -360,25 +393,25 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         </div>
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
           <span className="eyebrow">Balance del mes</span>
-          <div className={`text-xl sm:text-2xl font-extrabold font-mono mt-1 ${balance < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+          <PrivacyAmount className={`text-xl sm:text-2xl font-extrabold font-mono mt-1 ${balance < 0 ? 'text-red-500' : 'text-emerald-500'}`}>
             {fmtMoney(balance)}
-          </div>
+          </PrivacyAmount>
         </div>
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
           <span className="eyebrow">Gasto fijo</span>
-          <div className="text-xl font-extrabold font-mono mt-1 text-[var(--text)]">{fmtMoney(fijoMes)}</div>
+          <PrivacyAmount className="text-xl font-extrabold font-mono mt-1 text-[var(--text)]">{fmtMoney(fijoMes)}</PrivacyAmount>
           <p className="text-[10px] text-[var(--text-faint)] mt-0.5">comprometido de antemano</p>
         </div>
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
           <span className="eyebrow">Gasto variable</span>
-          <div className="text-xl font-extrabold font-mono mt-1 text-[var(--text)]">
+          <PrivacyAmount className="text-xl font-extrabold font-mono mt-1 text-[var(--text)]">
             {fmtMoney(gastoVariable)}
-          </div>
+          </PrivacyAmount>
           <p className="text-[10px] text-[var(--text-faint)] mt-0.5">gastos del mes que no son fijos</p>
         </div>
         <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
           <span className="eyebrow">Ganancia reventa</span>
-          <div className="text-xl font-extrabold font-mono mt-1 text-[var(--text)]">{fmtMoney(rstats.gananciaTotal)}</div>
+          <PrivacyAmount className="text-xl font-extrabold font-mono mt-1 text-[var(--text)]">{fmtMoney(rstats.gananciaTotal)}</PrivacyAmount>
           <p className="text-[10px] text-[var(--text-faint)] mt-0.5">histórico</p>
         </div>
       </div></details>
@@ -484,177 +517,25 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         </form>
       </div>
 
-      {/* Transaction History grouped by month */}
-      <div className="space-y-2">
-        <h2 className="text-base font-bold text-[var(--text)] flex items-center gap-2">
-          Historial de movimientos
-          <span className="text-xs font-semibold text-[var(--text-faint)] bg-[var(--bg)] px-2.5 py-0.5 rounded-md border border-[var(--border)]">
-            {state.finance.transactions.length}
-          </span>
-        </h2>
-        <p className="text-xs text-[var(--text-soft)]">
-          Gastado este año: <strong className="font-mono text-[var(--text)]">{fmtMoney(totalGastadoAnio)}</strong> · agrupado por mes, tocá para expandir.
-        </p>
+      {/* Visual Monthly Budgets Progress */}
+      <FinanceBudgetProgress
+        categories={state.finance.categories}
+        catSpent={catSpent}
+        budgets={state.finance.budgets}
+        onSetBudget={handleSetBudget}
+      />
 
-        {state.finance.transactions.length === 0 ? (
-          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-6 text-center text-xs text-[var(--text-faint)]">
-            Todavía no cargaste movimientos.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {monthGroups.map((g) => (
-              <details
-                key={g.key}
-                open={g.isCurrent}
-                className="bg-[var(--card)] border border-[var(--border)] rounded-xl overflow-hidden group"
-              >
-                <summary className="p-3.5 bg-[var(--bg)] flex flex-wrap items-center justify-between gap-2 font-semibold text-xs sm:text-sm cursor-pointer select-none">
-                  <span className="text-[var(--text)]">{g.label}</span>
-                  <div className="flex items-center gap-3 font-mono text-xs">
-                    <span className="text-[var(--text-soft)]">{g.txs.length} mov.</span>
-                    <span className="text-red-500 font-bold">− {fmtMoney(g.totalGasto)}</span>
-                    <span className="text-emerald-500 font-bold">+ {fmtMoney(g.totalIngreso)}</span>
-                  </div>
-                </summary>
-
-                <div className="p-3">
-                  <div className="space-y-2 md:hidden">
-                    {g.txs.map((t) => (
-                      <article key={t.id} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-extrabold text-[var(--text)]">{t.note || t.category}</p>
-                            <p className="mt-1 text-[11px] text-[var(--text-soft)]">{fmtDate(t.date)} · {state.finance.accounts.find((a) => a.id === t.accountId)?.name || 'Sin cuenta'} · {t.category}</p>
-                          </div>
-                          <strong className={`shrink-0 font-mono text-sm ${t.type === 'gasto' ? 'text-red-500' : 'text-emerald-500'}`}>{t.type === 'gasto' ? '−' : '+'} {fmtMoney(t.amount)}</strong>
-                        </div>
-                        <div className="mt-2 flex items-center justify-between">
-                          <span className="rounded-full bg-blue-500/10 px-2 py-1 text-[10px] font-bold text-blue-500">{t.fixed}{t.origin === 'adjustment' ? ' · conciliación' : ''}</span>
-                          <div className="flex gap-1"><button onClick={() => beginEditTx(t)} className="rounded-lg px-2 py-1 text-xs font-bold text-[var(--blue)]">Editar</button><button onClick={() => handleDeleteTx(t.id)} aria-label={`Eliminar movimiento ${t.note || t.category}`} className="rounded-lg px-2 py-1 text-xs font-bold text-[var(--text-faint)] hover:bg-red-500/10 hover:text-red-500">Eliminar</button></div>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                  <div className="hidden overflow-x-auto md:block">
-                  <table className="w-full text-xs text-left border-collapse">
-                    <thead>
-                      <tr className="border-b border-[var(--border)] text-[var(--text-faint)] uppercase text-[10px]">
-                        <th className="py-2 px-2">Fecha</th>
-                        <th className="py-2 px-2">Tipo</th>
-                        <th className="py-2 px-2">Cuenta</th>
-                        <th className="py-2 px-2">Categoría</th>
-                        <th className="py-2 px-2">Marca</th>
-                        <th className="py-2 px-2">Nota</th>
-                        <th className="py-2 px-2 text-right">Monto</th>
-                        <th className="py-2 px-2"></th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[var(--border)]">
-                      {g.txs.map((t) => (
-                        <tr key={t.id} className="hover:bg-[var(--bg)]/50 transition-colors">
-                          <td className="py-2 px-2 font-mono text-[var(--text-soft)]">{fmtDate(t.date)}</td>
-                          <td className="py-2 px-2">
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                t.type === 'gasto'
-                                  ? 'bg-red-500/10 text-red-500'
-                                  : 'bg-emerald-500/10 text-emerald-500'
-                              }`}
-                            >
-                              {t.type}
-                            </span>
-                          </td>
-                          <td className="py-2 px-2 text-[var(--text-soft)]">
-                            {state.finance.accounts.find((a) => a.id === t.accountId)?.name || '—'}
-                          </td>
-                          <td className="py-2 px-2 font-medium text-[var(--text)]">{t.category}</td>
-                          <td className="py-2 px-2">
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-500">
-                              {t.fixed}
-                            </span>
-                          </td>
-                          <td className="py-2 px-2 text-[var(--text-faint)] truncate max-w-[150px]">
-                            {t.note || '—'}
-                          </td>
-                          <td className="py-2 px-2 font-mono font-bold text-right text-[var(--text)]">
-                            {fmtMoney(t.amount)}
-                          </td>
-                          <td className="py-2 px-2 text-right">
-                            <button onClick={() => beginEditTx(t)} className="mr-2 text-[10px] font-bold text-[var(--blue)]">Editar</button>
-                            <button
-                              onClick={() => handleDeleteTx(t.id)}
-                              aria-label={`Eliminar movimiento ${t.note || t.category}`}
-                              className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1"
-                            >
-                              ✕
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-              </details>
-            ))}
-          </div>
-        )}
-      </div>
+      {/* Transaction History Clean Table with 1-Click Filters */}
+      <FinanceTransactionTable
+        transactions={state.finance.transactions}
+        accounts={state.finance.accounts}
+        categories={state.finance.categories}
+        onEdit={beginEditTx}
+        onDelete={handleDeleteTx}
+        totalGastadoAnio={totalGastadoAnio}
+      />
 
       <details className="surface group"><summary className="flex cursor-pointer list-none items-center justify-between p-4"><div><p className="eyebrow">Mantenimiento</p><h2 className="section-title mt-1">Cuentas, transferencias y conciliaciones</h2><p className="mt-1 text-sm text-[var(--text-soft)]">Herramientas para ordenar saldos; separadas del uso diario.</p></div><span className="text-xs font-semibold text-[var(--blue)]">Abrir</span></summary><div className="border-t border-[var(--border)] p-3 sm:p-4"><FinanceOperationsCard state={state} onUpdateState={onUpdateState} /></div></details>
-
-      {/* Category Budgets */}
-      <details className="group overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xs">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
-          <div>
-            <h2 className="text-sm font-bold text-[var(--text)]">Presupuesto por categoría</h2>
-            <p className="mt-0.5 text-xs text-[var(--text-soft)]">
-              {configuredBudgets.length === 0 ? 'Sin presupuestos configurados' : `${fmtMoney(budgetSpent)} de ${fmtMoney(budgetTotal)} este mes`}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {exceededBudgets > 0 && <span className="rounded-lg bg-red-500/10 px-2 py-1 text-[10px] font-bold text-red-500">⚠ {exceededBudgets} excedido(s)</span>}
-            <span className="text-xs font-bold text-[var(--blue)] group-open:hidden">Abrir ▾</span>
-            <span className="hidden text-xs font-bold text-[var(--blue)] group-open:inline">Cerrar ▴</span>
-          </div>
-        </summary>
-        <div className="divide-y divide-[var(--border)] space-y-3 border-t border-[var(--border)] p-4">
-          {state.finance.categories.map((cat) => {
-            const spent = catSpent[cat] || 0;
-            const budget = Number(state.finance.budgets[cat] || 0);
-            const pct = budget > 0 ? (spent / budget) * 100 : 0;
-            const over = budget > 0 && spent > budget;
-
-            return (
-              <div key={cat} className="pt-2 flex flex-col gap-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs sm:text-sm text-[var(--text)]">{cat}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-xs text-[var(--text-soft)]">{fmtMoney(spent)} /</span>
-                    <input
-                      type="number"
-                      value={budget || ''}
-                      onChange={(e) => handleSetBudget(cat, e.target.value)}
-                      placeholder="presupuesto"
-                      className="w-24 px-2 py-1 text-xs font-mono rounded-md bg-[var(--bg-elevated)] border border-[var(--border)] text-right"
-                    />
-                    {over && <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/10 text-red-500">⚠ excedido</span>}
-                  </div>
-                </div>
-
-                {budget > 0 && (
-                  <div className="w-full h-2 rounded-full bg-[var(--bg)] overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${over ? 'bg-red-500' : 'bg-emerald-500'}`}
-                      style={{ width: `${Math.min(pct, 100)}%` }}
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </details>
 
       {/* Expense Charts with Recharts */}
       <details className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4"><summary className="cursor-pointer list-none text-sm font-extrabold text-[var(--text)]">Análisis y gráficos <span className="ml-1 text-xs font-normal text-[var(--text-soft)]">· abrir cuando los necesites</span></summary><div className="mt-5 space-y-6">
@@ -720,7 +601,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                         </div>
                         <div className="flex items-center gap-3 font-mono">
                           <span className="text-[var(--text-soft)] text-[11px]">{pct}%</span>
-                          <span className="font-bold text-[var(--text)]">{fmtMoney(item.value)}</span>
+                          <PrivacyAmount as="span" className="font-bold text-[var(--text)]">{fmtMoney(item.value)}</PrivacyAmount>
                         </div>
                       </div>
                     );
@@ -816,7 +697,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         <div className="space-y-2">
           <h2 className="text-sm font-bold text-[var(--text)] flex items-center justify-between">
             Cuentas
-            <span className="text-xs font-mono text-[var(--text-soft)]">{fmtMoney(disponible)}</span>
+            <PrivacyAmount as="span" className="text-xs font-mono text-[var(--text-soft)]">{fmtMoney(disponible)}</PrivacyAmount>
           </h2>
           <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
             <form onSubmit={handleAddAccount} className="flex gap-2">
@@ -847,7 +728,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                 <div key={a.id} className="py-2 flex items-center justify-between text-xs sm:text-sm">
                   <span className="font-medium text-[var(--text)]">{a.name}</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-right"><strong className="block font-mono text-xs">{fmtMoney(a.balance)}</strong><span className="text-[10px] text-[var(--text-faint)]">{a.lastReconciledAt ? `Conciliada ${fmtDate(a.lastReconciledAt)}` : 'Sin conciliar'}</span></span>
+                    <span className="text-right"><PrivacyAmount as="strong" className="block font-mono text-xs">{fmtMoney(a.balance)}</PrivacyAmount><span className="text-[10px] text-[var(--text-faint)]">{a.lastReconciledAt ? `Conciliada ${fmtDate(a.lastReconciledAt)}` : 'Sin conciliar'}</span></span>
                     <button
                       onClick={() => handleDeleteAccount(a.id)}
                       className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1"
@@ -865,7 +746,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         <div className="space-y-2">
           <h2 className="text-sm font-bold text-[var(--text)] flex items-center justify-between">
             Suscripciones
-            <span className="text-xs font-mono text-[var(--text-soft)]">{fmtMoney(subsTotal)}/mes</span>
+            <PrivacyAmount as="span" className="text-xs font-mono text-[var(--text-soft)]">{fmtMoney(subsTotal)}/mes</PrivacyAmount>
           </h2>
           <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
             <form onSubmit={handleAddSubscription} className="flex flex-wrap gap-2">
@@ -900,7 +781,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   <div key={s.id} className="py-2 flex items-center justify-between text-xs sm:text-sm">
                     <span className="font-medium text-[var(--text)]">{s.name}</span>
                     <div className="flex items-center gap-3">
-                      <span className="text-right font-mono text-xs">{fmtMoney(s.amount)}<small className="block font-sans text-[9px] text-[var(--text-faint)]">{s.dueDay ? `día ${s.dueDay}` : 'sin fecha'}</small></span>
+                      <span className="text-right font-mono text-xs"><PrivacyAmount as="span">{fmtMoney(s.amount)}</PrivacyAmount><small className="block font-sans text-[9px] text-[var(--text-faint)]">{s.dueDay ? `día ${s.dueDay}` : 'sin fecha'}</small></span>
                       <button
                         onClick={() => handleDeleteSubscription(s.id)}
                         className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1"
@@ -919,7 +800,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         <div className="space-y-2">
           <h2 className="text-sm font-bold text-[var(--text)] flex items-center justify-between">
             Deudas
-            <span className="text-xs font-mono text-[var(--text-soft)]">{fmtMoney(calcDebtsTotal(state))}</span>
+            <PrivacyAmount as="span" className="text-xs font-mono text-[var(--text-soft)]">{fmtMoney(calcDebtsTotal(state))}</PrivacyAmount>
           </h2>
           <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
             <form onSubmit={handleAddDebt} className="flex flex-wrap gap-2">
@@ -955,7 +836,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   <div key={d.id} className="py-2 flex items-center justify-between text-xs sm:text-sm">
                     <span className="font-medium text-[var(--text)]">{d.name}</span>
                     <div className="flex items-center gap-3">
-                      <span className="text-right font-mono text-xs">{fmtMoney(d.amount)}<small className="block font-sans text-[9px] text-[var(--text-faint)]">{d.monthlyPayment ? `cuota ${fmtMoney(d.monthlyPayment)}` : 'sin cuota'}{d.dueDate ? ` · ${fmtDate(d.dueDate)}` : ''}</small></span>
+                      <span className="text-right font-mono text-xs"><PrivacyAmount as="span">{fmtMoney(d.amount)}</PrivacyAmount><small className="block font-sans text-[9px] text-[var(--text-faint)]">{d.monthlyPayment ? <>cuota <PrivacyAmount as="span">{fmtMoney(d.monthlyPayment)}</PrivacyAmount></> : 'sin cuota'}{d.dueDate ? ` · ${fmtDate(d.dueDate)}` : ''}</small></span>
                       <button
                         onClick={() => handleDeleteDebt(d.id)}
                         className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1"
@@ -974,7 +855,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         <div className="space-y-2">
           <h2 className="text-sm font-bold text-[var(--text)] flex items-center justify-between">
             Inversiones
-            <span className="text-xs font-mono text-[var(--text-soft)]">{fmtMoney(calcInvestmentsTotal(state))}</span>
+            <PrivacyAmount as="span" className="text-xs font-mono text-[var(--text-soft)]">{fmtMoney(calcInvestmentsTotal(state))}</PrivacyAmount>
           </h2>
           <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
             <form onSubmit={handleAddInvestment} className="flex gap-2">
@@ -1008,7 +889,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   <div key={i.id} className="py-2 flex items-center justify-between text-xs sm:text-sm">
                     <span className="font-medium text-[var(--text)]">{i.name}</span>
                     <div className="flex items-center gap-3">
-                      <span className="font-mono text-xs">{fmtMoney(i.amount)}</span>
+                      <PrivacyAmount as="span" className="font-mono text-xs">{fmtMoney(i.amount)}</PrivacyAmount>
                       <button
                         onClick={() => handleDeleteInvestment(i.id)}
                         className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1"

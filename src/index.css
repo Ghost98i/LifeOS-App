@@ -204,36 +204,105 @@ button:active {
   transform: scale(0.98);
 }
 
-.privacy-mode .privacy-sensitive,
-.privacy-mode .privacy-screen {
+/* Privacy Mode / Stream Guard */
+.privacy-mode .privacy-amount,
+.privacy-mode .privacy-blur {
+  filter: blur(8px);
+  user-select: none;
+  transition: filter 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+
+/* Hover reveal on desktop */
+@media (hover: hover) {
+  .privacy-mode .privacy-amount:hover,
+  .privacy-mode .privacy-blur:hover {
+    filter: blur(0) !important;
+  }
+}
+
+/* Tap / focus / active / revealed class for touch screens & mobile */
+.privacy-mode .privacy-amount:active,
+.privacy-mode .privacy-amount:focus,
+.privacy-mode .privacy-amount.revealed,
+.privacy-mode .privacy-blur:active,
+.privacy-mode .privacy-blur:focus,
+.privacy-mode .privacy-blur.revealed {
+  filter: blur(0) !important;
+}
+
+.privacy-mode .privacy-sensitive {
   position: relative;
   user-select: none;
+  filter: blur(8px);
+  transition: filter 0.18s ease;
+  cursor: pointer;
 }
 
-.privacy-mode .privacy-sensitive > *,
-.privacy-mode .privacy-screen > * {
-  filter: blur(12px);
-  pointer-events: none;
-}
-
-.privacy-mode .privacy-sensitive::after,
-.privacy-mode .privacy-screen::after {
-  content: "Oculto por Stream Guard";
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  display: grid;
-  place-items: center;
-  border-radius: inherit;
-  background: color-mix(in srgb, var(--card) 82%, transparent);
-  color: var(--text-soft);
-  font-size: 12px;
-  font-weight: 800;
-  backdrop-filter: blur(8px);
+.privacy-mode .privacy-sensitive:hover,
+.privacy-mode .privacy-sensitive:active,
+.privacy-mode .privacy-sensitive:focus,
+.privacy-mode .privacy-sensitive.revealed {
+  filter: blur(0) !important;
 }
 
 .toast-enter {
   animation: toast-enter 180ms ease-out both;
+}
+
+/* Bento & Skeleton Utility Styles */
+.skeleton {
+  background-color: var(--surface-muted);
+  border-radius: 0.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.07) 20%,
+    rgba(255, 255, 255, 0.16) 60%,
+    rgba(255, 255, 255, 0)
+  );
+  animation: shimmer 1.8s infinite;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.bento-card {
+  position: relative;
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: var(--card-shadow);
+}
+
+.dark .bento-card {
+  border-color: #1e293b; /* border-slate-800 */
+  background-color: rgba(16, 28, 45, 0.72);
+  backdrop-filter: blur(12px);
+}
+
+.bento-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--card-shadow-hover);
+  transform: translateY(-1.5px);
+}
+
+.dark .bento-card:hover {
+  border-color: #334155; /* border-slate-700 */
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
 }
 
 @keyframes toast-enter {

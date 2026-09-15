@@ -8,7 +8,6 @@
     "build": "vite build",
     "build:portable": "vite build --mode portable && node scripts/build-portable.mjs",
     "release": "npm run lint && npm test && npm run build:portable && npm run build && node scripts/build-release.mjs",
-    "start": "vite preview --host 0.0.0.0",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
