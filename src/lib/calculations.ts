@@ -214,32 +214,178 @@ export function weightVariation(state: LifeOSState): number | null {
   return c - f;
 }
 
+export function calcIMC(state: LifeOSState): number | null {
+  const weight = currentWeight(state);
+  const heightCm = state.profile?.height;
+  if (!weight || !heightCm || heightCm <= 0) return null;
+  const heightM = heightCm / 100;
+  return +(weight / (heightM * heightM)).toFixed(1);
+}
+
+export function imcCategory(imc: number | null): { label: string; color: 'blue' | 'green' | 'amber' | 'red' } {
+  if (imc == null) return { label: 'Sin datos', color: 'blue' };
+  if (imc < 18.5) return { label: 'Bajo peso', color: 'blue' };
+  if (imc < 25) return { label: 'Normal', color: 'green' };
+  if (imc < 30) return { label: 'Sobrepeso', color: 'amber' };
+  return { label: 'Obesidad', color: 'red' };
+}
+
+
 export function trainedDatesSet(state: LifeOSState): Set<string> {
   return new Set(state.gym.sessions.map((s) => s.date));
 }
 
-export function calcGymStreak(state: LifeOSState): number {
-  const set = trainedDatesSet(state);
-  let streak = 0;
-  const d = new Date();
+export interface GymStreakDetails {
+  streakDays: number;
+  workoutCount: number;
+  restDaysCount: number;
+  weeksStreak: number;
+  isTrainedToday: boolean;
+  isRestToday: boolean;
+  status: 'trained_today' | 'rest_today' | 'pending_today' | 'broken';
+  label: string;
+}
+
+export function calcGymStreakDetails(state: LifeOSState): GymStreakDetails {
+  const sessions = state.gym.sessions || [];
+  if (sessions.length === 0) {
+    return {
+      streakDays: 0,
+      workoutCount: 0,
+      restDaysCount: 0,
+      weeksStreak: 0,
+      isTrainedToday: false,
+      isRestToday: false,
+      status: 'broken',
+      label: '0 días',
+    };
+  }
+
+  const trainedDates = new Set(sessions.map((s) => s.date));
+  const restDates = new Set([
+    ...(state.gym.restDays || []),
+    ...Object.entries(state.checkoutLog || {})
+      .filter(([_, log]) => log && log.trainedSkipped)
+      .map(([date]) => date),
+  ]);
+
+  const today = todayISO();
+  const isTrainedToday = trainedDates.has(today);
+  const isRestToday = restDates.has(today);
+
+  const currentD = new Date();
+  let status: GymStreakDetails['status'] = 'pending_today';
+
+  let streakDays = 0;
+  let workoutCount = 0;
+  let restDaysCount = 0;
+  let consecutiveRest = 0;
+
+  if (isTrainedToday) {
+    status = 'trained_today';
+    streakDays++;
+    workoutCount++;
+    currentD.setDate(currentD.getDate() - 1);
+  } else if (isRestToday) {
+    status = 'rest_today';
+    streakDays++;
+    restDaysCount++;
+    currentD.setDate(currentD.getDate() - 1);
+  } else {
+    // Today hasn't been logged yet: evaluate from yesterday
+    status = 'pending_today';
+    currentD.setDate(currentD.getDate() - 1);
+  }
+
+  // Iterate backwards from previous days
   while (true) {
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    const iso = `${year}-${month}-${day}`;
-    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-    if (isWeekend) {
-      d.setDate(d.getDate() - 1);
-      continue;
-    }
-    if (set.has(iso)) {
-      streak++;
-      d.setDate(d.getDate() - 1);
+    const y = currentD.getFullYear();
+    const m = String(currentD.getMonth() + 1).padStart(2, '0');
+    const day = String(currentD.getDate()).padStart(2, '0');
+    const iso = `${y}-${m}-${day}`;
+    const dayOfWeek = currentD.getDay(); // 0 is Sunday, 6 is Saturday
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+    if (trainedDates.has(iso)) {
+      streakDays++;
+      workoutCount++;
+      consecutiveRest = 0;
+      currentD.setDate(currentD.getDate() - 1);
+    } else if (restDates.has(iso) || isWeekend) {
+      streakDays++;
+      restDaysCount++;
+      consecutiveRest = 0;
+      currentD.setDate(currentD.getDate() - 1);
+    } else if (consecutiveRest < 2 && (streakDays > 0 || !isTrainedToday && !isRestToday)) {
+      // Natural rest gap of up to 2 days between sessions
+      consecutiveRest++;
+      streakDays++;
+      restDaysCount++;
+      currentD.setDate(currentD.getDate() - 1);
     } else {
       break;
     }
   }
-  return streak;
+
+  // If no workouts were ever encountered in this sequence, streak is 0
+  if (workoutCount === 0) {
+    streakDays = 0;
+    restDaysCount = 0;
+    status = 'broken';
+  }
+
+  // Calculate consecutive weeks with at least 1 workout
+  let weeksStreak = 0;
+  const now = new Date();
+  const dayIdx = (now.getDay() + 6) % 7; // Monday = 0
+  const currMon = new Date(now);
+  currMon.setDate(now.getDate() - dayIdx);
+  currMon.setHours(0, 0, 0, 0);
+
+  const checkWeekMon = new Date(currMon);
+
+  const hasWorkoutInWeek = (monDate: Date) => {
+    const sunDate = new Date(monDate);
+    sunDate.setDate(monDate.getDate() + 6);
+    const monISO = monDate.toISOString().slice(0, 10);
+    const sunISO = sunDate.toISOString().slice(0, 10);
+    return sessions.some((s) => s.date >= monISO && s.date <= sunISO);
+  };
+
+  // If current week has workouts, count it; if not yet, see if last week had workouts
+  const iterMon = new Date(checkWeekMon);
+  if (!hasWorkoutInWeek(iterMon)) {
+    iterMon.setDate(iterMon.getDate() - 7);
+  }
+
+  while (hasWorkoutInWeek(iterMon)) {
+    weeksStreak++;
+    iterMon.setDate(iterMon.getDate() - 7);
+  }
+
+  let label = `${streakDays} día${streakDays === 1 ? '' : 's'}`;
+  if (status === 'trained_today') {
+    label += ' · Entrenado';
+  } else if (status === 'rest_today') {
+    label += ' · Descanso';
+  } else if (status === 'pending_today' && streakDays > 0) {
+    label += ' · En curso';
+  }
+
+  return {
+    streakDays,
+    workoutCount,
+    restDaysCount,
+    weeksStreak,
+    isTrainedToday,
+    isRestToday,
+    status,
+    label,
+  };
+}
+
+export function calcGymStreak(state: LifeOSState): number {
+  return calcGymStreakDetails(state).streakDays;
 }
 
 export interface PRInfo {
