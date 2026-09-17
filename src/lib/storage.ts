@@ -228,7 +228,7 @@ export function defaultState(): LifeOSState {
       investments: [],
       subscriptions: [],
     },
-    gym: { weight: [], measurements: [], sessions: [], routineTemplates: [], restDays: [] },
+    gym: { weight: [], measurements: [], sessions: [], routineTemplates: [], restDays: [], activeTimer: null },
     study: { subjects: [], exams: [], studyLog: [] },
     streaming: { sessions: [], monthlyGoal: 12, preStreamChecklist: [], contentPipeline: [] },
     jobs: { opportunities: [], applications: [] },

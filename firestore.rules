@@ -46,13 +46,12 @@ service cloud.firestore {
       allow get: if isOwner(userId) && validModule(module);
       allow create: if isOwner(userId)
         && validModule(module)
-        && validSyncPayload(module)
-        && request.resource.data.parentRevision == null;
-      // Optimistic concurrency: an old client may not replace a newer head.
+        && validSyncPayload(module);
+      // Multi-device sync: authenticated owner writes with valid sync payload.
+      // Concurrency is resolved via 3-way merge on the client without rejecting concurrent writes.
       allow update: if isOwner(userId)
         && validModule(module)
-        && validSyncPayload(module)
-        && request.resource.data.parentRevision == resource.data.revision;
+        && validSyncPayload(module);
       allow delete: if false;
     }
 

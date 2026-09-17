@@ -181,6 +181,25 @@ export function saveCloudBaselines(userId: string, baselines: SyncBaselineMap): 
   localStorage.setItem(`${BASELINE_KEY}:${userId}`, JSON.stringify(baselines));
 }
 
+const BASELINE_DATA_KEY = 'lifeos-cloud-baselinedata-v2';
+
+export function loadCloudBaselineData(userId: string): Partial<Record<SyncModuleKey, unknown>> {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(`${BASELINE_DATA_KEY}:${userId}`) || '{}') as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(parsed).filter(([key]) => isSyncModuleKey(key))) as Partial<Record<SyncModuleKey, unknown>>;
+  } catch {
+    return {};
+  }
+}
+
+export function saveCloudBaselineData(userId: string, data: Partial<Record<SyncModuleKey, unknown>>): void {
+  try {
+    localStorage.setItem(`${BASELINE_DATA_KEY}:${userId}`, JSON.stringify(data));
+  } catch {
+    // Ignore quota issues
+  }
+}
+
 export function hasMeaningfulData(state: LifeOSState): boolean {
   const def = defaultState();
   const agendaHasData = Object.values(state.agenda).some((blocks) => blocks.length > 0);

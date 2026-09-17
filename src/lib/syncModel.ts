@@ -1,5 +1,6 @@
 import type { LifeOSState } from '../types';
 import { defaultState, normalizeStoredState } from './storage';
+import { mergeModuleData } from './syncMerge';
 
 export const SYNC_MODULES = [
   'profile',
@@ -99,6 +100,22 @@ export function applySyncModule(state: LifeOSState, module: SyncModuleKey, data:
     throw new Error(`El módulo sincronizado “${module}” no contiene datos válidos.`);
   }
   const candidate = { ...state, ...(data as Partial<LifeOSState>) };
+  return normalizeStoredState(candidate);
+}
+
+export function mergeSyncModule(
+  state: LifeOSState,
+  module: SyncModuleKey,
+  remoteData: unknown,
+  baselineData?: unknown,
+  tombstones: Record<string, number> = {}
+): LifeOSState {
+  if (!remoteData || typeof remoteData !== 'object' || Array.isArray(remoteData)) {
+    throw new Error(`El módulo sincronizado “${module}” no contiene datos válidos.`);
+  }
+  const localData = syncModuleData(state, module);
+  const mergedData = mergeModuleData(module, localData, remoteData, baselineData, tombstones);
+  const candidate = { ...state, ...(mergedData as Partial<LifeOSState>) };
   return normalizeStoredState(candidate);
 }
 
