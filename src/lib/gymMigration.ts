@@ -132,6 +132,8 @@ export function migrateExercise(value: unknown, ownerId: string, exerciseIndex: 
   return {
     id: exerciseId,
     name: String(legacy.name || '').trim() || 'Ejercicio sin nombre',
+    weight: numeric(legacy.weight) || (migratedSets[0]?.weight ?? 0),
+    barWeight: Number.isFinite(Number((legacy as any).barWeight)) ? Number((legacy as any).barWeight) : 20,
     sets: migratedSets,
     muscleGroup,
     restSeconds: Math.min(600, Math.max(15, numeric(legacy.restSeconds) || 90)),
@@ -187,6 +189,7 @@ export function migrateGym(value: unknown): Gym {
     measurements: Array.isArray(gym.measurements) ? gym.measurements as Gym['measurements'] : [],
     sessions,
     routineTemplates: Array.isArray(gym.routineTemplates) ? gym.routineTemplates.map(migrateTemplate) : [],
+    restDays: Array.isArray(gym.restDays) ? (gym.restDays as string[]).filter((d) => typeof d === 'string') : [],
     activeTimer: timer && numeric(timer.endsAt) > 0 && typeof timer.sessionId === 'string'
       ? {
         endsAt: numeric(timer.endsAt),

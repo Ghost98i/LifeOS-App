@@ -10,6 +10,8 @@ import {
   eventsOnDate,
   upcomingEvents,
 } from '../lib/calculations';
+import { PageHeader } from './PageHeader';
+import { AppIcon } from './AppIcon';
 
 interface CalendarioViewProps {
   state: LifeOSState;
@@ -71,38 +73,41 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text)]">Calendario</h1>
-        <p className="text-sm text-[var(--text-soft)]">
-          Cumpleaños, estrenos y fechas que no querés olvidar.
-        </p>
-      </div>
+      <PageHeader
+        category="Organización"
+        title="Calendario & Fechas"
+        subtitle="Cumpleaños, estrenos, vencimientos y fechas especiales."
+      />
 
       {/* Calendar Month Navigation */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
         <button
           onClick={() => handleNav(-1)}
-          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] hover:border-[var(--blue)] cursor-pointer"
+          className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] hover:border-[var(--blue)] cursor-pointer transition-colors shadow-2xs"
+          title="Mes anterior"
+          aria-label="Mes anterior"
         >
-          ←
+          <AppIcon name="chevronLeft" className="h-4 w-4" />
         </button>
-        <span className="font-bold text-base text-[var(--text)] min-w-[160px] text-center">{monthLabel}</span>
+        <span className="font-extrabold text-base text-[var(--text)] min-w-[160px] text-center">{monthLabel}</span>
         <button
           onClick={() => handleNav(1)}
-          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] hover:border-[var(--blue)] cursor-pointer"
+          className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] hover:border-[var(--blue)] cursor-pointer transition-colors shadow-2xs"
+          title="Mes siguiente"
+          aria-label="Mes siguiente"
         >
-          →
+          <AppIcon name="chevronRight" className="h-4 w-4" />
         </button>
         <button
           onClick={() => handleNav('today')}
-          className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer ml-auto sm:ml-0"
+          className="px-3.5 h-9 text-xs font-bold rounded-xl bg-[var(--card)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] cursor-pointer ml-auto sm:ml-2 transition-colors shadow-2xs"
         >
           Hoy
         </button>
       </div>
 
       {/* Weekday headers */}
-      <div className="grid grid-cols-7 gap-1.5 text-center text-[10px] font-bold text-[var(--text-faint)] uppercase">
+      <div className="grid grid-cols-7 gap-2 text-center text-[11px] font-bold text-[var(--text-faint)] uppercase tracking-wider">
         <span>Lun</span>
         <span>Mar</span>
         <span>Mié</span>
@@ -113,10 +118,10 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
       </div>
 
       {/* Calendar Grid */}
-      <div className="grid grid-cols-7 gap-1.5">
+      <div className="grid grid-cols-7 gap-2">
         {cells.map((d, idx) => {
           if (d === null) {
-            return <div key={`empty-${idx}`} className="bg-transparent h-16 sm:h-20" />;
+            return <div key={`empty-${idx}`} className="bg-transparent h-16 sm:h-22" />;
           }
 
           const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -126,14 +131,21 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
           return (
             <div
               key={iso}
-              className={`bg-[var(--card)] border rounded-xl p-1.5 min-h-[64px] sm:min-h-[80px] flex flex-col gap-1 overflow-hidden ${
-                isToday ? 'border-[var(--blue)] shadow-xs ring-1 ring-[var(--blue)]' : 'border-[var(--border)]'
+              className={`bg-[var(--card)] border rounded-2xl p-2 min-h-[70px] sm:min-h-[90px] flex flex-col gap-1 overflow-hidden transition-all ${
+                isToday
+                  ? 'border-[var(--blue)] shadow-xs ring-2 ring-[var(--blue)]/30 bg-[var(--blue-soft)]/20'
+                  : 'border-[var(--border)] hover:border-[var(--border-hover)]'
               }`}
             >
-              <span className={`text-xs font-bold ${isToday ? 'text-[var(--blue)]' : 'text-[var(--text-soft)]'}`}>
-                {d}
-              </span>
-              <div className="space-y-1 overflow-y-auto max-h-[50px] no-scrollbar">
+              <div className="flex items-center justify-between">
+                <span className={`text-xs font-bold ${isToday ? 'text-[var(--blue)] font-black' : 'text-[var(--text-soft)]'}`}>
+                  {d}
+                </span>
+                {isToday && (
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--blue)]" />
+                )}
+              </div>
+              <div className="space-y-1 overflow-y-auto max-h-[56px] no-scrollbar">
                 {evs.map((e) => (
                   <div
                     key={e.id}
@@ -154,15 +166,15 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
       {/* Form to add event */}
       <div className="space-y-3 pt-2">
         <h2 className="text-sm font-bold text-[var(--text)]">Agregar evento</h2>
-        <form onSubmit={handleAddEvent} className="flex flex-wrap items-end gap-2 p-3.5 bg-[var(--bg)] border border-dashed border-[var(--border)] rounded-xl">
-          <div className="flex-1 min-w-[150px]">
+        <form onSubmit={handleAddEvent} className="flex flex-wrap items-end gap-2 p-4 bg-[var(--bg)] border border-dashed border-[var(--border)] rounded-2xl">
+          <div className="flex-1 min-w-[170px]">
             <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Nombre</label>
             <input
               type="text"
               value={eventName}
               onChange={(e) => setEventName(e.target.value)}
               placeholder="Ej: Cumpleaños de Ana"
-              className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+              className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
             />
           </div>
           <div>
@@ -171,7 +183,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
               type="date"
               value={eventDate}
               onChange={(e) => setEventDate(e.target.value)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+              className="px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
             />
           </div>
           <div>
@@ -179,7 +191,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
             <select
               value={eventType}
               onChange={(e) => setEventType(e.target.value as any)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+              className="px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)] cursor-pointer"
             >
               {Object.entries(EVENT_TYPE_META).map(([k, v]) => (
                 <option key={k} value={k}>
@@ -188,23 +200,24 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
               ))}
             </select>
           </div>
-          <div className="flex items-center gap-1.5 pb-2 px-1">
+          <div className="flex items-center gap-1.5 pb-2.5 px-1">
             <input
               type="checkbox"
               id="eventRecurringCheck"
               checked={eventRecurring}
               onChange={(e) => setEventRecurring(e.target.checked)}
-              className="rounded-xs"
+              className="rounded cursor-pointer"
             />
-            <label htmlFor="eventRecurringCheck" className="text-xs text-[var(--text-soft)] cursor-pointer">
+            <label htmlFor="eventRecurringCheck" className="text-xs text-[var(--text-soft)] cursor-pointer select-none">
               Se repite cada año
             </label>
           </div>
           <button
             type="submit"
-            className="px-3.5 py-1.5 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
+            className="px-4 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs flex items-center gap-1.5"
           >
-            ＋ Agregar
+            <AppIcon name="plus" className="h-3.5 w-3.5" />
+            <span>Agregar</span>
           </button>
         </form>
       </div>
@@ -212,7 +225,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
       {/* Upcoming events list */}
       <div className="space-y-3">
         <h2 className="text-sm font-bold text-[var(--text)]">Próximos eventos</h2>
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 divide-y divide-[var(--border)]">
+        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 divide-y divide-[var(--border)] shadow-2xs">
           {upcoming.length === 0 ? (
             <p className="text-center py-6 text-xs text-[var(--text-faint)]">Sin eventos cargados.</p>
           ) : (
@@ -223,16 +236,18 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                 </span>
                 <span className="flex-1 font-medium text-[var(--text)] truncate">
                   {e.name}
-                  {e.recurring && <span className="text-xs text-[var(--text-faint)] ml-1">(cada año)</span>}
+                  {e.recurring && <span className="text-xs text-[var(--text-faint)] ml-1 font-normal">(cada año)</span>}
                 </span>
                 <span className="font-mono text-xs text-[var(--text-soft)]">
                   {daysBetween(todayIso, e.occursOn) === 0 ? 'Hoy' : `${daysBetween(todayIso, e.occursOn)} día(s)`}
                 </span>
                 <button
                   onClick={() => handleDeleteEvent(e.id)}
-                  className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1"
+                  className="text-[var(--text-faint)] hover:text-red-500 p-1.5 rounded-lg hover:bg-[var(--surface-muted)] transition-colors cursor-pointer"
+                  title="Eliminar evento"
+                  aria-label="Eliminar evento"
                 >
-                  ✕
+                  <AppIcon name="trash" className="h-3.5 w-3.5" />
                 </button>
               </div>
             ))

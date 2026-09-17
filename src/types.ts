@@ -41,6 +41,7 @@ export interface DailyPriority {
   date: string;
   text: string;
   done?: boolean;
+  rank?: number;
 }
 
 export interface DailyContextEntry {
@@ -147,6 +148,7 @@ export interface Exercise {
   id?: string;
   name: string;
   weight?: number;
+  barWeight?: number;
   reps?: string;
   muscleGroup?: MuscleGroup | string;
   sets: GymSet[];
@@ -212,9 +214,25 @@ export interface StreamSession {
   hours: number;
 }
 
+export interface StreamChecklistItem {
+  id: string;
+  label: string;
+  done: boolean;
+}
+
+export interface StreamContentPipelineItem {
+  id: string;
+  title: string;
+  status: 'idea' | 'outline' | 'recording' | 'editing' | 'published';
+  note?: string;
+  updatedAt?: string;
+}
+
 export interface Streaming {
   sessions: StreamSession[];
   monthlyGoal: number;
+  preStreamChecklist?: StreamChecklistItem[];
+  contentPipeline?: StreamContentPipelineItem[];
 }
 
 export interface JobOpportunity {
@@ -308,6 +326,35 @@ export interface Goal {
   linked?: 'weight' | 'available' | null;
 }
 
+export interface ProjectTask {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+export type ProjectStatus = 'activo' | 'en_pausa' | 'completado' | 'cancelado';
+
+export interface Project {
+  id: string;
+  name: string;
+  objective: string;
+  status: ProjectStatus;
+  nextStep: string;
+  tasks: ProjectTask[];
+  blockers?: string;
+  reviewDate?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface InboxItem {
+  id: string;
+  text: string;
+  createdAt: string;
+  source?: 'quick-capture' | 'voice' | 'manual';
+}
+
 export interface Postit {
   id: string;
   text: string;
@@ -378,6 +425,8 @@ export interface LifeOSState {
   ideas: Idea[];
   calendarEvents: CalendarEvent[];
   goals: Goal[];
+  projects?: Project[];
+  inbox?: InboxItem[];
   notes: Notes;
   settings: Settings;
   checkoutLog: Record<string, CheckoutLogDay>;

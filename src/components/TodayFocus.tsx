@@ -12,7 +12,7 @@ interface TodayFocusProps {
 export const TodayFocus: React.FC<TodayFocusProps> = ({ priorities, onAdd, onToggle, onRemove }) => {
   const [text, setText] = useState('');
   const [adding, setAdding] = useState(false);
-  const sorted = [...priorities].sort((a, b) => a.rank - b.rank);
+  const sorted = [...priorities].sort((a, b) => (a.rank || 0) - (b.rank || 0));
   const completedCount = sorted.filter((item) => item.done).length;
 
   const submit = (event: React.FormEvent) => {
@@ -24,11 +24,17 @@ export const TodayFocus: React.FC<TodayFocusProps> = ({ priorities, onAdd, onTog
   };
 
   return (
-    <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 transition-colors">
+    <section className={`rounded-2xl border bg-[var(--card)] p-5 transition-all ${
+      completedCount === 3
+        ? 'border-emerald-500/40 bg-emerald-500/5 shadow-xs animate-celebrate'
+        : 'border-[var(--border)]'
+    }`}>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[var(--blue-soft)] text-[var(--blue)]">
-            <AppIcon name="target" className="h-3.5 w-3.5" />
+          <span className={`flex h-7 w-7 items-center justify-center rounded-xl transition-colors ${
+            completedCount === 3 ? 'bg-emerald-500/15 text-emerald-600' : 'bg-[var(--blue-soft)] text-[var(--blue)]'
+          }`}>
+            <AppIcon name={completedCount === 3 ? 'checkCircle' : 'target'} className="h-4 w-4" />
           </span>
           <div>
             <div className="flex items-center gap-2">
@@ -36,17 +42,19 @@ export const TodayFocus: React.FC<TodayFocusProps> = ({ priorities, onAdd, onTog
                 Las 3 Prioridades
               </h3>
               <span
-                className={`rounded-full px-2 py-0.5 text-[10px] font-bold font-mono ${
+                className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold font-mono transition-colors ${
                   completedCount === 3
-                    ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                    ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
                     : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'
                 }`}
               >
-                {completedCount}/3 {completedCount === 3 ? 'completadas ✓' : 'listas'}
+                {completedCount}/3 {completedCount === 3 ? 'Completadas ✓' : 'Listas'}
               </span>
             </div>
             <p className="text-[11px] text-[var(--text-soft)] mt-0.5">
-              Los 3 resultados indispensables que definen el éxito de tu día.
+              {completedCount === 3
+                ? '¡Excelente! Completaste los 3 resultados indispensables de tu jornada.'
+                : 'Los 3 resultados indispensables que definen el éxito de tu día.'}
             </p>
           </div>
         </div>
@@ -96,9 +104,10 @@ export const TodayFocus: React.FC<TodayFocusProps> = ({ priorities, onAdd, onTog
       {/* 3 Priority Cards / Slots */}
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
         {[1, 2, 3].map((slotRank) => {
-          const item = sorted.find((p) => p.rank === slotRank);
+          const item = sorted.find((p) => p.rank === slotRank) || (!sorted.some((p) => p.rank === slotRank) ? sorted[slotRank - 1] : undefined);
 
           if (item) {
+            const displayRank = item.rank || slotRank;
             return (
               <div
                 key={item.id}
@@ -119,7 +128,7 @@ export const TodayFocus: React.FC<TodayFocusProps> = ({ priorities, onAdd, onTog
                       : 'border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)] hover:border-[var(--blue)] hover:text-[var(--blue)]'
                   }`}
                 >
-                  {item.done ? '✓' : item.rank}
+                  {item.done ? '✓' : displayRank}
                 </button>
 
                 {/* Priority title */}

@@ -54,6 +54,7 @@ export function syncModuleData(state: LifeOSState, module: SyncModuleKey): unkno
       taskLog: state.taskLog,
       todayExtras: state.todayExtras,
       dailyPriorities: state.dailyPriorities,
+      inbox: state.inbox || [],
     };
     case 'context': return { dailyContext: state.dailyContext };
     case 'finance': return { finance: state.finance };
@@ -64,7 +65,7 @@ export function syncModuleData(state: LifeOSState, module: SyncModuleKey): unkno
     case 'resale': return { resale: state.resale };
     case 'ideas': return { ideas: state.ideas };
     case 'calendar': return { calendarEvents: state.calendarEvents };
-    case 'goals': return { goals: state.goals };
+    case 'goals': return { goals: state.goals, projects: state.projects || [] };
     case 'notes': return { notes: state.notes };
     case 'checkout': return { checkoutLog: state.checkoutLog };
   }

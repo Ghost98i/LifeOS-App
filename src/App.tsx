@@ -764,6 +764,7 @@ export default function App() {
         syncStatus={syncStatus}
         privacyMode={state.settings.privacyMode}
         onTogglePrivacy={handleTogglePrivacy}
+        inboxCount={(state.inbox || []).length}
       />
 
       <MobileQuickCapture

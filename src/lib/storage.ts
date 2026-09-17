@@ -1,4 +1,5 @@
 import { LifeOSState, DayKey, ResaleItem, Transaction } from '../types';
+import { migrateGym } from './gymMigration';
 
 export const DAYS: DayKey[] = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
 export const DAY_LABELS: Record<DayKey, string> = {
@@ -229,12 +230,14 @@ export function defaultState(): LifeOSState {
     },
     gym: { weight: [], measurements: [], sessions: [], routineTemplates: [], restDays: [] },
     study: { subjects: [], exams: [], studyLog: [] },
-    streaming: { sessions: [], monthlyGoal: 12 },
+    streaming: { sessions: [], monthlyGoal: 12, preStreamChecklist: [], contentPipeline: [] },
     jobs: { opportunities: [], applications: [] },
     resale: { opportunities: [], inventory: [] },
     ideas: [],
     calendarEvents: [],
     goals: [],
+    projects: [],
+    inbox: [],
     notes: { postits: [], shopping: [], links: [], possessions: [] },
     settings: { darkMode: false, lastBackupAt: null, hiddenTabs: [] },
     checkoutLog: {},
@@ -304,14 +307,40 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
   };
 
   // Gym
-  const rawGym: any = candidate.gym || {};
-  const gym = {
-    weight: Array.isArray(rawGym.weight) ? rawGym.weight : [],
-    measurements: Array.isArray(rawGym.measurements) ? rawGym.measurements : [],
-    sessions: Array.isArray(rawGym.sessions) ? rawGym.sessions : [],
-    routineTemplates: Array.isArray(rawGym.routineTemplates) ? rawGym.routineTemplates : [],
-    restDays: Array.isArray(rawGym.restDays) ? rawGym.restDays : [],
-  };
+  const gym = migrateGym(candidate.gym);
+
+  // Projects normalization
+  const projects = Array.isArray(candidate.projects)
+    ? candidate.projects.map((p: any) => ({
+        id: typeof p.id === 'string' ? p.id : uid(),
+        name: typeof p.name === 'string' ? p.name : 'Proyecto sin título',
+        objective: typeof p.objective === 'string' ? p.objective : '',
+        status: ['activo', 'en_pausa', 'completado', 'cancelado'].includes(p.status) ? p.status : 'activo',
+        nextStep: typeof p.nextStep === 'string' ? p.nextStep : '',
+        tasks: Array.isArray(p.tasks)
+          ? p.tasks.map((t: any) => ({
+              id: typeof t.id === 'string' ? t.id : uid(),
+              text: typeof t.text === 'string' ? t.text : '',
+              done: Boolean(t.done),
+            }))
+          : [],
+        blockers: typeof p.blockers === 'string' ? p.blockers : undefined,
+        reviewDate: typeof p.reviewDate === 'string' ? p.reviewDate : undefined,
+        notes: typeof p.notes === 'string' ? p.notes : undefined,
+        createdAt: typeof p.createdAt === 'string' ? p.createdAt : todayISO(),
+        updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : undefined,
+      }))
+    : [];
+
+  // Inbox normalization
+  const inbox = Array.isArray(candidate.inbox)
+    ? candidate.inbox.map((item: any) => ({
+        id: typeof item.id === 'string' ? item.id : uid(),
+        text: typeof item.text === 'string' ? item.text : '',
+        createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
+        source: ['quick-capture', 'voice', 'manual'].includes(item.source) ? item.source : 'quick-capture',
+      }))
+    : [];
 
   return {
     ...def,
@@ -327,12 +356,20 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
     finance,
     gym,
     study: { ...def.study, ...(candidate.study || {}) },
-    streaming: { ...def.streaming, ...(candidate.streaming || {}) },
+    streaming: {
+      ...def.streaming,
+      ...(candidate.streaming || {}),
+      sessions: Array.isArray(candidate.streaming?.sessions) ? candidate.streaming.sessions : [],
+      preStreamChecklist: Array.isArray(candidate.streaming?.preStreamChecklist) ? candidate.streaming.preStreamChecklist : [],
+      contentPipeline: Array.isArray(candidate.streaming?.contentPipeline) ? candidate.streaming.contentPipeline : [],
+    },
     jobs,
     resale: { ...def.resale, ...(candidate.resale || {}) },
     ideas: Array.isArray(candidate.ideas) ? candidate.ideas : [],
     calendarEvents: Array.isArray(candidate.calendarEvents) ? candidate.calendarEvents : [],
     goals: Array.isArray(candidate.goals) ? candidate.goals : [],
+    projects,
+    inbox,
     notes,
     settings: { ...def.settings, ...(candidate.settings || {}) },
     checkoutLog: candidate.checkoutLog && typeof candidate.checkoutLog === 'object' ? candidate.checkoutLog : {},

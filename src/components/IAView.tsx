@@ -9,6 +9,7 @@ import {
   buyResaleOpportunity,
   parseAIImport,
 } from '../lib/aiImport';
+import { PageHeader } from './PageHeader';
 
 interface IAViewProps {
   state: LifeOSState;
@@ -183,13 +184,12 @@ export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState }) => {
   };
 
   return (
-    <div className="space-y-7">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text)]">IA bajo demanda</h1>
-        <p className="text-sm text-[var(--text-soft)]">
-          LifeOS prepara el trabajo; vos elegís la IA, revisás el resultado y decidís qué importar.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        category="Asistente & Automatización"
+        title="IA bajo demanda"
+        subtitle="LifeOS prepara el trabajo; vos elegís la IA, revisás el resultado y decidís qué importar."
+      />
 
       <div className="rounded-2xl border border-violet-500/20 bg-gradient-to-r from-violet-500/10 to-blue-500/10 p-5">
         <h2 className="text-sm font-extrabold text-[var(--text)]">Sin API, servidor ni suscripción obligatoria</h2>

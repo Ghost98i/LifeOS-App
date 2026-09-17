@@ -8,6 +8,7 @@ import {
   StorageDiagnostics,
 } from '../lib/storage';
 import { showToast } from '../lib/toast';
+import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 
 interface ConfigViewProps {
@@ -70,13 +71,16 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text)]">Configuración</h1>
-        <p className="text-sm text-[var(--text-soft)]">
-          Ajustá tu perfil, módulos visibles y backups de datos.
-        </p>
-        <p className="mt-1 font-mono text-[10px] text-[var(--text-faint)]">LifeOS v{CURRENT_SCHEMA_VERSION} · build {__LIFEOS_BUILD_ID__}</p>
-      </div>
+      <PageHeader
+        category="Sistema & Preferencias"
+        title="Configuración"
+        subtitle="Ajustá tu perfil, módulos visibles, privacidad y backups de datos."
+        badge={
+          <span className="font-mono text-[10px] text-[var(--text-faint)] bg-[var(--surface-muted)] px-2 py-0.5 rounded-md border border-[var(--border)]">
+            v{CURRENT_SCHEMA_VERSION} · {__LIFEOS_BUILD_ID__}
+          </span>
+        }
+      />
 
       <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -89,24 +93,25 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           <button
             type="button"
             onClick={() => setDiagnostics(getStorageDiagnostics(storageUserId))}
-            className="px-3.5 py-2 bg-[var(--bg-elevated)] border border-[var(--border)] text-xs font-bold rounded-xl hover:border-[var(--blue)] cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-[var(--bg-elevated)] border border-[var(--border)] text-xs font-bold rounded-xl hover:border-[var(--blue)] cursor-pointer transition-colors shadow-2xs text-[var(--text)]"
           >
-            🔍 Diagnosticar
+            <AppIcon name="search" className="h-3.5 w-3.5 text-[var(--blue)]" />
+            <span>Diagnosticar</span>
           </button>
         </div>
 
         {diagnostics && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 text-xs">
-            <div className="rounded-xl bg-[var(--bg)] p-3"><span className="block text-[10px] uppercase text-[var(--text-faint)]">Backend</span><strong>{diagnostics.backend}</strong></div>
-            <div className="rounded-xl bg-[var(--bg)] p-3"><span className="block text-[10px] uppercase text-[var(--text-faint)]">Esquema</span><strong>v{diagnostics.schemaVersion}</strong></div>
-            <div className="rounded-xl bg-[var(--bg)] p-3"><span className="block text-[10px] uppercase text-[var(--text-faint)]">Datos actuales</span><strong>{diagnostics.primaryBytes.toLocaleString('es-UY')} bytes</strong></div>
-            <div className="rounded-xl bg-[var(--bg)] p-3"><span className="block text-[10px] uppercase text-[var(--text-faint)]">Recuperación</span><strong>{diagnostics.recoveryAvailable ? `${diagnostics.recoveryBytes.toLocaleString('es-UY')} bytes` : 'Todavía no creada'}</strong></div>
+            <div className="rounded-xl bg-[var(--surface-muted)] p-3"><span className="block text-[10px] font-bold uppercase text-[var(--text-faint)]">Backend</span><strong className="text-[var(--text)]">{diagnostics.backend}</strong></div>
+            <div className="rounded-xl bg-[var(--surface-muted)] p-3"><span className="block text-[10px] font-bold uppercase text-[var(--text-faint)]">Esquema</span><strong className="text-[var(--text)]">v{diagnostics.schemaVersion}</strong></div>
+            <div className="rounded-xl bg-[var(--surface-muted)] p-3"><span className="block text-[10px] font-bold uppercase text-[var(--text-faint)]">Datos actuales</span><strong className="font-mono text-[var(--text)]">{diagnostics.primaryBytes.toLocaleString('es-UY')} bytes</strong></div>
+            <div className="rounded-xl bg-[var(--surface-muted)] p-3"><span className="block text-[10px] font-bold uppercase text-[var(--text-faint)]">Recuperación</span><strong className="font-mono text-[var(--text)]">{diagnostics.recoveryAvailable ? `${diagnostics.recoveryBytes.toLocaleString('es-UY')} bytes` : 'Todavía no creada'}</strong></div>
           </div>
         )}
       </div>
 
       {/* Profile Form */}
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-4 shadow-2xs">
         <h2 className="text-sm font-bold text-[var(--text)]">Perfil y Metas Básicas</h2>
         <form onSubmit={handleSaveProfile} className="space-y-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -119,7 +124,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 value={profileName}
                 onChange={(e) => setProfileName(e.target.value)}
                 placeholder="Ej: Chino"
-                className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+                className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
               />
             </div>
 
@@ -132,7 +137,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 value={profileHeight}
                 onChange={(e) => setProfileHeight(e.target.value)}
                 placeholder="175"
-                className="w-full px-3 py-1.5 text-xs font-mono rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+                className="w-full px-3 py-2 text-xs font-mono rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
               />
             </div>
 
@@ -143,7 +148,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               <select
                 value={profileBodySex}
                 onChange={(e) => setProfileBodySex(e.target.value as '' | 'male' | 'female')}
-                className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+                className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)] cursor-pointer"
               >
                 <option value="">Elegir una vez…</option>
                 <option value="male">Masculino</option>
@@ -161,14 +166,14 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 value={streamGoal}
                 onChange={(e) => setStreamGoal(e.target.value)}
                 placeholder="12"
-                className="w-full px-3 py-1.5 text-xs font-mono rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+                className="w-full px-3 py-2 text-xs font-mono rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
               />
             </div>
           </div>
 
           <button
             type="submit"
-            className="px-4 py-2 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold rounded-xl hover:opacity-90 cursor-pointer"
+            className="px-4 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs"
           >
             Guardar cambios
           </button>
@@ -213,7 +218,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
       </div>
 
       {/* Backup and Data Management */}
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-4 shadow-2xs">
         <div>
           <h2 className="text-sm font-bold text-[var(--text)]">Backup y Gestión de Datos</h2>
           <p className="text-xs text-[var(--text-soft)]">
@@ -229,13 +234,15 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
         <div className="flex flex-wrap gap-3">
           <button
             onClick={onExportJSON}
-            className="px-4 py-2 bg-[var(--blue)] text-white text-xs font-bold rounded-xl hover:opacity-90 transition-opacity cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs"
           >
-            ⬇ Exportar Backup JSON
+            <AppIcon name="cloud" className="h-3.5 w-3.5" />
+            <span>Exportar Backup JSON</span>
           </button>
 
-          <label className="px-4 py-2 bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] text-xs font-bold rounded-xl hover:border-[var(--blue)] cursor-pointer transition-colors">
-            ⬆ Importar Backup JSON
+          <label className="flex items-center gap-1.5 px-4 py-2 bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] text-xs font-bold rounded-xl hover:border-[var(--blue)] cursor-pointer transition-colors shadow-2xs">
+            <AppIcon name="rotateCcw" className="h-3.5 w-3.5 text-[var(--blue)]" />
+            <span>Importar Backup JSON</span>
             <input
               type="file"
               accept=".json"
@@ -248,9 +255,10 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
         <div className="pt-4 border-t border-[var(--border)]">
           <button
             onClick={handleResetData}
-            className="px-3.5 py-1.5 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-bold rounded-xl hover:bg-red-500/20 cursor-pointer transition-colors"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-bold rounded-xl hover:bg-red-500/20 cursor-pointer transition-colors shadow-2xs"
           >
-            ⚠️ Reiniciar datos por defecto
+            <AppIcon name="shield" className="h-3.5 w-3.5" />
+            <span>Reiniciar datos por defecto</span>
           </button>
         </div>
       </div>

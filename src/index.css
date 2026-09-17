@@ -150,6 +150,122 @@ details > summary::-webkit-details-marker { display: none; }
   box-shadow: var(--card-shadow-hover);
 }
 
+/* LifeOS Standardized Components */
+.lifeos-card {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  box-shadow: var(--card-shadow);
+  transition: border-color 0.18s ease-in-out, box-shadow 0.18s ease-in-out;
+}
+
+.lifeos-card-interactive {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  box-shadow: var(--card-shadow);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lifeos-card-interactive:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--card-shadow-hover);
+  transform: translateY(-1px);
+}
+
+.lifeos-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0.25rem 0.6rem;
+  border-radius: 0.5rem;
+  border: 1px solid transparent;
+}
+
+.lifeos-badge-success {
+  background-color: rgb(16 185 129 / 0.12);
+  border-color: rgb(16 185 129 / 0.25);
+  color: #059669;
+}
+.dark .lifeos-badge-success {
+  color: #34d399;
+}
+
+.lifeos-badge-warning {
+  background-color: rgb(245 158 11 / 0.12);
+  border-color: rgb(245 158 11 / 0.25);
+  color: #d97706;
+}
+.dark .lifeos-badge-warning {
+  color: #fbbf24;
+}
+
+.lifeos-badge-danger {
+  background-color: rgb(239 68 68 / 0.12);
+  border-color: rgb(239 68 68 / 0.25);
+  color: #dc2626;
+}
+.dark .lifeos-badge-danger {
+  color: #f87171;
+}
+
+.lifeos-badge-info {
+  background-color: color-mix(in srgb, var(--blue) 12%, transparent);
+  border-color: color-mix(in srgb, var(--blue) 25%, transparent);
+  color: var(--blue);
+}
+
+.lifeos-badge-neutral {
+  background-color: var(--surface-muted);
+  border-color: var(--border);
+  color: var(--text-soft);
+}
+
+.lifeos-stat-card {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 1rem;
+  box-shadow: var(--card-shadow);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.lifeos-stat-card:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--card-shadow-hover);
+}
+
+.lifeos-input {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid var(--border);
+  background-color: var(--bg-elevated);
+  color: var(--text);
+  padding: 0.55rem 0.85rem;
+  font-size: 0.875rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  outline: none;
+}
+
+.lifeos-input:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-soft);
+}
+
+@keyframes celebrate-glow {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 40%, transparent); }
+  50% { box-shadow: 0 0 20px 4px color-mix(in srgb, var(--blue) 25%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.animate-celebrate {
+  animation: celebrate-glow 1.2s ease-out;
+}
+
+
 /* Custom Sleek Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

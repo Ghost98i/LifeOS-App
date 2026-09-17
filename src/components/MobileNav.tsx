@@ -11,6 +11,7 @@ interface MobileNavProps {
   syncStatus?: CloudSyncStatus;
   privacyMode?: boolean;
   onTogglePrivacy?: () => void;
+  inboxCount?: number;
 }
 
 export const MobileNav: React.FC<MobileNavProps> = ({
@@ -21,6 +22,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   syncStatus,
   privacyMode,
   onTogglePrivacy,
+  inboxCount = 0,
 }) => {
   const itemClass = (active: boolean) =>
     `flex min-w-0 flex-1 flex-col items-center gap-1 py-1 text-[11px] font-semibold ${
@@ -111,10 +113,15 @@ export const MobileNav: React.FC<MobileNavProps> = ({
         </button>
         <button
           onClick={onOpenCapture}
-          className="mx-2 -mt-5 flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-[var(--blue)] text-white shadow-lg shadow-blue-500/25 active:scale-95 transition-transform"
+          className="relative mx-2 -mt-5 flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-[var(--blue)] text-white shadow-lg shadow-blue-500/25 active:scale-95 transition-transform cursor-pointer"
           aria-label="Captura rápida"
         >
           <AppIcon name="plus" className="h-6 w-6" />
+          {inboxCount > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-black text-slate-900 border-2 border-[var(--card)] animate-pulse">
+              {inboxCount}
+            </span>
+          )}
         </button>
         <button
           onClick={() => onNavigate('finanzas')}

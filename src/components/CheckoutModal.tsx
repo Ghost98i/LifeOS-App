@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { LifeOSState, DayKey } from '../types';
 import { todayISO, fmtDate, DAYS, DAY_LABELS, uid } from '../lib/storage';
 import { playSound } from '../lib/audio';
+import { showToast } from '../lib/toast';
 
 interface CheckoutModalProps {
   state: LifeOSState;
@@ -66,7 +67,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
         });
       }
     });
-    alert('¡Día cerrado con éxito! 🌙 Todo guardado en 30 segundos.');
+    showToast('¡Día cerrado con éxito! 🌙 Todo guardado en 30 segundos.', 'success');
     onClose();
   };
 

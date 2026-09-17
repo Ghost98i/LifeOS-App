@@ -2,15 +2,19 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { EffortLevel, LifeOSState, ViewType } from '../types';
 import {
   addQuickIdea,
+  addQuickInbox,
   addQuickNote,
   addQuickReminder,
   addQuickTask,
   addQuickTransaction,
+  convertInboxItem,
+  deleteInboxItem,
   suggestedQuickAccountId,
 } from '../lib/quickCapture';
 import { parseQuickFinance } from '../utils/quickFinanceParser';
-import { todayISO, uid, dayKeyFromDate } from '../lib/storage';
+import { todayISO, uid, dayKeyFromDate, fmtDate } from '../lib/storage';
 import { playSound } from '../lib/audio';
+import { showToast } from '../lib/toast';
 
 interface MobileQuickCaptureProps {
   state: LifeOSState;
@@ -20,15 +24,16 @@ interface MobileQuickCaptureProps {
   onNavigate?: (view: ViewType) => void;
 }
 
-export type CaptureKind = 'tarea' | 'gasto' | 'nota' | 'idea' | 'entrenamiento' | 'recordatorio';
+export type CaptureKind = 'inbox' | 'tarea' | 'gasto' | 'nota' | 'idea' | 'entrenamiento' | 'recordatorio';
 
 const captureOptions: { kind: CaptureKind; label: string; icon: string; desc: string }[] = [
+  { kind: 'inbox', label: 'Bandeja', icon: '📥', desc: 'Captura libre' },
   { kind: 'tarea', label: 'Tarea', icon: '✓', desc: 'Acción para hoy' },
   { kind: 'gasto', label: 'Gasto', icon: '−', desc: 'Parser rápido' },
   { kind: 'nota', label: 'Nota', icon: '✎', desc: 'Post-it o apunte' },
   { kind: 'idea', label: 'Idea', icon: '💡', desc: 'Nueva propuesta' },
   { kind: 'entrenamiento', label: 'Entrenar', icon: '⚡', desc: 'Iniciar sesión' },
-  { kind: 'recordatorio', label: 'Recordatorio', icon: '⏰', desc: 'Alerta con hora' },
+  { kind: 'recordatorio', label: 'Alerta', icon: '⏰', desc: 'Con hora/fecha' },
 ];
 
 export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
@@ -38,7 +43,8 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
   onUpdateState,
   onNavigate,
 }) => {
-  const [kind, setKind] = useState<CaptureKind>('tarea');
+  const [activeTab, setActiveTab] = useState<'capture' | 'inbox'>('capture');
+  const [kind, setKind] = useState<CaptureKind>('inbox');
   const [text, setText] = useState('');
   const [priority, setPriority] = useState<'alta' | 'media' | 'baja'>('media');
   const [effort, setEffort] = useState<EffortLevel>('medium');
@@ -183,6 +189,11 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
           });
         }
         playSound('coins');
+      } else if (kind === 'inbox') {
+        onUpdateState((draft) => {
+          addQuickInbox(draft, text, 'quick-capture');
+        });
+        playSound('success');
       } else if (kind === 'tarea') {
         onUpdateState((draft) => {
           addQuickTask(draft, text, priority, date, effort);
@@ -213,6 +224,28 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'No se pudo guardar.');
     }
+  };
+
+  const handleConvertInbox = (id: string, target: 'tarea' | 'nota' | 'recordatorio' | 'proyecto') => {
+    onUpdateState((draft) => {
+      convertInboxItem(draft, id, target);
+    });
+    playSound('success');
+    const targetLabels: Record<string, string> = {
+      tarea: 'tarea de hoy',
+      proyecto: 'proyecto activo',
+      nota: 'nota post-it',
+      recordatorio: 'recordatorio',
+    };
+    showToast(`Convertido a ${targetLabels[target] || target}`, 'success');
+  };
+
+  const handleDiscardInbox = (id: string) => {
+    onUpdateState((draft) => {
+      deleteInboxItem(draft, id);
+    });
+    playSound('click');
+    showToast('Elemento descartado de la bandeja', 'info');
   };
 
   const startDictation = () => {
@@ -259,16 +292,36 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
         className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-[var(--card)] border border-[var(--border)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl transition-transform"
         onClick={(event) => event.stopPropagation()}
       >
-        {/* Header */}
+        {/* Header & Mode Tabs */}
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--blue-soft)] text-[var(--blue)] font-black text-sm">
-              ⚡
-            </span>
-            <div>
-              <h2 className="text-base font-extrabold text-[var(--text)] tracking-tight">Captura Rápida</h2>
-              <p className="text-[11px] text-[var(--text-soft)]">Guardá en 1–2 segundos sin cambiar de pantalla</p>
-            </div>
+          <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[var(--bg)] border border-[var(--border)]">
+            <button
+              type="button"
+              onClick={() => setActiveTab('capture')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                activeTab === 'capture'
+                  ? 'bg-[var(--card)] text-[var(--blue)] shadow-xs border border-[var(--border)]'
+                  : 'text-[var(--text-soft)] hover:text-[var(--text)]'
+              }`}
+            >
+              <span>⚡ Capturar</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('inbox')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                activeTab === 'inbox'
+                  ? 'bg-[var(--card)] text-[var(--blue)] shadow-xs border border-[var(--border)]'
+                  : 'text-[var(--text-soft)] hover:text-[var(--text)]'
+              }`}
+            >
+              <span>📥 Bandeja</span>
+              {(state.inbox || []).length > 0 && (
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-black px-1 animate-pulse">
+                  {(state.inbox || []).length}
+                </span>
+              )}
+            </button>
           </div>
           <button
             type="button"
@@ -280,27 +333,133 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
           </button>
         </div>
 
-        {/* 6 Category Selector Chips */}
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 rounded-2xl bg-[var(--bg)] p-1.5 mb-4">
-          {captureOptions.map((option) => (
-            <button
-              key={option.kind}
-              type="button"
-              onClick={() => {
-                setKind(option.kind);
-                setMessage('');
-              }}
-              className={`flex flex-col items-center justify-center rounded-xl py-2 px-1 text-[11px] font-bold transition cursor-pointer ${
-                kind === option.kind
-                  ? 'bg-[var(--card)] text-[var(--blue)] shadow-xs border border-[var(--border)]'
-                  : 'text-[var(--text-soft)] hover:text-[var(--text)]'
-              }`}
-            >
-              <span className="text-base leading-none mb-1">{option.icon}</span>
-              <span className="truncate">{option.label}</span>
-            </button>
-          ))}
-        </div>
+        {activeTab === 'inbox' ? (
+          <div className="space-y-3 py-1">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-extrabold text-[var(--text)] block">
+                  Bandeja de entrada personal ({(state.inbox || []).length})
+                </span>
+                <p className="text-[11px] text-[var(--text-faint)]">
+                  Ideas y notas sin clasificar listas para convertir en 1 toque.
+                </p>
+              </div>
+              {(state.inbox || []).length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('capture');
+                    setKind('inbox');
+                  }}
+                  className="rounded-lg bg-[var(--blue-soft)] border border-[var(--blue)]/30 px-2 py-1 text-[10px] font-bold text-[var(--blue)] cursor-pointer"
+                >
+                  ＋ Nueva
+                </button>
+              )}
+            </div>
+
+            {(state.inbox || []).length === 0 ? (
+              <div className="py-10 text-center space-y-3 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg)] p-6">
+                <span className="text-3xl block">✨</span>
+                <p className="text-sm font-bold text-[var(--text)]">Bandeja al día</p>
+                <p className="text-xs text-[var(--text-faint)] max-w-xs mx-auto">
+                  No tenés capturas pendientes de clasificar. Escribí cualquier idea o pensamiento rápido para procesarlo cuando quieras.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('capture');
+                    setKind('inbox');
+                  }}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-xl bg-[var(--blue)] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[var(--blue-hover)] cursor-pointer"
+                >
+                  ⚡ Capturar en bandeja
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2.5 max-h-[60vh] overflow-y-auto pr-0.5">
+                {(state.inbox || []).map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3.5 space-y-2.5 shadow-xs"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-xs font-semibold text-[var(--text)] whitespace-pre-wrap leading-relaxed">
+                        {item.text}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleDiscardInbox(item.id)}
+                        className="text-xs text-[var(--text-faint)] hover:text-rose-500 px-1.5 py-0.5 rounded cursor-pointer"
+                        title="Descartar"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--border)]">
+                      <span className="text-[10px] text-[var(--text-faint)] font-mono">
+                        {fmtDate(item.createdAt.slice(0, 10))} • {item.createdAt.slice(11, 16)}
+                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleConvertInbox(item.id, 'tarea')}
+                          className="rounded-lg bg-[var(--blue-soft)] border border-[var(--blue)]/30 px-2.5 py-1 text-[10px] font-bold text-[var(--blue)] hover:bg-[var(--blue)] hover:text-white transition cursor-pointer"
+                        >
+                          ✓ Tarea hoy
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleConvertInbox(item.id, 'proyecto')}
+                          className="rounded-lg bg-purple-500/10 border border-purple-500/30 px-2.5 py-1 text-[10px] font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-500 hover:text-white transition cursor-pointer"
+                        >
+                          🎯 Proyecto
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleConvertInbox(item.id, 'nota')}
+                          className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition cursor-pointer"
+                        >
+                          📝 Nota
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleConvertInbox(item.id, 'recordatorio')}
+                          className="rounded-lg bg-slate-500/10 border border-[var(--border)] px-2.5 py-1 text-[10px] font-bold text-[var(--text-soft)] hover:bg-[var(--text)] hover:text-[var(--bg)] transition cursor-pointer"
+                        >
+                          ⏰ Alerta
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* 7 Category Selector Chips */}
+            <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5 rounded-2xl bg-[var(--bg)] p-1.5 mb-4">
+              {captureOptions.map((option) => (
+                <button
+                  key={option.kind}
+                  type="button"
+                  onClick={() => {
+                    setKind(option.kind);
+                    setMessage('');
+                  }}
+                  className={`flex flex-col items-center justify-center rounded-xl py-2 px-1 text-[11px] font-bold transition cursor-pointer ${
+                    kind === option.kind
+                      ? 'bg-[var(--card)] text-[var(--blue)] shadow-xs border border-[var(--border)]'
+                      : 'text-[var(--text-soft)] hover:text-[var(--text)]'
+                  }`}
+                >
+                  <span className="text-base leading-none mb-1">{option.icon}</span>
+                  <span className="truncate">{option.label}</span>
+                </button>
+              ))}
+            </div>
 
         {/* WORKOUT TAB: 1-click start */}
         {kind === 'entrenamiento' ? (
@@ -528,11 +687,13 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
               </div>
             )}
 
-            {/* TEXT INPUT FOR TASKS, NOTES, IDEAS, REMINDERS */}
+            {/* TEXT INPUT FOR INBOX, TASKS, NOTES, IDEAS, REMINDERS */}
             {kind !== 'gasto' && (
               <label className="block">
                 <span className="block text-xs font-bold text-[var(--text-soft)] mb-1.5">
-                  {kind === 'tarea'
+                  {kind === 'inbox'
+                    ? '¿Qué querés guardar en tu bandeja?'
+                    : kind === 'tarea'
                     ? '¿Qué hay que hacer?'
                     : kind === 'nota'
                     ? '¿Qué querés guardar?'
@@ -547,7 +708,9 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                     value={text}
                     onChange={(event) => setText(event.target.value)}
                     placeholder={
-                      kind === 'tarea'
+                      kind === 'inbox'
+                        ? 'Ej.: Averiguar trámite, mandar presupuesto a cliente, probar app...'
+                        : kind === 'tarea'
                         ? 'Ej.: Pedir turno con el médico...'
                         : kind === 'nota'
                         ? 'Ej.: Código de acceso al portón es 4912...'
@@ -665,7 +828,9 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
             </button>
           </form>
         )}
-      </section>
-    </div>
+      </>
+    )}
+  </section>
+</div>
   );
 };

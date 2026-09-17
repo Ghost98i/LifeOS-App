@@ -84,3 +84,68 @@ export function addQuickReminder(state: LifeOSState, text: string, date = todayI
   return id;
 }
 
+export function addQuickInbox(
+  state: LifeOSState,
+  text: string,
+  source: 'quick-capture' | 'voice' | 'manual' = 'quick-capture'
+): string {
+  const cleanText = text.trim();
+  if (!cleanText) throw new Error('Escribí el pendiente o idea.');
+  if (!state.inbox) state.inbox = [];
+  const id = uid();
+  state.inbox.unshift({
+    id,
+    text: cleanText,
+    createdAt: new Date().toISOString(),
+    source,
+  });
+  return id;
+}
+
+export function deleteInboxItem(state: LifeOSState, id: string): void {
+  if (!state.inbox) return;
+  state.inbox = state.inbox.filter((item) => item.id !== id);
+}
+
+export function convertInboxItem(
+  state: LifeOSState,
+  id: string,
+  target: 'tarea' | 'nota' | 'recordatorio' | 'proyecto',
+  options?: {
+    priority?: 'alta' | 'media' | 'baja';
+    date?: string;
+    reminderTime?: string;
+    projectName?: string;
+    projectObjective?: string;
+  }
+): { convertedId: string } {
+  if (!state.inbox) state.inbox = [];
+  const item = state.inbox.find((x) => x.id === id);
+  if (!item) throw new Error('Elemento de bandeja de entrada no encontrado.');
+
+  let convertedId = '';
+  if (target === 'tarea') {
+    convertedId = addQuickTask(state, item.text, options?.priority || 'media', options?.date || todayISO());
+  } else if (target === 'nota') {
+    convertedId = addQuickNote(state, item.text, options?.date || todayISO());
+  } else if (target === 'recordatorio') {
+    convertedId = addQuickReminder(state, item.text, options?.date || todayISO(), options?.reminderTime);
+  } else if (target === 'proyecto') {
+    if (!state.projects) state.projects = [];
+    convertedId = uid();
+    state.projects.unshift({
+      id: convertedId,
+      name: options?.projectName?.trim() || item.text,
+      objective: options?.projectObjective?.trim() || item.text,
+      status: 'activo',
+      nextStep: 'Definir primera acción concreta',
+      tasks: [],
+      createdAt: todayISO(),
+    });
+  }
+
+  deleteInboxItem(state, id);
+  return { convertedId };
+}
+
+

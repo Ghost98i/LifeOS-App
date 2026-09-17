@@ -8,6 +8,7 @@ import {
   CalendarEvent,
   ResaleOpportunity,
   EffortLevel,
+  GymSession,
 } from '../types';
 import {
   todayISO,
@@ -396,14 +397,31 @@ export interface PRInfo {
 
 export function calcPRs(state: LifeOSState): Record<string, PRInfo> {
   const prs: Record<string, PRInfo> = {};
-  state.gym.sessions.forEach((s) => {
+  (state.gym.sessions || []).forEach((s) => {
     (s.exercises || []).forEach((ex) => {
-      ex.sets.forEach((set) => {
-        const current = prs[ex.name];
-        if (!current || set.weight > current.weight || (set.weight === current.weight && set.reps > current.reps)) {
-          prs[ex.name] = { weight: set.weight, reps: set.reps, date: s.date };
+      const exerciseName = (ex.name || '').trim();
+      if (!exerciseName) return;
+
+      const sets = ex.sets || [];
+      if (sets.length > 0) {
+        sets.forEach((set) => {
+          const w = Number(set.weight) || 0;
+          const r = Number(set.reps) || 0;
+          if (w <= 0 && r <= 0) return;
+          const current = prs[exerciseName];
+          if (!current || w > current.weight || (w === current.weight && r > current.reps)) {
+            prs[exerciseName] = { weight: w, reps: r, date: s.date };
+          }
+        });
+      } else if (Number(ex.weight) > 0 || ex.reps) {
+        const w = Number(ex.weight) || 0;
+        const rMatch = String(ex.reps || '').match(/\d+/);
+        const r = rMatch ? Number(rMatch[0]) : 1;
+        const current = prs[exerciseName];
+        if (!current || w > current.weight || (w === current.weight && r > current.reps)) {
+          prs[exerciseName] = { weight: w, reps: r, date: s.date };
         }
-      });
+      }
     });
   });
   return prs;
@@ -506,24 +524,79 @@ export function checkoutQuestionsFor(state: LifeOSState, dateIso: string) {
   };
 }
 
-export function findNowAndNext(state: LifeOSState) {
-  const now = new Date();
-  const dayKey = dayKeyFromDate(now);
+export function findNowAndNext(state: LifeOSState, referenceDate = new Date()) {
+  const dayKey = dayKeyFromDate(referenceDate);
   const blocks = [...(state.agenda[dayKey] || [])].sort((a, b) => a.time.localeCompare(b.time));
-  const curMin = now.getHours() * 60 + now.getMinutes();
+  const curMin = referenceDate.getHours() * 60 + referenceDate.getMinutes();
   let current: AgendaBlock | null = null;
   let next: AgendaBlock | null = null;
+
   for (let i = 0; i < blocks.length; i++) {
     const [h, m] = blocks[i].time.split(':').map(Number);
     const blockMin = h * 60 + m;
     if (blockMin <= curMin) {
-      current = blocks[i];
+      // Determine duration threshold until next block or default 90 min
+      const nextBlock = blocks[i + 1];
+      let maxDuration = 90;
+      if (nextBlock) {
+        const [nh, nm] = nextBlock.time.split(':').map(Number);
+        maxDuration = Math.min(180, Math.max(30, (nh * 60 + nm) - blockMin));
+      }
+      if (curMin - blockMin <= maxDuration) {
+        current = blocks[i];
+      }
     } else {
       next = blocks[i];
       break;
     }
   }
   return { current, next, dayKey };
+}
+
+export interface TodayGymStatus {
+  status: 'trained_today' | 'rest_today' | 'pending_today';
+  todaySession: GymSession | null;
+  completedSetsCount: number;
+  totalSetsCount: number;
+  streakDays: number;
+  weeksStreak: number;
+  totalVolume: number;
+}
+
+export function todayGymStatus(state: LifeOSState, dateIso = todayISO()): TodayGymStatus {
+  const streakDetails = calcGymStreakDetails(state);
+  const session = state.gym.sessions.find((s) => s.date === dateIso) || null;
+  const isRestDay = (state.gym.restDays || []).includes(dateIso) || Boolean(state.checkoutLog[dateIso]?.trainedSkipped);
+
+  let totalSets = 0;
+  let completedSets = 0;
+  let totalVolume = 0;
+
+  if (session) {
+    (session.exercises || []).forEach((ex) => {
+      (ex.sets || []).forEach((set) => {
+        totalSets++;
+        if (set.completed) completedSets++;
+        totalVolume += (Number(set.weight) || 0) * (Number(set.reps) || 0);
+      });
+    });
+  }
+
+  const status: TodayGymStatus['status'] = session
+    ? 'trained_today'
+    : isRestDay
+    ? 'rest_today'
+    : 'pending_today';
+
+  return {
+    status,
+    todaySession: session,
+    completedSetsCount: completedSets,
+    totalSetsCount: totalSets,
+    streakDays: streakDetails.streakDays,
+    weeksStreak: streakDetails.weeksStreak,
+    totalVolume,
+  };
 }
 
 export function jobStats(state: LifeOSState) {

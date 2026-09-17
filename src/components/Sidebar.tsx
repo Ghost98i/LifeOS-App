@@ -61,24 +61,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto pr-1">
-          {items.map((item) => {
+          {items.map((item, idx) => {
             const isActive = currentView === item.id;
+            const showPrincipalHeader = idx === 0;
+            const showOrganizarHeader = item.id === 'agenda';
+            const showSistemaHeader = item.id === 'ia' || (item.id === 'config' && !items.some(i => i.id === 'ia'));
+
             return (
               <React.Fragment key={item.id}>
-                {item.id === 'agenda' && <span className="mb-1 mt-3 px-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--text-faint)]">Organizar</span>}
+                {showPrincipalHeader && (
+                  <span className="mb-1 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-faint)]">
+                    Principal
+                  </span>
+                )}
+                {showOrganizarHeader && (
+                  <span className="mb-1 mt-4 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-faint)]">
+                    Organización
+                  </span>
+                )}
+                {showSistemaHeader && (
+                  <span className="mb-1 mt-4 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-faint)]">
+                    Sistema
+                  </span>
+                )}
                 <button
                   onClick={() => {
                     onNavigate(item.id);
                     onCloseMobile();
                   }}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-all ${
+                  className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium transition-all ${
                     isActive
-                      ? 'bg-[var(--blue-soft)] font-semibold text-[var(--blue)]'
+                      ? 'bg-[var(--blue-soft)] font-semibold text-[var(--blue)] shadow-2xs'
                       : 'text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]'
                   }`}
                 >
-                  <AppIcon name={item.icon} className="h-[19px] w-[19px] shrink-0" />
+                  {isActive && (
+                    <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-[var(--blue)]" />
+                  )}
+                  <AppIcon
+                    name={item.icon}
+                    className={`h-[18px] w-[18px] shrink-0 transition-colors ${
+                      isActive ? 'text-[var(--blue)]' : 'text-[var(--text-faint)] group-hover:text-[var(--text)]'
+                    }`}
+                  />
                   <span className="truncate">{item.label}</span>
                 </button>
               </React.Fragment>
@@ -86,13 +112,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
 
-        <div className="pt-3 border-t border-[var(--border)] mt-2 flex items-center justify-between">
+        <div className="pt-3 border-t border-[var(--border)] mt-2">
           <button
             onClick={onToggleTheme}
-            className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+            className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] transition-all cursor-pointer shadow-2xs"
+            title={state.settings.darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           >
-            <AppIcon name={state.settings.darkMode ? 'sun' : 'moon'} className="h-[19px] w-[19px]" />
-            <span>{state.settings.darkMode ? 'Claro' : 'Oscuro'}</span>
+            <div className="flex items-center gap-2.5">
+              <AppIcon name={state.settings.darkMode ? 'sun' : 'moon'} className="h-4 w-4 text-[var(--blue)]" />
+              <span>Modo {state.settings.darkMode ? 'Oscuro' : 'Claro'}</span>
+            </div>
+            <span className="text-[10px] font-bold text-[var(--text-faint)] uppercase">
+              {state.settings.darkMode ? 'ON' : 'OFF'}
+            </span>
           </button>
         </div>
       </aside>

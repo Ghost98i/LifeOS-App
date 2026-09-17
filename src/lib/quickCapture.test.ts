@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { defaultState } from './storage';
-import { addQuickNote, addQuickTask, addQuickTransaction, suggestedQuickAccountId } from './quickCapture';
+import {
+  addQuickInbox,
+  addQuickNote,
+  addQuickTask,
+  addQuickTransaction,
+  convertInboxItem,
+  suggestedQuickAccountId,
+} from './quickCapture';
 
 test('captura un ingreso y actualiza la cuenta elegida', () => {
   const state = defaultState();
@@ -62,3 +69,36 @@ test('addQuickNote agrega un fragmento de texto directamente a state.notes.posti
 
   assert.throws(() => addQuickNote(state, '   '), /la nota/);
 });
+
+test('addQuickInbox agrega pendientes sin clasificar y convertInboxItem los transforma correctamente', () => {
+  const state = defaultState();
+  const id1 = addQuickInbox(state, 'Averiguar costo de flete para mudanza');
+  assert.ok(id1);
+  assert.equal(state.inbox?.length, 1);
+  assert.equal(state.inbox?.[0].text, 'Averiguar costo de flete para mudanza');
+
+  // Convertir a tarea
+  const { convertedId: taskId } = convertInboxItem(state, id1, 'tarea', { priority: 'alta' });
+  assert.ok(taskId);
+  assert.equal(state.inbox?.length, 0); // removido de la bandeja
+  assert.equal(state.todayExtras.length, 1);
+  assert.equal(state.todayExtras[0].text, 'Averiguar costo de flete para mudanza');
+  assert.equal(state.todayExtras[0].priority, 'alta');
+
+  // Capturar otro y convertir a proyecto
+  const id2 = addQuickInbox(state, 'Lanzar nuevo canal de cocina');
+  const { convertedId: projId } = convertInboxItem(state, id2, 'proyecto');
+  assert.ok(projId);
+  assert.equal(state.inbox?.length, 0);
+  assert.equal(state.projects?.length, 1);
+  assert.equal(state.projects?.[0].name, 'Lanzar nuevo canal de cocina');
+  assert.equal(state.projects?.[0].status, 'activo');
+  assert.equal(state.projects?.[0].nextStep, 'Definir primera acción concreta');
+
+  // Capturar y convertir a nota
+  const id3 = addQuickInbox(state, 'Cita leída: "La disciplina es libertad"');
+  convertInboxItem(state, id3, 'nota');
+  assert.equal(state.inbox?.length, 0);
+  assert.ok(state.notes.postits.some((n) => n.text.includes('La disciplina es libertad')));
+});
+

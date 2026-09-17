@@ -7,6 +7,8 @@ import {
   TEMPLATE_ESTUDIANTE,
   uid,
 } from '../lib/storage';
+import { PageHeader } from './PageHeader';
+import { AppIcon } from './AppIcon';
 
 interface AgendaViewProps {
   state: LifeOSState;
@@ -143,27 +145,29 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text)]">Agenda & Rutinas</h1>
-        <p className="text-sm text-[var(--text-soft)]">
-          Tu horario semanal y las rutinas que alimentan el checklist de "Hoy". Podés editar los días y horarios en cualquier momento.
-        </p>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={handleLoadTemplate}
-          className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] hover:border-[var(--blue)] transition-colors cursor-pointer"
-        >
-          📋 Cargar plantilla sugerida
-        </button>
-        <button
-          onClick={handleClearAgenda}
-          className="px-3.5 py-2 text-xs font-semibold rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer"
-        >
-          🗑 Vaciar semana
-        </button>
-      </div>
+      <PageHeader
+        category="Organización"
+        title="Agenda & Rutinas"
+        subtitle="Tu horario semanal y las rutinas que alimentan el checklist de Hoy."
+        actions={
+          <>
+            <button
+              onClick={handleLoadTemplate}
+              className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-[var(--card)] border border-[var(--border)] text-[var(--text)] hover:border-[var(--blue)] transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+            >
+              <AppIcon name="list" className="h-3.5 w-3.5 text-[var(--blue)]" />
+              <span>Plantilla sugerida</span>
+            </button>
+            <button
+              onClick={handleClearAgenda}
+              className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs"
+            >
+              <AppIcon name="trash" className="h-3.5 w-3.5" />
+              <span>Vaciar semana</span>
+            </button>
+          </>
+        }
+      />
 
       {/* Week Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -172,33 +176,36 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
           return (
             <div
               key={day}
-              className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-3 flex flex-col min-h-[150px]"
+              className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-3 flex flex-col min-h-[160px] shadow-2xs transition-all hover:border-[var(--border-hover)]"
             >
               <div className="flex items-center justify-between font-bold text-xs capitalize text-[var(--text)] pb-2 mb-2 border-b border-[var(--border)]">
                 <span>{DAY_LABELS[day]}</span>
                 <button
                   onClick={() => handleAddBlock(day)}
-                  className="text-blue-600 dark:text-blue-400 hover:scale-110 transition-transform text-sm p-0.5 cursor-pointer"
+                  className="flex h-6 w-6 items-center justify-center rounded-lg bg-[var(--blue-soft)] text-[var(--blue)] hover:opacity-80 transition-opacity cursor-pointer"
                   title="Agregar bloque"
+                  aria-label={`Agregar bloque a ${DAY_LABELS[day]}`}
                 >
-                  ＋
+                  <AppIcon name="plus" className="h-3.5 w-3.5" />
                 </button>
               </div>
 
               <div className="space-y-1.5 flex-1">
                 {blocks.length === 0 ? (
-                  <p className="text-[11px] text-[var(--text-faint)] text-center py-4">Sin bloques</p>
+                  <div className="flex flex-col items-center justify-center py-6 text-[11px] text-[var(--text-faint)]">
+                    <span>Sin bloques</span>
+                  </div>
                 ) : (
                   blocks.map((b) => (
                     <div
                       key={b.id}
-                      className="bg-[var(--bg)] border border-[var(--border)] hover:border-[var(--blue)] rounded-lg p-1.5 text-[11px] flex items-center justify-between gap-1 group transition-colors"
+                      className="bg-[var(--bg-elevated)] border border-[var(--border)] hover:border-[var(--blue)] rounded-xl p-2 text-[11px] flex items-center justify-between gap-1 group transition-all"
                     >
-                      <div className="truncate flex-1">
-                        <span className="font-mono font-bold text-blue-600 dark:text-blue-400 mr-1">{b.time}</span>
-                        <span className="text-[var(--text)] font-medium">{b.activity}</span>
+                      <div className="truncate flex-1 min-w-0">
+                        <span className="font-mono font-bold text-[var(--blue)] mr-1.5">{b.time}</span>
+                        <span className="text-[var(--text)] font-medium truncate">{b.activity}</span>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-0.5 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() =>
                             setEditingBlock({
@@ -210,17 +217,19 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
                               effort: b.effort || 'medium',
                             })
                           }
-                          className="text-[var(--text-faint)] hover:text-[var(--blue)] text-xs px-1"
-                          title="Editar día o hora"
+                          className="text-[var(--text-faint)] hover:text-[var(--blue)] p-1 rounded hover:bg-[var(--surface-muted)] cursor-pointer"
+                          title="Editar bloque"
+                          aria-label="Editar bloque"
                         >
-                          ✏️
+                          <AppIcon name="edit" className="h-3 w-3" />
                         </button>
                         <button
                           onClick={() => handleDeleteBlock(day, b.id)}
-                          className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1"
+                          className="text-[var(--text-faint)] hover:text-red-500 p-1 rounded hover:bg-[var(--surface-muted)] cursor-pointer"
                           title="Eliminar bloque"
+                          aria-label="Eliminar bloque"
                         >
-                          ✕
+                          <AppIcon name="trash" className="h-3 w-3" />
                         </button>
                       </div>
                     </div>
@@ -237,12 +246,16 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
         <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 max-w-md w-full space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-              <h3 className="text-sm font-extrabold text-[var(--text)]">✏️ Editar Bloque de Agenda</h3>
+              <div className="flex items-center gap-2">
+                <AppIcon name="edit" className="h-4 w-4 text-[var(--blue)]" />
+                <h3 className="text-sm font-extrabold text-[var(--text)]">Editar Bloque de Agenda</h3>
+              </div>
               <button
                 onClick={() => setEditingBlock(null)}
-                className="text-xs text-[var(--text-faint)] hover:text-[var(--text)]"
+                className="text-xs text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded hover:bg-[var(--surface-muted)] cursor-pointer"
+                aria-label="Cerrar modal"
               >
-                ✕
+                <AppIcon name="x" className="h-4 w-4" />
               </button>
             </div>
 
@@ -366,9 +379,10 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
             </div>
             <button
               type="submit"
-              className="px-4 py-2 bg-[var(--blue)] text-white text-xs font-bold rounded-xl hover:bg-[var(--blue-hover)] transition-all cursor-pointer shadow-2xs"
+              className="px-4 py-2 bg-[var(--blue)] text-white text-xs font-bold rounded-xl hover:bg-[var(--blue-hover)] transition-all cursor-pointer shadow-2xs flex items-center gap-1.5"
             >
-              ＋ Agregar rutina
+              <AppIcon name="plus" className="h-3.5 w-3.5" />
+              <span>Agregar rutina</span>
             </button>
           </div>
 
@@ -386,7 +400,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
                     onClick={() => toggleDaySelection(d, taskDays, setTaskDays)}
                     className={`px-2.5 py-1 text-[11px] font-bold rounded-lg border cursor-pointer transition-all ${
                       isSelected
-                        ? 'bg-blue-600 border-blue-600 text-white'
+                        ? 'bg-[var(--blue)] border-[var(--blue)] text-white'
                         : 'bg-[var(--bg-elevated)] border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)]'
                     }`}
                   >
@@ -403,12 +417,16 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
           <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
             <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 max-w-md w-full space-y-4 shadow-xl">
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-                <h3 className="text-sm font-extrabold text-[var(--text)]">✏️ Editar Rutina Recurrente</h3>
+                <div className="flex items-center gap-2">
+                  <AppIcon name="edit" className="h-4 w-4 text-[var(--blue)]" />
+                  <h3 className="text-sm font-extrabold text-[var(--text)]">Editar Rutina Recurrente</h3>
+                </div>
                 <button
                   onClick={() => setEditingTask(null)}
-                  className="text-xs text-[var(--text-faint)] hover:text-[var(--text)]"
+                  className="text-xs text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded hover:bg-[var(--surface-muted)] cursor-pointer"
+                  aria-label="Cerrar modal"
                 >
-                  ✕
+                  <AppIcon name="x" className="h-4 w-4" />
                 </button>
               </div>
 
@@ -472,7 +490,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
                           }}
                           className={`px-3 py-1.5 text-xs font-bold rounded-xl border cursor-pointer transition-all ${
                             isSelected
-                              ? 'bg-blue-600 border-blue-600 text-white'
+                              ? 'bg-[var(--blue)] border-[var(--blue)] text-white'
                               : 'bg-[var(--bg-elevated)] border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)]'
                           }`}
                         >
@@ -508,16 +526,16 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
             const items = state.tasksRecurring.filter((t) => t.freq === freq);
             if (items.length === 0) return null;
             return (
-              <div key={freq} className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-4">
+              <div key={freq} className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-2xs">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-faint)] mb-2">
                   {FREQ_LABELS[freq]}
                 </h3>
                 <div className="divide-y divide-[var(--border)]">
                   {items.map((t) => (
                     <div key={t.id} className="py-2.5 flex items-center justify-between text-xs sm:text-sm text-[var(--text)]">
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-                        <span className="font-semibold">{t.name}</span>
-                        <span className={`w-fit rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase ${t.effort === 'low' ? 'bg-emerald-500/10 text-emerald-600' : t.effort === 'high' ? 'bg-rose-500/10 text-rose-600' : 'bg-amber-500/10 text-amber-600'}`}>{t.effort === 'low' ? 'bajo' : t.effort === 'high' ? 'alto' : 'medio'}</span>
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 min-w-0">
+                        <span className="font-semibold truncate">{t.name}</span>
+                        <span className={`w-fit rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase ${t.effort === 'low' ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : t.effort === 'high' ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>{t.effort === 'low' ? 'bajo' : t.effort === 'high' ? 'alto' : 'medio'}</span>
                         {t.days && t.days.length > 0 && (
                           <div className="flex flex-wrap gap-1">
                             {t.days.map((d) => (
@@ -531,20 +549,22 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
                           </div>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 shrink-0 ml-2">
                         <button
                           onClick={() => setEditingTask(t)}
-                          className="text-[var(--text-faint)] hover:text-[var(--blue)] text-xs px-2 py-1 rounded-lg bg-[var(--bg)] border border-[var(--border)] cursor-pointer"
+                          className="flex items-center gap-1 text-[var(--text-soft)] hover:text-[var(--blue)] text-xs px-2.5 py-1 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] hover:border-[var(--blue)] transition-colors cursor-pointer"
                           title="Editar días o nombre"
                         >
-                          ✏️ Editar días
+                          <AppIcon name="edit" className="h-3 w-3" />
+                          <span className="hidden sm:inline">Editar</span>
                         </button>
                         <button
                           onClick={() => handleDeleteTask(t.id)}
-                          className="text-[var(--text-faint)] hover:text-red-500 text-xs px-2 py-1 rounded-lg bg-[var(--bg)] border border-[var(--border)] cursor-pointer"
+                          className="text-[var(--text-faint)] hover:text-red-500 text-xs p-1.5 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] hover:border-red-400 transition-colors cursor-pointer"
                           title="Eliminar rutina"
+                          aria-label="Eliminar rutina"
                         >
-                          ✕
+                          <AppIcon name="trash" className="h-3 w-3" />
                         </button>
                       </div>
                     </div>

@@ -49,6 +49,7 @@ export const Topbar: React.FC<TopbarProps> = ({
 }) => {
   const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
   const [showCloudMenu, setShowCloudMenu] = useState(false);
+  const [showQuickMenu, setShowQuickMenu] = useState(false);
   const hidden = state.settings.hiddenTabs || [];
   const actions = QUICK_ACTIONS.filter((q) => !hidden.includes(q.view));
   const currentMeta: Record<ViewType, { icon: AppIconName; label: string }> = {
@@ -105,7 +106,7 @@ export const Topbar: React.FC<TopbarProps> = ({
     <header className="sticky top-0 z-30 flex min-h-16 items-center gap-3 border-b border-[var(--border)] bg-[var(--topbar)] px-4 py-3 backdrop-blur-xl lg:px-7">
       <button
         onClick={onOpenMobileNav}
-        className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--text)] lg:hidden"
+        className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--text)] lg:hidden cursor-pointer"
         aria-label="Abrir menú"
       >
         <AppIcon name="menu" className="h-5 w-5" />
@@ -129,10 +130,14 @@ export const Topbar: React.FC<TopbarProps> = ({
 
       <div className="flex min-w-0 items-center gap-2 sm:hidden">
         <img src={lifeOSIcon} alt="" className="h-7 w-7 shrink-0 rounded-lg" />
-        <span className="flex min-w-0 items-center gap-1.5 truncate text-sm font-bold tracking-tight text-[var(--text)]"><AppIcon name={currentMeta[currentView].icon} className="h-4 w-4 shrink-0" />{currentMeta[currentView].label}</span>
+        <span className="flex min-w-0 items-center gap-1.5 truncate text-sm font-bold tracking-tight text-[var(--text)]">
+          <AppIcon name={currentMeta[currentView].icon} className="h-4 w-4 shrink-0" />
+          {currentMeta[currentView].label}
+        </span>
       </div>
 
       <div className="flex items-center gap-2 ml-auto">
+        {/* Stream Guard Button */}
         <button
           onClick={onTogglePrivacy}
           title={state.settings.privacyMode ? "Stream Guard activo (Shift + P) - Clic para mostrar saldos" : "Activar Stream Guard (Shift + P) - Clic para ocultar montos"}
@@ -145,12 +150,77 @@ export const Topbar: React.FC<TopbarProps> = ({
         >
           <AppIcon name={state.settings.privacyMode ? 'eyeOff' : 'eye'} className="h-4 w-4" />
           <span className="hidden xl:inline">
-            {state.settings.privacyMode ? 'Stream Guard activo' : 'Stream Guard'}
+            {state.settings.privacyMode ? 'Stream Guard' : 'Privacidad'}
           </span>
         </button>
 
-        <button onClick={onOpenSearch} className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-sm sm:hidden cursor-pointer" aria-label="Buscar en LifeOS"><AppIcon name="search" className="h-4 w-4"/></button>
-        <button onClick={onOpenCapture} title="Capturar (C)" className="hidden sm:flex items-center gap-1.5 rounded-xl bg-[var(--blue)] px-3 py-2 text-xs font-extrabold text-white shadow-sm hover:opacity-90 transition-opacity cursor-pointer"><span className="text-base leading-none">＋</span> Capturar <kbd className="ml-1 rounded bg-white/15 px-1 text-[9px]">C</kbd></button>
+        <button onClick={onOpenSearch} className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-sm sm:hidden cursor-pointer" aria-label="Buscar en LifeOS">
+          <AppIcon name="search" className="h-4 w-4"/>
+        </button>
+
+        {/* Quick Action Shortcuts Group */}
+        <div className="relative hidden sm:flex items-center gap-1">
+          <button
+            onClick={onOpenCapture}
+            title={(state.inbox || []).length > 0 ? `Capturar / Bandeja (${(state.inbox || []).length} pendientes)` : "Capturar (C)"}
+            className="flex h-9 items-center gap-1.5 rounded-xl bg-[var(--blue)] px-3 text-xs font-bold text-white shadow-sm hover:opacity-90 transition-all active:scale-[0.98] cursor-pointer"
+          >
+            <AppIcon name="plus" className="h-3.5 w-3.5" />
+            <span>Capturar</span>
+            {(state.inbox || []).length > 0 ? (
+              <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-black text-slate-900 animate-pulse">
+                {(state.inbox || []).length}
+              </span>
+            ) : (
+              <kbd className="ml-0.5 rounded bg-white/20 px-1 py-0.5 text-[9px] font-mono">C</kbd>
+            )}
+          </button>
+
+          {actions.length > 0 && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowQuickMenu((v) => !v)}
+                title="Acciones y atajos rápidos"
+                className={`flex h-9 w-8 items-center justify-center rounded-xl border transition-all cursor-pointer ${
+                  showQuickMenu
+                    ? 'border-[var(--blue)] bg-[var(--blue-soft)] text-[var(--blue)]'
+                    : 'border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)]'
+                }`}
+                aria-label="Más acciones rápidas"
+              >
+                <AppIcon name="chevronDown" className="h-3.5 w-3.5" />
+              </button>
+
+              {showQuickMenu && (
+                <div
+                  className="absolute right-0 top-11 z-50 w-52 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-2 shadow-xl animate-in fade-in slide-in-from-top-1"
+                  onClick={() => setShowQuickMenu(false)}
+                >
+                  <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
+                    Atajos directos
+                  </div>
+                  <div className="space-y-0.5 mt-1">
+                    {actions.map((q) => (
+                      <button
+                        key={q.label}
+                        type="button"
+                        onClick={() => {
+                          playSound('click');
+                          onQuickAction(q.view, q.focusId, q.txType);
+                        }}
+                        className="flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-left text-xs font-medium text-[var(--text)] hover:bg-[var(--blue-soft)] hover:text-[var(--blue)] transition-colors cursor-pointer"
+                      >
+                        <span>{q.label}</span>
+                        <span className="text-[10px] text-[var(--text-faint)] uppercase">{q.view}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Visual Sync Status with Micro-LED */}
         <div className="relative shrink-0">
@@ -172,7 +242,7 @@ export const Topbar: React.FC<TopbarProps> = ({
             }
           >
             <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${syncLed.dotClass}`} />
-            <span className="hidden sm:inline">{syncLed.label}</span>
+            <span className="hidden md:inline">{syncLed.label}</span>
           </button>
           {cloudConfigured && cloudUser && showCloudMenu && (
             <div className="absolute right-0 top-11 z-50 w-64 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl">
@@ -188,29 +258,19 @@ export const Topbar: React.FC<TopbarProps> = ({
           )}
         </div>
 
-        <div className="hidden lg:flex items-center gap-2 overflow-x-auto no-scrollbar">
+        {/* Sound Toggle Icon Button */}
         <button
           onClick={toggleSound}
-          title={soundOn ? 'Sonidos activados' : 'Sonidos desactivados'}
-          className="px-2.5 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] text-xs font-bold text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition-all cursor-pointer shrink-0 shadow-2xs flex items-center gap-1.5"
+          title={soundOn ? 'Sonidos activados (clic para silenciar)' : 'Sonidos silenciados (clic para activar)'}
+          className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all cursor-pointer ${
+            soundOn
+              ? 'border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)]'
+              : 'border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-faint)]'
+          }`}
+          aria-label={soundOn ? 'Desactivar sonido' : 'Activar sonido'}
         >
           <AppIcon name={soundOn ? 'volume' : 'volumeOff'} className="h-4 w-4" />
-          <span className="hidden sm:inline text-[10px] uppercase tracking-wider">{soundOn ? 'Sonido ON' : 'Sonido OFF'}</span>
         </button>
-
-        {actions.map((q) => (
-          <button
-            key={q.label}
-            onClick={() => {
-              playSound('click');
-              onQuickAction(q.view, q.focusId, q.txType);
-            }}
-            className="px-3 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] text-xs font-bold text-[var(--text-soft)] hover:text-[var(--blue)] hover:border-[var(--blue)] hover:bg-[var(--blue-soft)] transition-all whitespace-nowrap cursor-pointer shrink-0 shadow-2xs"
-          >
-            {q.label}
-          </button>
-        ))}
-        </div>
       </div>
     </header>
   );

@@ -6,7 +6,7 @@ export type AppIconName =
   | 'sun' | 'moon' | 'menu' | 'search' | 'shield' | 'volume' | 'volumeOff'
   | 'cloud' | 'check' | 'clock' | 'chart' | 'scale' | 'chevronLeft' | 'chevronRight'
   | 'trophy' | 'play' | 'pause' | 'rotateCcw' | 'filter' | 'kanban' | 'list' | 'arrowRight' | 'trash' | 'edit' | 'flame' | 'trendingUp'
-  | 'eye' | 'eyeOff';
+  | 'eye' | 'eyeOff' | 'target' | 'zap' | 'bell' | 'chevronDown' | 'chevronUp' | 'x' | 'checkCircle' | 'activity';
 
 interface AppIconProps extends React.SVGProps<SVGSVGElement> {
   name: AppIconName;
@@ -54,6 +54,14 @@ const paths: Record<AppIconName, React.ReactNode> = {
   trendingUp: <><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></>,
   eye: <><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></>,
   eyeOff: <><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></>,
+  target: <><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></>,
+  zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>,
+  bell: <><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></>,
+  chevronDown: <path d="m6 9 6 6 6-6"/>,
+  chevronUp: <path d="m18 15-6-6-6 6"/>,
+  x: <path d="M18 6 6 18M6 6l12 12"/>,
+  checkCircle: <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>,
+  activity: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>,
 };
 
 export const AppIcon: React.FC<AppIconProps> = ({ name, className = 'h-5 w-5', ...props }) => (

@@ -8,6 +8,7 @@ import {
 } from '../lib/storage';
 import { jobStats } from '../lib/calculations';
 import { JobKanbanBoard } from './JobKanbanBoard';
+import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 
 interface TrabajoViewProps {
@@ -86,29 +87,50 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-[var(--text)]">Trabajo</h1>
-        <p className="text-sm text-[var(--text-soft)]">
-          Todo tu proceso de búsqueda laboral, en un solo lugar.
-        </p>
-      </div>
+      <PageHeader
+        category="Carrera Profesional"
+        title="Trabajo & Empleo"
+        subtitle="Postulaciones, embudo de entrevistas y seguimiento laboral centralizado."
+        actions={
+          <button
+            type="button"
+            onClick={() => handleQuickAddInColumn('pendiente')}
+            className="px-3.5 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+          >
+            <AppIcon name="plus" className="h-3.5 w-3.5" />
+            <span>Nueva postulación</span>
+          </button>
+        }
+      />
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">📨 CVs enviados</span>
+        <div className="lifeos-stat-card">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">CVs enviados</span>
+            <AppIcon name="note" className="h-4 w-4 text-[var(--blue)] shrink-0" />
+          </div>
           <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{jstats.cvEnviados}</div>
         </div>
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">🎤 Entrevistas</span>
+        <div className="lifeos-stat-card">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Entrevistas</span>
+            <AppIcon name="checkCircle" className="h-4 w-4 text-emerald-500 shrink-0" />
+          </div>
           <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{jstats.entrevistas}</div>
         </div>
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">🏢 Empresas</span>
+        <div className="lifeos-stat-card">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Empresas</span>
+            <AppIcon name="briefcase" className="h-4 w-4 text-[var(--blue)] shrink-0" />
+          </div>
           <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{jstats.empresas}</div>
         </div>
-        <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">⏰ Seguimientos hoy</span>
+        <div className="lifeos-stat-card">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Seguimientos hoy</span>
+            <AppIcon name="clock" className={`h-4 w-4 shrink-0 ${jstats.seguimientosPendientes > 0 ? 'text-red-500' : 'text-[var(--text-faint)]'}`} />
+          </div>
           <div className={`text-2xl font-extrabold font-mono mt-1 ${jstats.seguimientosPendientes > 0 ? 'text-red-500' : 'text-[var(--text)]'}`}>
             {jstats.seguimientosPendientes}
           </div>
@@ -119,7 +141,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
       {/* Add Form */}
       <div id="qa-focus-trabajo" className="space-y-2">
         <h2 className="text-sm font-bold text-[var(--text)]">Nueva postulación</h2>
-        <form onSubmit={handleAddApplication} className="flex flex-wrap items-end gap-2 p-3.5 bg-[var(--bg)] border border-dashed border-[var(--border)] rounded-xl">
+        <form onSubmit={handleAddApplication} className="flex flex-wrap items-end gap-2 p-4 bg-[var(--bg)] border border-dashed border-[var(--border)] rounded-2xl">
           <div className="min-w-[140px] flex-1">
             <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Empresa</label>
             <input
@@ -127,7 +149,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
               value={empresa}
               onChange={(e) => setEmpresa(e.target.value)}
               placeholder="Ej: Scotiabank"
-              className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+              className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
             />
           </div>
           <div className="min-w-[140px] flex-1">
@@ -137,7 +159,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
               value={puesto}
               onChange={(e) => setPuesto(e.target.value)}
               placeholder="Ej: Analista"
-              className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+              className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
             />
           </div>
           <div>
@@ -145,7 +167,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
             <select
               value={estado}
               onChange={(e) => setEstado(e.target.value as any)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+              className="px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)] cursor-pointer"
             >
               {Object.entries(ESTADO_LABELS).map(([k, v]) => (
                 <option key={k} value={k}>
@@ -160,7 +182,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
               type="date"
               value={fecha}
               onChange={(e) => setFecha(e.target.value)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+              className="px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
             />
           </div>
           <div className="min-w-[140px] flex-1">
@@ -170,14 +192,15 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
               value={reclutador}
               onChange={(e) => setReclutador(e.target.value)}
               placeholder="Opcional"
-              className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden"
+              className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
             />
           </div>
           <button
             type="submit"
-            className="px-3.5 py-1.5 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs"
           >
-            ＋ Agregar
+            <AppIcon name="plus" className="h-3.5 w-3.5" />
+            <span>Agregar</span>
           </button>
         </form>
       </div>

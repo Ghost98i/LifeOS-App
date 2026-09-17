@@ -31,3 +31,13 @@ test('agrega Mis cosas a backups anteriores sin perder notas', () => {
 test('rechaza archivos JSON que no pertenecen a LifeOS', () => {
   assert.throws(() => parseBackupJSON('{"hello":"world"}'), /no parece pertenecer/);
 });
+
+test('normaliza streaming heredado garantizando arrays de checklist y pipeline', () => {
+  const migrated = normalizeStoredState({
+    streaming: { sessions: [{ id: 's1', date: '2026-09-17', hours: 2 }], monthlyGoal: 10 },
+  });
+  assert.equal(migrated.streaming.monthlyGoal, 10);
+  assert.equal(migrated.streaming.sessions.length, 1);
+  assert.deepEqual(migrated.streaming.preStreamChecklist, []);
+  assert.deepEqual(migrated.streaming.contentPipeline, []);
+});

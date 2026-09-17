@@ -135,6 +135,8 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
   // Ideas & Metas
   state.ideas.forEach((item) => matches(query, item.text) && add({ id: `idea-${item.id}`, icon: '💡', iconName: 'sparkles', title: item.text, subtitle: 'Idea', view: 'ia', category: 'other' }));
   state.goals.forEach((item) => matches(query, item.name, item.current, item.target, 'meta') && add({ id: `goal-${item.id}`, icon: '🎯', iconName: 'trophy', title: item.name, subtitle: `${item.current} de ${item.target}`, view: 'dashboard', category: 'other' }));
+  (state.projects || []).forEach((item) => matches(query, item.name, item.objective, item.nextStep, item.blockers, 'proyecto') && add({ id: `project-${item.id}`, icon: '🚀', iconName: 'target', title: item.name, subtitle: `Proyecto (${item.status}) · Próximo: ${item.nextStep || 'Sin definir'}`, view: 'notas', category: 'other' }));
+  (state.inbox || []).forEach((item) => matches(query, item.text, 'inbox', 'bandeja') && add({ id: `inbox-${item.id}`, icon: '📥', iconName: 'bell', title: item.text, subtitle: `Bandeja de entrada`, view: 'dashboard', category: 'tasks' }));
   state.streaming.sessions.forEach((item) => matches(query, item.date, item.hours, 'stream') && add({ id: `stream-${item.id}`, icon: '🎙️', iconName: 'flame', title: `${item.hours} h de stream`, subtitle: item.date, view: 'dashboard', category: 'other' }));
 
   return results;
