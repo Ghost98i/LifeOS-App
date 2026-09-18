@@ -142,11 +142,16 @@ function normalizeSet(value: unknown, fallbackId: string): GymSet | null {
   const candidate = value as Record<string, unknown>;
   const reps = numeric(candidate.reps);
   if (reps <= 0) return null;
+  const completed = typeof candidate.completed === 'boolean'
+    ? candidate.completed
+    : Boolean(candidate.completedAt);
   return {
     id: stablePart(candidate.id, fallbackId),
     weight: numeric(candidate.weight),
     reps,
+    completed,
     completedAt: typeof candidate.completedAt === 'string' ? candidate.completedAt : null,
+    rpe: typeof candidate.rpe === 'number' && !Number.isNaN(candidate.rpe) ? candidate.rpe : undefined,
   };
 }
 
@@ -251,6 +256,7 @@ export function migrateGym(value: unknown): Gym {
     if (activeSeen) session.status = 'completed';
     activeSeen = true;
   });
+  sessions.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const timer = gym.activeTimer && typeof gym.activeTimer === 'object' && !Array.isArray(gym.activeTimer)
     ? gym.activeTimer as Record<string, unknown>
     : null;

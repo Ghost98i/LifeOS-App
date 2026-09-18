@@ -31,6 +31,7 @@ import {
   changedSyncModules,
   classifyInitialModuleChanges,
   equivalentLifeOSState,
+  extractPureModuleData,
   mergeSyncModule,
   syncDataFingerprint,
   syncModuleData,
@@ -175,7 +176,7 @@ export default function App() {
     if (!cloudSyncConfigured || !user || modules.length === 0 || storageUserIdRef.current !== user.uid) return;
     setSyncStatus(navigator.onLine ? 'saving' : 'offline');
 
-    const batch = writeCloudModules(user.uid, currentState, modules, deviceIdRef.current, optimisticRevisionMap());
+    const batch = writeCloudModules(user.uid, currentState, modules, deviceIdRef.current, optimisticRevisionMap(), tombstonesRef.current);
     batch.writes.forEach((write) => {
       pendingRevisionsRef.current[write.module] = [...(pendingRevisionsRef.current[write.module] || []), write.revision];
     });
@@ -204,7 +205,9 @@ export default function App() {
           if (remaining.length) pendingRevisionsRef.current[write.module] = remaining;
           else delete pendingRevisionsRef.current[write.module];
           failedSyncModulesRef.current.add(write.module);
+          queuedModulesRef.current.add(write.module);
         });
+        queuedStateRef.current = currentState;
         setFailedSyncModules([...failedSyncModulesRef.current]);
         setSyncStatus(navigator.onLine ? 'error' : 'offline');
 
@@ -212,7 +215,7 @@ export default function App() {
         retryAttemptRef.current += 1;
         if (retryTimeoutRef.current !== null) window.clearTimeout(retryTimeoutRef.current);
         retryTimeoutRef.current = window.setTimeout(() => {
-          if (failedSyncModulesRef.current.size > 0 && navigator.onLine) {
+          if (queuedModulesRef.current.size > 0 && navigator.onLine) {
             flushCloudSave();
           }
         }, delay);
@@ -440,8 +443,8 @@ export default function App() {
           : navigator.onLine ? 'synced' : 'offline';
 
         if (initializedUserRef.current !== cloudUser.uid) {
-          if (snapshot.fromCache) {
-            setSyncStatus(navigator.onLine ? 'connecting' : 'offline');
+          if (snapshot.fromCache && navigator.onLine) {
+            setSyncStatus('connecting');
             return;
           }
 
@@ -458,7 +461,7 @@ export default function App() {
             return;
           }
 
-          const moduleData = Object.fromEntries(snapshot.heads.map((head) => [head.module, head.data]));
+          const moduleData = Object.fromEntries(snapshot.heads.map((head) => [head.module, extractPureModuleData(head.data)]));
           const remoteRevisions = Object.fromEntries(snapshot.heads.map((head) => [head.module, head.revision])) as SyncRevisionMap;
           reconcileInitialState(buildStateFromModules(moduleData), remoteRevisions);
           return;
@@ -471,6 +474,23 @@ export default function App() {
         let appliedRemote = false;
 
         for (const head of snapshot.heads) {
+          if (head.data && typeof head.data === 'object' && '_tombstones' in head.data) {
+            const remoteTombstones = (head.data as any)._tombstones as Record<string, number>;
+            if (remoteTombstones && typeof remoteTombstones === 'object') {
+              let tombChanged = false;
+              for (const [id, ts] of Object.entries(remoteTombstones)) {
+                if (typeof ts === 'number' && (!tombstonesRef.current[id] || tombstonesRef.current[id] < ts)) {
+                  tombstonesRef.current[id] = ts;
+                  tombChanged = true;
+                }
+              }
+              if (tombChanged && cloudUserRef.current) {
+                saveTombstones(cloudUserRef.current.uid, tombstonesRef.current);
+              }
+            }
+          }
+
+          const pureHeadData = extractPureModuleData(head.data);
           const pendingRevisions = pendingRevisionsRef.current[head.module] || [];
           const knownRevision = nextRevisions[head.module] || null;
 
@@ -481,8 +501,8 @@ export default function App() {
               if (remaining.length) pendingRevisionsRef.current[head.module] = remaining;
               else delete pendingRevisionsRef.current[head.module];
               nextRevisions[head.module] = head.revision;
-              nextBaselines[head.module] = syncDataFingerprint(head.data);
-              baselineDataRef.current[head.module] = head.data;
+              nextBaselines[head.module] = syncDataFingerprint(pureHeadData);
+              baselineDataRef.current[head.module] = pureHeadData;
               failedSyncModulesRef.current.delete(head.module);
               setFailedSyncModules([...failedSyncModulesRef.current]);
             }
@@ -491,8 +511,8 @@ export default function App() {
 
           if (knownRevision === head.revision) {
             if (!nextBaselines[head.module]) {
-              nextBaselines[head.module] = syncDataFingerprint(head.data);
-              baselineDataRef.current[head.module] = head.data;
+              nextBaselines[head.module] = syncDataFingerprint(pureHeadData);
+              baselineDataRef.current[head.module] = pureHeadData;
             }
             continue;
           }
@@ -503,10 +523,10 @@ export default function App() {
             : false;
 
           if (pendingRevisions.length === 0 && !localDirty) {
-            nextState = applySyncModule(nextState, head.module, head.data);
+            nextState = applySyncModule(nextState, head.module, pureHeadData);
             nextRevisions[head.module] = head.revision;
-            nextBaselines[head.module] = syncDataFingerprint(head.data);
-            baselineDataRef.current[head.module] = head.data;
+            nextBaselines[head.module] = syncDataFingerprint(pureHeadData);
+            baselineDataRef.current[head.module] = pureHeadData;
             appliedRemote = true;
             continue;
           }
@@ -515,12 +535,12 @@ export default function App() {
           nextState = mergeSyncModule(
             nextState,
             head.module,
-            head.data,
+            pureHeadData,
             baselineDataRef.current[head.module],
             tombstonesRef.current
           );
           nextRevisions[head.module] = head.revision;
-          nextBaselines[head.module] = syncDataFingerprint(head.data);
+          nextBaselines[head.module] = syncDataFingerprint(pureHeadData);
           baselineDataRef.current[head.module] = syncModuleData(nextState, head.module);
           appliedRemote = true;
           modulesToUpload.push(head.module);

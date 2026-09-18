@@ -351,7 +351,8 @@ export function writeCloudModules(
   state: LifeOSState,
   modules: SyncModuleKey[],
   deviceId: string,
-  baseRevisions: SyncRevisionMap
+  baseRevisions: SyncRevisionMap,
+  tombstones: Record<string, number> = {}
 ): CloudWriteBatch {
   const { db } = services();
   const batch = writeBatch(db);
@@ -359,10 +360,15 @@ export function writeCloudModules(
   const writes = modules.map((module, index) => {
     const revision = `${clientUpdatedAt + index}-${deviceId}-${uid()}`;
     const parentRevision = baseRevisions[module] || null;
+    const rawData = syncModuleData(state, module) as Record<string, unknown>;
+    const payloadData = Object.keys(tombstones).length > 0
+      ? { ...rawData, _tombstones: tombstones }
+      : rawData;
+
     const payload = {
       schemaVersion: state.schemaVersion,
       module,
-      data: syncModuleData(state, module),
+      data: payloadData,
       revision,
       parentRevision,
       deviceId,
@@ -380,9 +386,10 @@ export function writeAllCloudModules(
   userId: string,
   state: LifeOSState,
   deviceId: string,
-  baseRevisions: SyncRevisionMap
+  baseRevisions: SyncRevisionMap,
+  tombstones: Record<string, number> = {}
 ): CloudWriteBatch {
-  return writeCloudModules(userId, state, [...SYNC_MODULES], deviceId, baseRevisions);
+  return writeCloudModules(userId, state, [...SYNC_MODULES], deviceId, baseRevisions, tombstones);
 }
 
 export async function readLegacyCloudState(userId: string): Promise<LifeOSState | null> {

@@ -4,10 +4,13 @@ import { NAV_ITEMS } from './Sidebar';
 import {
   CURRENT_SCHEMA_VERSION,
   defaultState,
+  fmtDate,
   getStorageDiagnostics,
   StorageDiagnostics,
+  todayISO,
 } from '../lib/storage';
-import type { CloudSyncStatus, CloudUser } from '../lib/cloudSync';
+import { getOrCreateDeviceId, type CloudSyncStatus, type CloudUser } from '../lib/cloudSync';
+import { computeAccountBalance } from '../lib/financeFlows';
 import { showToast } from '../lib/toast';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
@@ -48,6 +51,41 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   const [profileBodySex, setProfileBodySex] = useState<'' | 'male' | 'female'>(state.profile?.bodyCompositionSex || '');
   const [streamGoal, setStreamGoal] = useState(String(state.streaming?.monthlyGoal || 12));
   const [diagnostics, setDiagnostics] = useState<StorageDiagnostics | null>(null);
+  const [deviceId] = useState(() => (typeof window !== 'undefined' ? getOrCreateDeviceId() : 'unknown'));
+
+  const totalAccountBalance = (state.finance?.accounts || []).reduce((s, a) => s + Number(a.balance || 0), 0);
+  const ledgerTotalBalance = (state.finance?.accounts || []).reduce(
+    (s, a) => s + computeAccountBalance(a, state.finance?.transactions, state.finance?.transfers, state.finance?.reconciliations),
+    0
+  );
+  const balanceDifference = Math.round((totalAccountBalance - ledgerTotalBalance) * 100) / 100;
+
+  const sortedGymSessions = [...(state.gym?.sessions || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const latestCompletedGym = sortedGymSessions.find((s) => s.status === 'completed') || sortedGymSessions[0] || null;
+  const staleGymCount = sortedGymSessions.filter((s) => (s.date || '') < todayISO() && s.status === 'active').length;
+
+  const handleRepairFinanceBalances = () => {
+    let corrected = 0;
+    onUpdateState((draft) => {
+      draft.finance.accounts.forEach((acc) => {
+        const computed = computeAccountBalance(
+          acc,
+          draft.finance.transactions,
+          draft.finance.transfers,
+          draft.finance.reconciliations
+        );
+        if (Math.abs(Number(acc.balance || 0) - computed) > 0.001) {
+          acc.balance = computed;
+          corrected++;
+        }
+      });
+    });
+    if (corrected > 0) {
+      showToast(`✅ Se recalcularon ${corrected} cuenta(s) según el libro mayor cerrado.`);
+    } else {
+      showToast('✨ Todas las cuentas coinciden exactamente con el libro mayor.');
+    }
+  };
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -236,6 +274,154 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
             LifeOS se está ejecutando en versión portable fuera de línea. La sincronización en la nube está desactivada.
           </div>
         )}
+      </div>
+
+      {/* Auditoría Multi-Dispositivo y Consistencia */}
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-4 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <AppIcon name="shield" className="h-4 w-4 text-[var(--blue)]" />
+              <h2 className="text-sm font-bold text-[var(--text)]">Auditoría Multi-Dispositivo y Consistencia</h2>
+            </div>
+            <p className="text-xs text-[var(--text-soft)]">
+              Verificación en tiempo real de identidad de nodo, libro mayor de finanzas y rutinas de gimnasio.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-mono text-[var(--text-faint)] bg-[var(--surface-muted)] px-2.5 py-1 rounded-lg border border-[var(--border)]">
+              ID Nodo: <strong className="text-[var(--text)]">{deviceId.slice(0, 8)}…</strong>
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* Tarjeta Finanzas */}
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AppIcon name="wallet" className="h-4 w-4 text-[var(--emerald)]" />
+                <h3 className="text-xs font-bold text-[var(--text)]">Consistencia de Finanzas</h3>
+              </div>
+              {Math.abs(balanceDifference) < 0.01 ? (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  Libro Mayor Íntegro
+                </span>
+              ) : (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse">
+                  Divergencia Detectada
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="p-2.5 rounded-lg bg-[var(--surface-muted)]">
+                <span className="block text-[10px] font-semibold text-[var(--text-faint)] uppercase">Saldo Cuentas</span>
+                <span className="font-mono font-bold text-[var(--text)]">${totalAccountBalance.toLocaleString('es-UY', { minimumFractionDigits: 2 })}</span>
+              </div>
+              <div className="p-2.5 rounded-lg bg-[var(--surface-muted)]">
+                <span className="block text-[10px] font-semibold text-[var(--text-faint)] uppercase">Libro Mayor Cerrado</span>
+                <span className="font-mono font-bold text-[var(--text)]">${ledgerTotalBalance.toLocaleString('es-UY', { minimumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-[var(--text-soft)] space-y-1">
+              <div className="flex justify-between">
+                <span>Transacciones registradas:</span>
+                <strong className="text-[var(--text)]">{state.finance?.transactions?.length || 0}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span>Transferencias registradas:</span>
+                <strong className="text-[var(--text)]">{state.finance?.transfers?.length || 0}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span>Conciliaciones / Arqueos:</span>
+                <strong className="text-[var(--text)]">{state.finance?.reconciliations?.length || 0}</strong>
+              </div>
+            </div>
+
+            {Math.abs(balanceDifference) > 0.01 && (
+              <div className="pt-2 border-t border-[var(--border)] space-y-2">
+                <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                  Existe una diferencia de <strong>${balanceDifference.toLocaleString('es-UY', { minimumFractionDigits: 2 })} UYU</strong> entre los saldos locales en caché y el libro contable inmutable.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleRepairFinanceBalances}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-2xs"
+                >
+                  <AppIcon name="rotateCcw" className="h-3.5 w-3.5" />
+                  <span>Auditar y Reparar Saldos con Libro Mayor</span>
+                </button>
+              </div>
+            )}
+            {Math.abs(balanceDifference) <= 0.01 && (
+              <div className="pt-2 border-t border-[var(--border)]">
+                <button
+                  type="button"
+                  onClick={handleRepairFinanceBalances}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] font-medium text-xs rounded-xl transition-all cursor-pointer"
+                >
+                  <AppIcon name="check" className="h-3.5 w-3.5 text-emerald-500" />
+                  <span>Recalcular libro mayor</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Tarjeta Gimnasio */}
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AppIcon name="dumbbell" className="h-4 w-4 text-[var(--purple)]" />
+                <h3 className="text-xs font-bold text-[var(--text)]">Consistencia de Gimnasio</h3>
+              </div>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[var(--surface-muted)] text-[var(--text-soft)] border border-[var(--border)]">
+                {sortedGymSessions.length} sesiones
+              </span>
+            </div>
+
+            <div className="text-xs space-y-2">
+              <div className="p-2.5 rounded-lg bg-[var(--surface-muted)]">
+                <span className="block text-[10px] font-semibold text-[var(--text-faint)] uppercase">Última rutina registrada</span>
+                <span className="font-semibold text-[var(--text)]">
+                  {latestCompletedGym ? (
+                    <>
+                      {fmtDate(latestCompletedGym.date)} · <span className="text-[var(--text-soft)]">{latestCompletedGym.routineName}</span>
+                    </>
+                  ) : (
+                    'Sin sesiones aún'
+                  )}
+                </span>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-[var(--text-soft)] space-y-1">
+              <div className="flex justify-between">
+                <span>Sesiones completadas:</span>
+                <strong className="text-[var(--text)]">{sortedGymSessions.filter((s) => s.status === 'completed').length}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span>Sesión activa de hoy:</span>
+                <strong className="text-[var(--text)]">
+                  {sortedGymSessions.some((s) => s.date === todayISO() && s.status === 'active') ? 'Sí (en curso)' : 'Ninguna'}
+                </strong>
+              </div>
+              <div className="flex justify-between">
+                <span>Sesiones huérfanas de días anteriores:</span>
+                <strong className={staleGymCount > 0 ? 'text-amber-500 font-bold' : 'text-[var(--text)]'}>
+                  {staleGymCount}
+                </strong>
+              </div>
+            </div>
+
+            {staleGymCount > 0 && (
+              <div className="pt-2 border-t border-[var(--border)] text-[11px] text-amber-600 dark:text-amber-400">
+                Las sesiones incompletas de días previos están aisladas y no bloquean los entrenamientos de hoy.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-3">

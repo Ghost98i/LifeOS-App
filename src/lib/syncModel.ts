@@ -79,8 +79,18 @@ function stableStringify(value: unknown): string {
   return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(',')}}`;
 }
 
+export function extractPureModuleData(data: unknown): unknown {
+  if (data && typeof data === 'object' && !Array.isArray(data) && '_tombstones' in data) {
+    const copy = { ...(data as Record<string, unknown>) };
+    delete copy._tombstones;
+    return copy;
+  }
+  return data;
+}
+
 export function syncDataFingerprint(data: unknown): string {
-  const input = stableStringify(data);
+  const pureData = extractPureModuleData(data);
+  const input = stableStringify(pureData);
   let first = 2166136261;
   let second = 2246822519;
   for (let index = 0; index < input.length; index += 1) {
@@ -99,7 +109,8 @@ export function applySyncModule(state: LifeOSState, module: SyncModuleKey, data:
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
     throw new Error(`El módulo sincronizado “${module}” no contiene datos válidos.`);
   }
-  const candidate = { ...state, ...(data as Partial<LifeOSState>) };
+  const pureData = extractPureModuleData(data);
+  const candidate = { ...state, ...(pureData as Partial<LifeOSState>) };
   return normalizeStoredState(candidate);
 }
 
@@ -113,8 +124,10 @@ export function mergeSyncModule(
   if (!remoteData || typeof remoteData !== 'object' || Array.isArray(remoteData)) {
     throw new Error(`El módulo sincronizado “${module}” no contiene datos válidos.`);
   }
+  const pureRemote = extractPureModuleData(remoteData);
+  const pureBaseline = extractPureModuleData(baselineData);
   const localData = syncModuleData(state, module);
-  const mergedData = mergeModuleData(module, localData, remoteData, baselineData, tombstones);
+  const mergedData = mergeModuleData(module, localData, pureRemote, pureBaseline, tombstones);
   const candidate = { ...state, ...(mergedData as Partial<LifeOSState>) };
   return normalizeStoredState(candidate);
 }

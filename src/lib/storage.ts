@@ -221,8 +221,8 @@ export function defaultState(): LifeOSState {
       ],
       budgets: {},
       accounts: [
-        { id: accEfectivoId, name: 'Efectivo', balance: 0 },
-        { id: accBancoId, name: 'Banco', balance: 0 },
+        { id: accEfectivoId, name: 'Efectivo', balance: 0, initialBalance: 0 },
+        { id: accBancoId, name: 'Banco', balance: 0, initialBalance: 0 },
       ],
       debts: [],
       investments: [],
@@ -293,7 +293,38 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
     reconciliations: Array.isArray(rawFinance.reconciliations) ? rawFinance.reconciliations : [],
     categories,
     budgets: (rawFinance.budgets && typeof rawFinance.budgets === 'object') ? rawFinance.budgets : {},
-    accounts: Array.isArray(rawFinance.accounts) ? rawFinance.accounts : def.finance.accounts,
+    accounts: Array.isArray(rawFinance.accounts)
+      ? rawFinance.accounts.map((acc: any) => {
+          const id = typeof acc.id === 'string' ? acc.id : uid();
+          const name = typeof acc.name === 'string' ? acc.name : 'Cuenta';
+          const balance = Number(acc.balance || 0);
+          let initialBalance = typeof acc.initialBalance === 'number' && Number.isFinite(acc.initialBalance)
+            ? acc.initialBalance
+            : undefined;
+          if (initialBalance === undefined) {
+            const rawTxs = Array.isArray(rawFinance.transactions) ? rawFinance.transactions : [];
+            const rawTransfers = Array.isArray(rawFinance.transfers) ? rawFinance.transfers : [];
+            let delta = 0;
+            for (const tx of rawTxs) {
+              if (tx.accountId !== id) continue;
+              if (tx.type === 'ingreso') delta += Number(tx.amount || 0);
+              else delta -= Number(tx.amount || 0);
+            }
+            for (const tr of rawTransfers) {
+              if (tr.toAccountId === id) delta += Number(tr.amount || 0);
+              if (tr.fromAccountId === id) delta -= Number(tr.amount || 0);
+            }
+            initialBalance = Math.round((balance - delta) * 100) / 100;
+          }
+          return {
+            id,
+            name,
+            balance,
+            initialBalance,
+            lastReconciledAt: typeof acc.lastReconciledAt === 'string' ? acc.lastReconciledAt : undefined,
+          };
+        })
+      : def.finance.accounts,
     debts: Array.isArray(rawFinance.debts) ? rawFinance.debts : [],
     investments: Array.isArray(rawFinance.investments) ? rawFinance.investments : [],
     subscriptions: Array.isArray(rawFinance.subscriptions) ? rawFinance.subscriptions : [],

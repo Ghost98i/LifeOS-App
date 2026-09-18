@@ -89,6 +89,7 @@ export interface Account {
   id: string;
   name: string;
   balance: number;
+  initialBalance?: number;
   lastReconciledAt?: string | null;
 }
 

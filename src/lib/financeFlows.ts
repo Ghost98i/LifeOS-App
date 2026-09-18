@@ -99,12 +99,69 @@ export function updateTransaction(state: LifeOSState, transactionId: string, inp
   return transaction;
 }
 
+export function computeAccountBalance(
+  account: Account,
+  transactions: Transaction[] = [],
+  transfers: FinanceTransfer[] = [],
+  reconciliations: AccountReconciliation[] = []
+): number {
+  const accountRecons = (reconciliations || [])
+    .filter((r) => r.accountId === account.id)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  const latestRecon = accountRecons[0] || null;
+
+  if (latestRecon) {
+    let balance = Number(latestRecon.actualBalance || 0);
+
+    for (const tx of transactions || []) {
+      if (tx.accountId !== account.id) continue;
+      if (latestRecon.adjustmentTxId && tx.id === latestRecon.adjustmentTxId) continue;
+
+      if ((tx.date || '') > (latestRecon.date || '')) {
+        const amount = Number(tx.amount || 0);
+        if (tx.type === 'ingreso') balance += amount;
+        else balance -= amount;
+      }
+    }
+
+    for (const tr of transfers || []) {
+      if ((tr.date || '') > (latestRecon.date || '')) {
+        const amount = Number(tr.amount || 0);
+        if (tr.toAccountId === account.id) balance += amount;
+        if (tr.fromAccountId === account.id) balance -= amount;
+      }
+    }
+
+    return Math.round(balance * 100) / 100;
+  }
+
+  let totalDelta = 0;
+  for (const tx of transactions || []) {
+    if (tx.accountId !== account.id) continue;
+    const amount = Number(tx.amount || 0);
+    if (tx.type === 'ingreso') totalDelta += amount;
+    else totalDelta -= amount;
+  }
+  for (const tr of transfers || []) {
+    const amount = Number(tr.amount || 0);
+    if (tr.toAccountId === account.id) totalDelta += amount;
+    if (tr.fromAccountId === account.id) totalDelta -= amount;
+  }
+
+  const base = typeof account.initialBalance === 'number' && Number.isFinite(account.initialBalance)
+    ? account.initialBalance
+    : Number(account.balance || 0) - totalDelta;
+
+  return Math.round((base + totalDelta) * 100) / 100;
+}
+
 export function addAccount(state: LifeOSState, nameInput: string, balanceInput: number): Account {
   const name = nameInput.trim();
   const balance = Number(balanceInput);
   if (!name) throw new Error('Escribí un nombre para la cuenta.');
   if (!Number.isFinite(balance)) throw new Error('Ingresá un saldo inicial válido.');
-  const account = { id: uid(), name, balance };
+  const account: Account = { id: uid(), name, balance, initialBalance: balance };
   state.finance.accounts.push(account);
   return account;
 }

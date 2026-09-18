@@ -142,11 +142,42 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   const isRestDayToday =
     (state.gym?.restDays || []).includes(todayISO()) ||
     Boolean(state.checkoutLog?.[todayISO()]?.trainedSkipped);
-  const isTrainedToday = (state.gym?.sessions || []).some((s) => s.date === todayISO());
+  const gymSessions = state.gym?.sessions;
+  const sortedSessions = useMemo(() => {
+    return [...(gymSessions || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }, [gymSessions]);
+
+  const latestSession = useMemo(() => {
+    return sortedSessions.find((s) => s.status === 'completed') || sortedSessions[0] || null;
+  }, [sortedSessions]);
+
+  const isTrainedToday = (state.gym?.sessions || []).some((s) => s.date === todayISO() && s.status === 'completed');
 
   const activeWorkoutSession = (state.gym?.sessions || []).find(
-    (s) => s.status === 'active' || (s.date === todayISO() && s.status !== 'completed')
+    (s) => s.date === todayISO() && s.status === 'active'
   );
+
+  const staleActiveSessions = (state.gym?.sessions || []).filter(
+    (s) => (s.date || '') < todayISO() && s.status === 'active'
+  );
+
+  const handleCompleteStaleSession = (sessionId: string) => {
+    onUpdateState((draft) => {
+      const s = draft.gym.sessions.find((x) => x.id === sessionId);
+      if (s) {
+        s.status = 'completed';
+        if (!s.finishedAt) s.finishedAt = 'Auto-cerrada';
+      }
+    });
+    showToast('Sesión anterior completada.', 'info');
+  };
+
+  const handleDiscardStaleSession = (sessionId: string) => {
+    onUpdateState((draft) => {
+      draft.gym.sessions = draft.gym.sessions.filter((x) => x.id !== sessionId);
+    });
+    showToast('Sesión descartada.', 'info');
+  };
 
   const handleToggleRestDay = () => {
     const today = todayISO();
@@ -250,6 +281,14 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
     const template = templateId ? state.gym.routineTemplates.find((t) => t.id === templateId) : null;
 
     onUpdateState((draft) => {
+      if (!draft.gym) draft.gym = { sessions: [], exercises: [], routineTemplates: [], weight: [] } as any;
+      if (!draft.gym.sessions) draft.gym.sessions = [];
+      draft.gym.sessions.forEach((s) => {
+        if (s.status === 'active') {
+          s.status = 'completed';
+          if (!s.finishedAt) s.finishedAt = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+      });
       const newSession: GymSession = {
         id: uid(),
         date: today,
@@ -742,7 +781,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
       {/* Docked Rest Timer Bar */}
       <GymRestTimerBar
         state={state}
-        sessionId={activeWorkoutSession?.id || (state.gym.sessions[0]?.id ?? '')}
+        sessionId={activeWorkoutSession?.id || (latestSession?.id ?? '')}
         onUpdateState={onUpdateState}
       />
 
@@ -1501,7 +1540,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
               </div>
 
               {/* Latest Session Card (Quick Glance) */}
-              {state.gym.sessions.length > 0 && (
+              {latestSession && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-faint)]">
@@ -1516,34 +1555,34 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                     </button>
                   </div>
                   <WorkoutSessionCard
-                    session={state.gym.sessions[0]}
-                    allSessions={state.gym.sessions}
-                    onFinishWorkout={() => handleFinishWorkout(state.gym.sessions[0].id)}
-                    onDeleteSession={() => handleDeleteSession(state.gym.sessions[0].id)}
-                    onEditSessionDate={(d) => handleEditSessionDate(state.gym.sessions[0].id, d)}
-                    onEditSessionWeek={(w) => handleEditSessionWeek(state.gym.sessions[0].id, w)}
-                    onSaveAsTemplate={() => handleSaveSessionAsTemplate(state.gym.sessions[0])}
+                    session={latestSession}
+                    allSessions={sortedSessions}
+                    onFinishWorkout={() => handleFinishWorkout(latestSession.id)}
+                    onDeleteSession={() => handleDeleteSession(latestSession.id)}
+                    onEditSessionDate={(d) => handleEditSessionDate(latestSession.id, d)}
+                    onEditSessionWeek={(w) => handleEditSessionWeek(latestSession.id, w)}
+                    onSaveAsTemplate={() => handleSaveSessionAsTemplate(latestSession)}
                     onAddExercise={(name, muscle, eq, barW, w, r) =>
-                      handleAddExerciseToSession(state.gym.sessions[0].id, name, muscle, eq, barW, w, r)
+                      handleAddExerciseToSession(latestSession.id, name, muscle, eq, barW, w, r)
                     }
-                    onDeleteExercise={(exIdx) => handleDeleteExercise(state.gym.sessions[0].id, exIdx)}
-                    onAddSet={(exIdx) => handleAddSet(state.gym.sessions[0].id, exIdx)}
+                    onDeleteExercise={(exIdx) => handleDeleteExercise(latestSession.id, exIdx)}
+                    onAddSet={(exIdx) => handleAddSet(latestSession.id, exIdx)}
                     onUpdateSet={(exIdx, setIdx, updates) =>
-                      handleUpdateSet(state.gym.sessions[0].id, exIdx, setIdx, updates)
+                      handleUpdateSet(latestSession.id, exIdx, setIdx, updates)
                     }
-                    onDeleteSet={(exIdx, setIdx) => handleDeleteSet(state.gym.sessions[0].id, exIdx, setIdx)}
+                    onDeleteSet={(exIdx, setIdx) => handleDeleteSet(latestSession.id, exIdx, setIdx)}
                     onUpdateExerciseBar={(exIdx, barW) =>
-                      handleUpdateExerciseBar(state.gym.sessions[0].id, exIdx, barW)
+                      handleUpdateExerciseBar(latestSession.id, exIdx, barW)
                     }
                     onUpdateExerciseEquipment={(exIdx, eq, barW) =>
-                      handleUpdateExerciseEquipment(state.gym.sessions[0].id, exIdx, eq, barW)
+                      handleUpdateExerciseEquipment(latestSession.id, exIdx, eq, barW)
                     }
                     onPropagateExercise={(name, config) =>
                       handlePropagateExerciseToHistory(name, config)
                     }
                     onOpenCalculator={(exIdx, setIdx, initialW, barW) =>
                       setCalculatorTarget({
-                        sessionId: state.gym.sessions[0].id,
+                        sessionId: latestSession.id,
                         exerciseIndex: exIdx,
                         setIndex: setIdx,
                         initialWeight: initialW,
@@ -1561,6 +1600,43 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
       {/* TAB 2: HISTORIAL DE SEMANAS */}
       {activeTab === 'historial' && (
         <div className="space-y-6 animate-in fade-in">
+          {staleActiveSessions.length > 0 && (
+            <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                  <span>⚠️</span>
+                  <span>Tenés {staleActiveSessions.length} sesión(es) de fechas anteriores sin finalizar</span>
+                </span>
+                <span className="text-[11px] text-[var(--text-soft)]">No bloquean tu entrenamiento de hoy</span>
+              </div>
+              <div className="space-y-1.5">
+                {staleActiveSessions.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between text-xs bg-[var(--card)] p-2.5 rounded-xl border border-[var(--border)]">
+                    <span className="font-mono font-bold text-[var(--text)]">
+                      {fmtDate(s.date)} — {s.exercises.length} ejercicio(s)
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleCompleteStaleSession(s.id)}
+                        className="px-2.5 py-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg cursor-pointer"
+                      >
+                        Finalizar sesión ✓
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDiscardStaleSession(s.id)}
+                        className="px-2.5 py-1 text-[11px] font-semibold text-rose-500 hover:bg-rose-500/10 rounded-lg cursor-pointer"
+                      >
+                        Descartar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Quick Create Manual Session Bar */}
           <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-xs">
             <div>

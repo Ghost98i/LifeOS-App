@@ -9,6 +9,7 @@ import type {
   DayKey,
   Exercise,
   Finance,
+  FinanceTransfer,
   Goal,
   Gym,
   GymSession,
@@ -40,10 +41,12 @@ import type {
   Subject,
   TaskRecurring,
   TodayExtra,
+  Transaction,
   UsefulLink,
   WeightPoint,
 } from '../types';
 import type { SyncModuleKey } from './syncModel';
+import { computeAccountBalance } from './financeFlows';
 
 const TOMBSTONE_PREFIX = 'lifeos-cloud-tombstones-v2:';
 const DEFAULT_MAX_TOMBSTONE_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -508,49 +511,98 @@ export function mergeFinanceModule(
     }
   }
 
-  // Account balances delta reconciliation
-  const mergedAccounts = mergeEntityCollection<Account>(
+  const calcAccountDelta = (
+    accId: string,
+    txs: Transaction[] = [],
+    trfs: FinanceTransfer[] = []
+  ): number => {
+    let delta = 0;
+    for (const tx of txs) {
+      if (tx.accountId !== accId) continue;
+      if (tx.type === 'ingreso') delta += Number(tx.amount || 0);
+      else delta -= Number(tx.amount || 0);
+    }
+    for (const tr of trfs) {
+      if (tr.toAccountId === accId) delta += Number(tr.amount || 0);
+      if (tr.fromAccountId === accId) delta -= Number(tr.amount || 0);
+    }
+    return delta;
+  };
+
+  const resolveAccountInitialBalance = (
+    accId: string,
+    lAcc?: Account,
+    rAcc?: Account,
+    bAcc?: Account
+  ): number => {
+    if (typeof rAcc?.initialBalance === 'number' && Number.isFinite(rAcc.initialBalance)) {
+      return rAcc.initialBalance;
+    }
+    if (typeof lAcc?.initialBalance === 'number' && Number.isFinite(lAcc.initialBalance)) {
+      return lAcc.initialBalance;
+    }
+    if (typeof bAcc?.initialBalance === 'number' && Number.isFinite(bAcc.initialBalance)) {
+      return bAcc.initialBalance;
+    }
+
+    if (bAcc) {
+      const bDelta = calcAccountDelta(accId, baseline?.transactions, baseline?.transfers);
+      return Math.round((Number(bAcc.balance || 0) - bDelta) * 100) / 100;
+    }
+
+    if (lAcc && rAcc) {
+      const lDelta = calcAccountDelta(accId, local.transactions, local.transfers);
+      const rDelta = calcAccountDelta(accId, remote.transactions, remote.transfers);
+      const lBase = Number(lAcc.balance || 0) - lDelta;
+      const rBase = Number(rAcc.balance || 0) - rDelta;
+      return Math.round((Number.isFinite(rBase) ? rBase : lBase) * 100) / 100;
+    }
+
+    if (lAcc) {
+      const lDelta = calcAccountDelta(accId, local.transactions, local.transfers);
+      return Math.round((Number(lAcc.balance || 0) - lDelta) * 100) / 100;
+    }
+
+    if (rAcc) {
+      const rDelta = calcAccountDelta(accId, remote.transactions, remote.transfers);
+      return Math.round((Number(rAcc.balance || 0) - rDelta) * 100) / 100;
+    }
+
+    return 0;
+  };
+
+  // Account collection merge
+  const mergedAccountsRaw = mergeEntityCollection<Account>(
     local.accounts,
     remote.accounts,
     baseline?.accounts,
     tombstones,
     (lAcc, rAcc, bAcc) => {
-      let finalBalance = lAcc.balance;
-      if (bAcc) {
-        const deltaLocal = Number(lAcc.balance) - Number(bAcc.balance);
-        const deltaRemote = Number(rAcc.balance) - Number(bAcc.balance);
-        finalBalance = Number(bAcc.balance) + deltaLocal + deltaRemote;
-      } else {
-        // Without baseline, calculate net effect of transactions in remote that are absent in local
-        const localTxIds = new Set(local.transactions.map((tx) => tx.id));
-        const remoteOnlyTxs = remote.transactions.filter(
-          (tx) => tx.accountId === lAcc.id && !localTxIds.has(tx.id)
-        );
-        let netDelta = 0;
-        for (const tx of remoteOnlyTxs) {
-          if (tx.type === 'ingreso') netDelta += Number(tx.amount);
-          else netDelta -= Number(tx.amount);
-        }
-
-        const localTransferIds = new Set(local.transfers.map((tr) => tr.id));
-        const remoteOnlyTransfers = remote.transfers.filter(
-          (tr) => !localTransferIds.has(tr.id)
-        );
-        for (const tr of remoteOnlyTransfers) {
-          if (tr.toAccountId === lAcc.id) netDelta += Number(tr.amount);
-          if (tr.fromAccountId === lAcc.id) netDelta -= Number(tr.amount);
-        }
-        finalBalance = Number(lAcc.balance) + netDelta;
-      }
-
+      const initialBalance = resolveAccountInitialBalance(lAcc.id, lAcc, rAcc, bAcc);
       return {
         ...lAcc,
         name: rAcc.name !== bAcc?.name ? rAcc.name : lAcc.name,
-        balance: Math.round(finalBalance * 100) / 100,
+        initialBalance,
         lastReconciledAt: rAcc.lastReconciledAt || lAcc.lastReconciledAt || undefined,
       };
     }
   );
+
+  // Deterministic ledger reconciliation guarantees identical balance on all devices
+  const mergedAccounts = mergedAccountsRaw.map((acc) => {
+    let initialBalance = acc.initialBalance;
+    if (typeof initialBalance !== 'number' || !Number.isFinite(initialBalance)) {
+      const lAcc = local.accounts.find((a) => a.id === acc.id);
+      const rAcc = remote.accounts.find((a) => a.id === acc.id);
+      const bAcc = baseline?.accounts.find((a) => a.id === acc.id);
+      initialBalance = resolveAccountInitialBalance(acc.id, lAcc, rAcc, bAcc);
+    }
+    const accWithInitial = { ...acc, initialBalance };
+    return {
+      ...accWithInitial,
+      balance: computeAccountBalance(accWithInitial, transactions, transfers, reconciliations),
+    };
+  });
 
   return {
     accounts: mergedAccounts,
@@ -632,7 +684,7 @@ export function mergeGymModule(
       status: lSess.status === 'completed' || rSess.status === 'completed' ? 'completed' : 'active',
       finishedAt: rSess.finishedAt || lSess.finishedAt || undefined,
     })
-  );
+  ).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
   const weight = mergeDateCollection<WeightPoint>(
     local.weight,
