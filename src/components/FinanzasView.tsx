@@ -61,7 +61,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   const [txType, setTxType] = useState<'gasto' | 'ingreso'>(initialTransactionType);
   const [txAmount, setTxAmount] = useState('');
   const [txAccount, setTxAccount] = useState<string>(defaultAccountId(state) || '');
-  const [txCategory, setTxCategory] = useState<string>(state.finance.categories[0] || 'Comida');
+  const [txCategory, setTxCategory] = useState<string>(state.finance?.categories?.[0] || 'Comida');
   const [txFixed, setTxFixed] = useState<'variable' | 'fijo'>('variable');
   const [txDate, setTxDate] = useState(todayISO());
   const [txNote, setTxNote] = useState('');
@@ -99,7 +99,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   const cashFlow = cashFlow30Days(state);
   const rstats = resaleStats(state);
   const ref = new Date();
-  const totalGastadoAnio = state.finance.transactions
+  const totalGastadoAnio = (state.finance?.transactions || [])
     .filter((t) => t.type === 'gasto' && t.origin !== 'adjustment' && sameYear(t.date, ref))
     .reduce((s, t) => s + Number(t.amount || 0), 0);
   const fijoMes = calcFixedSpentMonth(state, 0);
@@ -165,6 +165,8 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
 
   const handleSetBudget = (category: string, amountStr: string) => {
     onUpdateState((draft) => {
+      if (!draft.finance) draft.finance = { accounts: [], transactions: [], categories: [], budgets: {}, subscriptions: [], debts: [], investments: [] } as any;
+      if (!draft.finance.budgets) draft.finance.budgets = {};
       draft.finance.budgets[category] = Number(amountStr) || 0;
     });
   };
@@ -195,6 +197,8 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
     e.preventDefault();
     if (!subName.trim()) return;
     onUpdateState((draft) => {
+      if (!draft.finance) draft.finance = { accounts: [], transactions: [], categories: [], budgets: {}, subscriptions: [], debts: [], investments: [] } as any;
+      if (!draft.finance.subscriptions) draft.finance.subscriptions = [];
       draft.finance.subscriptions.push({
         id: uid(),
         name: subName.trim(),
@@ -210,7 +214,8 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
 
   const handleDeleteSubscription = (id: string) => {
     onUpdateState((draft) => {
-      draft.finance.subscriptions = draft.finance.subscriptions.filter((s) => s.id !== id);
+      if (!draft.finance) draft.finance = { accounts: [], transactions: [], categories: [], budgets: {}, subscriptions: [], debts: [], investments: [] } as any;
+      draft.finance.subscriptions = (draft.finance.subscriptions || []).filter((s) => s.id !== id);
     });
     showToast('Suscripción eliminada.', 'info');
   };
@@ -219,6 +224,8 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
     e.preventDefault();
     if (!debtName.trim()) return;
     onUpdateState((draft) => {
+      if (!draft.finance) draft.finance = { accounts: [], transactions: [], categories: [], budgets: {}, subscriptions: [], debts: [], investments: [] } as any;
+      if (!draft.finance.debts) draft.finance.debts = [];
       draft.finance.debts.push({
         id: uid(),
         name: debtName.trim(),
@@ -236,7 +243,8 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
 
   const handleDeleteDebt = (id: string) => {
     onUpdateState((draft) => {
-      draft.finance.debts = draft.finance.debts.filter((d) => d.id !== id);
+      if (!draft.finance) draft.finance = { accounts: [], transactions: [], categories: [], budgets: {}, subscriptions: [], debts: [], investments: [] } as any;
+      draft.finance.debts = (draft.finance.debts || []).filter((d) => d.id !== id);
     });
     showToast('Deuda eliminada.', 'info');
   };
@@ -245,6 +253,8 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
     e.preventDefault();
     if (!invName.trim()) return;
     onUpdateState((draft) => {
+      if (!draft.finance) draft.finance = { accounts: [], transactions: [], categories: [], budgets: {}, subscriptions: [], debts: [], investments: [] } as any;
+      if (!draft.finance.investments) draft.finance.investments = [];
       draft.finance.investments.push({
         id: uid(),
         name: invName.trim(),
@@ -258,7 +268,8 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
 
   const handleDeleteInvestment = (id: string) => {
     onUpdateState((draft) => {
-      draft.finance.investments = draft.finance.investments.filter((i) => i.id !== id);
+      if (!draft.finance) draft.finance = { accounts: [], transactions: [], categories: [], budgets: {}, subscriptions: [], debts: [], investments: [] } as any;
+      draft.finance.investments = (draft.finance.investments || []).filter((i) => i.id !== id);
     });
     showToast('Inversión eliminada.', 'info');
   };

@@ -28,15 +28,17 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   storageUserId,
   cloudConnected = false,
 }) => {
-  const [profileName, setProfileName] = useState(state.profile.name || '');
-  const [profileHeight, setProfileHeight] = useState(String(state.profile.height || 170));
-  const [profileBodySex, setProfileBodySex] = useState<'' | 'male' | 'female'>(state.profile.bodyCompositionSex || '');
-  const [streamGoal, setStreamGoal] = useState(String(state.streaming.monthlyGoal || 12));
+  const [profileName, setProfileName] = useState(state.profile?.name || '');
+  const [profileHeight, setProfileHeight] = useState(String(state.profile?.height || 170));
+  const [profileBodySex, setProfileBodySex] = useState<'' | 'male' | 'female'>(state.profile?.bodyCompositionSex || '');
+  const [streamGoal, setStreamGoal] = useState(String(state.streaming?.monthlyGoal || 12));
   const [diagnostics, setDiagnostics] = useState<StorageDiagnostics | null>(null);
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     onUpdateState((draft) => {
+      if (!draft.profile) draft.profile = { name: '', height: 170, bodyCompositionSex: null };
+      if (!draft.streaming) draft.streaming = { sessions: [], monthlyGoal: 12, platforms: [] };
       draft.profile.name = profileName.trim();
       draft.profile.height = Number(profileHeight) || 170;
       draft.profile.bodyCompositionSex = profileBodySex || null;
@@ -47,6 +49,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
   const handleToggleTab = (tabId: string) => {
     onUpdateState((draft) => {
+      if (!draft.settings) draft.settings = { hiddenTabs: [] } as any;
       if (!draft.settings.hiddenTabs) draft.settings.hiddenTabs = [];
       if (draft.settings.hiddenTabs.includes(tabId)) {
         draft.settings.hiddenTabs = draft.settings.hiddenTabs.filter((id) => id !== tabId);
@@ -191,7 +194,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2">
           {NAV_ITEMS.filter((item) => item.optional).map((item) => {
-            const isHidden = (state.settings.hiddenTabs || []).includes(item.id);
+            const isHidden = (state.settings?.hiddenTabs || []).includes(item.id);
 
             return (
               <button
@@ -224,7 +227,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           <p className="text-xs text-[var(--text-soft)]">
             LifeOS conserva una copia en este navegador y, si conectaste Google, la sincroniza entre dispositivos. El JSON sigue siendo tu respaldo portátil independiente.
           </p>
-          {state.settings.lastBackupAt && (
+          {state.settings?.lastBackupAt && (
             <p className="text-[11px] font-mono text-[var(--blue)] mt-1">
               Último backup exportado: {state.settings.lastBackupAt}
             </p>

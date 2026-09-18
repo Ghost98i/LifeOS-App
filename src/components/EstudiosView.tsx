@@ -37,7 +37,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
   const todayMin = studyMinutesForDate(state, todayISO());
   const ref = new Date();
   const horasAnio =
-    state.study.studyLog
+    (state.study?.studyLog || [])
       .filter((l) => sameYear(l.date, ref))
       .reduce((s, l) => s + Number(l.minutes || 0), 0) / 60;
 
@@ -46,6 +46,8 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
     const min = Number(studyMinutes);
     if (!min) return;
     onUpdateState((draft) => {
+      if (!draft.study) draft.study = { studyLog: [], subjects: [], exams: [] } as any;
+      if (!draft.study.studyLog) draft.study.studyLog = [];
       draft.study.studyLog.push({
         id: uid(),
         date: studyDate || todayISO(),
@@ -58,7 +60,8 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
 
   const handleDeleteStudy = (id: string) => {
     onUpdateState((draft) => {
-      draft.study.studyLog = draft.study.studyLog.filter((l) => l.id !== id);
+      if (!draft.study) draft.study = { studyLog: [], subjects: [], exams: [] } as any;
+      draft.study.studyLog = (draft.study.studyLog || []).filter((l) => l.id !== id);
     });
   };
 
@@ -66,6 +69,8 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
     e.preventDefault();
     if (!subjectName.trim()) return;
     onUpdateState((draft) => {
+      if (!draft.study) draft.study = { studyLog: [], subjects: [], exams: [] } as any;
+      if (!draft.study.subjects) draft.study.subjects = [];
       draft.study.subjects.push({
         id: uid(),
         name: subjectName.trim(),
@@ -76,19 +81,22 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
 
   const handleDeleteSubject = (id: string) => {
     onUpdateState((draft) => {
-      draft.study.subjects = draft.study.subjects.filter((s) => s.id !== id);
-      draft.study.exams = draft.study.exams.filter((e) => e.subjectId !== id);
+      if (!draft.study) draft.study = { studyLog: [], subjects: [], exams: [] } as any;
+      draft.study.subjects = (draft.study.subjects || []).filter((s) => s.id !== id);
+      draft.study.exams = (draft.study.exams || []).filter((e) => e.subjectId !== id);
     });
   };
 
   const handleAddExam = (e: React.FormEvent) => {
     e.preventDefault();
-    const subId = examSubjectId || (state.study.subjects.length ? state.study.subjects[0].id : '');
+    const subId = examSubjectId || ((state.study?.subjects || []).length ? state.study.subjects[0].id : '');
     if (!subId) {
       showToast('Primero agregá una materia.', 'info');
       return;
     }
     onUpdateState((draft) => {
+      if (!draft.study) draft.study = { studyLog: [], subjects: [], exams: [] } as any;
+      if (!draft.study.exams) draft.study.exams = [];
       draft.study.exams.push({
         id: uid(),
         subjectId: subId,
@@ -100,6 +108,8 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
 
   const handleSetExamStatus = (id: string, status: Exam['status']) => {
     onUpdateState((draft) => {
+      if (!draft.study) draft.study = { studyLog: [], subjects: [], exams: [] } as any;
+      if (!draft.study.exams) draft.study.exams = [];
       const e = draft.study.exams.find((x) => x.id === id);
       if (e) e.status = status;
     });
@@ -107,7 +117,8 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
 
   const handleDeleteExam = (id: string) => {
     onUpdateState((draft) => {
-      draft.study.exams = draft.study.exams.filter((e) => e.id !== id);
+      if (!draft.study) draft.study = { studyLog: [], subjects: [], exams: [] } as any;
+      draft.study.exams = (draft.study.exams || []).filter((e) => e.id !== id);
     });
   };
 
@@ -115,11 +126,13 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
     if (!mins) return;
     playSound('success');
     onUpdateState((draft) => {
+      if (!draft.study) draft.study = { studyLog: [], subjects: [], exams: [] } as any;
+      if (!draft.study.studyLog) draft.study.studyLog = [];
       draft.study.studyLog.push({
         id: uid(),
         date: todayISO(),
         minutes: mins,
-        subjectId: targetSubjectId || (state.study.subjects.length > 0 ? state.study.subjects[0].id : null),
+        subjectId: targetSubjectId || ((state.study?.subjects || []).length > 0 ? state.study.subjects[0].id : null),
       });
     });
   };
@@ -133,7 +146,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
       />
 
       {/* Focus / Pomodoro Timer */}
-      <FocusTimer targets={state.study.subjects.map((subject) => ({ id: subject.id, label: subject.name }))} onSessionComplete={handlePomodoroComplete} />
+      <FocusTimer targets={(state.study?.subjects || []).map((subject) => ({ id: subject.id, label: subject.name }))} onSessionComplete={handlePomodoroComplete} />
 
       {/* Metrics Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -143,7 +156,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
             <AppIcon name="clock" className="h-4 w-4 text-[var(--blue)] shrink-0" />
           </div>
           <div className="text-base font-bold truncate mt-1.5 text-[var(--text)]">
-            {exam ? state.study.subjects.find((s) => s.id === exam.subjectId)?.name || '—' : 'Sin exámenes'}
+            {exam ? (state.study?.subjects || []).find((s) => s.id === exam.subjectId)?.name || '—' : 'Sin exámenes'}
           </div>
           <p className="text-[11px] text-[var(--text-soft)] mt-0.5">
             {exam ? `${fmtDate(exam.date)}` : '—'}
@@ -208,7 +221,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
               className="px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)] cursor-pointer"
             >
               <option value="">General</option>
-              {state.study.subjects.map((s) => (
+              {(state.study?.subjects || []).map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
@@ -225,17 +238,17 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
         </form>
 
         <div className="divide-y divide-[var(--border)]">
-          {state.study.studyLog.length === 0 ? (
+          {(state.study?.studyLog || []).length === 0 ? (
             <p className="text-center py-6 text-xs text-[var(--text-faint)]">Sin registros de estudio.</p>
           ) : (
-            [...state.study.studyLog]
+            [...(state.study?.studyLog || [])]
               .sort((a, b) => b.date.localeCompare(a.date))
               .slice(0, 10)
               .map((l) => (
                 <div key={l.id} className="py-2.5 flex items-center justify-between text-xs sm:text-sm">
                   <span className="font-mono text-[var(--text-soft)]">{fmtDate(l.date)}</span>
                   <span className="font-medium text-[var(--text)]">
-                    {state.study.subjects.find((s) => s.id === l.subjectId)?.name || 'General'}
+                    {(state.study?.subjects || []).find((s) => s.id === l.subjectId)?.name || 'General'}
                   </span>
                   <span className="font-mono font-bold text-[var(--blue)]">{l.minutes} min</span>
                   <button
@@ -277,10 +290,10 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
             </form>
 
             <div className="divide-y divide-[var(--border)]">
-              {state.study.subjects.length === 0 ? (
+              {(state.study?.subjects || []).length === 0 ? (
                 <p className="text-center py-4 text-xs text-[var(--text-faint)]">Sin materias.</p>
               ) : (
-                state.study.subjects.map((s) => (
+                (state.study?.subjects || []).map((s) => (
                   <div key={s.id} className="py-2.5 flex items-center justify-between text-xs sm:text-sm">
                     <span className="font-semibold text-[var(--text)]">{s.name}</span>
                     <button
@@ -308,7 +321,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
                 onChange={(e) => setExamSubjectId(e.target.value)}
                 className="flex-1 min-w-[120px] px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)] cursor-pointer"
               >
-                {state.study.subjects.map((s) => (
+                {(state.study?.subjects || []).map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
@@ -331,16 +344,16 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
             </form>
 
             <div className="divide-y divide-[var(--border)]">
-              {state.study.exams.length === 0 ? (
+              {(state.study?.exams || []).length === 0 ? (
                 <p className="text-center py-4 text-xs text-[var(--text-faint)]">Sin exámenes cargados.</p>
               ) : (
-                [...state.study.exams]
+                [...(state.study?.exams || [])]
                   .sort((a, b) => a.date.localeCompare(b.date))
                   .map((e) => (
                     <div key={e.id} className="py-2.5 flex items-center justify-between text-xs gap-2">
                       <div className="truncate min-w-0 flex-1">
                         <span className="font-semibold text-[var(--text)]">
-                          {state.study.subjects.find((s) => s.id === e.subjectId)?.name || '—'}
+                          {(state.study?.subjects || []).find((s) => s.id === e.subjectId)?.name || '—'}
                         </span>
                         <span className="font-mono text-[var(--text-faint)] ml-2">{fmtDate(e.date)}</span>
                       </div>

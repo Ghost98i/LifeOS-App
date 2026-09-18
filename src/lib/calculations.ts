@@ -22,27 +22,28 @@ import {
 } from './storage';
 
 export function calcAccountsTotal(state: LifeOSState): number {
-  return state.finance.accounts.reduce((s, a) => s + Number(a.balance || 0), 0);
+  return (state.finance?.accounts || []).reduce((s, a) => s + Number(a.balance || 0), 0);
 }
 
 export function defaultAccountId(state: LifeOSState): string | null {
-  return state.finance.accounts.length ? state.finance.accounts[0].id : null;
+  const accounts = state.finance?.accounts || [];
+  return accounts.length ? accounts[0].id : null;
 }
 
 export function adjustAccountBalance(state: LifeOSState, accountId: string | null | undefined, delta: number): void {
   if (!accountId) return;
-  const acc = state.finance.accounts.find((a) => a.id === accountId);
+  const acc = (state.finance?.accounts || []).find((a) => a.id === accountId);
   if (acc) {
     acc.balance = Number(acc.balance || 0) + delta;
   }
 }
 
 export function calcInvestmentsTotal(state: LifeOSState): number {
-  return state.finance.investments.reduce((s, i) => s + Number(i.amount || 0), 0);
+  return (state.finance?.investments || []).reduce((s, i) => s + Number(i.amount || 0), 0);
 }
 
 export function calcDebtsTotal(state: LifeOSState): number {
-  return state.finance.debts.reduce((s, d) => s + Number(d.amount || 0), 0);
+  return (state.finance?.debts || []).reduce((s, d) => s + Number(d.amount || 0), 0);
 }
 
 export function calcNetWorth(state: LifeOSState): number {
@@ -50,7 +51,7 @@ export function calcNetWorth(state: LifeOSState): number {
 }
 
 export function calcSubscriptionsTotal(state: LifeOSState): number {
-  return state.finance.subscriptions.reduce((s, x) => s + Number(x.amount || 0), 0);
+  return (state.finance?.subscriptions || []).reduce((s, x) => s + Number(x.amount || 0), 0);
 }
 
 export interface CashFlowCommitment {
@@ -76,14 +77,14 @@ export function cashFlow30Days(state: LifeOSState, fromIso = todayISO()) {
   const horizon = new Date(`${fromIso}T12:00:00`);
   horizon.setDate(horizon.getDate() + 30);
   const horizonIso = `${horizon.getFullYear()}-${String(horizon.getMonth() + 1).padStart(2, '0')}-${String(horizon.getDate()).padStart(2, '0')}`;
-  const commitments: CashFlowCommitment[] = state.finance.subscriptions.map((subscription) => ({
+  const commitments: CashFlowCommitment[] = (state.finance?.subscriptions || []).map((subscription) => ({
     id: `subscription-${subscription.id}`,
     label: subscription.name,
     amount: Number(subscription.amount || 0),
     dueDate: subscription.dueDay ? nextMonthlyDate(subscription.dueDay, fromIso) : null,
     kind: 'subscription' as const,
   }));
-  state.finance.debts.forEach((debt) => {
+  (state.finance?.debts || []).forEach((debt) => {
     const amount = Number(debt.monthlyPayment || 0);
     if (amount <= 0) return;
     if (debt.dueDate && (debt.dueDate < fromIso || debt.dueDate > horizonIso)) return;
@@ -96,7 +97,7 @@ export function cashFlow30Days(state: LifeOSState, fromIso = todayISO()) {
 }
 
 export function resaleGananciaTotal(state: LifeOSState): number {
-  return state.resale.inventory
+  return (state.resale?.inventory || [])
     .filter((i) => i.status === 'vendido')
     .reduce((s, i) => {
       const breakdown = Number(i.shippingCost || 0) + Number(i.platformFees || 0) + Number(i.taxes || 0);
@@ -110,7 +111,7 @@ function isOperationalTransaction(transaction: Transaction): boolean {
 
 export function txInMonth(state: LifeOSState, offset = 0): Transaction[] {
   const ref = monthLabel(offset);
-  return state.finance.transactions.filter((t) => sameMonth(t.date, ref));
+  return (state.finance?.transactions || []).filter((t) => sameMonth(t.date, ref));
 }
 
 export function calcSpentMonth(state: LifeOSState, offset = 0): number {
@@ -153,7 +154,7 @@ export function calcSpentByCategory(state: LifeOSState, offset = 0): Record<stri
 
 export function calcSpentByCategoryAllTime(state: LifeOSState): Record<string, number> {
   const map: Record<string, number> = {};
-  state.finance.transactions
+  (state.finance?.transactions || [])
     .filter((t) => t.type === 'gasto' && isOperationalTransaction(t))
     .forEach((t) => {
       map[t.category] = (map[t.category] || 0) + Number(t.amount || 0);
@@ -172,7 +173,7 @@ export interface MonthTransactionGroup {
 
 export function groupTransactionsByMonth(state: LifeOSState): MonthTransactionGroup[] {
   const groups: Record<string, Transaction[]> = {};
-  state.finance.transactions.filter(isOperationalTransaction).forEach((t) => {
+  (state.finance?.transactions || []).filter(isOperationalTransaction).forEach((t) => {
     const key = t.date.slice(0, 7); // YYYY-MM
     if (!groups[key]) groups[key] = [];
     groups[key].push(t);
@@ -195,7 +196,7 @@ export function groupTransactionsByMonth(state: LifeOSState): MonthTransactionGr
 }
 
 export function sortedWeight(state: LifeOSState) {
-  return [...state.gym.weight].sort((a, b) => a.date.localeCompare(b.date));
+  return [...(state.gym?.weight || [])].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export function currentWeight(state: LifeOSState): number | null {
@@ -233,7 +234,7 @@ export function imcCategory(imc: number | null): { label: string; color: 'blue' 
 
 
 export function trainedDatesSet(state: LifeOSState): Set<string> {
-  return new Set(state.gym.sessions.map((s) => s.date));
+  return new Set((state.gym?.sessions || []).map((s) => s.date));
 }
 
 export interface GymStreakDetails {
@@ -428,23 +429,23 @@ export function calcPRs(state: LifeOSState): Record<string, PRInfo> {
 }
 
 export function studyMinutesForDate(state: LifeOSState, iso: string): number {
-  return state.study.studyLog.filter((l) => l.date === iso).reduce((s, l) => s + Number(l.minutes || 0), 0);
+  return (state.study?.studyLog || []).filter((l) => l.date === iso).reduce((s, l) => s + Number(l.minutes || 0), 0);
 }
 
 export function studyMinutesThisWeek(state: LifeOSState): number {
-  return state.study.studyLog.filter((l) => withinCurrentWeek(l.date)).reduce((s, l) => s + Number(l.minutes || 0), 0);
+  return (state.study?.studyLog || []).filter((l) => withinCurrentWeek(l.date)).reduce((s, l) => s + Number(l.minutes || 0), 0);
 }
 
 export function nextExam(state: LifeOSState) {
   const today = todayISO();
-  const pend = state.study.exams
+  const pend = (state.study?.exams || [])
     .filter((e) => e.status === 'pendiente' && e.date >= today)
     .sort((a, b) => a.date.localeCompare(b.date));
   return pend.length ? pend[0] : null;
 }
 
 export function examApprovalPct(state: LifeOSState): number | null {
-  const done = state.study.exams.filter((e) => e.status === 'aprobado' || e.status === 'desaprobado');
+  const done = (state.study?.exams || []).filter((e) => e.status === 'aprobado' || e.status === 'desaprobado');
   if (done.length === 0) return null;
   const ap = done.filter((e) => e.status === 'aprobado').length;
   return (ap / done.length) * 100;
@@ -452,12 +453,12 @@ export function examApprovalPct(state: LifeOSState): number | null {
 
 export function streamSessionsInMonth(state: LifeOSState, offset = 0) {
   const ref = monthLabel(offset);
-  return state.streaming.sessions.filter((s) => sameMonth(s.date, ref));
+  return (state.streaming?.sessions || []).filter((s) => sameMonth(s.date, ref));
 }
 
 export function todayStreamStatus(state: LifeOSState) {
   const iso = todayISO();
-  const s = state.streaming.sessions.find((x) => x.date === iso);
+  const s = (state.streaming?.sessions || []).find((x) => x.date === iso);
   return s ? { live: true, hours: s.hours } : { live: false, hours: 0 };
 }
 
@@ -472,7 +473,7 @@ export function eventsOnDate(state: LifeOSState, iso: string): CalendarEvent[] {
   const parts = iso.split('-');
   const m = parts[1];
   const d = parts[2];
-  return state.calendarEvents.filter((e) => {
+  return (state.calendarEvents || []).filter((e) => {
     if (e.recurring) {
       const eParts = e.date.split('-');
       return eParts[1] === m && eParts[2] === d;
@@ -496,7 +497,7 @@ export function nextOccurrence(e: CalendarEvent): string {
 }
 
 export function upcomingEvents(state: LifeOSState, limit = 5) {
-  return state.calendarEvents
+  return (state.calendarEvents || [])
     .map((e) => ({ ...e, occursOn: nextOccurrence(e) }))
     .filter((e) => e.recurring || e.date >= todayISO())
     .sort((a, b) => a.occursOn.localeCompare(b.occursOn))
@@ -504,19 +505,19 @@ export function upcomingEvents(state: LifeOSState, limit = 5) {
 }
 
 export function hasGymSessionOn(state: LifeOSState, dateIso: string): boolean {
-  return state.gym.sessions.some((s) => s.date === dateIso);
+  return (state.gym?.sessions || []).some((s) => s.date === dateIso);
 }
 
 export function hasStudyLogOn(state: LifeOSState, dateIso: string): boolean {
-  return state.study.studyLog.some((l) => l.date === dateIso);
+  return (state.study?.studyLog || []).some((l) => l.date === dateIso);
 }
 
 export function hasTransactionOn(state: LifeOSState, dateIso: string): boolean {
-  return state.finance.transactions.some((t) => t.date === dateIso);
+  return (state.finance?.transactions || []).some((t) => t.date === dateIso);
 }
 
 export function checkoutQuestionsFor(state: LifeOSState, dateIso: string) {
-  const log = state.checkoutLog[dateIso] || {};
+  const log = (state.checkoutLog || {})[dateIso] || {};
   return {
     trained: !hasGymSessionOn(state, dateIso) && !log.trainedSkipped,
     studied: !hasStudyLogOn(state, dateIso) && !log.studiedSkipped,
@@ -600,7 +601,7 @@ export function todayGymStatus(state: LifeOSState, dateIso = todayISO()): TodayG
 }
 
 export function jobStats(state: LifeOSState) {
-  const apps = state.jobs.applications;
+  const apps = state.jobs?.applications || [];
   const cvEnviados = apps.filter((a) => a.estado !== 'pendiente').length;
   const entrevistas = apps.filter((a) => a.estado === 'entrevista').length;
   const empresas = new Set(apps.map((a) => a.empresa)).size;
@@ -609,13 +610,13 @@ export function jobStats(state: LifeOSState) {
     cvEnviados,
     entrevistas,
     empresas,
-    ofertasNuevas: state.jobs.opportunities.filter((o) => o.status === 'nueva').length,
+    ofertasNuevas: (state.jobs?.opportunities || []).filter((o) => o.status === 'nueva').length,
     seguimientosPendientes,
   };
 }
 
 export function resaleStats(state: LifeOSState) {
-  const inv = state.resale.inventory;
+  const inv = state.resale?.inventory || [];
   const stock = inv.filter((i) => i.status === 'comprado').length;
   const vendidos = inv.filter((i) => i.status === 'vendido');
   const ventas = vendidos.length;
@@ -647,7 +648,7 @@ export function resaleStats(state: LifeOSState) {
     roi,
     tiempoPromedio,
     ranking,
-    oportunidadesNuevas: state.resale.opportunities.filter((o) => o.status === 'nueva').length,
+    oportunidadesNuevas: (state.resale?.opportunities || []).filter((o) => o.status === 'nueva').length,
   };
 }
 
@@ -743,10 +744,10 @@ export function todayItems(state: LifeOSState, dateIso?: string, includeFollowup
   const iso = dateIso || todayISO();
   if (includeFollowups === undefined) includeFollowups = iso === todayISO();
   const dayKey = dayKeyFromDate(new Date(iso + 'T00:00:00'));
-  const log = state.taskLog[iso] || {};
+  const log = (state.taskLog || {})[iso] || {};
   const items: TodayItem[] = [];
 
-  [...(state.agenda[dayKey] || [])]
+  [...((state.agenda || {})[dayKey] || [])]
     .sort((a, b) => a.time.localeCompare(b.time))
     .forEach((b) => {
       const done = Boolean(log[b.id]);
@@ -761,7 +762,7 @@ export function todayItems(state: LifeOSState, dateIso?: string, includeFollowup
       });
     });
 
-  state.tasksRecurring.forEach((t) => {
+  (state.tasksRecurring || []).forEach((t) => {
     if (!routineScheduledFor(state, t, iso)) return;
     const done = Boolean(log[t.id]);
     items.push({
@@ -775,7 +776,7 @@ export function todayItems(state: LifeOSState, dateIso?: string, includeFollowup
     });
   });
 
-  state.todayExtras
+  (state.todayExtras || [])
     .filter((x) => x.date === iso)
     .forEach((x) => {
       items.push({
@@ -790,7 +791,7 @@ export function todayItems(state: LifeOSState, dateIso?: string, includeFollowup
     });
 
   if (includeFollowups) {
-    state.jobs.applications
+    (state.jobs?.applications || [])
       .filter((a) => a.nextActionDate && a.nextActionDate <= iso)
       .forEach((a) => {
         items.push({

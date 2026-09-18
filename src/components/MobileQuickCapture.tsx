@@ -69,22 +69,23 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
   // Live parsed finance object
   const parsedFinance = useMemo(() => {
     return parseQuickFinance(financeInput, {
-      accounts: state.finance.accounts,
-      categories: state.finance.categories,
+      accounts: state.finance?.accounts || [],
+      categories: state.finance?.categories || [],
       defaultDate: date,
       defaultAccountId: manualAccountId || fallbackAccountId,
     });
-  }, [financeInput, state.finance.accounts, state.finance.categories, date, manualAccountId, fallbackAccountId]);
+  }, [financeInput, state.finance?.accounts, state.finance?.categories, date, manualAccountId, fallbackAccountId]);
 
   // Today's suggested workout
   const todayDayKey = dayKeyFromDate(new Date());
   const suggestedTemplate = useMemo(() => {
+    const templates = state.gym?.routineTemplates || [];
     return (
-      state.gym.routineTemplates.find((t) => t.days?.includes(todayDayKey)) ||
-      state.gym.routineTemplates[0] ||
+      templates.find((t) => t.days?.includes(todayDayKey)) ||
+      templates[0] ||
       null
     );
-  }, [state.gym.routineTemplates, todayDayKey]);
+  }, [state.gym?.routineTemplates, todayDayKey]);
 
   useEffect(() => {
     if (!open) return;
@@ -109,7 +110,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
 
   const handleStartWorkout = (templateId?: string) => {
     try {
-      const template = state.gym.routineTemplates.find((t) => t.id === templateId) || null;
+      const template = (state.gym?.routineTemplates || []).find((t) => t.id === templateId) || null;
       const newSessionId = uid();
       const exercises = template
         ? template.exercises.map((ex) => ({
@@ -128,6 +129,8 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
         : [];
 
       onUpdateState((draft) => {
+        if (!draft.gym) draft.gym = { sessions: [], exercises: [], routineTemplates: [], weight: [] } as any;
+        if (!draft.gym.sessions) draft.gym.sessions = [];
         // mark any previous active session as completed
         draft.gym.sessions.forEach((s) => {
           if (s.status === 'active') s.status = 'completed';
@@ -500,7 +503,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                     className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-2.5 text-xs text-[var(--text)]"
                   >
                     <option value="">Sesión Libre (sin rutina fija)</option>
-                    {state.gym.routineTemplates.map((t) => (
+                    {(state.gym?.routineTemplates || []).map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name}
                       </option>
@@ -582,13 +585,13 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                       </div>
 
                       {/* Quick Account Picker Chips if account is missing */}
-                      {parsedFinance.missing.includes('account') && state.finance.accounts.length > 0 && (
+                      {parsedFinance.missing.includes('account') && (state.finance?.accounts || []).length > 0 && (
                         <div className="mt-2 pt-2 border-t border-[var(--border)]">
                           <span className="text-[10px] text-[var(--text-faint)] block mb-1">
                             Seleccionar cuenta con un toque:
                           </span>
                           <div className="flex flex-wrap gap-1.5">
-                            {state.finance.accounts.map((acc) => (
+                            {(state.finance?.accounts || []).map((acc) => (
                               <button
                                 key={acc.id}
                                 type="button"
@@ -640,7 +643,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                           onChange={(e) => setManualAccountId(e.target.value)}
                           className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-xs"
                         >
-                          {state.finance.accounts.map((a) => (
+                          {(state.finance?.accounts || []).map((a) => (
                             <option key={a.id} value={a.id}>
                               {a.name}
                             </option>
@@ -656,7 +659,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                           onChange={(e) => setManualCategory(e.target.value)}
                           className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-xs"
                         >
-                          {state.finance.categories.map((c) => (
+                          {(state.finance?.categories || []).map((c) => (
                             <option key={c} value={c}>
                               {c}
                             </option>

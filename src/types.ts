@@ -144,9 +144,12 @@ export interface GymSet {
   rpe?: number;
 }
 
+export type ExerciseEquipment = 'barra' | 'mancuerna' | 'polea' | 'maquina' | 'corporal';
+
 export interface Exercise {
   id?: string;
   name: string;
+  equipment?: ExerciseEquipment;
   weight?: number;
   barWeight?: number;
   reps?: string;

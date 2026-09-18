@@ -10,7 +10,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts';
-import { GymSession, GymSet, LifeOSState, MuscleGroup } from '../types';
+import { Exercise, ExerciseEquipment, GymSession, GymSet, LifeOSState, MuscleGroup } from '../types';
 import { GymRestTimerBar } from './GymRestTimerBar';
 import { GymPlateCalculator } from './GymPlateCalculator';
 import { PersonalRecordsCard } from './PersonalRecordsCard';
@@ -31,7 +31,14 @@ import {
   sortedWeight,
 } from '../lib/calculations';
 import { buildGymHistory } from '../lib/gymHistory';
-import { inferMuscleGroup, sessionVolume } from '../lib/gymMigration';
+import {
+  EXERCISE_EQUIPMENT_OPTIONS,
+  inferExerciseEquipment,
+  inferMuscleGroup,
+  normalizeAllGymSessions,
+  propagateExerciseConfiguration,
+  sessionVolume,
+} from '../lib/gymMigration';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
 
@@ -72,12 +79,12 @@ function getPreviousExerciseStats(
 ): string | null {
   const norm = exerciseName.trim().toLowerCase();
   if (!norm) return null;
-  const pastSessions = sessions
-    .filter((s) => s.id !== currentSessionId && s.exercises.some((e) => e.name.trim().toLowerCase() === norm))
+  const pastSessions = (sessions || [])
+    .filter((s) => s.id !== currentSessionId && (s.exercises || []).some((e) => e.name?.trim().toLowerCase() === norm))
     .sort((a, b) => b.date.localeCompare(a.date));
 
   if (pastSessions.length === 0) return null;
-  const ex = pastSessions[0].exercises.find((e) => e.name.trim().toLowerCase() === norm);
+  const ex = (pastSessions[0].exercises || []).find((e) => e.name?.trim().toLowerCase() === norm);
   if (!ex) return null;
   if (ex.sets && ex.sets.length > 0) {
     const bestSet = [...ex.sets].sort((a, b) => b.weight - a.weight || b.reps - a.reps)[0];
@@ -102,6 +109,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   const [showBodyComposition, setShowBodyComposition] = useState(false);
   const [showPRs, setShowPRs] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
 
   // Live Workout Mobile Navigation State
   const [liveExIdx, setLiveExIdx] = useState<number>(0);
@@ -118,7 +126,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
 
   const allExerciseNames = Array.from(
     new Set(
-      state.gym.sessions.flatMap((s) => s.exercises.map((e) => e.name.trim())).filter(Boolean)
+      (state.gym?.sessions || []).flatMap((s) => (s.exercises || []).map((e) => e.name?.trim())).filter(Boolean)
     )
   );
 
@@ -132,27 +140,29 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   const streakDetails = calcGymStreakDetails(state);
   const streak = streakDetails.streakDays;
   const isRestDayToday =
-    (state.gym.restDays || []).includes(todayISO()) ||
-    Boolean(state.checkoutLog[todayISO()]?.trainedSkipped);
-  const isTrainedToday = state.gym.sessions.some((s) => s.date === todayISO());
+    (state.gym?.restDays || []).includes(todayISO()) ||
+    Boolean(state.checkoutLog?.[todayISO()]?.trainedSkipped);
+  const isTrainedToday = (state.gym?.sessions || []).some((s) => s.date === todayISO());
 
-  const activeWorkoutSession = state.gym.sessions.find(
+  const activeWorkoutSession = (state.gym?.sessions || []).find(
     (s) => s.status === 'active' || (s.date === todayISO() && s.status !== 'completed')
   );
 
   const handleToggleRestDay = () => {
     const today = todayISO();
     onUpdateState((draft) => {
+      if (!draft.gym) draft.gym = { sessions: [], exercises: [], routineTemplates: [], weight: [] } as any;
       if (!draft.gym.restDays) draft.gym.restDays = [];
       const idx = draft.gym.restDays.indexOf(today);
       if (idx >= 0) {
         draft.gym.restDays.splice(idx, 1);
-        if (draft.checkoutLog[today]) {
+        if (draft.checkoutLog?.[today]) {
           draft.checkoutLog[today].trainedSkipped = false;
         }
         showToast('Descanso cancelado. Racha regular.', 'info');
       } else {
         draft.gym.restDays.push(today);
+        if (!draft.checkoutLog) draft.checkoutLog = {};
         if (!draft.checkoutLog[today]) draft.checkoutLog[today] = {};
         draft.checkoutLog[today].trainedSkipped = true;
         showToast('🛋️ Hoy marcado como descanso. Tu racha está protegida.');
@@ -163,7 +173,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   const weightPts = sortedWeight(state);
   const ref = new Date();
   const diasEntrenadosAnio = new Set(
-    state.gym.sessions
+    (state.gym?.sessions || [])
       .filter((s) => new Date(s.date + 'T00:00:00').getFullYear() === ref.getFullYear())
       .map((s) => s.date)
   ).size;
@@ -178,13 +188,13 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   const bwMin = bwVals.length > 0 ? Math.max(0, Math.floor(Math.min(...bwVals) - 2)) : 50;
   const bwMax = bwVals.length > 0 ? Math.ceil(Math.max(...bwVals) + 2) : 100;
 
-  const liftingChartData = state.gym.sessions
+  const liftingChartData = (state.gym?.sessions || [])
     .filter((s) =>
-      s.exercises.some((e) => e.name.trim().toLowerCase() === activeExercise.trim().toLowerCase())
+      (s.exercises || []).some((e) => e.name?.trim().toLowerCase() === activeExercise.trim().toLowerCase())
     )
     .map((s) => {
-      const exList = s.exercises.filter(
-        (e) => e.name.trim().toLowerCase() === activeExercise.trim().toLowerCase()
+      const exList = (s.exercises || []).filter(
+        (e) => e.name?.trim().toLowerCase() === activeExercise.trim().toLowerCase()
       );
       const maxKg = Math.max(
         ...exList.flatMap((e) =>
@@ -333,12 +343,16 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
     sessionId: string,
     exName: string,
     muscleGroup?: MuscleGroup,
-    barWeight = 20,
+    equipment?: ExerciseEquipment,
+    barWeight?: number,
     initialWeight = 20,
     initialReps = 10
   ) => {
     if (!exName.trim()) return;
     const name = exName.trim();
+    const inferred = inferExerciseEquipment(name);
+    const eq = equipment || inferred.equipment;
+    const barW = eq === 'barra' ? (barWeight !== undefined ? barWeight : inferred.barWeight) : 0;
     const group = muscleGroup || inferMuscleGroup(name);
     const newSets: GymSet[] = [
       { id: uid(), weight: initialWeight, reps: initialReps, completed: false },
@@ -352,8 +366,9 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
         s.exercises.push({
           id: uid(),
           name,
+          equipment: eq,
           muscleGroup: group,
-          barWeight,
+          barWeight: barW,
           restSeconds: 90,
           timerEnabled: true,
           sets: newSets,
@@ -447,6 +462,22 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
     });
   };
 
+  const handleUpdateExerciseEquipment = (
+    sessionId: string,
+    exerciseIndex: number,
+    equipment: ExerciseEquipment,
+    barWeight?: number
+  ) => {
+    onUpdateState((draft) => {
+      const s = draft.gym.sessions.find((x) => x.id === sessionId);
+      if (s && s.exercises[exerciseIndex]) {
+        const ex = s.exercises[exerciseIndex];
+        ex.equipment = equipment;
+        ex.barWeight = equipment === 'barra' ? (barWeight !== undefined ? barWeight : (ex.barWeight && ex.barWeight > 0 ? ex.barWeight : 20)) : 0;
+      }
+    });
+  };
+
   // Templates
   const handleAddTemplate = (e: React.FormEvent) => {
     e.preventDefault();
@@ -466,6 +497,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
     onUpdateState((draft) => {
       draft.gym.routineTemplates = draft.gym.routineTemplates.filter((t) => t.id !== id);
     });
+    if (editingTemplateId === id) setEditingTemplateId(null);
     showToast('Plantilla eliminada.', 'info');
   };
 
@@ -478,23 +510,149 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
       draft.gym.routineTemplates.push({
         id: uid(),
         name: name.trim(),
-        exercises: session.exercises.map((ex) => ({
-          id: uid(),
-          name: ex.name,
-          muscleGroup: ex.muscleGroup,
-          barWeight: ex.barWeight ?? 20,
-          restSeconds: ex.restSeconds || 90,
-          timerEnabled: true,
-          sets: ex.sets.map((s) => ({
+        exercises: session.exercises.map((ex) => {
+          const eq = ex.equipment || inferExerciseEquipment(ex.name).equipment;
+          return {
             id: uid(),
-            weight: s.weight,
-            reps: s.reps,
-            completed: false,
-          })),
-        })),
+            name: ex.name,
+            equipment: eq,
+            muscleGroup: ex.muscleGroup,
+            barWeight: eq === 'barra' ? (ex.barWeight ?? 20) : 0,
+            restSeconds: ex.restSeconds || 90,
+            timerEnabled: true,
+            sets: ex.sets.map((s) => ({
+              id: uid(),
+              weight: s.weight,
+              reps: s.reps,
+              completed: false,
+            })),
+          };
+        }),
       });
     });
     showToast('Plantilla guardada a partir de la sesión.');
+  };
+
+  const handleUpdateTemplateExercise = (
+    templateId: string,
+    exerciseIndex: number,
+    updates: Partial<Exercise>
+  ) => {
+    onUpdateState((draft) => {
+      const t = draft.gym.routineTemplates.find((x) => x.id === templateId);
+      if (t && t.exercises[exerciseIndex]) {
+        t.exercises[exerciseIndex] = { ...t.exercises[exerciseIndex], ...updates };
+      }
+    });
+  };
+
+  const handleDeleteExerciseFromTemplate = (templateId: string, exerciseIndex: number) => {
+    onUpdateState((draft) => {
+      const t = draft.gym.routineTemplates.find((x) => x.id === templateId);
+      if (t) {
+        t.exercises.splice(exerciseIndex, 1);
+      }
+    });
+    showToast('Ejercicio eliminado de la plantilla.', 'info');
+  };
+
+  const handleAddExerciseToTemplate = (
+    templateId: string,
+    name: string,
+    muscleGroup?: MuscleGroup,
+    equipment?: ExerciseEquipment,
+    barWeight?: number,
+    setsCount = 3,
+    reps = 10,
+    weight = 20
+  ) => {
+    if (!name.trim()) return;
+    const inferred = inferExerciseEquipment(name);
+    const eq = equipment || inferred.equipment;
+    const barW = eq === 'barra' ? (barWeight !== undefined ? barWeight : inferred.barWeight) : 0;
+    const group = muscleGroup || inferMuscleGroup(name);
+    const newSets: GymSet[] = Array.from({ length: setsCount }, () => ({
+      id: uid(),
+      weight,
+      reps,
+      completed: false,
+    }));
+
+    onUpdateState((draft) => {
+      const t = draft.gym.routineTemplates.find((x) => x.id === templateId);
+      if (t) {
+        t.exercises.push({
+          id: uid(),
+          name: name.trim(),
+          equipment: eq,
+          muscleGroup: group,
+          barWeight: barW,
+          restSeconds: 90,
+          timerEnabled: true,
+          sets: newSets,
+          weight,
+        });
+      }
+    });
+    showToast(`Ejercicio agregado a plantilla: ${name.trim()}`);
+  };
+
+  const handlePropagateTemplateToHistory = (templateId: string) => {
+    const tmpl = state.gym.routineTemplates.find((t) => t.id === templateId);
+    if (!tmpl || tmpl.exercises.length === 0) {
+      showToast('La plantilla no contiene ejercicios para propagar.', 'info');
+      return;
+    }
+    let totalAffected = 0;
+    onUpdateState((draft) => {
+      let currentSessions = draft.gym.sessions;
+      let currentTemplates = draft.gym.routineTemplates;
+      for (const ex of tmpl.exercises) {
+        const eq = ex.equipment || inferExerciseEquipment(ex.name).equipment;
+        const barW = eq === 'barra' ? (ex.barWeight ?? 20) : 0;
+        const res = propagateExerciseConfiguration(
+          currentSessions,
+          currentTemplates,
+          ex.name,
+          {
+            equipment: eq,
+            barWeight: barW,
+            muscleGroup: ex.muscleGroup,
+          }
+        );
+        currentSessions = res.updatedSessions;
+        currentTemplates = res.updatedTemplates;
+        totalAffected += res.affectedSessions;
+      }
+      draft.gym.sessions = currentSessions;
+      draft.gym.routineTemplates = currentTemplates;
+    });
+    showToast(`⚡ Plantilla "${tmpl.name}" propagada: ${totalAffected} sesiones históricas actualizadas.`);
+  };
+
+  const handleNormalizeAllHistory = () => {
+    onUpdateState((draft) => {
+      const res = normalizeAllGymSessions(draft.gym.sessions, draft.gym.routineTemplates);
+      draft.gym.sessions = res.updatedSessions;
+      showToast(`🪄 Historial normalizado: ${res.affectedCount} ejercicios corregidos en todas las sesiones pasadas.`);
+    });
+  };
+
+  const handlePropagateExerciseToHistory = (
+    exerciseName: string,
+    config: { equipment: ExerciseEquipment; barWeight: number; muscleGroup?: MuscleGroup | string }
+  ) => {
+    onUpdateState((draft) => {
+      const res = propagateExerciseConfiguration(
+        draft.gym.sessions,
+        draft.gym.routineTemplates,
+        exerciseName,
+        config
+      );
+      draft.gym.sessions = res.updatedSessions;
+      draft.gym.routineTemplates = res.updatedTemplates;
+      showToast(`⚡ "${exerciseName}" propagado a ${res.affectedSessions} sesiones históricas.`);
+    });
   };
 
   const gymHistory = useMemo(() => {
@@ -748,34 +906,68 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1.5">
                       <select
-                        value={liveCurrentEx.barWeight ?? 20}
-                        onChange={(e) => handleUpdateExerciseBar(activeWorkoutSession.id, liveSafeExIdx, Number(e.target.value))}
-                        className="px-2 py-1 text-xs font-mono font-bold rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
-                        title="Tipo de barra"
+                        value={liveCurrentEx.equipment || (liveCurrentEx.barWeight && liveCurrentEx.barWeight > 0 ? 'barra' : 'mancuerna')}
+                        onChange={(e) => {
+                          const eq = e.target.value as ExerciseEquipment;
+                          handleUpdateExerciseEquipment(activeWorkoutSession.id, liveSafeExIdx, eq);
+                        }}
+                        className="px-2 py-1 text-xs font-semibold rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
+                        title="Tipo de equipamiento"
                       >
-                        <option value={20}>Barra 20 kg (Olímpica)</option>
-                        <option value={15}>Barra 15 kg (Mujer)</option>
-                        <option value={10}>Barra 10 kg (W / EZ)</option>
-                        <option value={0}>0 kg (Mancuerna / Máq)</option>
+                        <option value="barra">🏋️ Barra</option>
+                        <option value="mancuerna">💪 Mancuerna</option>
+                        <option value="polea">🪢 Polea</option>
+                        <option value="maquina">⚙️ Máquina</option>
+                        <option value="corporal">🤸 Corporal</option>
                       </select>
+
+                      {(liveCurrentEx.equipment === 'barra' || (!liveCurrentEx.equipment && (liveCurrentEx.barWeight ?? 20) > 0)) && (
+                        <select
+                          value={liveCurrentEx.barWeight ?? 20}
+                          onChange={(e) => handleUpdateExerciseBar(activeWorkoutSession.id, liveSafeExIdx, Number(e.target.value))}
+                          className="px-2 py-1 text-xs font-mono font-bold rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
+                          title="Peso de la barra"
+                        >
+                          <option value={20}>20 kg (Olímpica)</option>
+                          <option value={15}>15 kg (Mujer)</option>
+                          <option value={10}>10 kg (W / EZ)</option>
+                        </select>
+                      )}
 
                       <button
                         type="button"
                         onClick={() =>
-                          setCalculatorTarget({
-                            sessionId: activeWorkoutSession.id,
-                            exerciseIndex: liveSafeExIdx,
-                            setIndex: liveSafeSetIdx,
-                            initialWeight: Number(liveCurrentSet?.weight) || 40,
-                            barWeight: liveCurrentEx.barWeight ?? 20,
+                          handlePropagateExerciseToHistory(liveCurrentEx.name, {
+                            equipment: liveCurrentEx.equipment || 'mancuerna',
+                            barWeight: liveCurrentEx.barWeight ?? 0,
+                            muscleGroup: liveCurrentEx.muscleGroup as MuscleGroup,
                           })
                         }
-                        className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-xs font-bold cursor-pointer hover:bg-blue-500/20"
+                        className="px-2 py-1 rounded-lg bg-[var(--card)] text-[var(--text-soft)] hover:text-blue-600 border border-[var(--border)] text-[10px] font-bold cursor-pointer"
+                        title="Aplicar este equipamiento a todas las sesiones pasadas con este ejercicio"
                       >
-                        ⚖️ Discos
+                        ⚡ Al historial
                       </button>
+
+                      {(liveCurrentEx.equipment === 'barra' || (!liveCurrentEx.equipment && (liveCurrentEx.barWeight ?? 20) > 0)) && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCalculatorTarget({
+                              sessionId: activeWorkoutSession.id,
+                              exerciseIndex: liveSafeExIdx,
+                              setIndex: liveSafeSetIdx,
+                              initialWeight: Number(liveCurrentSet?.weight) || 40,
+                              barWeight: liveCurrentEx.barWeight ?? 20,
+                            })
+                          }
+                          className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-xs font-bold cursor-pointer hover:bg-blue-500/20"
+                        >
+                          ⚖️ Discos
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -828,12 +1020,26 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                         <div className="text-right">
                           <span className="text-xs font-mono font-bold text-[var(--blue)]">
                             {(() => {
-                              const bar = liveCurrentEx.barWeight ?? 20;
+                              const eq = liveCurrentEx.equipment || (liveCurrentEx.barWeight && liveCurrentEx.barWeight > 0 ? 'barra' : 'mancuerna');
+                              const bar = liveCurrentEx.barWeight ?? 0;
                               const w = Number(liveCurrentSet.weight) || 0;
-                              const perSide = Math.max(0, (w - bar) / 2);
-                              return bar > 0
-                                ? `${perSide} kg por lado (en barra de ${bar} kg)`
-                                : 'Sin barra';
+                              if (eq === 'barra' && bar > 0) {
+                                const perSide = Math.max(0, (w - bar) / 2);
+                                return `${perSide} kg por lado (en barra de ${bar} kg)`;
+                              }
+                              if (eq === 'mancuerna') {
+                                return `Mancuerna de ${w} kg`;
+                              }
+                              if (eq === 'polea') {
+                                return `Polea: ${w} kg`;
+                              }
+                              if (eq === 'maquina') {
+                                return `Máquina: ${w} kg`;
+                              }
+                              if (eq === 'corporal') {
+                                return w > 0 ? `Corporal + ${w} kg lastre` : 'Peso corporal';
+                              }
+                              return `${w} kg`;
                             })()}
                           </span>
                         </div>
@@ -1093,7 +1299,27 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                 </div>
 
                 {showTemplates && (
-                  <div className="space-y-3 pt-2 border-t border-[var(--border)] animate-in fade-in">
+                  <div className="space-y-4 pt-2 border-t border-[var(--border)] animate-in fade-in">
+                    {/* Normalization Banner */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                      <div>
+                        <strong className="text-xs text-[var(--text)] block">
+                          🪄 Auto-reparación y normalización del historial
+                        </strong>
+                        <p className="text-[11px] text-[var(--text-soft)]">
+                          Corrige de una sola vez todas las mancuernas, poleas, máquinas y barras de las semanas pasadas en lote.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleNormalizeAllHistory}
+                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl cursor-pointer shadow-xs transition"
+                      >
+                        🪄 Reparar todo el historial
+                      </button>
+                    </div>
+
+                    {/* Create Template Form */}
                     <form onSubmit={handleAddTemplate} className="flex gap-2">
                       <input
                         type="text"
@@ -1110,34 +1336,165 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                       </button>
                     </form>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {state.gym.routineTemplates.map((t) => (
-                        <div key={t.id} className="p-3 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-between gap-2">
-                          <div>
-                            <strong className="text-xs text-[var(--text)] block">{t.name}</strong>
-                            <span className="text-[11px] text-[var(--text-soft)]">
-                              {t.exercises.length} ejercicio{t.exercises.length === 1 ? '' : 's'}
-                            </span>
+                    {/* Templates List & Expanded Exercise Editor */}
+                    <div className="space-y-3">
+                      {state.gym.routineTemplates.map((t) => {
+                        const isEditing = editingTemplateId === t.id;
+                        return (
+                          <div
+                            key={t.id}
+                            className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] overflow-hidden transition-all shadow-2xs"
+                          >
+                            <div className="p-3.5 flex items-center justify-between gap-2 flex-wrap">
+                              <div>
+                                <strong className="text-xs font-bold text-[var(--text)] block">{t.name}</strong>
+                                <span className="text-[11px] text-[var(--text-soft)]">
+                                  {t.exercises.length} ejercicio{t.exercises.length === 1 ? '' : 's'} configurado{t.exercises.length === 1 ? '' : 's'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartWorkout(t.id)}
+                                  className="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-[10px] font-bold hover:bg-blue-700 cursor-pointer shadow-2xs"
+                                >
+                                  ⚡ Iniciar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingTemplateId(isEditing ? null : t.id)}
+                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer border transition ${
+                                    isEditing
+                                      ? 'bg-[var(--text)] text-[var(--bg-elevated)] border-transparent'
+                                      : 'bg-[var(--card)] text-[var(--text)] border-[var(--border)] hover:border-blue-500/40'
+                                  }`}
+                                >
+                                  {isEditing ? 'Cerrar editor ✕' : '✏️ Editar ejercicios'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteTemplate(t.id)}
+                                  className="text-xs text-[var(--text-faint)] hover:text-rose-500 cursor-pointer p-1"
+                                  title="Eliminar plantilla"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Template Exercises Sub-editor */}
+                            {isEditing && (
+                              <div className="p-4 border-t border-[var(--border)] bg-[var(--card)] space-y-4 animate-in fade-in">
+                                <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-2 flex-wrap">
+                                  <span className="text-xs font-bold text-[var(--text-soft)]">
+                                    Ejercicios y equipamiento de la plantilla "{t.name}"
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePropagateTemplateToHistory(t.id)}
+                                    className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded-lg text-[11px] font-bold cursor-pointer flex items-center gap-1"
+                                    title="Aplica este equipamiento y barra a todas las sesiones anteriores con estos mismos ejercicios"
+                                  >
+                                    ⚡ Propagar toda la plantilla al historial
+                                  </button>
+                                </div>
+
+                                {t.exercises.length === 0 ? (
+                                  <p className="text-xs text-[var(--text-faint)] py-2">
+                                    Esta plantilla aún no tiene ejercicios. Agregá el primero abajo.
+                                  </p>
+                                ) : (
+                                  <div className="space-y-2">
+                                    {t.exercises.map((ex, exIdx) => {
+                                      const exEq = ex.equipment || (ex.barWeight && ex.barWeight > 0 ? 'barra' : 'mancuerna');
+                                      return (
+                                        <div
+                                          key={ex.id || exIdx}
+                                          className="p-2.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-between gap-2 flex-wrap text-xs"
+                                        >
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-bold text-[var(--text)]">{ex.name}</span>
+                                            {ex.muscleGroup && (
+                                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[var(--card)] border border-[var(--border)] text-[var(--text-soft)]">
+                                                {ex.muscleGroup}
+                                              </span>
+                                            )}
+                                          </div>
+
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            {/* Equipment selector */}
+                                            <select
+                                              value={exEq}
+                                              onChange={(e) => {
+                                                const eq = e.target.value as ExerciseEquipment;
+                                                const bw = eq === 'barra' ? 20 : 0;
+                                                handleUpdateTemplateExercise(t.id, exIdx, { equipment: eq, barWeight: bw });
+                                              }}
+                                              className="px-2 py-1 text-xs font-semibold rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
+                                            >
+                                              <option value="barra">🏋️ Barra</option>
+                                              <option value="mancuerna">💪 Mancuerna</option>
+                                              <option value="polea">🪢 Polea</option>
+                                              <option value="maquina">⚙️ Máquina</option>
+                                              <option value="corporal">🤸 Corporal</option>
+                                            </select>
+
+                                            {/* Bar weight if barra */}
+                                            {exEq === 'barra' && (
+                                              <select
+                                                value={ex.barWeight ?? 20}
+                                                onChange={(e) =>
+                                                  handleUpdateTemplateExercise(t.id, exIdx, { barWeight: Number(e.target.value) })
+                                                }
+                                                className="px-2 py-1 text-xs font-mono font-bold rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
+                                              >
+                                                <option value={20}>20 kg</option>
+                                                <option value={15}>15 kg</option>
+                                                <option value={10}>10 kg</option>
+                                              </select>
+                                            )}
+
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                handlePropagateExerciseToHistory(ex.name, {
+                                                  equipment: exEq,
+                                                  barWeight: exEq === 'barra' ? (ex.barWeight ?? 20) : 0,
+                                                  muscleGroup: ex.muscleGroup,
+                                                })
+                                              }
+                                              className="px-2 py-1 rounded-lg bg-[var(--card)] text-[var(--text-soft)] hover:text-blue-600 border border-[var(--border)] text-[10px] font-bold cursor-pointer"
+                                              title="Aplicar a todo el historial"
+                                            >
+                                              ⚡ Al historial
+                                            </button>
+
+                                            <button
+                                              type="button"
+                                              onClick={() => handleDeleteExerciseFromTemplate(t.id, exIdx)}
+                                              className="text-[var(--text-faint)] hover:text-rose-500 text-xs px-1 cursor-pointer"
+                                              title="Eliminar de la plantilla"
+                                            >
+                                              ✕
+                                            </button>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+
+                                {/* Add exercise to template */}
+                                <TemplateAddExerciseForm
+                                  onAdd={(name, muscle, equipment, barWeight) =>
+                                    handleAddExerciseToTemplate(t.id, name, muscle, equipment, barWeight)
+                                  }
+                                />
+                              </div>
+                            )}
                           </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleStartWorkout(t.id)}
-                              className="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-[10px] font-bold hover:bg-blue-700 cursor-pointer shadow-2xs"
-                            >
-                              ⚡ Iniciar
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteTemplate(t.id)}
-                              className="text-xs text-[var(--text-faint)] hover:text-rose-500 cursor-pointer p-1"
-                              title="Eliminar plantilla"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -1166,8 +1523,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                     onEditSessionDate={(d) => handleEditSessionDate(state.gym.sessions[0].id, d)}
                     onEditSessionWeek={(w) => handleEditSessionWeek(state.gym.sessions[0].id, w)}
                     onSaveAsTemplate={() => handleSaveSessionAsTemplate(state.gym.sessions[0])}
-                    onAddExercise={(name, muscle, barW, w, r) =>
-                      handleAddExerciseToSession(state.gym.sessions[0].id, name, muscle, barW, w, r)
+                    onAddExercise={(name, muscle, eq, barW, w, r) =>
+                      handleAddExerciseToSession(state.gym.sessions[0].id, name, muscle, eq, barW, w, r)
                     }
                     onDeleteExercise={(exIdx) => handleDeleteExercise(state.gym.sessions[0].id, exIdx)}
                     onAddSet={(exIdx) => handleAddSet(state.gym.sessions[0].id, exIdx)}
@@ -1177,6 +1534,12 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                     onDeleteSet={(exIdx, setIdx) => handleDeleteSet(state.gym.sessions[0].id, exIdx, setIdx)}
                     onUpdateExerciseBar={(exIdx, barW) =>
                       handleUpdateExerciseBar(state.gym.sessions[0].id, exIdx, barW)
+                    }
+                    onUpdateExerciseEquipment={(exIdx, eq, barW) =>
+                      handleUpdateExerciseEquipment(state.gym.sessions[0].id, exIdx, eq, barW)
+                    }
+                    onPropagateExercise={(name, config) =>
+                      handlePropagateExerciseToHistory(name, config)
                     }
                     onOpenCalculator={(exIdx, setIdx, initialW, barW) =>
                       setCalculatorTarget({
@@ -1203,11 +1566,19 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
             <div>
               <h2 className="text-sm font-bold text-[var(--text)]">Cargar Sesión Manual</h2>
               <p className="text-xs text-[var(--text-soft)]">
-                Agregá un entrenamiento pasado con fecha específica.
+                Agregá un entrenamiento pasado o normalizá el equipamiento histórico.
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleNormalizeAllHistory}
+                className="px-3 py-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-bold rounded-xl cursor-pointer hover:bg-amber-500/20 transition-all flex items-center gap-1.5"
+                title="Detecta mancuernas, poleas, máquinas y barras en todo tu historial y corrige pesos de barra"
+              >
+                <span>🪄 Normalizar todo el historial</span>
+              </button>
               <input
                 type="date"
                 value={sessionDate}
@@ -1255,8 +1626,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                       onEditSessionDate={(d) => handleEditSessionDate(session.id, d)}
                       onEditSessionWeek={(w) => handleEditSessionWeek(session.id, w)}
                       onSaveAsTemplate={() => handleSaveSessionAsTemplate(session)}
-                      onAddExercise={(name, muscle, barW, w, r) =>
-                        handleAddExerciseToSession(session.id, name, muscle, barW, w, r)
+                      onAddExercise={(name, muscle, eq, barW, w, r) =>
+                        handleAddExerciseToSession(session.id, name, muscle, eq, barW, w, r)
                       }
                       onDeleteExercise={(exIdx) => handleDeleteExercise(session.id, exIdx)}
                       onAddSet={(exIdx) => handleAddSet(session.id, exIdx)}
@@ -1266,6 +1637,12 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                       onDeleteSet={(exIdx, setIdx) => handleDeleteSet(session.id, exIdx, setIdx)}
                       onUpdateExerciseBar={(exIdx, barW) =>
                         handleUpdateExerciseBar(session.id, exIdx, barW)
+                      }
+                      onUpdateExerciseEquipment={(exIdx, eq, barW) =>
+                        handleUpdateExerciseEquipment(session.id, exIdx, eq, barW)
+                      }
+                      onPropagateExercise={(name, config) =>
+                        handlePropagateExerciseToHistory(name, config)
                       }
                       onOpenCalculator={(exIdx, setIdx, initialW, barW) =>
                         setCalculatorTarget({
@@ -1317,8 +1694,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                         onEditSessionDate={(d) => handleEditSessionDate(session.id, d)}
                         onEditSessionWeek={(w) => handleEditSessionWeek(session.id, w)}
                         onSaveAsTemplate={() => handleSaveSessionAsTemplate(session)}
-                        onAddExercise={(name, muscle, barW, w, r) =>
-                          handleAddExerciseToSession(session.id, name, muscle, barW, w, r)
+                        onAddExercise={(name, muscle, eq, barW, w, r) =>
+                          handleAddExerciseToSession(session.id, name, muscle, eq, barW, w, r)
                         }
                         onDeleteExercise={(exIdx) => handleDeleteExercise(session.id, exIdx)}
                         onAddSet={(exIdx) => handleAddSet(session.id, exIdx)}
@@ -1328,6 +1705,12 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                         onDeleteSet={(exIdx, setIdx) => handleDeleteSet(session.id, exIdx, setIdx)}
                         onUpdateExerciseBar={(exIdx, barW) =>
                           handleUpdateExerciseBar(session.id, exIdx, barW)
+                        }
+                        onUpdateExerciseEquipment={(exIdx, eq, barW) =>
+                          handleUpdateExerciseEquipment(session.id, exIdx, eq, barW)
+                        }
+                        onPropagateExercise={(name, config) =>
+                          handlePropagateExerciseToHistory(name, config)
                         }
                         onOpenCalculator={(exIdx, setIdx, initialW, barW) =>
                           setCalculatorTarget({
@@ -1582,6 +1965,130 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   );
 };
 
+interface TemplateAddExerciseFormProps {
+  onAdd: (
+    name: string,
+    muscleGroup: MuscleGroup,
+    equipment: ExerciseEquipment,
+    barWeight: number
+  ) => void;
+}
+
+const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd }) => {
+  const [name, setName] = useState('');
+  const [muscleGroup, setMuscleGroup] = useState<MuscleGroup>('Pecho');
+  const [equipment, setEquipment] = useState<ExerciseEquipment>('barra');
+  const [barWeight, setBarWeight] = useState(20);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    onAdd(name.trim(), muscleGroup, equipment, equipment === 'barra' ? barWeight : 0);
+    setName('');
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="p-3 bg-[var(--card)] border border-dashed border-[var(--border)] rounded-xl flex flex-wrap items-end gap-2"
+    >
+      <div className="flex-1 min-w-[160px]">
+        <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-1">
+          Agregar ejercicio a plantilla
+        </label>
+        <input
+          type="text"
+          list="template-gym-suggestions"
+          value={name}
+          onChange={(e) => {
+            const val = e.target.value;
+            setName(val);
+            if (val) {
+              setMuscleGroup(inferMuscleGroup(val));
+              const inferred = inferExerciseEquipment(val);
+              setEquipment(inferred.equipment);
+              setBarWeight(inferred.barWeight);
+            }
+          }}
+          placeholder="Ej: Curl con mancuernas"
+          className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-hidden focus:border-[var(--blue)]"
+        />
+        <datalist id="template-gym-suggestions">
+          {COMMON_EXERCISE_SUGGESTIONS.map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
+      </div>
+
+      <div>
+        <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-1">
+          Músculo
+        </label>
+        <select
+          value={muscleGroup}
+          onChange={(e) => setMuscleGroup(e.target.value as MuscleGroup)}
+          className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
+        >
+          {['Pecho', 'Espalda', 'Piernas', 'Hombros', 'Brazos', 'Core', 'Cardio', 'Otros'].map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-1">
+          Tipo equipo
+        </label>
+        <select
+          value={equipment}
+          onChange={(e) => {
+            const eq = e.target.value as ExerciseEquipment;
+            setEquipment(eq);
+            if (eq !== 'barra') {
+              setBarWeight(0);
+            } else if (barWeight === 0) {
+              setBarWeight(20);
+            }
+          }}
+          className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
+        >
+          {EXERCISE_EQUIPMENT_OPTIONS.map((item) => (
+            <option key={item.key} value={item.key}>
+              {item.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {equipment === 'barra' && (
+        <div>
+          <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-1">
+            Barra
+          </label>
+          <select
+            value={barWeight}
+            onChange={(e) => setBarWeight(Number(e.target.value))}
+            className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
+          >
+            <option value={20}>20 kg (Olímpica)</option>
+            <option value={15}>15 kg (Técnica)</option>
+            <option value={10}>10 kg (W / EZ)</option>
+          </select>
+        </div>
+      )}
+
+      <button
+        type="submit"
+        className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-all shadow-2xs"
+      >
+        ＋ Añadir
+      </button>
+    </form>
+  );
+};
+
 interface WorkoutSessionCardProps {
   session: GymSession;
   allSessions: GymSession[];
@@ -1593,6 +2100,7 @@ interface WorkoutSessionCardProps {
   onAddExercise: (
     name: string,
     muscleGroup: MuscleGroup,
+    equipment: ExerciseEquipment,
     barWeight: number,
     initialWeight: number,
     initialReps: number
@@ -1602,6 +2110,15 @@ interface WorkoutSessionCardProps {
   onUpdateSet: (exerciseIndex: number, setIndex: number, updates: Partial<GymSet>) => void;
   onDeleteSet: (exerciseIndex: number, setIndex: number) => void;
   onUpdateExerciseBar: (exerciseIndex: number, barWeight: number) => void;
+  onUpdateExerciseEquipment?: (
+    exerciseIndex: number,
+    equipment: ExerciseEquipment,
+    barWeight: number
+  ) => void;
+  onPropagateExercise?: (
+    name: string,
+    config: { equipment: ExerciseEquipment; barWeight: number; muscleGroup?: MuscleGroup }
+  ) => void;
   onOpenCalculator: (
     exerciseIndex: number,
     setIndex: number,
@@ -1624,10 +2141,13 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
   onUpdateSet,
   onDeleteSet,
   onUpdateExerciseBar,
+  onUpdateExerciseEquipment,
+  onPropagateExercise,
   onOpenCalculator,
 }) => {
   const [newExName, setNewExName] = useState('');
   const [newExMuscle, setNewExMuscle] = useState<MuscleGroup>('Pecho');
+  const [newExEquipment, setNewExEquipment] = useState<ExerciseEquipment>('barra');
   const [newExBar, setNewExBar] = useState(20);
   const [newExWeight, setNewExWeight] = useState('40');
   const [newExReps, setNewExReps] = useState('10');
@@ -1647,7 +2167,8 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
     onAddExercise(
       newExName.trim(),
       newExMuscle,
-      newExBar,
+      newExEquipment,
+      newExEquipment === 'barra' ? newExBar : 0,
       Number(newExWeight) || 20,
       Number(newExReps) || 10
     );
@@ -1767,7 +2288,12 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
         ) : (
           session.exercises.map((exercise, exIdx) => {
             const previousBest = getPreviousExerciseStats(allSessions, session.id, exercise.name);
-            const currentBarWeight = exercise.barWeight ?? 20;
+            const inferred = inferExerciseEquipment(exercise.name);
+            const currentEquipment: ExerciseEquipment =
+              exercise.equipment ||
+              (exercise.barWeight && exercise.barWeight > 0 ? 'barra' : inferred.equipment);
+            const currentBarWeight =
+              currentEquipment === 'barra' ? (exercise.barWeight ?? inferred.barWeight) : 0;
 
             return (
               <div
@@ -1792,42 +2318,79 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                     )}
                   </div>
 
-                  {/* Bar Weight & Actions */}
-                  <div className="flex items-center gap-2 text-xs">
-                    <div className="flex items-center gap-1 text-[11px] text-[var(--text-soft)]">
-                      <span>Barra:</span>
-                      <select
-                        value={currentBarWeight}
-                        onChange={(e) => onUpdateExerciseBar(exIdx, Number(e.target.value))}
-                        className="bg-[var(--card)] border border-[var(--border)] rounded-md px-1.5 py-0.5 text-xs font-mono font-bold cursor-pointer text-[var(--text)]"
-                      >
-                        <option value={20}>20 kg (Olímpica)</option>
-                        <option value={15}>15 kg (Técnica/Mujer)</option>
-                        <option value={10}>10 kg (W / EZ)</option>
-                        <option value={0}>0 kg (Mancuerna/Máq)</option>
-                      </select>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onOpenCalculator(
-                          exIdx,
-                          0,
-                          Number(exercise.sets?.[0]?.weight) || 40,
-                          currentBarWeight
-                        )
-                      }
-                      className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 font-bold text-[10px] cursor-pointer flex items-center gap-1"
-                      title="Calculadora y desglose de discos por lado"
+                  {/* Equipment, Bar Weight & Actions */}
+                  <div className="flex items-center gap-1.5 text-xs flex-wrap">
+                    <select
+                      value={currentEquipment}
+                      onChange={(e) => {
+                        const newEq = e.target.value as ExerciseEquipment;
+                        const newBar = newEq === 'barra' ? (currentBarWeight > 0 ? currentBarWeight : 20) : 0;
+                        onUpdateExerciseEquipment?.(exIdx, newEq, newBar);
+                      }}
+                      className="bg-[var(--card)] border border-[var(--border)] rounded-md px-1.5 py-0.5 text-xs font-semibold cursor-pointer text-[var(--text)]"
                     >
-                      <span>⚖️ Discos</span>
-                    </button>
+                      <option value="barra">🏋️ Barra</option>
+                      <option value="mancuerna">💪 Mancuerna</option>
+                      <option value="polea">🔗 Polea</option>
+                      <option value="maquina">⚙️ Máquina</option>
+                      <option value="corporal">🤸 Corporal</option>
+                    </select>
+
+                    {currentEquipment === 'barra' && (
+                      <div className="flex items-center gap-1 text-[11px] text-[var(--text-soft)]">
+                        <span>Barra:</span>
+                        <select
+                          value={currentBarWeight}
+                          onChange={(e) => onUpdateExerciseBar(exIdx, Number(e.target.value))}
+                          className="bg-[var(--card)] border border-[var(--border)] rounded-md px-1.5 py-0.5 text-xs font-mono font-bold cursor-pointer text-[var(--text)]"
+                        >
+                          <option value={20}>20 kg (Olímpica)</option>
+                          <option value={15}>15 kg (Técnica)</option>
+                          <option value={10}>10 kg (W / EZ)</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {onPropagateExercise && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onPropagateExercise(exercise.name, {
+                            equipment: currentEquipment,
+                            barWeight: currentBarWeight,
+                            muscleGroup: exercise.muscleGroup,
+                          })
+                        }
+                        className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 font-bold text-[10px] cursor-pointer"
+                        title={`Aplicar "${exercise.name}" como ${currentEquipment} en todo el historial`}
+                      >
+                        ⚡ Al historial
+                      </button>
+                    )}
+
+                    {currentEquipment === 'barra' && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onOpenCalculator(
+                            exIdx,
+                            0,
+                            Number(exercise.sets?.[0]?.weight) || 40,
+                            currentBarWeight
+                          )
+                        }
+                        className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 font-bold text-[10px] cursor-pointer flex items-center gap-1"
+                        title="Calculadora y desglose de discos por lado"
+                      >
+                        <span>⚖️ Discos</span>
+                      </button>
+                    )}
 
                     <button
                       type="button"
                       onClick={() => onDeleteExercise(exIdx)}
                       className="text-[var(--text-faint)] hover:text-rose-500 text-xs px-1 cursor-pointer"
+                      title="Eliminar ejercicio"
                     >
                       ✕
                     </button>
@@ -1841,7 +2404,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                       <tr className="text-[10px] uppercase font-bold text-[var(--text-faint)] border-b border-[var(--border)]">
                         <th className="py-1 w-10">Serie</th>
                         <th className="py-1 w-36">Peso Total</th>
-                        <th className="py-1 w-28">Discos / Lado</th>
+                        <th className="py-1 w-32">Carga / Discos</th>
                         <th className="py-1 w-32">Reps</th>
                         <th className="py-1 w-12 text-center">Hecha</th>
                         <th className="py-1 w-8"></th>
@@ -1900,20 +2463,22 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                 >
                                   +
                                 </button>
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    onOpenCalculator(exIdx, setIdx, setWeight, currentBarWeight)
-                                  }
-                                  className="p-1 text-[10px] text-blue-600 hover:underline cursor-pointer"
-                                  title="Calcular discos para esta serie"
-                                >
-                                  ⚖️
-                                </button>
+                                {currentEquipment === 'barra' && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      onOpenCalculator(exIdx, setIdx, setWeight, currentBarWeight)
+                                    }
+                                    className="p-1 text-[10px] text-blue-600 hover:underline cursor-pointer"
+                                    title="Calcular discos para esta serie"
+                                  >
+                                    ⚖️
+                                  </button>
+                                )}
                               </div>
                             </td>
                             <td className="py-1.5 font-mono text-[11px] text-[var(--text-soft)]">
-                              {currentBarWeight > 0 ? (
+                              {currentEquipment === 'barra' && (
                                 <span
                                   onClick={() =>
                                     onOpenCalculator(exIdx, setIdx, setWeight, currentBarWeight)
@@ -1922,8 +2487,26 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                 >
                                   {platePerSide > 0 ? `${platePerSide} kg/lado` : 'Solo barra'}
                                 </span>
-                              ) : (
-                                '—'
+                              )}
+                              {currentEquipment === 'mancuerna' && (
+                                <span className="font-semibold text-[var(--text-soft)]">
+                                  {setWeight > 0 ? `${setWeight} kg manc.` : '—'}
+                                </span>
+                              )}
+                              {currentEquipment === 'polea' && (
+                                <span className="font-semibold text-[var(--text-soft)]">
+                                  {setWeight > 0 ? `${setWeight} kg polea` : '—'}
+                                </span>
+                              )}
+                              {currentEquipment === 'maquina' && (
+                                <span className="font-semibold text-[var(--text-soft)]">
+                                  {setWeight > 0 ? `${setWeight} kg máq.` : '—'}
+                                </span>
+                              )}
+                              {currentEquipment === 'corporal' && (
+                                <span className="font-semibold text-[var(--text-soft)]">
+                                  {setWeight > 0 ? `+${setWeight} kg lastre` : 'Corporal'}
+                                </span>
                               )}
                             </td>
                             <td className="py-1.5">
@@ -2032,7 +2615,12 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
             onChange={(e) => {
               const val = e.target.value;
               setNewExName(val);
-              if (val) setNewExMuscle(inferMuscleGroup(val));
+              if (val) {
+                setNewExMuscle(inferMuscleGroup(val));
+                const inferred = inferExerciseEquipment(val);
+                setNewExEquipment(inferred.equipment);
+                setNewExBar(inferred.barWeight);
+              }
             }}
             placeholder="Ej: Press banca plano"
             className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-hidden focus:border-[var(--blue)]"
@@ -2063,19 +2651,45 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
 
         <div>
           <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-1">
-            Barra
+            Tipo
           </label>
           <select
-            value={newExBar}
-            onChange={(e) => setNewExBar(Number(e.target.value))}
+            value={newExEquipment}
+            onChange={(e) => {
+              const eq = e.target.value as ExerciseEquipment;
+              setNewExEquipment(eq);
+              if (eq !== 'barra') {
+                setNewExBar(0);
+              } else if (newExBar === 0) {
+                setNewExBar(20);
+              }
+            }}
             className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
           >
-            <option value={20}>20 kg</option>
-            <option value={15}>15 kg</option>
-            <option value={10}>10 kg</option>
-            <option value={0}>0 kg</option>
+            {EXERCISE_EQUIPMENT_OPTIONS.map((item) => (
+              <option key={item.key} value={item.key}>
+                {item.label}
+              </option>
+            ))}
           </select>
         </div>
+
+        {newExEquipment === 'barra' && (
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-1">
+              Barra
+            </label>
+            <select
+              value={newExBar}
+              onChange={(e) => setNewExBar(Number(e.target.value))}
+              className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
+            >
+              <option value={20}>20 kg</option>
+              <option value={15}>15 kg</option>
+              <option value={10}>10 kg</option>
+            </select>
+          </div>
+        )}
 
         <div>
           <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-1">

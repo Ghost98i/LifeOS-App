@@ -84,10 +84,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const backupUrgent = daysSinceBackup === null || daysSinceBackup >= 3;
 
   // Today's priorities
-  const todayPriorities = state.dailyPriorities.filter((p) => p.date === todayIso);
+  const todayPriorities = (state.dailyPriorities || []).filter((p) => p.date === todayIso);
 
   const handleAddPriority = (text: string) => {
     onUpdateState((draft) => {
+      if (!draft.dailyPriorities) draft.dailyPriorities = [];
       const existing = draft.dailyPriorities.filter((p) => p.date === todayIso);
       const usedRanks = existing.map((p) => p.rank || 0);
       const nextRank = [1, 2, 3].find((r) => !usedRanks.includes(r)) || existing.length + 1;
@@ -105,6 +106,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const handleTogglePriority = (priority: typeof todayPriorities[0]) => {
     playSound('success');
     onUpdateState((draft) => {
+      if (!draft.dailyPriorities) draft.dailyPriorities = [];
       const p = draft.dailyPriorities.find((x) => x.id === priority.id);
       if (p) p.done = !p.done;
     });
@@ -112,7 +114,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const handleRemovePriority = (id: string) => {
     onUpdateState((draft) => {
-      draft.dailyPriorities = draft.dailyPriorities.filter((x) => x.id !== id);
+      draft.dailyPriorities = (draft.dailyPriorities || []).filter((x) => x.id !== id);
     });
   };
 
@@ -120,6 +122,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     e.preventDefault();
     if (!extraText.trim()) return;
     onUpdateState((draft) => {
+      if (!draft.todayExtras) draft.todayExtras = [];
       draft.todayExtras.push({
         id: uid(),
         date: todayIso,
@@ -137,13 +140,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     onUpdateState((draft) => {
       const iso = todayISO();
       if (item.kind === 'toggle-task-today') {
+        if (!draft.taskLog) draft.taskLog = {};
         if (!draft.taskLog[iso]) draft.taskLog[iso] = {};
         draft.taskLog[iso][item.id] = !draft.taskLog[iso][item.id];
       } else if (item.kind === 'toggle-extra-today') {
+        if (!draft.todayExtras) draft.todayExtras = [];
         const extra = draft.todayExtras.find((x) => x.id === item.id);
         if (extra) extra.done = !extra.done;
       } else if (item.kind === 'complete-followup') {
-        const app = draft.jobs.applications.find((a) => a.id === item.id);
+        const app = (draft.jobs?.applications || []).find((a) => a.id === item.id);
         if (app) {
           app.nextAction = '';
           app.nextActionDate = '';
@@ -154,13 +159,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const handleDeleteExtra = (id: string) => {
     onUpdateState((draft) => {
-      draft.todayExtras = draft.todayExtras.filter((x) => x.id !== id);
+      draft.todayExtras = (draft.todayExtras || []).filter((x) => x.id !== id);
     });
   };
 
   const handleToggleRestDay = () => {
     onUpdateState((draft) => {
+      if (!draft.gym) draft.gym = { sessions: [], exercises: [], routineTemplates: [], weight: [] } as any;
       if (!draft.gym.restDays) draft.gym.restDays = [];
+      if (!draft.checkoutLog) draft.checkoutLog = {};
       const idx = draft.gym.restDays.indexOf(todayIso);
       if (idx >= 0) {
         draft.gym.restDays.splice(idx, 1);
@@ -632,7 +639,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     className="flex w-full items-center justify-between p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-900 dark:text-purple-200 hover:bg-purple-500/15 transition-all text-left cursor-pointer"
                   >
                     <span className="font-medium text-[11px]">
-                      📚 Examen de {state.study.subjects.find((s) => s.id === exam.subjectId)?.name || 'materia'} en {daysBetween(todayIso, exam.date)} día(s)
+                      📚 Examen de {(state.study?.subjects || []).find((s) => s.id === exam.subjectId)?.name || 'materia'} en {daysBetween(todayIso, exam.date)} día(s)
                     </span>
                     <AppIcon name="arrowRight" className="h-3.5 w-3.5 shrink-0 ml-2" />
                   </button>

@@ -37,6 +37,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
   const handleLoadTemplate = () => {
     if (confirm('¿Cargar plantilla sugerida de estudiante? Esto reemplazará tu horario actual.')) {
       onUpdateState((draft) => {
+        if (!draft.agenda) draft.agenda = {} as any;
         DAYS.forEach((d) => {
           draft.agenda[d] = TEMPLATE_ESTUDIANTE[d].map((b) => ({
             id: uid(),
@@ -52,6 +53,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
   const handleClearAgenda = () => {
     if (confirm('¿Vaciar toda la agenda semanal?')) {
       onUpdateState((draft) => {
+        if (!draft.agenda) draft.agenda = {} as any;
         DAYS.forEach((d) => {
           draft.agenda[d] = [];
         });
@@ -65,12 +67,16 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
     const activity = prompt('Actividad:');
     if (!activity) return;
     onUpdateState((draft) => {
+      if (!draft.agenda) draft.agenda = {} as any;
+      if (!draft.agenda[day]) draft.agenda[day] = [];
       draft.agenda[day].push({ id: uid(), time, activity, effort: 'medium' });
     });
   };
 
   const handleDeleteBlock = (day: DayKey, id: string) => {
     onUpdateState((draft) => {
+      if (!draft.agenda) draft.agenda = {} as any;
+      if (!draft.agenda[day]) draft.agenda[day] = [];
       draft.agenda[day] = draft.agenda[day].filter((b) => b.id !== id);
     });
   };
@@ -81,6 +87,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
     const { id, currentDay, newDay, time, activity, effort } = editingBlock;
 
     onUpdateState((draft) => {
+      if (!draft.agenda) draft.agenda = {} as any;
+      if (!draft.agenda[currentDay]) draft.agenda[currentDay] = [];
+      if (!draft.agenda[newDay]) draft.agenda[newDay] = [];
       // Remove from current day
       draft.agenda[currentDay] = draft.agenda[currentDay].filter((b) => b.id !== id);
       // Add to new day
@@ -107,6 +116,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
     e.preventDefault();
     if (!taskName.trim()) return;
     onUpdateState((draft) => {
+      if (!draft.tasksRecurring) draft.tasksRecurring = [];
       draft.tasksRecurring.push({
         id: uid(),
         name: taskName.trim(),
@@ -125,6 +135,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
     if (!editingTask || !editingTask.name.trim()) return;
 
     onUpdateState((draft) => {
+      if (!draft.tasksRecurring) draft.tasksRecurring = [];
       const idx = draft.tasksRecurring.findIndex((t) => t.id === editingTask.id);
       if (idx !== -1) {
         draft.tasksRecurring[idx] = {
@@ -139,7 +150,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
 
   const handleDeleteTask = (id: string) => {
     onUpdateState((draft) => {
-      draft.tasksRecurring = draft.tasksRecurring.filter((t) => t.id !== id);
+      draft.tasksRecurring = (draft.tasksRecurring || []).filter((t) => t.id !== id);
     });
   };
 
@@ -172,7 +183,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
       {/* Week Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         {DAYS.map((day) => {
-          const blocks = [...(state.agenda[day] || [])].sort((a, b) => a.time.localeCompare(b.time));
+          const blocks = [...(state.agenda?.[day] || [])].sort((a, b) => a.time.localeCompare(b.time));
           return (
             <div
               key={day}
@@ -338,7 +349,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
           <h2 className="text-base font-bold text-[var(--text)] flex items-center gap-2">
             Rutinas recurrentes
             <span className="text-xs font-semibold text-[var(--text-faint)] bg-[var(--bg)] px-2.5 py-0.5 rounded-md border border-[var(--border)]">
-              {state.tasksRecurring.length}
+              {(state.tasksRecurring || []).length}
             </span>
           </h2>
           <p className="text-xs text-[var(--text-soft)]">
@@ -523,7 +534,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
 
         <div className="space-y-3">
           {(['daily', '2-3x', 'weekly'] as const).map((freq) => {
-            const items = state.tasksRecurring.filter((t) => t.freq === freq);
+            const items = (state.tasksRecurring || []).filter((t) => t.freq === freq);
             if (items.length === 0) return null;
             return (
               <div key={freq} className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-2xs">

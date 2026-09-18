@@ -46,6 +46,7 @@ import {
 } from './lib/syncMerge';
 
 import { AppIcon } from './components/AppIcon';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 
@@ -788,69 +789,71 @@ export default function App() {
             </div>
           )}
           {/* View Router */}
-          <Suspense fallback={<DashboardSkeleton />}>
-          {currentView === 'dashboard' && (
-            <DashboardView
-              state={state}
-              onUpdateState={updateState}
-              onNavigate={handleNavigate}
-              onExportJSON={handleExportJSON}
-              onOpenSearch={() => { setSearchQuery(''); setIsSearchOpen(true); }}
-              onOpenCapture={() => setIsQuickCaptureOpen(true)}
-            />
-          )}
+          <AppErrorBoundary key={currentView} inline fallbackTitle={`Error al cargar la pantalla`}>
+            <Suspense fallback={<DashboardSkeleton />}>
+              {currentView === 'dashboard' && (
+                <DashboardView
+                  state={state}
+                  onUpdateState={updateState}
+                  onNavigate={handleNavigate}
+                  onExportJSON={handleExportJSON}
+                  onOpenSearch={() => { setSearchQuery(''); setIsSearchOpen(true); }}
+                  onOpenCapture={() => setIsQuickCaptureOpen(true)}
+                />
+              )}
 
-          {currentView === 'agenda' && (
-            <AgendaView state={state} onUpdateState={updateState} />
-          )}
+              {currentView === 'agenda' && (
+                <AgendaView state={state} onUpdateState={updateState} />
+              )}
 
-          {currentView === 'calendario' && (
-            <CalendarioView state={state} onUpdateState={updateState} />
-          )}
+              {currentView === 'calendario' && (
+                <CalendarioView state={state} onUpdateState={updateState} />
+              )}
 
-          {currentView === 'trabajo' && (
-            <TrabajoView state={state} onUpdateState={updateState} />
-          )}
+              {currentView === 'trabajo' && (
+                <TrabajoView state={state} onUpdateState={updateState} />
+              )}
 
-          {currentView === 'reventa' && (
-            <ReventaView state={state} onUpdateState={updateState} />
-          )}
+              {currentView === 'reventa' && (
+                <ReventaView state={state} onUpdateState={updateState} />
+              )}
 
-          {currentView === 'finanzas' && (
-            <FinanzasView
-              state={state}
-              onUpdateState={updateState}
-              initialTransactionType={quickTransactionType}
-            />
-          )}
+              {currentView === 'finanzas' && (
+                <FinanzasView
+                  state={state}
+                  onUpdateState={updateState}
+                  initialTransactionType={quickTransactionType}
+                />
+              )}
 
-          {currentView === 'gimnasio' && (
-            <GimnasioView state={state} onUpdateState={updateState} />
-          )}
+              {currentView === 'gimnasio' && (
+                <GimnasioView state={state} onUpdateState={updateState} />
+              )}
 
-          {currentView === 'estudios' && (
-            <EstudiosView state={state} onUpdateState={updateState} />
-          )}
+              {currentView === 'estudios' && (
+                <EstudiosView state={state} onUpdateState={updateState} />
+              )}
 
-          {currentView === 'notas' && (
-            <NotasView state={state} onUpdateState={updateState} />
-          )}
+              {currentView === 'notas' && (
+                <NotasView state={state} onUpdateState={updateState} />
+              )}
 
-          {currentView === 'ia' && (
-            <IAView state={state} onUpdateState={updateState} />
-          )}
+              {currentView === 'ia' && (
+                <IAView state={state} onUpdateState={updateState} />
+              )}
 
-          {currentView === 'config' && (
-            <ConfigView
-              state={state}
-              onUpdateState={updateState}
-              onExportJSON={handleExportJSON}
-              onImportJSON={handleImportJSON}
-              storageUserId={storageUserId}
-              cloudConnected={Boolean(cloudUser)}
-            />
-          )}
-          </Suspense>
+              {currentView === 'config' && (
+                <ConfigView
+                  state={state}
+                  onUpdateState={updateState}
+                  onExportJSON={handleExportJSON}
+                  onImportJSON={handleImportJSON}
+                  storageUserId={storageUserId}
+                  cloudConnected={Boolean(cloudUser)}
+                />
+              )}
+            </Suspense>
+          </AppErrorBoundary>
         </main>
       </div>
 

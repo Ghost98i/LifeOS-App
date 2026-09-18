@@ -26,7 +26,7 @@ const SellForm: React.FC<SellFormProps> = ({ item, state, onUpdateState, onClose
   const [platformFees, setPlatformFees] = useState(item.platformFees ? String(item.platformFees) : !hasCostBreakdown && item.fees ? String(item.fees) : '');
   const [taxes, setTaxes] = useState(item.taxes ? String(item.taxes) : '');
   const [date, setDate] = useState(item.sellDate || todayISO());
-  const [accountId, setAccountId] = useState(item.saleAccountId || state.finance.accounts[0]?.id || '');
+  const [accountId, setAccountId] = useState(item.saleAccountId || state.finance?.accounts?.[0]?.id || '');
   const [message, setMessage] = useState('');
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -41,7 +41,7 @@ const SellForm: React.FC<SellFormProps> = ({ item, state, onUpdateState, onClose
       <label><span className="mb-1 block text-[10px] font-bold text-[var(--text-faint)]">Envío</span><input type="number" value={shippingCost} onChange={(event) => setShippingCost(event.target.value)} placeholder="0" className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs font-mono" /></label>
       <label><span className="mb-1 block text-[10px] font-bold text-[var(--text-faint)]">Plataforma</span><input type="number" value={platformFees} onChange={(event) => setPlatformFees(event.target.value)} placeholder="0" className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs font-mono" /></label>
       <label><span className="mb-1 block text-[10px] font-bold text-[var(--text-faint)]">Impuestos</span><input type="number" value={taxes} onChange={(event) => setTaxes(event.target.value)} placeholder="0" className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs font-mono" /></label>
-      <label><span className="mb-1 block text-[10px] font-bold text-[var(--text-faint)]">Cuenta</span><select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs">{state.finance.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
+      <label><span className="mb-1 block text-[10px] font-bold text-[var(--text-faint)]">Cuenta</span><select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs">{(state.finance?.accounts || []).map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
       <label><span className="mb-1 block text-[10px] font-bold text-[var(--text-faint)]">Fecha</span><input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs" /></label>
       <div className="col-span-2 rounded-lg border border-emerald-500/20 bg-[var(--card)] p-2 sm:col-span-2"><span className="block text-[9px] font-bold uppercase text-[var(--text-faint)]">Margen neto estimado</span><strong className={`font-mono text-sm ${Number(price) - item.buyPrice - Number(shippingCost || 0) - Number(platformFees || 0) - Number(taxes || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}><PrivacyAmount>{fmtMoney(Number(price) - item.buyPrice - Number(shippingCost || 0) - Number(platformFees || 0) - Number(taxes || 0))}</PrivacyAmount></strong></div>
       {message && <p className="col-span-2 text-[11px] font-bold text-red-500 sm:col-span-4">{message}</p>}
@@ -54,11 +54,11 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState }
   const [item, setItem] = useState('');
   const [buyPrice, setBuyPrice] = useState('');
   const [buyDate, setBuyDate] = useState(todayISO());
-  const [accountId, setAccountId] = useState(state.finance.accounts[0]?.id || '');
+  const [accountId, setAccountId] = useState(state.finance?.accounts?.[0]?.id || '');
   const [sellingId, setSellingId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const stats = resaleStats(state);
-  const stockValue = state.resale.inventory.filter((candidate) => candidate.status === 'comprado').reduce((sum, candidate) => sum + Number(candidate.buyPrice || 0), 0);
+  const stockValue = (state.resale?.inventory || []).filter((candidate) => candidate.status === 'comprado').reduce((sum, candidate) => sum + Number(candidate.buyPrice || 0), 0);
 
   const addPurchase = (event: React.FormEvent) => {
     event.preventDefault();
@@ -114,7 +114,7 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState }
           <label>
             <span className="mb-1 block text-[10px] font-bold uppercase text-[var(--text-faint)]">Cuenta</span>
             <select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs text-[var(--text)] cursor-pointer focus:border-[var(--blue)] outline-hidden">
-              {state.finance.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+              {(state.finance?.accounts || []).map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
             </select>
           </label>
           <label>
@@ -132,15 +132,15 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState }
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-extrabold text-[var(--text)]">Operaciones</h2>
-          <span className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs font-bold text-[var(--text-soft)]">{state.resale.inventory.length}</span>
+          <span className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs font-bold text-[var(--text-soft)]">{(state.resale?.inventory || []).length}</span>
         </div>
-        {state.resale.inventory.length === 0 ? (
+        {(state.resale?.inventory || []).length === 0 ? (
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 text-center text-xs text-[var(--text-faint)]">
             Todavía no registraste compras.
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-            {[...state.resale.inventory].sort((a, b) => b.buyDate.localeCompare(a.buyDate)).map((candidate) => {
+            {[...(state.resale?.inventory || [])].sort((a, b) => b.buyDate.localeCompare(a.buyDate)).map((candidate) => {
               const profit = resaleProfit(candidate);
               return (
                 <article key={candidate.id} className="lifeos-card p-4">

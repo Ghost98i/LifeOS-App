@@ -55,8 +55,8 @@ export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState }) => {
   const [resaleMarket, setResaleMarket] = useState('');
   const [ideaText, setIdeaText] = useState('');
 
-  const jobOpportunities = state.jobs.opportunities.filter((item) => item.status === 'nueva');
-  const resaleOpportunities = state.resale.opportunities.filter((item) => item.status === 'nueva');
+  const jobOpportunities = (state.jobs?.opportunities || []).filter((item) => item.status === 'nueva');
+  const resaleOpportunities = (state.resale?.opportunities || []).filter((item) => item.status === 'nueva');
 
   const copyText = async (kind: 'prompt' | 'schema', content: string) => {
     let copiedSuccessfully = false;
@@ -113,6 +113,8 @@ export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState }) => {
 
   const handleDiscardJob = (id: string) => {
     onUpdateState((draft) => {
+      if (!draft.jobs) draft.jobs = { applications: [], opportunities: [] } as any;
+      if (!draft.jobs.opportunities) draft.jobs.opportunities = [];
       const opportunity = draft.jobs.opportunities.find((item) => item.id === id);
       if (opportunity) opportunity.status = 'descartada';
     });
@@ -124,6 +126,8 @@ export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState }) => {
 
   const handleDiscardResale = (id: string) => {
     onUpdateState((draft) => {
+      if (!draft.resale) draft.resale = { inventory: [], opportunities: [] } as any;
+      if (!draft.resale.opportunities) draft.resale.opportunities = [];
       const opportunity = draft.resale.opportunities.find((item) => item.id === id);
       if (opportunity) opportunity.status = 'descartada';
     });
@@ -133,6 +137,8 @@ export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState }) => {
     event.preventDefault();
     if (!jobCompany.trim()) return;
     onUpdateState((draft) => {
+      if (!draft.jobs) draft.jobs = { applications: [], opportunities: [] } as any;
+      if (!draft.jobs.opportunities) draft.jobs.opportunities = [];
       draft.jobs.opportunities.push({
         id: uid(),
         empresa: jobCompany.trim(),
@@ -153,6 +159,8 @@ export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState }) => {
     event.preventDefault();
     if (!resaleItem.trim()) return;
     onUpdateState((draft) => {
+      if (!draft.resale) draft.resale = { inventory: [], opportunities: [] } as any;
+      if (!draft.resale.opportunities) draft.resale.opportunities = [];
       draft.resale.opportunities.push({
         id: uid(),
         item: resaleItem.trim(),
@@ -172,6 +180,7 @@ export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState }) => {
     event.preventDefault();
     if (!ideaText.trim()) return;
     onUpdateState((draft) => {
+      if (!draft.ideas) draft.ideas = [];
       draft.ideas.push({ id: uid(), text: ideaText.trim(), date: todayISO(), source: 'manual' });
     });
     setIdeaText('');
@@ -179,7 +188,7 @@ export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState }) => {
 
   const handleDeleteIdea = (id: string) => {
     onUpdateState((draft) => {
-      draft.ideas = draft.ideas.filter((idea) => idea.id !== id);
+      draft.ideas = (draft.ideas || []).filter((idea) => idea.id !== id);
     });
   };
 
@@ -309,7 +318,7 @@ export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState }) => {
           <button type="submit" className="px-4 py-2 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold rounded-xl cursor-pointer">＋</button>
         </form>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {state.ideas.length === 0 ? <p className="text-xs text-[var(--text-faint)]">No hay ideas guardadas.</p> : state.ideas.map((idea) => (
+          {(state.ideas || []).length === 0 ? <p className="text-xs text-[var(--text-faint)]">No hay ideas guardadas.</p> : (state.ideas || []).map((idea) => (
             <article key={idea.id} className="relative bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 pr-9">
               <button onClick={() => handleDeleteIdea(idea.id)} className="absolute right-3 top-3 text-xs text-[var(--text-faint)] hover:text-red-500 cursor-pointer">✕</button>
               <p className="text-xs font-medium text-[var(--text)]">{idea.text}</p>

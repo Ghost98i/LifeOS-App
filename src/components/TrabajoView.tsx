@@ -30,6 +30,8 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
     e.preventDefault();
     if (!empresa.trim()) return;
     onUpdateState((draft) => {
+      if (!draft.jobs) draft.jobs = { applications: [] };
+      if (!draft.jobs.applications) draft.jobs.applications = [];
       draft.jobs.applications.push({
         id: uid(),
         empresa: empresa.trim(),
@@ -50,6 +52,8 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
 
   const handleSetEstado = (id: string, newEstado: JobApplication['estado']) => {
     onUpdateState((draft) => {
+      if (!draft.jobs) draft.jobs = { applications: [] };
+      if (!draft.jobs.applications) draft.jobs.applications = [];
       const app = draft.jobs.applications.find((a) => a.id === id);
       if (app) app.estado = newEstado;
     });
@@ -57,6 +61,8 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
 
   const handleSetNextAction = (id: string, nextAction: string) => {
     onUpdateState((draft) => {
+      if (!draft.jobs) draft.jobs = { applications: [] };
+      if (!draft.jobs.applications) draft.jobs.applications = [];
       const app = draft.jobs.applications.find((a) => a.id === id);
       if (app) app.nextAction = nextAction;
     });
@@ -64,6 +70,8 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
 
   const handleSetNextActionDate = (id: string, nextActionDate: string) => {
     onUpdateState((draft) => {
+      if (!draft.jobs) draft.jobs = { applications: [] };
+      if (!draft.jobs.applications) draft.jobs.applications = [];
       const app = draft.jobs.applications.find((a) => a.id === id);
       if (app) app.nextActionDate = nextActionDate;
     });
@@ -71,7 +79,8 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
 
   const handleDeleteApplication = (id: string) => {
     onUpdateState((draft) => {
-      draft.jobs.applications = draft.jobs.applications.filter((a) => a.id !== id);
+      if (!draft.jobs) draft.jobs = { applications: [] };
+      draft.jobs.applications = (draft.jobs.applications || []).filter((a) => a.id !== id);
     });
   };
 
@@ -252,7 +261,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
         {/* View content */}
         {viewMode === 'kanban' ? (
           <JobKanbanBoard
-            applications={state.jobs.applications}
+            applications={state.jobs?.applications || []}
             onSetEstado={handleSetEstado}
             onSetNextAction={handleSetNextAction}
             onSetNextActionDate={handleSetNextActionDate}
@@ -261,7 +270,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
           />
         ) : (
           <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 overflow-x-auto">
-            {state.jobs.applications.length === 0 ? (
+            {(state.jobs?.applications || []).length === 0 ? (
               <p className="text-center py-8 text-xs text-[var(--text-faint)]">Sin postulaciones cargadas todavía.</p>
             ) : (
               <table className="w-full text-xs text-left border-collapse">
@@ -277,7 +286,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--border)]">
-                  {[...state.jobs.applications]
+                  {[...(state.jobs?.applications || [])]
                     .sort((a, b) => b.fecha.localeCompare(a.fecha))
                     .map((a) => (
                       <tr key={a.id} className="hover:bg-[var(--bg)]/50 transition-colors">

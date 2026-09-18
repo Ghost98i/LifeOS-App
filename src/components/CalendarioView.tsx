@@ -52,6 +52,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
     e.preventDefault();
     if (!eventName.trim()) return;
     onUpdateState((draft) => {
+      if (!draft.calendarEvents) draft.calendarEvents = [];
       draft.calendarEvents.push({
         id: uid(),
         name: eventName.trim(),
@@ -65,7 +66,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
 
   const handleDeleteEvent = (id: string) => {
     onUpdateState((draft) => {
-      draft.calendarEvents = draft.calendarEvents.filter((e) => e.id !== id);
+      draft.calendarEvents = (draft.calendarEvents || []).filter((e) => e.id !== id);
     });
   };
 

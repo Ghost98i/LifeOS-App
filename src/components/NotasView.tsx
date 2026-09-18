@@ -46,7 +46,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
   const [possessionSearch, setPossessionSearch] = useState('');
 
   const status = todayStreamStatus(state);
-  const streamGoal = Number(state.streaming.monthlyGoal || 0);
+  const streamGoal = Number(state.streaming?.monthlyGoal || 0);
   const streamCount = streamSessionsInMonth(state, 0).length;
   const streamPct = streamGoal > 0 ? clamp((streamCount / streamGoal) * 100, 0, 100) : 0;
   const pipelineStages = [
@@ -58,8 +58,8 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
   ] as const;
 
   const activeProjectsCount = (state.projects || []).filter((p) => p.status === 'activo').length;
-  const postitCount = (state.notes.postits || []).length;
-  const pendingShopCount = (state.notes.shopping || []).filter((s) => !s.done).length;
+  const postitCount = (state.notes?.postits || []).length;
+  const pendingShopCount = (state.notes?.shopping || []).filter((s) => !s.done).length;
 
   const handleAddStream = (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,6 +67,8 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
     if (!hours) return;
     onUpdateState((draft) => {
       const date = streamDate || todayISO();
+      if (!draft.streaming) draft.streaming = { sessions: [], monthlyGoal: 12, preStreamChecklist: [], contentPipeline: [] };
+      if (!draft.streaming.sessions) draft.streaming.sessions = [];
       draft.streaming.sessions = draft.streaming.sessions.filter((s) => s.date !== date);
       draft.streaming.sessions.push({ id: uid(), date, hours });
     });
@@ -101,6 +103,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
     const initial = Number(goalInitial) || 0;
     const target = Number(goalTarget) || 0;
     onUpdateState((draft) => {
+      if (!draft.goals) draft.goals = [];
       draft.goals.push({
         id: uid(),
         name: goalName.trim(),
@@ -120,6 +123,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
     if (val === null) return;
     const num = Number(val);
     onUpdateState((draft) => {
+      if (!draft.goals) draft.goals = [];
       const targetGoal = draft.goals.find((x) => x.id === g.id);
       if (targetGoal) targetGoal.current = !isNaN(num) ? num : targetGoal.current;
     });
@@ -127,6 +131,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
 
   const handleDeleteGoal = (id: string) => {
     onUpdateState((draft) => {
+      if (!draft.goals) draft.goals = [];
       draft.goals = draft.goals.filter((g) => g.id !== id);
     });
   };
@@ -135,6 +140,8 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
     e.preventDefault();
     if (!postitText.trim()) return;
     onUpdateState((draft) => {
+      if (!draft.notes) draft.notes = { postits: [], shopping: [], links: [], possessions: [] };
+      if (!draft.notes.postits) draft.notes.postits = [];
       draft.notes.postits.push({
         id: uid(),
         text: postitText.trim(),
@@ -146,6 +153,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
 
   const handleDeletePostit = (id: string) => {
     onUpdateState((draft) => {
+      if (!draft.notes?.postits) return;
       draft.notes.postits = draft.notes.postits.filter((p) => p.id !== id);
     });
   };
@@ -154,6 +162,8 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
     e.preventDefault();
     if (!shopItem.trim()) return;
     onUpdateState((draft) => {
+      if (!draft.notes) draft.notes = { postits: [], shopping: [], links: [], possessions: [] };
+      if (!draft.notes.shopping) draft.notes.shopping = [];
       draft.notes.shopping.push({
         id: uid(),
         text: shopItem.trim(),
@@ -165,6 +175,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
 
   const handleToggleShop = (id: string) => {
     onUpdateState((draft) => {
+      if (!draft.notes?.shopping) return;
       const item = draft.notes.shopping.find((s) => s.id === id);
       if (item) item.done = !item.done;
     });
@@ -172,6 +183,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
 
   const handleDeleteShop = (id: string) => {
     onUpdateState((draft) => {
+      if (!draft.notes?.shopping) return;
       draft.notes.shopping = draft.notes.shopping.filter((s) => s.id !== id);
     });
   };
@@ -182,6 +194,8 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
     let url = linkUrl.trim();
     if (!/^https?:\/\//.test(url)) url = 'https://' + url;
     onUpdateState((draft) => {
+      if (!draft.notes) draft.notes = { postits: [], shopping: [], links: [], possessions: [] };
+      if (!draft.notes.links) draft.notes.links = [];
       draft.notes.links.push({
         id: uid(),
         name: linkName.trim(),
@@ -194,6 +208,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
 
   const handleDeleteLink = (id: string) => {
     onUpdateState((draft) => {
+      if (!draft.notes?.links) return;
       draft.notes.links = draft.notes.links.filter((l) => l.id !== id);
     });
   };
@@ -202,6 +217,8 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
     event.preventDefault();
     if (!possessionName.trim()) return;
     onUpdateState((draft) => {
+      if (!draft.notes) draft.notes = { postits: [], shopping: [], links: [], possessions: [] };
+      if (!draft.notes.possessions) draft.notes.possessions = [];
       draft.notes.possessions.push({
         id: uid(), name: possessionName.trim(), category: possessionCategory.trim() || 'Otros',
         location: possessionLocation.trim(), receivedAt: possessionDate || null, note: possessionNote.trim(),
@@ -213,7 +230,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
   };
 
   const possessionQuery = possessionSearch.trim().toLocaleLowerCase('es');
-  const visiblePossessions = state.notes.possessions.filter((item) => !possessionQuery || [item.name, item.category, item.location, item.note].some((value) => String(value || '').toLocaleLowerCase('es').includes(possessionQuery)));
+  const visiblePossessions = (state.notes?.possessions || []).filter((item) => !possessionQuery || [item.name, item.category, item.location, item.note].some((value) => String(value || '').toLocaleLowerCase('es').includes(possessionQuery)));
 
   return (
     <div className="space-y-6">
@@ -354,12 +371,12 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
         </form>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {state.goals.length === 0 ? (
+          {(state.goals || []).length === 0 ? (
             <p className="text-center py-6 text-xs text-[var(--text-faint)] col-span-3">
               Todavía no creaste objetivos.
             </p>
           ) : (
-            state.goals.map((g) => {
+            (state.goals || []).map((g) => {
               const cur = goalCurrentValue(state, g);
               const pct = goalProgressPct(g, cur);
 
@@ -420,7 +437,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
             <p className="text-xs text-[var(--text-faint)]">Recordatorios visuales rápidos y notas adhesivas.</p>
           </div>
           <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
-            {state.notes.postits.length} notas
+            {(state.notes?.postits || []).length} notas
           </span>
         </div>
 
@@ -441,10 +458,10 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
         </form>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {state.notes.postits.length === 0 ? (
+          {(state.notes?.postits || []).length === 0 ? (
             <p className="text-center py-6 text-xs text-[var(--text-faint)] col-span-3">Sin post-its guardados.</p>
           ) : (
-            [...state.notes.postits]
+            [...(state.notes?.postits || [])]
               .sort((a, b) => b.date.localeCompare(a.date))
               .map((p) => (
                 <div
@@ -472,7 +489,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
             <h2 className="text-sm font-bold text-[var(--text)]">Mis cosas 🎁</h2>
             <p className="text-xs text-[var(--text-soft)]">Registrá regalos y objetos que valorás, dónde están y qué te gusta de tenerlos.</p>
           </div>
-          {state.notes.possessions.length > 4 && (
+          {(state.notes?.possessions || []).length > 4 && (
             <input
               value={possessionSearch}
               onChange={(event) => setPossessionSearch(event.target.value)}
@@ -491,7 +508,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
         </form>
         {visiblePossessions.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[var(--border)] p-5 text-center text-xs text-[var(--text-faint)]">
-            {state.notes.possessions.length ? 'No encontré coincidencias.' : 'Todavía no guardaste nada acá.'}
+            {(state.notes?.possessions || []).length ? 'No encontré coincidencias.' : 'Todavía no guardaste nada acá.'}
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -503,7 +520,10 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
                     <h3 className="font-extrabold text-[var(--text)]">{item.name}</h3>
                   </div>
                   <button
-                    onClick={() => onUpdateState((draft) => { draft.notes.possessions = draft.notes.possessions.filter((candidate) => candidate.id !== item.id); })}
+                    onClick={() => onUpdateState((draft) => {
+                      if (!draft.notes?.possessions) return;
+                      draft.notes.possessions = draft.notes.possessions.filter((candidate) => candidate.id !== item.id);
+                    })}
                     aria-label={`Eliminar ${item.name}`}
                     className="text-xs text-[var(--text-faint)] hover:text-rose-500 cursor-pointer"
                   >
@@ -551,10 +571,10 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
             </form>
 
             <div className="divide-y divide-[var(--border)] max-h-60 overflow-y-auto">
-              {state.notes.shopping.length === 0 ? (
+              {(state.notes?.shopping || []).length === 0 ? (
                 <p className="text-center py-4 text-xs text-[var(--text-faint)]">Lista vacía.</p>
               ) : (
-                state.notes.shopping.map((s) => (
+                (state.notes?.shopping || []).map((s) => (
                   <div key={s.id} className="py-2 flex items-center gap-3 text-xs">
                     <button
                       type="button"
@@ -611,10 +631,10 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
             </form>
 
             <div className="divide-y divide-[var(--border)] max-h-60 overflow-y-auto">
-              {state.notes.links.length === 0 ? (
+              {(state.notes?.links || []).length === 0 ? (
                 <p className="text-center py-4 text-xs text-[var(--text-faint)]">Sin links guardados.</p>
               ) : (
-                state.notes.links.map((l) => (
+                (state.notes?.links || []).map((l) => (
                   <div key={l.id} className="py-2 flex items-center justify-between text-xs">
                     <a
                       href={l.url}
