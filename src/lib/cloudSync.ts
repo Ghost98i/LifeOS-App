@@ -2,6 +2,7 @@ import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
   browserLocalPersistence,
   getAuth,
+  getRedirectResult,
   GoogleAuthProvider,
   onAuthStateChanged,
   setPersistence,
@@ -33,6 +34,7 @@ import {
   type SyncBaselineMap,
   type SyncRevisionMap,
 } from './syncModel';
+import appletConfig from '../../firebase-applet-config.json';
 
 export type CloudSyncStatus =
   | 'unavailable'
@@ -79,17 +81,34 @@ export interface CloudWriteBatch {
   completion: Promise<void>;
 }
 
-const config = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
+const DEFAULT_FIREBASE_CONFIG = {
+  projectId: 'lifeosanywhere',
+  appId: '1:177511653491:web:e1242266f2b7620ae60a06',
+  apiKey: 'AIzaSyAMZHa2xmHslOVKzxIp4SpBYeLJdT-aruQ',
+  authDomain: 'lifeosanywhere.firebaseapp.com',
+  storageBucket: 'lifeosanywhere.firebasestorage.app',
+  messagingSenderId: '177511653491',
+  measurementId: 'G-YST3MQ8V9R',
 };
 
+const metaEnv: Record<string, string | undefined> =
+  typeof import.meta !== 'undefined' && (import.meta as any).env
+    ? (import.meta as any).env
+    : (typeof process !== 'undefined' && process.env ? (process.env as Record<string, string | undefined>) : {});
+
+const config = {
+  apiKey: metaEnv.VITE_FIREBASE_API_KEY || appletConfig.apiKey || DEFAULT_FIREBASE_CONFIG.apiKey,
+  authDomain: metaEnv.VITE_FIREBASE_AUTH_DOMAIN || appletConfig.authDomain || DEFAULT_FIREBASE_CONFIG.authDomain,
+  projectId: metaEnv.VITE_FIREBASE_PROJECT_ID || appletConfig.projectId || DEFAULT_FIREBASE_CONFIG.projectId,
+  storageBucket: metaEnv.VITE_FIREBASE_STORAGE_BUCKET || appletConfig.storageBucket || DEFAULT_FIREBASE_CONFIG.storageBucket,
+  messagingSenderId: metaEnv.VITE_FIREBASE_MESSAGING_SENDER_ID || appletConfig.messagingSenderId || DEFAULT_FIREBASE_CONFIG.messagingSenderId,
+  appId: metaEnv.VITE_FIREBASE_APP_ID || appletConfig.appId || DEFAULT_FIREBASE_CONFIG.appId,
+};
+
+const isPortable = typeof __LIFEOS_PORTABLE__ !== 'undefined' && Boolean(__LIFEOS_PORTABLE__);
+
 export const cloudSyncConfigured =
-  !__LIFEOS_PORTABLE__ &&
+  !isPortable &&
   Boolean(config.apiKey && config.authDomain && config.projectId && config.appId);
 
 const DEVICE_KEY = 'lifeos-device-id-v1';
@@ -242,6 +261,10 @@ export function observeCloudUser(onChange: (user: CloudUser | null) => void): ()
     return () => undefined;
   }
   const { auth } = services();
+  // Resuelve credenciales de redirect en móviles y PWAs standalone
+  getRedirectResult(auth).catch((error) => {
+    console.warn('Firebase redirect auth notice:', error);
+  });
   return onAuthStateChanged(auth, (user) => onChange(toCloudUser(user)));
 }
 
@@ -250,17 +273,20 @@ export async function signInToCloud(): Promise<void> {
   await persistenceReady;
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-  const mobileLike = window.matchMedia('(max-width: 767px)').matches
-    || window.matchMedia('(display-mode: standalone)').matches;
-  if (mobileLike) {
-    await signInWithRedirect(auth, provider);
-    return;
-  }
+  // Intenta popup primero (más fluido en PC y navegadores modernos sin recargar la aplicación).
+  // Si el navegador o PWA bloquea popups, recurre automáticamente a redirección.
   try {
     await signInWithPopup(auth, provider);
   } catch (error) {
     const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
-    if (code.includes('popup-blocked')) {
+    if (code.includes('popup-closed-by-user')) {
+      return;
+    }
+    if (
+      code.includes('popup-blocked') ||
+      code.includes('cancelled-popup-request') ||
+      code.includes('operation-not-supported-in-this-environment')
+    ) {
       await signInWithRedirect(auth, provider);
       return;
     }

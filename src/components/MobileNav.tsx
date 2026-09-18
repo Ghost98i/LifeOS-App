@@ -12,6 +12,9 @@ interface MobileNavProps {
   privacyMode?: boolean;
   onTogglePrivacy?: () => void;
   inboxCount?: number;
+  cloudConfigured?: boolean;
+  cloudUser?: unknown | null;
+  onCloudSignIn?: () => void;
 }
 
 export const MobileNav: React.FC<MobileNavProps> = ({
@@ -23,6 +26,9 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   privacyMode,
   onTogglePrivacy,
   inboxCount = 0,
+  cloudConfigured = false,
+  cloudUser = null,
+  onCloudSignIn,
 }) => {
   const itemClass = (active: boolean) =>
     `flex min-w-0 flex-1 flex-col items-center gap-1 py-1 text-[11px] font-semibold ${
@@ -59,6 +65,13 @@ export const MobileNav: React.FC<MobileNavProps> = ({
         textColor: 'text-rose-700 dark:text-rose-300',
       };
     }
+    if (cloudConfigured && !cloudUser) {
+      return {
+        dotClass: 'bg-blue-400 dark:bg-blue-400 animate-pulse',
+        label: 'Toca para conectar Google',
+        textColor: 'text-blue-600 dark:text-blue-400 font-bold',
+      };
+    }
     return {
       dotClass: 'bg-slate-400 dark:bg-slate-500',
       label: 'Offline (Local)',
@@ -70,10 +83,22 @@ export const MobileNav: React.FC<MobileNavProps> = ({
     <nav className="fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-[var(--border)] bg-[var(--nav-mobile)] shadow-[0_-10px_30px_rgba(2,8,23,.08)] backdrop-blur-xl lg:hidden">
       {/* Micro-bar: Sync status LED & Privacy quick toggle */}
       <div className="flex items-center justify-between px-3.5 py-1 border-b border-[var(--border)]/35 text-[10px]">
-        <div className="flex items-center gap-1.5">
-          <span className={`inline-block h-1.5 w-1.5 rounded-full ${syncLed.dotClass}`} />
-          <span className={`font-medium ${syncLed.textColor}`}>{syncLed.label}</span>
-        </div>
+        {cloudConfigured && !cloudUser && onCloudSignIn ? (
+          <button
+            type="button"
+            onClick={onCloudSignIn}
+            className="flex items-center gap-1.5 cursor-pointer hover:opacity-90"
+            title="Conectar con Google para sincronizar"
+          >
+            <span className={`inline-block h-1.5 w-1.5 rounded-full ${syncLed.dotClass}`} />
+            <span className={syncLed.textColor}>{syncLed.label}</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <span className={`inline-block h-1.5 w-1.5 rounded-full ${syncLed.dotClass}`} />
+            <span className={`font-medium ${syncLed.textColor}`}>{syncLed.label}</span>
+          </div>
+        )}
         {onTogglePrivacy && (
           <button
             type="button"

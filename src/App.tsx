@@ -550,14 +550,31 @@ export default function App() {
   }, [cloudUser, storageUserId]);
 
   useEffect(() => {
-    const handleOnline = () => setSyncStatus(cloudUserRef.current ? 'connecting' : cloudSyncConfigured ? 'signed-out' : 'unavailable');
+    const handleOnline = () => {
+      setSyncStatus(cloudUserRef.current ? 'connecting' : cloudSyncConfigured ? 'signed-out' : 'unavailable');
+      if (cloudUserRef.current && failedSyncModulesRef.current.size > 0) {
+        queueCloudSave(stateRef.current, [...failedSyncModulesRef.current]);
+      }
+    };
     const handleOffline = () => setSyncStatus(cloudUserRef.current ? 'offline' : cloudSyncConfigured ? 'signed-out' : 'unavailable');
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && cloudUserRef.current && navigator.onLine) {
+        if (failedSyncModulesRef.current.size > 0) {
+          queueCloudSave(stateRef.current, [...failedSyncModulesRef.current]);
+        }
+      }
+    };
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCloudSignIn = async () => {
@@ -576,6 +593,15 @@ export default function App() {
     } catch {
       setSyncStatus('error');
     }
+  };
+
+  const handleForceSync = () => {
+    if (!cloudUser) {
+      void handleCloudSignIn();
+      return;
+    }
+    showToast('Sincronizando con la nube...', 'info');
+    queueCloudSave(stateRef.current, [...SYNC_MODULES]);
   };
 
   const handleRetrySync = () => {
@@ -850,6 +876,13 @@ export default function App() {
                   onImportJSON={handleImportJSON}
                   storageUserId={storageUserId}
                   cloudConnected={Boolean(cloudUser)}
+                  cloudConfigured={cloudSyncConfigured}
+                  cloudUser={cloudUser}
+                  syncStatus={syncStatus}
+                  lastSyncedAt={lastSyncedAt}
+                  onCloudSignIn={handleCloudSignIn}
+                  onCloudSignOut={handleCloudSignOut}
+                  onForceSync={handleForceSync}
                 />
               )}
             </Suspense>
@@ -875,6 +908,9 @@ export default function App() {
         privacyMode={state.settings.privacyMode}
         onTogglePrivacy={handleTogglePrivacy}
         inboxCount={(state.inbox || []).length}
+        cloudConfigured={cloudSyncConfigured}
+        cloudUser={cloudUser}
+        onCloudSignIn={handleCloudSignIn}
       />
 
       <MobileQuickCapture

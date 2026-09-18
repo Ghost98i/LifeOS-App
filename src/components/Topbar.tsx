@@ -95,6 +95,13 @@ export const Topbar: React.FC<TopbarProps> = ({
         textColor: 'text-rose-700 dark:text-rose-300 border-rose-500/30 bg-rose-500/10',
       };
     }
+    if (cloudConfigured && !cloudUser) {
+      return {
+        dotClass: 'bg-blue-400 dark:bg-blue-400 animate-pulse',
+        label: 'Conectar Google',
+        textColor: 'text-blue-700 dark:text-blue-300 border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20',
+      };
+    }
     return {
       dotClass: 'bg-slate-400 dark:bg-slate-500',
       label: 'Offline (Local)',
@@ -237,12 +244,16 @@ export const Topbar: React.FC<TopbarProps> = ({
             className={`flex h-9 items-center gap-2 rounded-xl border px-2.5 text-xs font-semibold transition-all ${syncLed.textColor} ${cloudConfigured ? 'cursor-pointer hover:opacity-90' : 'cursor-default'}`}
             title={
               cloudConfigured
-                ? (lastSyncedAt && syncStatus === 'synced' ? `${syncLed.label} · Última confirmación: ${lastSyncedAt}` : syncLed.label)
+                ? (!cloudUser ? 'Conectar con Google para sincronizar PC y celular' : (lastSyncedAt && syncStatus === 'synced' ? `${syncLed.label} · Última confirmación: ${lastSyncedAt}` : syncLed.label))
                 : 'Datos guardados en este dispositivo'
             }
           >
             <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${syncLed.dotClass}`} />
-            <span className="hidden md:inline">{syncLed.label}</span>
+            {cloudConfigured && !cloudUser ? (
+              <span className="inline font-bold text-[11px] sm:text-xs">Conectar</span>
+            ) : (
+              <span className="hidden md:inline">{syncLed.label}</span>
+            )}
           </button>
           {cloudConfigured && cloudUser && showCloudMenu && (
             <div className="absolute right-0 top-11 z-50 w-64 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl">

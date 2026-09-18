@@ -7,6 +7,7 @@ import {
   getStorageDiagnostics,
   StorageDiagnostics,
 } from '../lib/storage';
+import type { CloudSyncStatus, CloudUser } from '../lib/cloudSync';
 import { showToast } from '../lib/toast';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
@@ -18,6 +19,13 @@ interface ConfigViewProps {
   onImportJSON: (e: React.ChangeEvent<HTMLInputElement>) => void;
   storageUserId?: string | null;
   cloudConnected?: boolean;
+  cloudConfigured?: boolean;
+  cloudUser?: CloudUser | null;
+  syncStatus?: CloudSyncStatus;
+  lastSyncedAt?: string | null;
+  onCloudSignIn?: () => void;
+  onCloudSignOut?: () => void;
+  onForceSync?: () => void;
 }
 
 export const ConfigView: React.FC<ConfigViewProps> = ({
@@ -27,6 +35,13 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   onImportJSON,
   storageUserId,
   cloudConnected = false,
+  cloudConfigured = true,
+  cloudUser = null,
+  syncStatus = 'signed-out',
+  lastSyncedAt = null,
+  onCloudSignIn,
+  onCloudSignOut,
+  onForceSync,
 }) => {
   const [profileName, setProfileName] = useState(state.profile?.name || '');
   const [profileHeight, setProfileHeight] = useState(String(state.profile?.height || 170));
@@ -72,6 +87,49 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
     }
   };
 
+  const syncStatusMeta = (() => {
+    if (syncStatus === 'synced') {
+      return {
+        dotClass: 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]',
+        label: 'Sincronizado',
+        textColor: 'text-emerald-700 dark:text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
+      };
+    }
+    if (syncStatus === 'saving' || syncStatus === 'connecting') {
+      return {
+        dotClass: 'bg-amber-400 animate-pulse shadow-[0_0_6px_rgba(251,191,36,0.7)]',
+        label: syncStatus === 'connecting' ? 'Conectando...' : 'Guardando cambios...',
+        textColor: 'text-amber-700 dark:text-amber-300 border-amber-500/30 bg-amber-500/10',
+      };
+    }
+    if (syncStatus === 'conflict') {
+      return {
+        dotClass: 'bg-rose-500 animate-ping',
+        label: 'Conflicto de versiones',
+        textColor: 'text-rose-700 dark:text-rose-300 border-rose-500/30 bg-rose-500/10',
+      };
+    }
+    if (syncStatus === 'error') {
+      return {
+        dotClass: 'bg-rose-500 animate-pulse',
+        label: 'Error al sincronizar',
+        textColor: 'text-rose-700 dark:text-rose-300 border-rose-500/30 bg-rose-500/10',
+      };
+    }
+    if (syncStatus === 'offline') {
+      return {
+        dotClass: 'bg-slate-400',
+        label: 'Sin conexión (Offline)',
+        textColor: 'text-[var(--text-faint)] border-[var(--border)] bg-[var(--surface-muted)]',
+      };
+    }
+    return {
+      dotClass: 'bg-slate-400',
+      label: 'Desconectado',
+      textColor: 'text-[var(--text-faint)] border-[var(--border)] bg-[var(--surface-muted)]',
+    };
+  })();
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -84,6 +142,101 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           </span>
         }
       />
+
+      {/* Sincronización en la Nube (LifeOS Anywhere) */}
+      <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-4 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <AppIcon name="cloud" className="h-4 w-4 text-[var(--blue)]" />
+              <h2 className="text-sm font-bold text-[var(--text)]">Sincronización en la Nube (LifeOS Anywhere)</h2>
+            </div>
+            <p className="text-xs text-[var(--text-soft)]">
+              Mantené tu PC, celular y otros navegadores sincronizados en tiempo real mediante tu cuenta de Google.
+            </p>
+          </div>
+          {cloudConfigured && (
+            <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-xl border text-xs font-semibold self-start sm:self-auto ${
+              cloudUser ? syncStatusMeta.textColor : 'text-[var(--text-faint)] border-[var(--border)] bg-[var(--surface-muted)]'
+            }`}>
+              <span className={`h-2 w-2 rounded-full shrink-0 ${cloudUser ? syncStatusMeta.dotClass : 'bg-slate-400'}`} />
+              <span>{cloudUser ? syncStatusMeta.label : 'Sin conectar'}</span>
+            </div>
+          )}
+        </div>
+
+        {cloudConfigured ? (
+          cloudUser ? (
+            <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-3">
+                  {cloudUser.photoURL ? (
+                    <img src={cloudUser.photoURL} alt={cloudUser.name} className="h-10 w-10 rounded-full border border-[var(--border)] shrink-0" />
+                  ) : (
+                    <div className="h-10 w-10 rounded-full bg-[var(--blue)]/20 text-[var(--blue)] flex items-center justify-center font-bold text-sm shrink-0">
+                      {cloudUser.name ? cloudUser.name[0].toUpperCase() : 'G'}
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-xs font-bold text-[var(--text)]">{cloudUser.name || 'Usuario Google'}</p>
+                    <p className="text-[11px] text-[var(--text-soft)]">{cloudUser.email}</p>
+                  </div>
+                </div>
+                {lastSyncedAt && (
+                  <span className="text-[11px] text-[var(--text-faint)]">
+                    Última sincronización: <strong className="text-[var(--text)]">{lastSyncedAt}</strong>
+                  </span>
+                )}
+              </div>
+
+              <div className="pt-2 border-t border-[var(--border)] flex flex-wrap gap-2.5">
+                {onForceSync && (
+                  <button
+                    type="button"
+                    onClick={onForceSync}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs"
+                  >
+                    <AppIcon name="rotateCcw" className="h-3.5 w-3.5" />
+                    <span>Sincronizar ahora</span>
+                  </button>
+                )}
+                {onCloudSignOut && (
+                  <button
+                    type="button"
+                    onClick={onCloudSignOut}
+                    className="flex items-center gap-1.5 px-3.5 py-2 border border-[var(--border)] hover:border-red-500/40 text-[var(--text-soft)] hover:text-red-600 dark:hover:text-red-400 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                  >
+                    <span>Cerrar sesión de Google</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-[var(--text)]">No has conectado tu cuenta de Google</p>
+                <p className="text-[11px] text-[var(--text-soft)] max-w-md">
+                  Para que los entrenamientos, gastos y tareas que registres en tu celular aparezcan automáticamente en tu PC (y viceversa) sin tener que mover archivos JSON, conectá tu cuenta de Google.
+                </p>
+              </div>
+              {onCloudSignIn && (
+                <button
+                  type="button"
+                  onClick={onCloudSignIn}
+                  className="shrink-0 flex items-center justify-center gap-2 px-4 py-2.5 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-extrabold rounded-xl transition-all cursor-pointer shadow-2xs"
+                >
+                  <AppIcon name="cloud" className="h-4 w-4" />
+                  <span>Conectar con Google</span>
+                </button>
+              )}
+            </div>
+          )
+        ) : (
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl p-3 text-xs text-[var(--text-faint)]">
+            LifeOS se está ejecutando en versión portable fuera de línea. La sincronización en la nube está desactivada.
+          </div>
+        )}
+      </div>
 
       <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">

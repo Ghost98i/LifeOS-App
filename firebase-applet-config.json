@@ -1,12 +1,9 @@
 {
-  "projectId": "exalted-summit-rlcf1",
-  "appId": "1:758945205864:web:79ef0cb9ec8e6887f6f5dd",
-  "apiKey": "AIzaSyB5KL-QKLXQnHfLBW1DQ6xX5DqMSjt_pd4",
-  "authDomain": "exalted-summit-rlcf1.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-lifeosapp-d0801203-93a7-4f37-b4c4-2ef6401f36e9",
-  "storageBucket": "exalted-summit-rlcf1.firebasestorage.app",
-  "messagingSenderId": "758945205864",
-  "measurementId": "",
-  "oAuthClientId": "758945205864-47it0sm0qlc9s3dei2jd9hlbmercadu6.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "projectId": "lifeosanywhere",
+  "appId": "1:177511653491:web:e1242266f2b7620ae60a06",
+  "apiKey": "AIzaSyAMZHa2xmHslOVKzxIp4SpBYeLJdT-aruQ",
+  "authDomain": "lifeosanywhere.firebaseapp.com",
+  "storageBucket": "lifeosanywhere.firebasestorage.app",
+  "messagingSenderId": "177511653491",
+  "measurementId": "G-YST3MQ8V9R"
 }
