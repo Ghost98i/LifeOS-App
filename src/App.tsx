@@ -320,6 +320,7 @@ export default function App() {
     }
 
     queueCloudSave(draft, changedSyncModules(previous, draft));
+    return saved;
   };
   const updateStateRef = useRef(updateState);
   updateStateRef.current = updateState;

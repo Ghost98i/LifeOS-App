@@ -1,19 +1,22 @@
 import React, { useState } from 'react';
 import type { LifeOSState } from '../types';
-import type {
+import {
   CaptureDraft,
   FinanceDraft,
   TaskDraft,
   StudyDraft,
+  canConfirmDraft,
 } from '../lib/quickCaptureDrafts';
 import { fmtMoney, todayISO } from '../lib/storage';
-import { MODULE_NAV_METADATA } from '../lib/moduleVisibility';
+import { MODULE_NAV_METADATA, isModuleEnabled } from '../lib/moduleVisibility';
 import { AppIcon, AppIconName } from './AppIcon';
 import { PrivacyAmount } from './PrivacyAmount';
 
 export interface DraftConfirmationTrayProps {
   drafts: CaptureDraft[];
   state: LifeOSState;
+  confirmingDraftIds?: Set<string>;
+  isConfirmingAll?: boolean;
   onUpdateDraft: (updated: CaptureDraft) => void;
   onConfirmDraft: (draft: CaptureDraft) => void;
   onConfirmAll?: () => void;
@@ -21,11 +24,14 @@ export interface DraftConfirmationTrayProps {
   onDiscardAll?: () => void;
   onEnableModule: (draft: CaptureDraft) => void;
   onConvertToNote: (draft: CaptureDraft) => void;
+  onConvertToInbox?: (draft: CaptureDraft) => void;
 }
 
 export const DraftConfirmationTray: React.FC<DraftConfirmationTrayProps> = ({
   drafts,
   state,
+  confirmingDraftIds,
+  isConfirmingAll,
   onUpdateDraft,
   onConfirmDraft,
   onConfirmAll,
@@ -33,17 +39,13 @@ export const DraftConfirmationTray: React.FC<DraftConfirmationTrayProps> = ({
   onDiscardAll,
   onEnableModule,
   onConvertToNote,
+  onConvertToInbox,
 }) => {
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
 
   if (!drafts || drafts.length === 0) return null;
 
-  const allValid = drafts.every(
-    (d) =>
-      d.isModuleEnabled &&
-      (!d.missingFields || d.missingFields.length === 0) &&
-      (d.kind !== 'finance' || (d.amount !== undefined && d.amount > 0))
-  );
+  const allValid = drafts.every((d) => canConfirmDraft(state, d).valid);
 
   return (
     <div className="w-full flex flex-col gap-3 p-3 sm:p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-md animate-fadeIn transition-all">
@@ -68,10 +70,10 @@ export const DraftConfirmationTray: React.FC<DraftConfirmationTrayProps> = ({
               <button
                 type="button"
                 onClick={onConfirmAll}
-                disabled={!allValid}
+                disabled={!allValid || isConfirmingAll}
                 className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 active:scale-95 disabled:opacity-40 transition cursor-pointer"
               >
-                Confirmar todos
+                {isConfirmingAll ? 'Registrando...' : 'Confirmar todos'}
               </button>
             )}
             {onDiscardAll && (
@@ -95,6 +97,7 @@ export const DraftConfirmationTray: React.FC<DraftConfirmationTrayProps> = ({
             draft={draft}
             state={state}
             isEditing={editingDraftId === draft.id}
+            isConfirming={confirmingDraftIds?.has(draft.id)}
             onToggleEdit={() =>
               setEditingDraftId((prev) => (prev === draft.id ? null : draft.id))
             }
@@ -103,6 +106,7 @@ export const DraftConfirmationTray: React.FC<DraftConfirmationTrayProps> = ({
             onDiscard={() => onDiscardDraft(draft.id)}
             onEnableModule={() => onEnableModule(draft)}
             onConvertToNote={() => onConvertToNote(draft)}
+            onConvertToInbox={onConvertToInbox ? () => onConvertToInbox(draft) : undefined}
           />
         ))}
       </div>
@@ -114,35 +118,45 @@ interface DraftCardProps {
   draft: CaptureDraft;
   state: LifeOSState;
   isEditing: boolean;
+  isConfirming?: boolean;
   onToggleEdit: () => void;
   onUpdateDraft: (updated: CaptureDraft) => void;
   onConfirm: () => void;
   onDiscard: () => void;
   onEnableModule: () => void;
   onConvertToNote: () => void;
+  onConvertToInbox?: () => void;
 }
 
 const DraftCard: React.FC<DraftCardProps> = ({
   draft,
   state,
   isEditing,
+  isConfirming,
   onToggleEdit,
   onUpdateDraft,
   onConfirm,
   onDiscard,
   onEnableModule,
   onConvertToNote,
+  onConvertToInbox,
 }) => {
   const meta = getDraftMeta(draft);
   const isMissingAmount = draft.missingFields?.includes('amount');
   const isMissingCategory = draft.missingFields?.includes('category');
-  const canConfirm =
-    draft.isModuleEnabled &&
-    !isMissingAmount &&
-    (draft.kind !== 'finance' || (draft.amount !== undefined && draft.amount > 0));
+
+  const isFinance = draft.kind === 'finance';
+  const finDraft = isFinance ? (draft as FinanceDraft) : null;
+  const isCurrencyBlocked = finDraft?.isCurrencyIncompatible || (finDraft?.currency && finDraft.currency !== 'UYU');
+
+  const validation = canConfirmDraft(state, draft);
+  const canConfirm = validation.valid;
+  const accountDeleted = isFinance && !canConfirm && validation.reason === 'Cuenta inexistente';
+  const categoryArchived = isFinance && !canConfirm && validation.reason === 'Categoría archivada';
 
   const targetModuleMeta = MODULE_NAV_METADATA[draft.targetModule];
   const moduleName = targetModuleMeta?.label || draft.targetModule;
+  const isNotasEnabled = isModuleEnabled(state, 'notas');
 
   return (
     <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--card)] hover:border-[var(--border-hover)] transition-all flex flex-col gap-2">
@@ -164,6 +178,27 @@ const DraftCard: React.FC<DraftCardProps> = ({
             </span>
           )}
 
+          {/* Warning: Incompatible Currency */}
+          {isCurrencyBlocked && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+              <span>Moneda no soportada ({finDraft?.currency})</span>
+            </span>
+          )}
+
+          {/* Warning: Account Deleted */}
+          {accountDeleted && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+              <span>Cuenta inexistente</span>
+            </span>
+          )}
+
+          {/* Warning: Category Archived */}
+          {categoryArchived && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+              <span>Categoría archivada</span>
+            </span>
+          )}
+
           {/* Warning: Missing amount */}
           {isMissingAmount && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30">
@@ -172,7 +207,7 @@ const DraftCard: React.FC<DraftCardProps> = ({
           )}
 
           {/* Warning: Missing category */}
-          {isMissingCategory && (
+          {isMissingCategory && !categoryArchived && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30">
               <span>Categoría pendiente</span>
             </span>
@@ -204,6 +239,13 @@ const DraftCard: React.FC<DraftCardProps> = ({
         </div>
       </div>
 
+      {/* Ambiguity Warning Banner */}
+      {draft.ambiguityWarning && (
+        <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-xs">
+          {draft.ambiguityWarning}
+        </div>
+      )}
+
       {/* Draft Content Summary */}
       {!isEditing && (
         <div className="text-xs sm:text-sm text-[var(--text)] font-medium pl-1 flex flex-col gap-1">
@@ -212,7 +254,7 @@ const DraftCard: React.FC<DraftCardProps> = ({
               <span className="font-bold text-sm sm:text-base">
                 {draft.amount !== undefined ? (
                   <PrivacyAmount>
-                    {draft.currency === 'USD' ? 'USD ' : '$U '}
+                    {draft.currency === 'USD' ? 'USD ' : draft.currency === 'EUR' ? 'EUR ' : '$U '}
                     {fmtMoney(draft.amount)}
                   </PrivacyAmount>
                 ) : (
@@ -226,7 +268,10 @@ const DraftCard: React.FC<DraftCardProps> = ({
               {draft.accountName && (
                 <>
                   <span className="text-[var(--text-faint)]">·</span>
-                  <span className="text-[var(--text-faint)]">{draft.accountName}</span>
+                  <PrivacyAmount as="span" className="text-[var(--text-faint)]">
+                    {draft.accountName}
+                    {draft.isAccountSuggested ? ' (sugerida)' : ''}
+                  </PrivacyAmount>
                 </>
               )}
               {draft.installments && (
@@ -243,6 +288,12 @@ const DraftCard: React.FC<DraftCardProps> = ({
           {draft.kind === 'task' && (
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[var(--text)] font-semibold">{draft.text}</span>
+              {draft.time && (
+                <>
+                  <span className="text-[var(--text-faint)]">·</span>
+                  <span className="font-mono text-blue-500 font-bold">{draft.time}</span>
+                </>
+              )}
               <span className="text-[var(--text-faint)]">·</span>
               <span
                 className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${
@@ -284,8 +335,10 @@ const DraftCard: React.FC<DraftCardProps> = ({
             </div>
           )}
 
-          {(draft.kind === 'note' || draft.kind === 'idea' || draft.kind === 'inbox') && (
-            <div className="text-[var(--text)]">{draft.text}</div>
+          {(draft.kind === 'note' || draft.kind === 'idea' || draft.kind === 'inbox' || draft.kind === 'work') && (
+            <div className={`text-[var(--text)] ${state.settings.privacyMode && draft.kind === 'note' ? 'privacy-sensitive' : ''}`}>
+              {'text' in draft ? (draft as any).text : draft.rawText}
+            </div>
           )}
 
           {draft.kind === 'agenda' && (
@@ -303,7 +356,7 @@ const DraftCard: React.FC<DraftCardProps> = ({
           )}
 
           {draft.notes && (
-            <div className="text-[11px] text-[var(--text-faint)] italic">{draft.notes}</div>
+            <div className={`text-[11px] text-[var(--text-faint)] italic ${state.settings.privacyMode ? 'privacy-sensitive' : ''}`}>{draft.notes}</div>
           )}
         </div>
       )}
@@ -318,11 +371,28 @@ const DraftCard: React.FC<DraftCardProps> = ({
         />
       )}
 
+      {/* Incompatible Currency Recovery Bar */}
+      {isCurrencyBlocked && onConvertToInbox && (
+        <div className="mt-1 p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-between gap-2 flex-wrap text-xs">
+          <span className="text-rose-800 dark:text-rose-200 text-[11px]">
+            No es posible registrar monedas extranjeras ({finDraft?.currency}). Guardalo en tu Bandeja para conservarlo.
+          </span>
+          <button
+            type="button"
+            onClick={onConvertToInbox}
+            className="px-2.5 py-1 rounded text-xs font-semibold bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 transition cursor-pointer"
+          >
+            Guardar en Bandeja
+          </button>
+        </div>
+      )}
+
       {/* Module Disabled Recovery Bar */}
-      {!draft.isModuleEnabled && (
+      {!draft.isModuleEnabled && !isCurrencyBlocked && (
         <div className="mt-1 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-between gap-2 flex-wrap text-xs">
           <span className="text-amber-800 dark:text-amber-200 text-[11px]">
-            Para registrar en <strong>{moduleName}</strong>, activá el módulo o guardalo como nota.
+            Para registrar en <strong>{moduleName}</strong>, activá el módulo o guardalo{' '}
+            {isNotasEnabled ? 'como nota o en bandeja.' : 'en tu bandeja de entrada.'}
           </span>
           <div className="flex items-center gap-1.5">
             <button
@@ -332,13 +402,23 @@ const DraftCard: React.FC<DraftCardProps> = ({
             >
               Activar {moduleName}
             </button>
-            <button
-              type="button"
-              onClick={onConvertToNote}
-              className="px-2 py-1 rounded text-xs font-semibold bg-[var(--surface-muted)] text-[var(--text)] hover:bg-[var(--border)] transition cursor-pointer"
-            >
-              Guardar como nota
-            </button>
+            {isNotasEnabled ? (
+              <button
+                type="button"
+                onClick={onConvertToNote}
+                className="px-2 py-1 rounded text-xs font-semibold bg-[var(--surface-muted)] text-[var(--text)] hover:bg-[var(--border)] transition cursor-pointer"
+              >
+                Guardar como nota
+              </button>
+            ) : onConvertToInbox ? (
+              <button
+                type="button"
+                onClick={onConvertToInbox}
+                className="px-2 py-1 rounded text-xs font-semibold bg-[var(--surface-muted)] text-[var(--text)] hover:bg-[var(--border)] transition cursor-pointer"
+              >
+                Guardar en Bandeja
+              </button>
+            ) : null}
           </div>
         </div>
       )}
@@ -349,11 +429,11 @@ const DraftCard: React.FC<DraftCardProps> = ({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={!canConfirm}
+            disabled={!canConfirm || isConfirming}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
           >
             <AppIcon name="check" className="h-3.5 w-3.5" />
-            <span>Confirmar</span>
+            <span>{isConfirming ? 'Registrando...' : 'Confirmar'}</span>
           </button>
         </div>
       )}
@@ -405,7 +485,9 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
                 } as FinanceDraft);
               }}
               placeholder="0.00"
-              className="px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-sm font-semibold outline-none"
+              className={`px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-sm font-semibold outline-none ${
+                state.settings.privacyMode ? 'privacy-sensitive' : ''
+              }`}
             />
           </div>
 
@@ -431,15 +513,17 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
               className="px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium outline-none"
             >
               <option value="">Seleccionar categoría...</option>
-              {categories.map((c) => {
-                const id = typeof c === 'string' ? c : c.id;
-                const name = typeof c === 'string' ? c : c.name;
-                return (
-                  <option key={id} value={id}>
-                    {name}
-                  </option>
-                );
-              })}
+              {categories
+                .filter((c) => (typeof c === 'string' ? true : c.active !== false))
+                .map((c) => {
+                  const id = typeof c === 'string' ? c : c.id;
+                  const name = typeof c === 'string' ? c : c.name;
+                  return (
+                    <option key={id} value={id}>
+                      {name}
+                    </option>
+                  );
+                })}
             </select>
           </div>
 
@@ -459,7 +543,9 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
                   accountName: acc?.name,
                 } as FinanceDraft);
               }}
-              className="px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium outline-none"
+              className={`px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium outline-none ${
+                state.settings.privacyMode ? 'privacy-sensitive' : ''
+              }`}
             >
               <option value="">Sin especificar...</option>
               {accounts.map((a) => (
@@ -637,7 +723,9 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
           onChange={(e) =>
             onUpdateDraft({ ...draft, text: e.target.value } as any)
           }
-          className="px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium outline-none resize-none"
+          className={`px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium outline-none resize-none ${
+            state.settings.privacyMode && draft.kind === 'note' ? 'privacy-sensitive' : ''
+          }`}
         />
       </div>
 

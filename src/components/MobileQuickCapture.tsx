@@ -21,17 +21,19 @@ import { isModuleEnabled } from '../lib/moduleVisibility';
 import {
   parseCaptureDrafts,
   confirmCaptureDraft,
+  canConfirmDraft,
   convertDraftToNote,
   enableModuleForDraft,
   type CaptureDraft,
 } from '../lib/quickCaptureDrafts';
 import { DraftConfirmationTray } from './DraftConfirmationTray';
+import { PrivacyAmount } from './PrivacyAmount';
 
 interface MobileQuickCaptureProps {
   state: LifeOSState;
   open: boolean;
   onClose: () => void;
-  onUpdateState: (updater: (draft: LifeOSState) => void) => void;
+  onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
   onNavigate?: (view: ViewType) => void;
   initialKind?: CaptureKind;
 }
@@ -61,6 +63,8 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
   const [kind, setKind] = useState<CaptureKind>(() => initialKind || 'universal');
   const [universalInput, setUniversalInput] = useState('');
   const [mobileDrafts, setMobileDrafts] = useState<CaptureDraft[]>([]);
+  const [confirmingDraftIds, setConfirmingDraftIds] = useState<Set<string>>(new Set());
+  const [isConfirmingAll, setIsConfirmingAll] = useState(false);
   const [text, setText] = useState('');
   const [noteTitle, setNoteTitle] = useState('');
   const [notePinned, setNotePinned] = useState(false);
@@ -121,8 +125,14 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
     });
   }, [state.settings]);
 
+  const prevOpenRef = useRef(false);
+
   useEffect(() => {
+    const isOpening = open && !prevOpenRef.current;
+    prevOpenRef.current = open;
+
     if (!open) return;
+
     const isAllowed = (k: CaptureKind) => {
       if (k === 'gasto') return isModuleEnabled(state.settings, 'finanzas');
       if (k === 'nota') return isModuleEnabled(state.settings, 'notas');
@@ -130,20 +140,26 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
       if (k === 'idea') return isModuleEnabled(state.settings, 'ia');
       return true;
     };
-    if (initialKind && isAllowed(initialKind)) {
-      setKind(initialKind);
+
+    if (isOpening) {
+      if (initialKind && isAllowed(initialKind)) {
+        setKind(initialKind);
+      } else {
+        setKind((prev) => (isAllowed(prev) ? prev : 'universal'));
+      }
+      setUniversalInput('');
+      setMobileDrafts([]);
+      setDate(todayISO());
+      setMessage('');
+      setNoteTitle('');
+      setNotePinned(false);
+      setManualAccountId(fallbackAccountId);
+      if (suggestedTemplate) {
+        setSelectedWorkoutTemplateId(suggestedTemplate.id);
+      }
     } else {
+      // If module visibility changed while open, ensure kind remains valid without wiping drafts or input
       setKind((prev) => (isAllowed(prev) ? prev : 'universal'));
-    }
-    setUniversalInput('');
-    setMobileDrafts([]);
-    setDate(todayISO());
-    setMessage('');
-    setNoteTitle('');
-    setNotePinned(false);
-    setManualAccountId(fallbackAccountId);
-    if (suggestedTemplate) {
-      setSelectedWorkoutTemplateId(suggestedTemplate.id);
     }
   }, [open, initialKind, fallbackAccountId, suggestedTemplate, state.settings]);
 
@@ -180,10 +196,58 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
     return () => window.clearTimeout(timer);
   }, [open, kind, manualFinanceMode, activeTab]);
 
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+
+  const handleRequestClose = () => {
+    const hasPendingContent = (kind === 'universal' && (mobileDrafts.length > 0 || universalInput.trim().length > 0)) ||
+      (kind !== 'universal' && (text.trim().length > 0 || financeInput.trim().length > 0));
+
+    if (hasPendingContent) {
+      setShowExitConfirm(true);
+    } else {
+      onClose();
+    }
+  };
+
+  const handleForceCloseDiscard = () => {
+    setShowExitConfirm(false);
+    onClose();
+  };
+
+  const handleForceCloseSaveInbox = () => {
+    try {
+      if (kind === 'universal') {
+        if (universalInput.trim()) {
+          onUpdateState((s) => {
+            addQuickInbox(s, universalInput.trim(), 'quick-capture');
+          });
+        }
+        for (const draft of mobileDrafts) {
+          onUpdateState((s) => {
+            addQuickInbox(s, draft.rawText, 'quick-capture');
+          });
+        }
+      } else {
+        const textToSave = text.trim() || financeInput.trim();
+        if (textToSave) {
+          onUpdateState((s) => {
+            addQuickInbox(s, textToSave, 'quick-capture');
+          });
+        }
+      }
+      playSound('success');
+      showToast('Guardado en Bandeja de Entrada');
+    } catch {
+      // ignore
+    }
+    setShowExitConfirm(false);
+    onClose();
+  };
+
   const handleDialogKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.stopPropagation();
-      onClose();
+      handleRequestClose();
     }
   };
 
@@ -307,17 +371,21 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
   };
 
   const handleConvertInbox = (id: string, target: 'tarea' | 'nota' | 'recordatorio' | 'proyecto') => {
-    onUpdateState((draft) => {
-      convertInboxItem(draft, id, target);
-    });
-    playSound('success');
-    const targetLabels: Record<string, string> = {
-      tarea: 'tarea de hoy',
-      proyecto: 'proyecto activo',
-      nota: 'nota post-it',
-      recordatorio: 'recordatorio',
-    };
-    showToast(`Convertido a ${targetLabels[target] || target}`, 'success');
+    try {
+      onUpdateState((draft) => {
+        convertInboxItem(draft, id, target);
+      });
+      playSound('success');
+      const targetLabels: Record<string, string> = {
+        tarea: 'tarea de hoy',
+        proyecto: 'proyecto activo',
+        nota: 'nota post-it',
+        recordatorio: 'recordatorio',
+      };
+      showToast(`Convertido a ${targetLabels[target] || target}`, 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'No se pudo convertir.', 'error');
+    }
   };
 
   const handleDiscardInbox = (id: string) => {
@@ -376,16 +444,52 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
   return (
     <div
       className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/55 backdrop-blur-xs transition-opacity"
-      onClick={onClose}
+      onClick={handleRequestClose}
     >
       <section
         role="dialog"
         aria-modal="true"
         aria-label="Captura universal"
         onKeyDown={handleDialogKeyDown}
-        className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-[var(--card)] border border-[var(--border)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl transition-transform"
+        className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-[var(--card)] border border-[var(--border)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl transition-transform relative"
         onClick={(event) => event.stopPropagation()}
       >
+        {/* Exit Confirmation Dialog */}
+        {showExitConfirm && (
+          <div className="absolute inset-0 z-50 rounded-t-3xl sm:rounded-3xl bg-[var(--card)]/95 backdrop-blur-sm p-6 flex flex-col justify-center items-center text-center gap-4 animate-fadeIn">
+            <span className="text-3xl">⚠️</span>
+            <div>
+              <h3 className="text-base font-bold text-[var(--text)]">¿Descartar cambios sin guardar?</h3>
+              <p className="text-xs text-[var(--text-soft)] mt-1 max-w-xs">
+                Tenés capturas o borradores pendientes. Podés guardarlos en la Bandeja de Entrada para no perderlos.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 w-full max-w-xs">
+              <button
+                type="button"
+                onClick={handleForceCloseSaveInbox}
+                className="flex-1 py-2 px-3 rounded-xl bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold hover:opacity-90 transition cursor-pointer"
+              >
+                Guardar en Bandeja
+              </button>
+              <button
+                type="button"
+                onClick={handleForceCloseDiscard}
+                className="flex-1 py-2 px-3 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-xs font-bold hover:bg-rose-500/20 transition cursor-pointer"
+              >
+                Descartar
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowExitConfirm(false)}
+                className="py-2 px-3 rounded-xl bg-[var(--surface-muted)] text-[var(--text-soft)] text-xs font-semibold hover:bg-[var(--border)] transition cursor-pointer"
+              >
+                Volver
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Header & Mode Tabs */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[var(--bg)] border border-[var(--border)]">
@@ -419,7 +523,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleRequestClose}
             className="w-8 h-8 rounded-full bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] font-bold flex items-center justify-center transition cursor-pointer"
             aria-label="Cerrar"
           >
@@ -577,7 +681,9 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                       }
                     }}
                     placeholder="Ej: 1200 nafta, estudiar redes mañana..."
-                    className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-3.5 px-4 text-sm font-medium outline-none focus:border-[var(--blue)] shadow-inner text-[var(--text)]"
+                    className={`w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-3.5 px-4 text-sm font-medium outline-none focus:border-[var(--blue)] shadow-inner text-[var(--text)] ${
+                      state.settings.privacyMode ? 'privacy-sensitive' : ''
+                    }`}
                   />
                   <button
                     type="button"
@@ -613,18 +719,31 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
               <DraftConfirmationTray
                 drafts={mobileDrafts}
                 state={state}
+                confirmingDraftIds={confirmingDraftIds}
+                isConfirmingAll={isConfirmingAll}
                 onUpdateDraft={(updated) =>
                   setMobileDrafts((prev) => prev.map((d) => (d.id === updated.id ? updated : d)))
                 }
                 onConfirmDraft={(draft) => {
+                  if (confirmingDraftIds.has(draft.id)) return;
+                  const validation = canConfirmDraft(state, draft);
+                  if (!validation.valid) {
+                    setMessage(validation.reason || 'Borrador no válido.');
+                    return;
+                  }
+                  setConfirmingDraftIds((prev) => new Set(prev).add(draft.id));
                   try {
                     let feedback: { message: string; sound: 'success' | 'coins' | 'click' } = {
                       message: 'Elemento registrado.',
                       sound: 'success',
                     };
-                    onUpdateState((s) => {
+                    const saved = onUpdateState((s) => {
                       feedback = confirmCaptureDraft(s, draft);
                     });
+                    if (saved === false) {
+                      setMessage('Error al persistir localmente.');
+                      return;
+                    }
                     playSound(feedback.sound);
                     showToast(feedback.message);
                     setMobileDrafts((prev) => {
@@ -634,29 +753,50 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                     });
                   } catch (err) {
                     setMessage(err instanceof Error ? err.message : 'Error al registrar.');
+                  } finally {
+                    setConfirmingDraftIds((prev) => {
+                      const next = new Set(prev);
+                      next.delete(draft.id);
+                      return next;
+                    });
                   }
                 }}
                 onConfirmAll={() => {
+                  if (isConfirmingAll) return;
+                  setIsConfirmingAll(true);
                   try {
                     let count = 0;
-                    onUpdateState((s) => {
+                    const confirmedIds = new Set<string>();
+                    const saved = onUpdateState((s) => {
                       for (const d of mobileDrafts) {
-                        if (
-                          d.isModuleEnabled &&
-                          (!d.missingFields || d.missingFields.length === 0) &&
-                          (d.kind !== 'finance' || (d.amount !== undefined && d.amount > 0))
-                        ) {
-                          confirmCaptureDraft(s, d);
-                          count++;
+                        if (canConfirmDraft(s, d).valid) {
+                          try {
+                            confirmCaptureDraft(s, d);
+                            confirmedIds.add(d.id);
+                            count++;
+                          } catch {
+                            // individual draft error, keep in tray
+                          }
                         }
                       }
                     });
-                    playSound('success');
-                    showToast(`${count} elementos registrados.`);
-                    setMobileDrafts([]);
-                    onClose();
+                    if (saved === false) {
+                      setMessage('Error al persistir localmente.');
+                      return;
+                    }
+                    if (count > 0) {
+                      playSound('success');
+                      showToast(`${count} elementos registrados.`);
+                    }
+                    setMobileDrafts((prev) => {
+                      const remaining = prev.filter((d) => !confirmedIds.has(d.id));
+                      if (remaining.length === 0) onClose();
+                      return remaining;
+                    });
                   } catch (err) {
                     setMessage(err instanceof Error ? err.message : 'Error al registrar borradores.');
+                  } finally {
+                    setIsConfirmingAll(false);
                   }
                 }}
                 onDiscardDraft={(draftId) => {
@@ -680,6 +820,20 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                     prev.map((d) => (d.id === draft.id ? noteDraft : d))
                   );
                   showToast('Convertido a nota.');
+                }}
+                onConvertToInbox={(draft) => {
+                  const inboxDraft: CaptureDraft = {
+                    id: draft.id,
+                    rawText: draft.rawText,
+                    kind: 'inbox',
+                    targetModule: 'dashboard',
+                    isModuleEnabled: true,
+                    text: draft.rawText,
+                  };
+                  setMobileDrafts((prev) =>
+                    prev.map((d) => (d.id === draft.id ? inboxDraft : d))
+                  );
+                  showToast('Convertido a bandeja de entrada.');
                 }}
               />
             )}
@@ -765,7 +919,9 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                           value={financeInput}
                           onChange={(e) => setFinanceInput(e.target.value)}
                           placeholder="Monto, categoría o cuenta (ej: 500 super)..."
-                          className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-3.5 px-4 text-sm font-medium outline-none focus:border-[var(--blue)] shadow-inner text-[var(--text)]"
+                          className={`w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-3.5 px-4 text-sm font-medium outline-none focus:border-[var(--blue)] shadow-inner text-[var(--text)] ${
+                            state.settings.privacyMode ? 'privacy-sensitive' : ''
+                          }`}
                         />
                         <button
                           type="button"
@@ -792,9 +948,9 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                           <span
                             className={`text-xs font-mono font-bold block mt-0.5 truncate ${
                               parsedFinance.isValid ? 'text-emerald-500' : 'text-[var(--text-soft)]'
-                            }`}
+                            } ${state.settings.privacyMode ? 'privacy-sensitive' : ''}`}
                           >
-                            {parsedFinance.preview}
+                            <PrivacyAmount>{parsedFinance.preview}</PrivacyAmount>
                           </span>
                         </div>
                         {parsedFinance.isValid && (
@@ -853,7 +1009,9 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                           value={manualAmount}
                           onChange={(e) => setManualAmount(e.target.value)}
                           placeholder="0"
-                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-lg font-black outline-none focus:border-[var(--blue)]"
+                          className={`w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-lg font-black outline-none focus:border-[var(--blue)] ${
+                            state.settings.privacyMode ? 'privacy-sensitive' : ''
+                          }`}
                         />
                       </label>
                       <label>

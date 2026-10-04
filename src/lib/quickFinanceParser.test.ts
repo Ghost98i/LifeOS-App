@@ -116,3 +116,46 @@ test('parseQuickFinance handles income notation: + 50000 sueldo banco', () => {
   assert.equal(result.type, 'ingreso');
   assert.equal(result.accountId, 'acc-brou');
 });
+
+test('parseQuickFinance strictly enforces separator policy', () => {
+  // 1200.50 -> 1200.50
+  assert.equal(parseQuickFinance('1200.50 nafta', { accounts: mockAccounts }).amount, 1200.50);
+  // 500.50 -> 500.50
+  assert.equal(parseQuickFinance('500.50 comida', { accounts: mockAccounts }).amount, 500.50);
+  // 1.200,50 -> 1200.50
+  assert.equal(parseQuickFinance('1.200,50 super', { accounts: mockAccounts }).amount, 1200.50);
+  // 1,200.50 -> 1200.50
+  assert.equal(parseQuickFinance('1,200.50 super', { accounts: mockAccounts }).amount, 1200.50);
+  // 1200,50 -> 1200.50
+  assert.equal(parseQuickFinance('1200,50 nafta', { accounts: mockAccounts }).amount, 1200.50);
+  // 1.200 -> 1200
+  assert.equal(parseQuickFinance('1.200 super', { accounts: mockAccounts }).amount, 1200);
+  // 1,200 -> 1200
+  assert.equal(parseQuickFinance('1,200 super', { accounts: mockAccounts }).amount, 1200);
+
+  // Ambiguous forms
+  const ambig1 = parseQuickFinance('1.200.50 nafta', { accounts: mockAccounts });
+  assert.equal(ambig1.amount, null);
+  assert.equal(ambig1.isAmbiguous, true);
+  assert.equal(ambig1.isValid, false);
+});
+
+test('parseQuickFinance does not steal date numbers as amount (date before amount)', () => {
+  // "pagué internet el 15/09" -> missing amount, 15 is day, not amount!
+  const res = parseQuickFinance('pagué internet el 15/09', { accounts: mockAccounts, defaultDate: '2026-09-20' });
+  assert.equal(res.amount, null);
+  assert.ok(res.missing.includes('amount'));
+  assert.equal(res.date, '2026-09-15');
+});
+
+test('parseQuickFinance detects foreign currency as incompatible', () => {
+  const resUsd = parseQuickFinance('USD 50 de hosting', { accounts: mockAccounts });
+  assert.equal(resUsd.currency, 'USD');
+  assert.equal(resUsd.isCurrencyIncompatible, true);
+  assert.equal(resUsd.isValid, false);
+
+  const resEur = parseQuickFinance('40 euros de suscripcion', { accounts: mockAccounts });
+  assert.equal(resEur.currency, 'EUR');
+  assert.equal(resEur.isCurrencyIncompatible, true);
+  assert.equal(resEur.isValid, false);
+});

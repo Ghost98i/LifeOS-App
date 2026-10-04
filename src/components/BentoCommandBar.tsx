@@ -3,6 +3,7 @@ import type { LifeOSState, ViewType } from '../types';
 import {
   parseCaptureDrafts,
   confirmCaptureDraft,
+  canConfirmDraft,
   convertDraftToNote,
   enableModuleForDraft,
   CaptureDraft,
@@ -17,7 +18,7 @@ import { fmtMoney } from '../lib/storage';
 
 interface BentoCommandBarProps {
   state: LifeOSState;
-  onUpdateState: (updater: (draft: LifeOSState) => void) => void;
+  onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
   onNavigate: (view: ViewType) => void;
   onOpenSearch?: () => void;
   onQuickAction?: (view: ViewType, focusId: string, txType?: 'gasto' | 'ingreso') => void;
@@ -32,6 +33,8 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
 }) => {
   const [input, setInput] = useState('');
   const [detectedDrafts, setDetectedDrafts] = useState<CaptureDraft[]>([]);
+  const [confirmingDraftIds, setConfirmingDraftIds] = useState<Set<string>>(new Set());
+  const [isConfirmingAll, setIsConfirmingAll] = useState(false);
 
   // Live parsed drafts for preview chip while typing
   const liveDrafts = useMemo(() => {
@@ -60,42 +63,72 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
   };
 
   const handleConfirmDraft = (draft: CaptureDraft) => {
+    if (confirmingDraftIds.has(draft.id)) return;
+    const validation = canConfirmDraft(state, draft);
+    if (!validation.valid) {
+      showToast(validation.reason || 'Borrador no válido.', 'error');
+      return;
+    }
+    setConfirmingDraftIds((prev) => new Set(prev).add(draft.id));
+
     try {
       let feedback: { message: string; sound: 'success' | 'coins' | 'click' } = {
         message: 'Elemento registrado.',
         sound: 'success',
       };
-      onUpdateState((s) => {
+      const saved = onUpdateState((s) => {
         feedback = confirmCaptureDraft(s, draft);
       });
+      if (saved === false) {
+        showToast('Error al persistir localmente.', 'error');
+        return;
+      }
       playSound(feedback.sound);
       showToast(feedback.message);
       setDetectedDrafts((prev) => prev.filter((d) => d.id !== draft.id));
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Error al registrar.', 'error');
+    } finally {
+      setConfirmingDraftIds((prev) => {
+        const next = new Set(prev);
+        next.delete(draft.id);
+        return next;
+      });
     }
   };
 
   const handleConfirmAll = () => {
+    if (isConfirmingAll) return;
+    setIsConfirmingAll(true);
     try {
       let registeredCount = 0;
-      onUpdateState((s) => {
+      const confirmedIds = new Set<string>();
+      const saved = onUpdateState((s) => {
         for (const draft of detectedDrafts) {
-          if (
-            draft.isModuleEnabled &&
-            (!draft.missingFields || draft.missingFields.length === 0) &&
-            (draft.kind !== 'finance' || (draft.amount !== undefined && draft.amount > 0))
-          ) {
-            confirmCaptureDraft(s, draft);
-            registeredCount++;
+          if (canConfirmDraft(s, draft).valid) {
+            try {
+              confirmCaptureDraft(s, draft);
+              confirmedIds.add(draft.id);
+              registeredCount++;
+            } catch {
+              // individual draft failed, keep in tray
+            }
           }
         }
       });
-      playSound('success');
-      showToast(`${registeredCount} elementos registrados.`);
-      setDetectedDrafts([]);
+      if (saved === false) {
+        showToast('Error al persistir localmente.', 'error');
+        return;
+      }
+      if (registeredCount > 0) {
+        playSound('success');
+        showToast(`${registeredCount} elementos registrados.`);
+      }
+      setDetectedDrafts((prev) => prev.filter((d) => !confirmedIds.has(d.id)));
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Error al registrar borradores.', 'error');
+    } finally {
+      setIsConfirmingAll(false);
     }
   };
 
@@ -129,6 +162,19 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
     showToast('Convertido a nota.');
   };
 
+  const handleConvertToInbox = (draft: CaptureDraft) => {
+    const inboxDraft: CaptureDraft = {
+      id: draft.id,
+      rawText: draft.rawText,
+      kind: 'inbox',
+      targetModule: 'dashboard',
+      isModuleEnabled: true,
+      text: draft.rawText,
+    };
+    setDetectedDrafts((prev) => prev.map((d) => (d.id === draft.id ? inboxDraft : d)));
+    showToast('Convertido a bandeja de entrada.');
+  };
+
   return (
     <div className="w-full flex flex-col gap-3">
       <div className="w-full rounded-2xl p-3 sm:p-4 bg-[var(--card)] border border-[var(--border)] shadow-xs transition-all">
@@ -146,7 +192,9 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Captura rápida: ej. 1200 nafta, estudiar redes mañana..."
-              className="flex-1 min-w-0 bg-transparent text-sm sm:text-base font-medium text-[var(--text)] placeholder:text-[var(--text-faint)] outline-none"
+              className={`flex-1 min-w-0 bg-transparent text-sm sm:text-base font-medium text-[var(--text)] placeholder:text-[var(--text-faint)] outline-none ${
+                state.settings.privacyMode ? 'privacy-sensitive' : ''
+              }`}
             />
 
             {/* Shortcut Command / Search Trigger */}
@@ -263,6 +311,8 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
         <DraftConfirmationTray
           drafts={detectedDrafts}
           state={state}
+          confirmingDraftIds={confirmingDraftIds}
+          isConfirmingAll={isConfirmingAll}
           onUpdateDraft={handleUpdateDraft}
           onConfirmDraft={handleConfirmDraft}
           onConfirmAll={handleConfirmAll}
@@ -270,6 +320,7 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
           onDiscardAll={handleDiscardAll}
           onEnableModule={handleEnableModule}
           onConvertToNote={handleConvertToNote}
+          onConvertToInbox={handleConvertToInbox}
         />
       )}
     </div>
@@ -358,6 +409,11 @@ const LiveDraftPreview: React.FC<{ draft: CaptureDraft }> = ({ draft }) => {
         <AppIcon name="repeat" className="h-3.5 w-3.5 text-cyan-500" />
         <span>
           Detectado como <strong className="text-[var(--text)]">Reventa</strong>: {draft.title}
+          {draft.price !== undefined && (
+            <>
+              {' '}(<PrivacyAmount>$U {fmtMoney(draft.price)}</PrivacyAmount>)
+            </>
+          )}
         </span>
       </div>
     );

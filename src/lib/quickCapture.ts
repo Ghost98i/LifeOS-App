@@ -176,10 +176,16 @@ export function convertInboxItem(
   if (target === 'tarea') {
     convertedId = addQuickTask(state, item.text, options?.priority || 'media', options?.date || todayISO());
   } else if (target === 'nota') {
+    if (!isModuleEnabled(state, 'notas')) {
+      throw new Error('El módulo Notas está desactivado.');
+    }
     convertedId = addQuickNote(state, item.text, options?.date || todayISO());
   } else if (target === 'recordatorio') {
     convertedId = addQuickReminder(state, item.text, options?.date || todayISO(), options?.reminderTime);
   } else if (target === 'proyecto') {
+    if (!isModuleEnabled(state, 'notas')) {
+      throw new Error('El contexto de proyectos requiere que el módulo Notas esté activo.');
+    }
     if (!state.projects) state.projects = [];
     convertedId = uid();
     state.projects.unshift({

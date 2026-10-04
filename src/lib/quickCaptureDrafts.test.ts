@@ -4,11 +4,15 @@ import { defaultState } from './storage';
 import {
   parseCaptureDrafts,
   confirmCaptureDraft,
+  canConfirmDraft,
   convertDraftToNote,
+  convertDraftToInbox,
   enableModuleForDraft,
   segmentCompoundClauses,
   extractRelativeDate,
+  type CaptureDraft,
 } from './quickCaptureDrafts';
+import { convertInboxItem, addQuickInbox } from './quickCapture';
 import { isModuleEnabled } from './moduleVisibility';
 
 test('LifeOS — Fase 4: Clause segmentation distinguishes compound intents without breaking simple conjunctions', () => {
@@ -287,4 +291,484 @@ test('LifeOS — Fase 4: Confirmation, inline editing, and discard lifecycle', (
   const initialTaskCount = state.todayExtras.length;
   // Discarding simply omits calling confirmCaptureDraft
   assert.equal(state.todayExtras.length, initialTaskCount);
+});
+
+test('LifeOS — Fase 4: Truthful capture for resale and work into Inbox without fake records', () => {
+  const state = defaultState();
+  const initialInboxCount = (state.inbox || []).length;
+
+  // "vendí monitor por 4500"
+  const resaleDrafts = parseCaptureDrafts('vendí monitor por 4500', state);
+  assert.equal(resaleDrafts.length, 1);
+  const rDraft = resaleDrafts[0];
+  assert.equal(rDraft.kind, 'resale');
+
+  // Confirmation must route to inbox honestly
+  const resResale = confirmCaptureDraft(state, rDraft);
+  assert.equal(resResale.sound, 'click');
+  assert.ok(resResale.message.includes('Bandeja de Entrada'));
+  assert.equal(state.inbox?.length, initialInboxCount + 1);
+  assert.equal(state.inbox?.[0].text, 'vendí monitor por 4500');
+
+  // Work draft
+  const workDraft: CaptureDraft = {
+    id: 'work-1',
+    rawText: 'seguimiento entrevista MercadoLibre',
+    kind: 'work',
+    action: 'MercadoLibre',
+    date: '2026-10-04',
+    targetModule: 'trabajo',
+    isModuleEnabled: true,
+  };
+  const resWork = confirmCaptureDraft(state, workDraft);
+  assert.equal(resWork.sound, 'click');
+  assert.ok(resWork.message.includes('Bandeja de Entrada'));
+  assert.equal(state.inbox?.length, initialInboxCount + 2);
+  assert.equal(state.inbox?.[0].text, 'seguimiento entrevista MercadoLibre');
+});
+
+test('LifeOS — Fase 4: Future study and payment intentions parsed as tasks without inventing data', () => {
+  const state = defaultState();
+
+  // "estudiar redes mañana" and "mañana estudiar redes"
+  const d1 = parseCaptureDrafts('estudiar redes mañana', state, { defaultDate: '2026-10-04' })[0];
+  assert.equal(d1.kind, 'task');
+  if (d1.kind === 'task') {
+    assert.equal(d1.priority, 'media');
+    assert.equal(d1.dueDate, '2026-10-05');
+  }
+
+  const d2 = parseCaptureDrafts('mañana estudiar redes', state, { defaultDate: '2026-10-04' })[0];
+  assert.equal(d2.kind, 'task');
+  if (d2.kind === 'task') {
+    assert.equal(d2.priority, 'media');
+    assert.equal(d2.dueDate, '2026-10-05');
+  }
+
+  // Does NOT create studyLog or invent 45 minutes
+  assert.equal(state.study?.studyLog?.length || 0, 0);
+
+  // "pagar 1200 internet mañana" -> must be a Task, NOT an immediate balance deduction!
+  const dPay = parseCaptureDrafts('pagar 1200 internet mañana', state, { defaultDate: '2026-10-04' })[0];
+  assert.equal(dPay.kind, 'task');
+  if (dPay.kind === 'task') {
+    assert.equal(dPay.priority, 'media');
+    assert.equal(dPay.dueDate, '2026-10-05');
+  }
+  // Confirming it creates a task, zero balance deduction
+  const initialBalance = state.finance.accounts[0]?.balance || 0;
+  confirmCaptureDraft(state, dPay);
+  assert.equal(state.finance.accounts[0]?.balance || 0, initialBalance);
+});
+
+test('LifeOS — Fase 4: Gym with schedule parsed as task with time and medium priority with Agenda OFF', () => {
+  const state = defaultState();
+  state.settings.hiddenTabs = ['agenda']; // Agenda OFF
+
+  const gymDrafts = parseCaptureDrafts('mañana gym 13:30', state, { defaultDate: '2026-10-04' });
+  assert.equal(gymDrafts.length, 1);
+  const gDraft = gymDrafts[0];
+  assert.equal(gDraft.kind, 'task');
+  assert.equal(gDraft.isModuleEnabled, true, 'Debe estar habilitada como tarea core');
+  if (gDraft.kind === 'task') {
+    assert.equal(gDraft.time, '13:30');
+    assert.equal(gDraft.priority, 'media');
+    assert.equal(gDraft.dueDate, '2026-10-05');
+  }
+
+  // Confirming works seamlessly with Agenda OFF
+  assert.doesNotThrow(() => {
+    confirmCaptureDraft(state, gDraft);
+  });
+});
+
+test('LifeOS — Fase 4: Strict validation rejects invalid currency, account and archived category', () => {
+  const state = defaultState();
+
+  // Incompatible currency
+  const foreignDraft: CaptureDraft = {
+    id: 'f-1',
+    rawText: 'USD 50',
+    kind: 'finance',
+    type: 'gasto',
+    amount: 50,
+    currency: 'USD',
+    isCurrencyIncompatible: true,
+    date: '2026-10-04',
+    dateLabel: 'Hoy',
+    targetModule: 'finanzas',
+    isModuleEnabled: true,
+  };
+  assert.throws(() => confirmCaptureDraft(state, foreignDraft), /Moneda no soportada/);
+
+  // Deleted or non-existent account
+  const badAccDraft: CaptureDraft = {
+    id: 'f-2',
+    rawText: '500 comida en fantasma',
+    kind: 'finance',
+    type: 'gasto',
+    amount: 500,
+    currency: 'UYU',
+    accountId: 'non-existent-account-id',
+    date: '2026-10-04',
+    dateLabel: 'Hoy',
+    targetModule: 'finanzas',
+    isModuleEnabled: true,
+  };
+  assert.throws(() => confirmCaptureDraft(state, badAccDraft), /La cuenta seleccionada no existe/);
+
+  // Archived category
+  state.finance.categories = [
+    { id: 'cat-active', name: 'Comida', active: true },
+    { id: 'cat-archived', name: 'Viajes', active: false },
+  ];
+  const archivedCatDraft: CaptureDraft = {
+    id: 'f-3',
+    rawText: '2000 pasaje',
+    kind: 'finance',
+    type: 'gasto',
+    amount: 2000,
+    currency: 'UYU',
+    category: 'cat-archived',
+    date: '2026-10-04',
+    dateLabel: 'Hoy',
+    targetModule: 'finanzas',
+    isModuleEnabled: true,
+  };
+  assert.throws(() => confirmCaptureDraft(state, archivedCatDraft), /La categoría seleccionada está archivada/);
+});
+
+test('LifeOS — Fase 4: Stream Guard prevents monetary number leakage in toasts', () => {
+  const state = defaultState();
+  const draft = parseCaptureDrafts('800 nafta', state)[0];
+  assert.equal(draft.kind, 'finance');
+  const res = confirmCaptureDraft(state, draft);
+  // Toast must NOT contain literal number 800 or $
+  assert.doesNotMatch(res.message, /\b800\b/);
+  assert.doesNotMatch(res.message, /\$/);
+  assert.ok(res.message.includes('Gasto registrado'));
+});
+
+test('LifeOS — Fase 4: Guard inbox conversion to project/note when Notas is disabled', () => {
+  const state = defaultState();
+  state.inbox = [{ id: 'inbox-1', text: 'Aprender Docker', createdAt: new Date().toISOString(), source: 'quick-capture' }];
+  state.settings.hiddenTabs = ['notas']; // Notas OFF
+
+  // Converting to note when Notas is OFF must fail
+  assert.throws(() => {
+    convertInboxItem(state, 'inbox-1', 'nota');
+  }, /El módulo Notas está desactivado/);
+
+  // Converting to project when Notas is OFF must fail
+  assert.throws(() => {
+    convertInboxItem(state, 'inbox-1', 'proyecto');
+  }, /El contexto de proyectos requiere que el módulo Notas esté activo/);
+
+  // Item was NOT deleted from inbox due to failure
+  assert.equal(state.inbox.length, 1);
+});
+
+test('LifeOS — Fase 4: "hoy me siento cansado" parses as reflective note, not a task', () => {
+  const state = defaultState();
+  const drafts = parseCaptureDrafts('hoy me siento cansado', state);
+  assert.equal(drafts.length, 1);
+  assert.equal(drafts[0].kind, 'note');
+  assert.equal(drafts[0].targetModule, 'notas');
+  assert.equal((drafts[0] as any).text, 'hoy me siento cansado');
+});
+
+test('LifeOS — Fase 4: "nota: llamar al médico y comprar remedios" parses as a single intact note', () => {
+  const state = defaultState();
+  const drafts = parseCaptureDrafts('nota: llamar al médico y comprar remedios', state);
+  assert.equal(drafts.length, 1);
+  assert.equal(drafts[0].kind, 'note');
+  assert.equal((drafts[0] as any).text, 'llamar al médico y comprar remedios');
+});
+
+test('LifeOS — Fase 4: canConfirmDraft and confirmCaptureDraft reject category archived after parsing', () => {
+  const state = defaultState();
+  state.finance.categories = [
+    { id: 'cat-super', name: 'Super', active: true },
+  ];
+  const draft: CaptureDraft = {
+    id: 'f-test',
+    rawText: '1500 super',
+    kind: 'finance',
+    type: 'gasto',
+    amount: 1500,
+    currency: 'UYU',
+    date: '2026-10-04',
+    dateLabel: 'Hoy',
+    category: 'cat-super',
+    categoryMatched: 'Super',
+    targetModule: 'finanzas',
+    isModuleEnabled: true,
+  };
+
+  // User or system archives category before confirmation
+  state.finance.categories = [
+    { id: 'cat-super', name: 'Super', active: false },
+  ];
+
+  const validation = canConfirmDraft(state, draft);
+  assert.equal(validation.valid, false);
+  assert.equal(validation.reason, 'Categoría archivada');
+  assert.throws(() => confirmCaptureDraft(state, draft), /La categoría seleccionada está archivada/);
+});
+
+test('LifeOS — Fase 4: canConfirmDraft and confirmCaptureDraft reject account deleted after parsing', () => {
+  const state = defaultState();
+  state.finance.accounts = [
+    { id: 'acc-itaú', name: 'Banco Itaú', balance: 5000 },
+  ];
+  const drafts = parseCaptureDrafts('800 nafta itau', state);
+  assert.equal(drafts.length, 1);
+  const draft = drafts[0];
+  assert.equal((draft as any).accountId, 'acc-itaú');
+
+  // Account is deleted in another tab/view before confirmation
+  state.finance.accounts = [];
+
+  const validation = canConfirmDraft(state, draft);
+  assert.equal(validation.valid, false);
+  assert.equal(validation.reason, 'Cuenta inexistente');
+  assert.throws(() => confirmCaptureDraft(state, draft), /La cuenta seleccionada no existe/);
+});
+
+test('LifeOS — Fase 4: Zero optional modules active: core tasks succeed and inactive modules fallback cleanly to Inbox', () => {
+  const state = defaultState();
+  // Turn OFF all optional modules
+  state.settings.hiddenTabs = ['finanzas', 'gimnasio', 'estudios', 'trabajo', 'agenda', 'calendario', 'notas', 'reventa', 'ia'];
+
+  // Core task always supported
+  const taskDrafts = parseCaptureDrafts('comprar comida para los gatos', state);
+  assert.equal(taskDrafts.length, 1);
+  assert.equal(taskDrafts[0].targetModule, 'dashboard');
+  assert.equal(taskDrafts[0].isModuleEnabled, true);
+  const taskVal = canConfirmDraft(state, taskDrafts[0]);
+  assert.equal(taskVal.valid, true);
+
+  confirmCaptureDraft(state, taskDrafts[0]);
+  assert.equal(state.todayExtras.some((t) => t.text.includes('comprar comida para los gatos')), true);
+
+  // Inactive module (finance)
+  const finDrafts = parseCaptureDrafts('1200 nafta', state);
+  assert.equal(finDrafts.length, 1);
+  assert.equal(finDrafts[0].isModuleEnabled, false);
+  const finVal = canConfirmDraft(state, finDrafts[0]);
+  assert.equal(finVal.valid, false);
+  assert.throws(() => confirmCaptureDraft(state, finDrafts[0]), /desactivado/);
+
+  // Fallback to inbox
+  const inboxDraft = convertDraftToInbox(finDrafts[0]);
+  assert.equal(inboxDraft.targetModule, 'dashboard');
+  assert.equal(inboxDraft.isModuleEnabled, true);
+  confirmCaptureDraft(state, inboxDraft);
+  assert.equal(state.inbox.some((i) => i.text === '1200 nafta'), true);
+});
+
+test('LifeOS — Fase 4: Preserving pending drafts on close without duplicating already confirmed drafts', () => {
+  const state = defaultState();
+  const initialInboxCount = (state.inbox || []).length;
+  const initialTaskCount = state.todayExtras.length;
+
+  // Suppose user parsed: "estudiar redes mañana y comprar pan y 1200 nafta"
+  const draft1: CaptureDraft = {
+    id: 'd-1',
+    rawText: 'estudiar redes mañana',
+    kind: 'task',
+    text: 'estudiar redes mañana',
+    priority: 'media',
+    targetModule: 'dashboard',
+    isModuleEnabled: true,
+  };
+  const draft2: CaptureDraft = {
+    id: 'd-2',
+    rawText: 'comprar pan',
+    kind: 'task',
+    text: 'comprar pan',
+    priority: 'media',
+    targetModule: 'dashboard',
+    isModuleEnabled: true,
+  };
+  const draft3: CaptureDraft = {
+    id: 'd-3',
+    rawText: '1200 nafta',
+    kind: 'finance',
+    type: 'gasto',
+    amount: 1200,
+    currency: 'UYU',
+    date: '2026-10-04',
+    dateLabel: 'Hoy',
+    category: 'Transporte',
+    targetModule: 'finanzas',
+    isModuleEnabled: true,
+  };
+
+  let activeDrafts = [draft1, draft2, draft3];
+
+  // User confirms draft1
+  confirmCaptureDraft(state, draft1);
+  activeDrafts = activeDrafts.filter((d) => d.id !== draft1.id);
+  assert.equal(activeDrafts.length, 2);
+  assert.equal(state.todayExtras.length, initialTaskCount + 1);
+
+  // User now closes modal with draft2 and draft3 pending:
+  // "Guardar en Bandeja" action saves ONLY remaining pending drafts
+  for (const remaining of activeDrafts) {
+    addQuickInbox(state, remaining.rawText, 'quick-capture');
+  }
+
+  // Verify:
+  // - draft1 was saved as a task once (not in inbox)
+  // - draft2 and draft3 are in inbox once
+  // - Nothing is duplicated
+  assert.equal(state.todayExtras.filter((t) => t.text.includes('estudiar redes')).length, 1);
+  assert.equal(state.inbox.filter((i) => i.text === 'estudiar redes mañana').length, 0);
+  assert.equal(state.inbox.filter((i) => i.text === 'comprar pan').length, 1);
+  assert.equal(state.inbox.filter((i) => i.text === '1200 nafta').length, 1);
+  assert.equal(state.inbox.length, initialInboxCount + 2);
+});
+
+test('LifeOS — Fase 4: Numerical fidelity: 500.50 produces exactly 500.50 in parse, draft and transaction', () => {
+  const state = defaultState();
+  const bankAcc = state.finance.accounts.find((a) => a.name.toLowerCase().includes('banco'));
+  assert.ok(bankAcc);
+  const initialBalance = bankAcc.balance;
+
+  const drafts = parseCaptureDrafts('500.50 comida banco', state);
+  assert.equal(drafts.length, 1);
+  const draft = drafts[0];
+  assert.equal(draft.kind, 'finance');
+  assert.equal((draft as any).amount, 500.50);
+
+  confirmCaptureDraft(state, draft);
+
+  const lastTx = state.finance.transactions[state.finance.transactions.length - 1];
+  assert.equal(lastTx.amount, 500.50);
+  assert.equal(bankAcc.balance, initialBalance - 500.50);
+});
+
+test('LifeOS — Fase 4: Local persistence failure & safe retry prevents duplicate mutations', () => {
+  let inMemoryState = defaultState();
+  const initialTxCount = inMemoryState.finance.transactions.length;
+  const initialBalance = inMemoryState.finance.accounts[0].balance;
+
+  const draft = parseCaptureDrafts('1200 nafta', inMemoryState)[0];
+
+  // Simulated updateState contract
+  let simulateStorageFail = true;
+  const updateState = (updater: (draft: typeof inMemoryState) => void): boolean => {
+    const clone = structuredClone(inMemoryState);
+    updater(clone);
+    if (simulateStorageFail) {
+      // Storage failed (e.g. quota exceeded)
+      // Must NOT commit to inMemoryState
+      return false;
+    }
+    inMemoryState = clone;
+    return true;
+  };
+
+  // Attempt 1: Storage fails
+  let trayDrafts = [draft];
+  const attempt1Saved = updateState((s) => {
+    confirmCaptureDraft(s, trayDrafts[0]);
+  });
+
+  assert.equal(attempt1Saved, false);
+  // Tray must retain draft when saved === false
+  if (attempt1Saved) {
+    trayDrafts = [];
+  }
+  assert.equal(trayDrafts.length, 1);
+  // inMemoryState must NOT be modified
+  assert.equal(inMemoryState.finance.transactions.length, initialTxCount);
+  assert.equal(inMemoryState.finance.accounts[0].balance, initialBalance);
+
+  // Attempt 2: Storage fixed, retry confirmation
+  simulateStorageFail = false;
+  const attempt2Saved = updateState((s) => {
+    confirmCaptureDraft(s, trayDrafts[0]);
+  });
+
+  assert.equal(attempt2Saved, true);
+  if (attempt2Saved) {
+    trayDrafts = trayDrafts.filter((d) => d.id !== draft.id);
+  }
+  assert.equal(trayDrafts.length, 0);
+
+  // Verify: Exactly 1 transaction added, balance deducted exactly once
+  assert.equal(inMemoryState.finance.transactions.length, initialTxCount + 1);
+  assert.equal(inMemoryState.finance.accounts[0].balance, initialBalance - 1200);
+});
+
+test('LifeOS — Fase 4: Batch confirmation (Confirm All) retains invalid or failed drafts', () => {
+  const state = defaultState();
+  state.finance.categories = [
+    { id: 'cat-ok', name: 'Comida', active: true },
+    { id: 'cat-arch', name: 'Vieja', active: false },
+  ];
+
+  const validDraft: CaptureDraft = {
+    id: 'd-ok',
+    rawText: 'comprar pan',
+    kind: 'task',
+    text: 'comprar pan',
+    priority: 'media',
+    targetModule: 'dashboard',
+    isModuleEnabled: true,
+  };
+  const foreignDraft: CaptureDraft = {
+    id: 'd-usd',
+    rawText: 'USD 50 de hosting',
+    kind: 'finance',
+    type: 'gasto',
+    amount: 50,
+    currency: 'USD',
+    date: '2026-10-04',
+    dateLabel: 'Hoy',
+    isCurrencyIncompatible: true,
+    targetModule: 'finanzas',
+    isModuleEnabled: true,
+  };
+  const archivedDraft: CaptureDraft = {
+    id: 'd-arch',
+    rawText: '400 algo',
+    kind: 'finance',
+    type: 'gasto',
+    amount: 400,
+    currency: 'UYU',
+    date: '2026-10-04',
+    dateLabel: 'Hoy',
+    category: 'cat-arch',
+    targetModule: 'finanzas',
+    isModuleEnabled: true,
+  };
+
+  let draftsInTray = [validDraft, foreignDraft, archivedDraft];
+
+  // Confirm all simulation
+  const confirmedIds = new Set<string>();
+  for (const d of draftsInTray) {
+    if (canConfirmDraft(state, d).valid) {
+      try {
+        confirmCaptureDraft(state, d);
+        confirmedIds.add(d.id);
+      } catch {
+        // fail
+      }
+    }
+  }
+
+  // Filter only successfully confirmed
+  draftsInTray = draftsInTray.filter((d) => !confirmedIds.has(d.id));
+
+  // Only validDraft confirmed, foreignDraft and archivedDraft remain in tray!
+  assert.equal(confirmedIds.has('d-ok'), true);
+  assert.equal(confirmedIds.has('d-usd'), false);
+  assert.equal(confirmedIds.has('d-arch'), false);
+  assert.equal(draftsInTray.length, 2);
+  assert.equal(draftsInTray[0].id, 'd-usd');
+  assert.equal(draftsInTray[1].id, 'd-arch');
 });

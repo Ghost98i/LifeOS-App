@@ -32,6 +32,8 @@ export interface FinanceDraft extends BaseDraft {
   type: 'gasto' | 'ingreso';
   amount?: number;
   currency?: string;
+  isCurrencyIncompatible?: boolean;
+  isAccountSuggested?: boolean;
   category?: string;
   categoryMatched?: string;
   accountId?: string;
@@ -281,6 +283,12 @@ export function segmentCompoundClauses(rawInput: string): string[] {
       .filter((s) => s.length > 0);
   }
 
+  // If input has an explicit single intent prefix (e.g. "nota:", "inbox:", "idea:"),
+  // treat the entire content as a single clause so internal conjunctions ("y comprar...") are preserved.
+  if (/^(?:nota|note|pensar|inbox|idea|ideas):\s*/i.test(trimmed)) {
+    return [trimmed];
+  }
+
   // Heuristic regex to check for sentence connectors " y ", " e ", ", y " where the second clause
   // starts with a recognizable intent verb, date, or number:
   // e.g.: " y mañana ...", " y pagar ...", " y gasté ...", " y comprar ...", " y estudiar ..."
@@ -393,15 +401,63 @@ function parseSingleClauseDraft(
     };
   }
 
-  // 3. Study Session / Task: "estudiar redes mañana", "estudiar TypeScript 1 hora", "tengo que estudiar para redes el jueves"
-  const studyPattern = /^(?:tengo\s+que\s+estudiar(?:\s+para)?|estudiar)\s+(.+)$/i;
-  const studyMatch = trimmed.match(studyPattern);
+  // 3. Gym with schedule or time: "mañana gym 13:30", "gym 18:00", "hoy gym 14:00"
+  // Must be captured as core TaskDraft with time and priority 'media' (works with Agenda OFF, no Agenda event)
+  const timeMatch = trimmed.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+  if (timeMatch && /\bgym\b/i.test(trimmed)) {
+    const time = timeMatch[0];
+    const dateExtraction = extractRelativeDate(trimmed.replace(time, ' '), referenceDate, 'future');
+    let taskText = cleanPunctuation(dateExtraction.cleanedText);
+    taskText = taskText.replace(/^(?:recordar|tengo\s+que|hacer)\s+/i, '');
+
+    return {
+      id: draftId,
+      rawText: trimmed,
+      kind: 'task',
+      text: taskText || 'Gym',
+      time,
+      priority: 'media',
+      dueDate: dateExtraction.date,
+      dueDateLabel: dateExtraction.dateLabel,
+      targetModule: 'dashboard',
+      isModuleEnabled: true,
+    };
+  }
+
+  // 4. Study Tasks vs Sessions:
+  // "estudiar redes mañana", "mañana estudiar redes", "tengo que estudiar para redes el jueves"
+  // Future intentions are TASKS (medium priority), NOT past study logs, do NOT invent 45 mins, do NOT create subjects.
+  const isStudyVerb = /\b(?:estudiar|repasar)\b/i.test(trimmed);
+  const hasFutureDateMention = /\b(?:ma[nñ]ana|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|pr[oó]xim[oa]|semana\s+que\s+viene|en\s+\d+\s+d[ií]as)\b/i.test(trimmed);
+
+  if (isStudyVerb && hasFutureDateMention) {
+    const dateExtraction = extractRelativeDate(trimmed, referenceDate, 'future');
+    let taskText = cleanPunctuation(dateExtraction.cleanedText);
+    taskText = taskText.replace(/^(?:recordar|tengo\s+que|hacer)\s+/i, '');
+
+    const targetModule: ViewType = isModuleEnabled(state, 'estudios') ? 'estudios' : 'dashboard';
+
+    return {
+      id: draftId,
+      rawText: trimmed,
+      kind: 'task',
+      text: taskText || trimmed,
+      priority: 'media',
+      dueDate: dateExtraction.date,
+      dueDateLabel: dateExtraction.dateLabel,
+      targetModule,
+      isModuleEnabled: true,
+    };
+  }
+
+  // Study log/session with explicit duration (e.g. "estudiar redes 2 horas", "estudiar 45 min de redes")
+  const studyMatch = trimmed.match(/^(?:tengo\s+que\s+estudiar(?:\s+para)?|estudiar)\s+(.+)$/i);
   if (studyMatch) {
     const rest = studyMatch[1].trim();
     const dateExtraction = extractRelativeDate(rest, referenceDate, 'future');
 
-    // Extract minutes / hours
-    let minutes = 45;
+    // Extract minutes / hours if explicitly specified
+    let minutes: number | undefined;
     let subjectText = dateExtraction.cleanedText;
 
     const hourMatch = subjectText.match(/(\d+(?:\.\d+)?)\s*(?:horas?|hs?\b|h\b)/i);
@@ -414,42 +470,79 @@ function parseSingleClauseDraft(
       subjectText = subjectText.replace(minMatch[0], ' ');
     }
 
-    subjectText = cleanPunctuation(subjectText.replace(/\b(?:durante|por|para|de)\b/gi, ' '));
+    if (minutes !== undefined) {
+      subjectText = cleanPunctuation(subjectText.replace(/\b(?:durante|por|para|de)\b/gi, ' '));
+      const matchedSubject = (state.study?.subjects || []).find(
+        (s) => s.name.toLowerCase().includes(subjectText.toLowerCase()) || subjectText.toLowerCase().includes(s.name.toLowerCase())
+      );
+      const enabled = isModuleEnabled(state, 'estudios');
+      return {
+        id: draftId,
+        rawText: trimmed,
+        kind: 'study',
+        subjectName: matchedSubject?.name || subjectText || 'General',
+        subjectId: matchedSubject?.id,
+        minutes,
+        date: dateExtraction.date,
+        dateLabel: dateExtraction.dateLabel,
+        note: `Sesión de ${minutes} min de ${subjectText}`,
+        targetModule: 'estudios',
+        isModuleEnabled: enabled,
+      };
+    } else {
+      // No duration provided -> It's a task!
+      let taskText = cleanPunctuation(subjectText);
+      taskText = taskText.replace(/^(?:recordar|tengo\s+que|hacer)\s+/i, '');
+      return {
+        id: draftId,
+        rawText: trimmed,
+        kind: 'task',
+        text: taskText ? `Estudiar ${taskText}` : trimmed,
+        priority: 'media',
+        dueDate: dateExtraction.date,
+        dueDateLabel: dateExtraction.dateLabel,
+        targetModule: 'dashboard',
+        isModuleEnabled: true,
+      };
+    }
+  }
 
-    const matchedSubject = (state.study?.subjects || []).find(
-      (s) => s.name.toLowerCase().includes(subjectText.toLowerCase()) || subjectText.toLowerCase().includes(s.name.toLowerCase())
-    );
-
-    const enabled = isModuleEnabled(state, 'estudios');
+  // 5. Future payments as Tasks:
+  // e.g. "pagar 1200 internet mañana", "mañana pagar 1200 de nafta"
+  // It is a pending task, not an immediate transaction or balance deduction!
+  const hasFuturePayment = /^(?:pagar|pago\s+de)\s+/i.test(trimmed) || (/\bpagar\b/i.test(trimmed) && hasFutureDateMention);
+  if (hasFuturePayment && hasFutureDateMention) {
+    const dateExtraction = extractRelativeDate(trimmed, referenceDate, 'future');
+    let taskText = cleanPunctuation(dateExtraction.cleanedText);
+    taskText = taskText.replace(/^(?:recordar|tengo\s+que|hacer)\s+/i, '');
     return {
       id: draftId,
       rawText: trimmed,
-      kind: 'study',
-      subjectName: matchedSubject?.name || subjectText || 'General',
-      subjectId: matchedSubject?.id,
-      minutes,
-      date: dateExtraction.date,
-      dateLabel: dateExtraction.dateLabel,
-      note: `Sesión de ${minutes} min de ${subjectText}`,
-      targetModule: 'estudios',
-      isModuleEnabled: enabled,
+      kind: 'task',
+      text: taskText || trimmed,
+      priority: 'media',
+      dueDate: dateExtraction.date,
+      dueDateLabel: dateExtraction.dateLabel,
+      targetModule: 'dashboard',
+      isModuleEnabled: true,
     };
   }
 
-  // 4. Financial Parsing (Strict & Nuanced)
+  // 6. Financial Parsing (Strict & Nuanced)
   // Check for currency symbols, keywords, or missing amounts ("pagué internet")
-  const hasCurrencySign = /(?:\$|\$U\b|USD\b|EUR\b|UYU\b|pesos\b|d[oó]lares\b)/i.test(trimmed);
+  const hasCurrencySign = /(?:\$|\$U\b|USD\b|EUR\b|UYU\b|pesos\b|d[oó]lares\b|euros?\b)/i.test(trimmed);
   const hasPastTransactionalDeclaration = /^(?:gast[eé]|pagu[eé]|cobr[eé]|compr[eé]|pago\s+de|gasto\s+en)(?:\s+|$)/i.test(trimmed);
   const hasTransactionalVerb = /(?:^|\s)(?:gast[eé]|gasto|gastar|pagu[eé]|pago|pagar|compr[eé]|compra|comprar|cost[oó]|cobro|cobr[eé]|cobrar|ingreso|sueldo|salario)(?:\s|$)/i.test(trimmed);
   const startsWithPlusOrMinusNum = /^(?:\+|-)\s*\d+/i.test(trimmed);
   const startsWithAmount = /^[+-]?\$?\d+(?:[.,]\d+)?\s+[a-záéíóúñ]/i.test(trimmed);
   const isMeasurementUnit = /^[+-]?\$?\d+(?:[.,]\d+)?\s*(?:horas?|hs?\b|h\b|minutos?|mins?\b|m\b|segundos?|segs?\b|d[ií]as?|km|kms?|kilos?|kg|reps?|series?|materias?|veces)\b/i.test(trimmed);
 
-  // Check if any word matches a known category in user's state.finance.categories
+  // Check if any word matches an active category in user's state.finance.categories
   const words = trimmed.toLowerCase().split(/\s+/);
   const matchesUserCategory = (state.finance?.categories || []).some((c) => {
     const cName = typeof c === 'string' ? c : c.name;
-    return words.some((w) => w === cName.toLowerCase() || (cName.toLowerCase().includes(w) && w.length >= 4));
+    const cActive = typeof c === 'string' ? true : c.active !== false;
+    return cActive && words.some((w) => w === cName.toLowerCase() || (cName.toLowerCase().includes(w) && w.length >= 4));
   });
 
   const matchesUserAccount = (state.finance?.accounts || []).some((a) =>
@@ -461,12 +554,12 @@ function parseSingleClauseDraft(
     const dateExtraction = extractRelativeDate(trimmed, referenceDate, 'past');
     const enabled = isModuleEnabled(state, 'finanzas');
 
-    // Attempt to extract category from remaining text or default category keywords
     const cleanRemaining = dateExtraction.cleanedText.replace(/(?:^|\s)(?:gast[eé]|gasto|pagu[eé]|pago|compr[eé]|compra|en|de)(?:\s|$)/gi, ' ').trim();
 
     const matchedCat = (state.finance?.categories || []).find((c) => {
       const cName = typeof c === 'string' ? c : c.name;
-      return cName.toLowerCase().includes(cleanRemaining.toLowerCase()) || cleanRemaining.toLowerCase().includes(cName.toLowerCase());
+      const cActive = typeof c === 'string' ? true : c.active !== false;
+      return cActive && (cName.toLowerCase().includes(cleanRemaining.toLowerCase()) || cleanRemaining.toLowerCase().includes(cName.toLowerCase()));
     });
 
     const categoryName = typeof matchedCat === 'string' ? matchedCat : matchedCat?.name;
@@ -499,24 +592,16 @@ function parseSingleClauseDraft(
     !isMeasurementUnit;
 
   if (isFinanceCandidate) {
-    // Check if measurement unit vetoes it (e.g. "correr 5 km en 30 minutos", "transmitir 23 horas")
     const isVetoedByMeasurement =
       !hasCurrencySign &&
       !hasTransactionalVerb &&
       /\b\d+(?:\.\d+)?\s*(?:horas?|hs?\b|h\b|minutos?|mins?\b|segundos?|d[ií]as?|km|kms?|kilos?|kg|reps?|series?)\b/i.test(trimmed);
 
     if (!isVetoedByMeasurement) {
-      // Check installments: "6000 en 6 cuotas"
       let installments: number | undefined;
       const cuotasMatch = trimmed.match(/(\d+)\s+cuotas?\b/i);
       if (cuotasMatch) {
         installments = parseInt(cuotasMatch[1], 10);
-      }
-
-      // Check currency: USD / dólares
-      let currency = 'UYU';
-      if (/\b(?:usd|d[oó]lares?)\b/i.test(trimmed)) {
-        currency = 'USD';
       }
 
       let financeCandidate = trimmed;
@@ -530,15 +615,33 @@ function parseSingleClauseDraft(
         defaultDate: referenceDate,
       });
 
-      if (parsed.isValid && parsed.amount && parsed.amount > 0) {
+      // Currency check from parsed result
+      const parsedCurrency = parsed.currency || 'UYU';
+      const isCurrencyIncompatible = parsed.isCurrencyIncompatible || parsedCurrency !== 'UYU';
+
+      // If valid or if amount/currency detected
+      if (parsed.amount !== null || isCurrencyIncompatible || parsed.isAmbiguous) {
         const enabled = isModuleEnabled(state, 'finanzas');
+        const missingFields: ('amount' | 'category' | 'account' | 'title')[] = [];
+        if (!parsed.amount || parsed.isAmbiguous) missingFields.push('amount');
+        if (!parsed.category) missingFields.push('category');
+
+        let ambiguityWarning: string | undefined;
+        if (isCurrencyIncompatible) {
+          ambiguityWarning = `Moneda no soportada (${parsedCurrency}). LifeOS opera únicamente en moneda local. Podés guardarlo en tu Bandeja de Entrada.`;
+        } else if (parsed.isAmbiguous) {
+          ambiguityWarning = 'Importe con formato de separadores ambiguo. Revisá el valor antes de confirmar.';
+        }
+
         return {
           id: draftId,
           rawText: trimmed,
           kind: 'finance',
           type: parsed.type,
-          amount: parsed.amount,
-          currency,
+          amount: parsed.amount || undefined,
+          currency: parsedCurrency,
+          isCurrencyIncompatible,
+          isAccountSuggested: parsed.isAccountSuggested,
           category: parsed.category || undefined,
           categoryMatched: parsed.categoryMatched || undefined,
           accountId: parsed.accountId || undefined,
@@ -547,7 +650,8 @@ function parseSingleClauseDraft(
           dateLabel: parsed.dateLabel,
           note: parsed.note || trimmed,
           installments,
-          missingFields: !parsed.category ? ['category'] : undefined,
+          missingFields: missingFields.length > 0 ? missingFields : undefined,
+          ambiguityWarning,
           targetModule: 'finanzas',
           isModuleEnabled: enabled,
         };
@@ -555,9 +659,9 @@ function parseSingleClauseDraft(
     }
   }
 
-  // 5. Unstructured Reflective Notes: "hoy fue un día horrible", "ayer pensé que..."
+  // 7. Unstructured Reflective Notes: "hoy fue un día horrible", "ayer pensé que...", "hoy me siento cansado"
   if (
-    /^(?:hoy\s+fue\s+un\s+d[ií]a|ayer\s+pens[eé]|estoy\s+pensando\s+en|me\s+di\s+cuenta\s+que)(?:\s+|$)/i.test(trimmed)
+    /^(?:hoy\s+(?:fue\s+un\s+d[ií]a|me\s+siento)|ayer\s+pens[eé]|estoy\s+pensando\s+en|me\s+di\s+cuenta\s+que|me\s+siento\s+)(?:\s+|$)/i.test(trimmed)
   ) {
     const enabled = isModuleEnabled(state, 'notas');
     return {
@@ -570,9 +674,8 @@ function parseSingleClauseDraft(
     };
   }
 
-  // 6. Agenda / Event pattern: "mañana gym 13:30", "reunión a las 15:00"
-  const timeMatch = trimmed.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
-  if (timeMatch && (/\bgym\b/i.test(trimmed) || /\breuni[oó]n\b/i.test(trimmed) || /\bclase\b/i.test(trimmed))) {
+  // 8. Agenda / Event pattern: "reunión a las 15:00", "clase a las 18:30" (gym with time is already handled above)
+  if (timeMatch && (/\breuni[oó]n\b/i.test(trimmed) || /\bclase\b/i.test(trimmed) || /\bllamada\b/i.test(trimmed))) {
     const time = timeMatch[0];
     const dateExtraction = extractRelativeDate(trimmed.replace(time, ' '), referenceDate, 'future');
     const activity = cleanPunctuation(dateExtraction.cleanedText);
@@ -591,7 +694,7 @@ function parseSingleClauseDraft(
     };
   }
 
-  // 7. General Task: "estudiar redes mañana", "llamar a Juan el lunes", "comprar comida para los gatos"
+  // 9. General Task (Core LifeOS - Target 'dashboard' so it does not depend on Agenda module)
   const dateExtraction = extractRelativeDate(trimmed, referenceDate, 'future');
   let taskText = dateExtraction.cleanedText;
 
@@ -615,7 +718,7 @@ function parseSingleClauseDraft(
     priority,
     dueDate: dateExtraction.date,
     dueDateLabel: dateExtraction.dateLabel,
-    targetModule: 'agenda',
+    targetModule: 'dashboard',
     isModuleEnabled: true, // tasks are always supported in core LifeOS
   };
 }
@@ -623,6 +726,44 @@ function parseSingleClauseDraft(
 /* =========================================================================
    DRAFT EXECUTION & CONFIRMATION
    ========================================================================= */
+
+export function canConfirmDraft(
+  state: LifeOSState,
+  draft: CaptureDraft
+): { valid: boolean; reason?: string } {
+  if (!isModuleEnabled(state, draft.targetModule)) {
+    return { valid: false, reason: `Módulo ${draft.targetModule} desactivado` };
+  }
+  if (!draft.isModuleEnabled) {
+    return { valid: false, reason: 'Módulo desactivado' };
+  }
+  if (draft.missingFields && draft.missingFields.length > 0) {
+    return { valid: false, reason: 'Campos requeridos faltantes' };
+  }
+  if (draft.kind === 'finance') {
+    if (draft.amount === undefined || draft.amount <= 0) {
+      return { valid: false, reason: 'Importe requerido' };
+    }
+    if (draft.isCurrencyIncompatible || (draft.currency && draft.currency !== 'UYU')) {
+      return { valid: false, reason: 'Moneda extranjera no soportada' };
+    }
+    if (draft.accountId) {
+      const accExists = (state.finance?.accounts || []).some((a) => a.id === draft.accountId);
+      if (!accExists) {
+        return { valid: false, reason: 'Cuenta inexistente' };
+      }
+    }
+    if (draft.category) {
+      const catObj = (state.finance?.categories || []).find((c) =>
+        typeof c === 'string' ? c === draft.category : c.id === draft.category
+      );
+      if (catObj && typeof catObj !== 'string' && catObj.active === false) {
+        return { valid: false, reason: 'Categoría archivada' };
+      }
+    }
+  }
+  return { valid: true };
+}
 
 export function confirmCaptureDraft(
   draftState: LifeOSState,
@@ -638,7 +779,29 @@ export function confirmCaptureDraft(
       if (!draft.amount || draft.amount <= 0) {
         throw new Error('El importe es obligatorio para registrar un movimiento.');
       }
+      if (draft.isCurrencyIncompatible || (draft.currency && draft.currency !== 'UYU')) {
+        throw new Error(`Moneda no soportada (${draft.currency || 'extranjera'}). LifeOS no realiza conversiones automáticas.`);
+      }
+
+      // Check account exists
+      const accounts = draftState.finance?.accounts || [];
+      if (draft.accountId) {
+        const accExists = accounts.some((a) => a.id === draft.accountId);
+        if (!accExists) {
+          throw new Error('La cuenta seleccionada no existe o fue eliminada.');
+        }
+      }
+
+      // Check category is active if specified
       const category = draft.category || 'Otros';
+      const userCategories = draftState.finance?.categories || [];
+      if (userCategories.length > 0 && draft.category) {
+        const catObj = userCategories.find((c) => (typeof c === 'string' ? c === draft.category : c.id === draft.category));
+        if (catObj && typeof catObj !== 'string' && catObj.active === false) {
+          throw new Error('La categoría seleccionada está archivada o desactivada.');
+        }
+      }
+
       const tx = addQuickTransaction(draftState, {
         type: draft.type,
         amount: draft.amount,
@@ -647,8 +810,11 @@ export function confirmCaptureDraft(
         note: draft.installments ? `${draft.note || ''} (${draft.installments} cuotas)`.trim() : draft.note,
         date: draft.date,
       });
+
+      // Stream Guard: Do NOT leak raw numbers in toast
+      const displayCategory = draft.categoryMatched || draft.category || 'Finanzas';
       return {
-        message: `${tx.type === 'ingreso' ? 'Ingreso' : 'Gasto'} de ${fmtMoney(tx.amount)} registrado.`,
+        message: `${tx.type === 'ingreso' ? 'Ingreso' : 'Gasto'} registrado en ${displayCategory}.`,
         sound: 'coins',
       };
     }
@@ -710,18 +876,20 @@ export function confirmCaptureDraft(
     }
 
     case 'work': {
-      // Register follow-up if applicable or note
+      // Unimplemented domain mutation: Save to Inbox honestly without inventing follow-up
+      addQuickInbox(draftState, draft.rawText, 'quick-capture');
       return {
-        message: `Seguimiento laboral registrado: ${draft.action}.`,
-        sound: 'success',
+        message: `Guardado en Bandeja de Entrada como captura pendiente (${draft.action}).`,
+        sound: 'click',
       };
     }
 
     case 'resale': {
-      // Register in resale candidate or transaction
+      // Unimplemented domain mutation: Save to Inbox honestly without inventing fake resale entity
+      addQuickInbox(draftState, draft.rawText, 'quick-capture');
       return {
-        message: `Registro de reventa guardado: ${draft.title}.`,
-        sound: 'coins',
+        message: `Guardado en Bandeja de Entrada como captura pendiente (${draft.title}).`,
+        sound: 'click',
       };
     }
 
@@ -746,7 +914,7 @@ export function confirmCaptureDraft(
 }
 
 /**
- * Converts any draft into a safe NoteDraft (e.g. when module is disabled or user prefers note).
+ * Converts any draft into a safe NoteDraft or InboxDraft (e.g. when module is disabled or user prefers note/inbox).
  */
 export function convertDraftToNote(draft: CaptureDraft): NoteDraft {
   let content = draft.rawText;
@@ -761,6 +929,17 @@ export function convertDraftToNote(draft: CaptureDraft): NoteDraft {
     targetModule: 'notas',
     isModuleEnabled: true,
     text: content,
+  };
+}
+
+export function convertDraftToInbox(draft: CaptureDraft): InboxDraft {
+  return {
+    id: draft.id,
+    rawText: draft.rawText,
+    kind: 'inbox',
+    targetModule: 'dashboard',
+    isModuleEnabled: true,
+    text: draft.rawText,
   };
 }
 

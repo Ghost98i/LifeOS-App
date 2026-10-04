@@ -8,6 +8,12 @@ export interface QuickFinanceParserOptions {
   defaultAccountId?: string;
 }
 
+export interface ParsedMonetaryToken {
+  amount: number | null;
+  isAmbiguous: boolean;
+  rawMatched: string;
+}
+
 export interface ParsedQuickFinance {
   raw: string;
   isValid: boolean;
@@ -17,6 +23,9 @@ export interface ParsedQuickFinance {
   categoryMatched: string | null;
   accountId: string | null;
   accountName: string | null;
+  isAccountSuggested?: boolean;
+  currency?: string;
+  isCurrencyIncompatible?: boolean;
   date: string;
   dateLabel: string;
   note: string;
@@ -27,6 +36,7 @@ export interface ParsedQuickFinance {
     category: boolean;
     account: boolean;
   };
+  isAmbiguous?: boolean;
 }
 
 export const DEFAULT_CATEGORY_KEYWORDS: Record<string, string[]> = {
@@ -59,74 +69,149 @@ export const DEFAULT_CATEGORY_KEYWORDS: Record<string, string[]> = {
     'playstation', 'psn', 'xbox', 'fiesta', 'juntada', 'cerveza', 'tragos'
   ],
   Hogar: [
-    'hogar', 'ute', 'ose', 'antel', 'wifi', 'internet', 'luz', 'agua', 'gas',
-    'alquiler', 'gastos comunes', 'expensas', 'ferreteria', 'limpieza', 'muebles'
+    'hogar', 'alquiler', 'gastos comunes', 'ute', 'ose', 'antel', 'internet',
+    'fibra', 'wifi', 'celular', 'contrato', 'limpieza', 'ferreteria', 'ferretería',
+    'muebles', 'reparacion', 'reparación', 'plomero', 'electricista'
+  ],
+  'Admin/Hogar': [
+    'admin', 'hogar', 'alquiler', 'gastos comunes', 'ute', 'ose', 'antel', 'internet',
+    'fibra', 'wifi', 'celular', 'contrato', 'limpieza', 'ferreteria', 'ferretería'
   ],
   Suscripciones: [
-    'suscripcion', 'suscripción', 'suscripciones', 'netflix', 'spotify', 'youtube',
-    'icloud', 'chatgpt', 'prime', 'amazon prime', 'disney', 'hbo', 'max', 'game pass'
+    'suscripcion', 'suscripción', 'netflix', 'spotify', 'youtube', 'disney',
+    'amazon prime', 'prime video', 'chatgpt', 'openai', 'claude', 'github',
+    'icloud', 'google one', 'patreon', 'twitch', 'sub'
   ],
   Salud: [
-    'salud', 'farmacia', 'remedios', 'medicamentos', 'medico', 'médico', 'dentista',
-    'psicologo', 'psicólogo', 'optica', 'óptica', 'mutualista', 'consulta'
+    'medico', 'médico', 'farmacia', 'medicamentos', 'dentista', 'odontologo',
+    'odontólogo', 'analisis', 'análisis', 'psicologo', 'psicólogo', 'optica',
+    'óptica', 'lentes', 'mutualista'
   ],
-  Ropa: [
-    'ropa', 'indumentaria', 'zapatillas', 'calzado', 'championes', 'camisa',
-    'pantalon', 'pantalón', 'shopping', 'remera', 'buzo'
+  Indumentaria: [
+    'ropa', 'zapatillas', 'championes', 'campera', 'pantalon', 'pantalón',
+    'remera', 'buzo', 'zara', 'h&m', 'shopping'
   ],
+  Otros: [
+    'otros', 'varios', 'imprevisto', 'imprevistos', 'regalo', 'donacion', 'donación'
+  ]
 };
 
 export const DEFAULT_ACCOUNT_KEYWORDS: Record<string, string[]> = {
-  banco: ['banco', 'brou', 'bbva', 'santander', 'itau', 'itaú', 'scotiabank', 'hsbc', 'heritage', 'transferencia'],
-  efectivo: ['efectivo', 'cash', 'mano', 'plata', 'billetera'],
-  mp: ['mp', 'mercadopago', 'mercado pago'],
-  prex: ['prex', 'prexcard'],
-  tarjeta: ['tarjeta', 'credito', 'crédito', 'debito', 'débito', 'visa', 'mastercard', 'oca', 'amex', 'passcard', 'cabal'],
-  midinero: ['midinero', 'mi dinero'],
+  efectivo: ['efectivo', 'cash', 'mano', 'plata', 'billetes'],
+  banco: ['banco', 'brou', 'itau', 'itaú', 'bbva', 'santander', 'scotiabank', 'transferencia', 'debito', 'débito'],
+  tarjeta: ['tarjeta', 'credito', 'crédito', 'visa', 'mastercard', 'oca', 'passcard'],
+  digital: ['mp', 'mercado pago', 'mercadopago', 'prex', 'midinero', 'uala', 'ualá'],
 };
 
-function normalize(s: string): string {
-  return s
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim();
-}
+/**
+ * Strict Decimal & Thousands Separator Policy:
+ * 1. 1200.50 -> 1200.50
+ * 2. 500.50 -> 500.50
+ * 3. 1.200,50 -> 1200.50
+ * 4. 1,200.50 -> 1200.50
+ * 5. 1200,50 -> 1200.50
+ * 6. 1200 -> 1200
+ * 7. 1.200 -> 1200
+ * 8. 1,200 -> 1200
+ *
+ * Ambiguous (e.g. 1.200.50, 1,200,50, 1.2.3, 12.34.56): isAmbiguous = true, amount = null
+ */
+export function parseMonetaryToken(str: string): ParsedMonetaryToken {
+  const clean = str.trim();
+  if (!clean) return { amount: null, isAmbiguous: false, rawMatched: str };
 
-function formatDateLabel(iso: string, today: string): string {
-  if (iso === today) return 'Hoy';
-  const [ty, tm, td] = today.split('-').map(Number);
-  const [y, m, d] = iso.split('-').map(Number);
-  const todayMs = Date.UTC(ty, tm - 1, td);
-  const targetMs = Date.UTC(y, m - 1, d);
-  const diffDays = Math.round((targetMs - todayMs) / (1000 * 60 * 60 * 24));
+  const dotCount = (clean.match(/\./g) || []).length;
+  const commaCount = (clean.match(/,/g) || []).length;
 
-  if (diffDays === -1) return 'Ayer';
-  if (diffDays === -2) return 'Anteayer';
-  if (diffDays === 1) return 'Mañana';
-  if (diffDays === 2) return 'Pasado mañana';
+  // Case: both dot and comma present
+  if (dotCount > 0 && commaCount > 0) {
+    const lastDotIdx = clean.lastIndexOf('.');
+    const lastCommaIdx = clean.lastIndexOf(',');
 
-  const dateObj = new Date(y, m - 1, d);
-  return dateObj.toLocaleDateString('es-UY', { day: 'numeric', month: 'short' });
-}
-
-function computeRelativeDate(baseISO: string, offsetDays: number): string {
-  const [y, m, d] = baseISO.split('-').map(Number);
-  const date = new Date(Date.UTC(y, m - 1, d + offsetDays));
-  return date.toISOString().slice(0, 10);
-}
-
-function findClosestDayOfWeek(baseISO: string, targetDayIndex: number): string {
-  // targetDayIndex: 0 = domingo, 1 = lunes, ..., 6 = sabado
-  const [y, m, d] = baseISO.split('-').map(Number);
-  const baseDate = new Date(Date.UTC(y, m - 1, d));
-  const currentDay = baseDate.getUTCDay();
-  let diff = targetDayIndex - currentDay;
-  if (diff > 0) {
-    diff -= 7; // look to the most recent past occurrence of that day
+    if (lastCommaIdx > lastDotIdx) {
+      // Form: 1.200,50
+      const decPart = clean.slice(lastCommaIdx + 1);
+      const intPart = clean.slice(0, lastCommaIdx);
+      if (decPart.length < 1 || decPart.length > 2) {
+        return { amount: null, isAmbiguous: true, rawMatched: str };
+      }
+      const parts = intPart.split('.');
+      const validThousands = parts.every((p, idx) => (idx === 0 ? p.length >= 1 && p.length <= 3 : p.length === 3));
+      if (!validThousands) {
+        return { amount: null, isAmbiguous: true, rawMatched: str };
+      }
+      const num = parseFloat(intPart.replace(/\./g, '') + '.' + decPart);
+      return { amount: isNaN(num) ? null : num, isAmbiguous: isNaN(num), rawMatched: str };
+    } else {
+      // Form: 1,200.50
+      const decPart = clean.slice(lastDotIdx + 1);
+      const intPart = clean.slice(0, lastDotIdx);
+      if (decPart.length < 1 || decPart.length > 2) {
+        return { amount: null, isAmbiguous: true, rawMatched: str };
+      }
+      const parts = intPart.split(',');
+      const validThousands = parts.every((p, idx) => (idx === 0 ? p.length >= 1 && p.length <= 3 : p.length === 3));
+      if (!validThousands) {
+        return { amount: null, isAmbiguous: true, rawMatched: str };
+      }
+      const num = parseFloat(intPart.replace(/,/g, '') + '.' + decPart);
+      return { amount: isNaN(num) ? null : num, isAmbiguous: isNaN(num), rawMatched: str };
+    }
   }
-  baseDate.setUTCDate(baseDate.getUTCDate() + diff);
-  return baseDate.toISOString().slice(0, 10);
+
+  // Case: multiple dots (e.g. 1.000.000)
+  if (dotCount > 1) {
+    const parts = clean.split('.');
+    const validThousands = parts.every((p, idx) => (idx === 0 ? p.length >= 1 && p.length <= 3 : p.length === 3));
+    if (validThousands) {
+      const num = parseFloat(clean.replace(/\./g, ''));
+      return { amount: isNaN(num) ? null : num, isAmbiguous: isNaN(num), rawMatched: str };
+    }
+    return { amount: null, isAmbiguous: true, rawMatched: str };
+  }
+
+  // Case: multiple commas (e.g. 1,000,000)
+  if (commaCount > 1) {
+    const parts = clean.split(',');
+    const validThousands = parts.every((p, idx) => (idx === 0 ? p.length >= 1 && p.length <= 3 : p.length === 3));
+    if (validThousands) {
+      const num = parseFloat(clean.replace(/,/g, ''));
+      return { amount: isNaN(num) ? null : num, isAmbiguous: isNaN(num), rawMatched: str };
+    }
+    return { amount: null, isAmbiguous: true, rawMatched: str };
+  }
+
+  // Case: exactly one dot (e.g. 1200.50, 500.50, 1.200)
+  if (dotCount === 1) {
+    const [intPart, decPart] = clean.split('.');
+    if (decPart.length === 1 || decPart.length === 2) {
+      const num = parseFloat(intPart + '.' + decPart);
+      return { amount: isNaN(num) ? null : num, isAmbiguous: isNaN(num), rawMatched: str };
+    }
+    if (decPart.length === 3 && intPart.length >= 1 && intPart.length <= 3) {
+      const num = parseFloat(intPart + decPart);
+      return { amount: isNaN(num) ? null : num, isAmbiguous: isNaN(num), rawMatched: str };
+    }
+    return { amount: null, isAmbiguous: true, rawMatched: str };
+  }
+
+  // Case: exactly one comma (e.g. 1200,50, 500,50, 1,200)
+  if (commaCount === 1) {
+    const [intPart, decPart] = clean.split(',');
+    if (decPart.length === 1 || decPart.length === 2) {
+      const num = parseFloat(intPart + '.' + decPart);
+      return { amount: isNaN(num) ? null : num, isAmbiguous: isNaN(num), rawMatched: str };
+    }
+    if (decPart.length === 3 && intPart.length >= 1 && intPart.length <= 3) {
+      const num = parseFloat(intPart + decPart);
+      return { amount: isNaN(num) ? null : num, isAmbiguous: isNaN(num), rawMatched: str };
+    }
+    return { amount: null, isAmbiguous: true, rawMatched: str };
+  }
+
+  // Pure integer
+  const num = parseFloat(clean);
+  return { amount: !isNaN(num) && num > 0 ? num : null, isAmbiguous: false, rawMatched: str };
 }
 
 export function parseQuickFinance(
@@ -155,26 +240,110 @@ export function parseQuickFinance(
     };
   }
 
-  // 1. Detect Type (income vs expense)
+  // 1. Detect Currency
+  let currency = 'UYU';
+  let isCurrencyIncompatible = false;
+  if (/\b(?:usd|d[oó]lares?)\b/i.test(raw)) {
+    currency = 'USD';
+    isCurrencyIncompatible = true;
+  } else if (/\b(?:eur|euros?)\b/i.test(raw)) {
+    currency = 'EUR';
+    isCurrencyIncompatible = true;
+  }
+
+  // 2. Detect Type (income vs expense)
   let type: 'gasto' | 'ingreso' = 'gasto';
   let processed = raw;
 
-  if (/^(\+U|\$U\s*\+|\+)/i.test(processed) || /\b(ingreso|cobro|sueldo|ganancia|honorarios)\b/i.test(processed)) {
+  if (
+    /^(\+U|\$U\s*\+|\+)/i.test(processed) ||
+    /\b(ingreso|cobro|cobr[eé]|sueldo|ganancia|honorarios)\b/i.test(processed)
+  ) {
     type = 'ingreso';
     processed = processed.replace(/^(\+U|\$U\s*\+|\+)\s*/i, '');
-    processed = processed.replace(/\b(ingreso|cobro|sueldo|ganancia|honorarios)\b\s*/i, ' ');
+    processed = processed.replace(/\b(ingreso|cobro|cobr[eé]|sueldo|ganancia|honorarios)\b\s*/i, ' ');
   } else if (/^-/.test(processed)) {
     type = 'gasto';
     processed = processed.replace(/^-+\s*/, '');
   }
 
-  // 2. Extract Amount
-  // Matches: 500, 1200, 1.200, 1200.50, 1200,50, $500, $U 500, 500 USD, 500 EUR, 500 UYU
-  // Avoid false positives with measurement units (e.g., 23 horas, 5 km, 80 kg)
+  // 3. Extract Time (e.g. 13:30) so hours/minutes aren't mistaken for amount
+  const timeRegex = /\b([01]?\d|2[0-3]):([0-5]\d)(?:\s*(?:hs?\b|horas?\b))?\b/gi;
+  processed = processed.replace(timeRegex, ' ');
+
+  // 4. Extract Installments / Cuotas (e.g. 6 cuotas) so installment count isn't mistaken for amount
+  const cuotasRegex = /\b(\d+)\s+cuotas?\b/gi;
+  processed = processed.replace(cuotasRegex, ' ');
+
+  // 5. Extract Date BEFORE Amount (so slashed dates like 15/09 are not eaten as amount 15)
+  let targetDate = today;
+  let dateLabel = 'Hoy';
+
+  // Slashed dates: 15/09, 15/9, 15/09/2026
+  const slashedDateRegex = /\b([0-3]?\d)\/([0-1]?\d)(?:\/(\d{2,4}))?\b/;
+  const slashedMatch = processed.match(slashedDateRegex);
+  if (slashedMatch) {
+    const day = parseInt(slashedMatch[1], 10);
+    const month = parseInt(slashedMatch[2], 10);
+    const year = slashedMatch[3] ? parseInt(slashedMatch[3], 10) : new Date(today + 'T00:00:00').getFullYear();
+    const fullYear = year < 100 ? 2000 + year : year;
+    const formattedMonth = String(month).padStart(2, '0');
+    const formattedDay = String(day).padStart(2, '0');
+    targetDate = `${fullYear}-${formattedMonth}-${formattedDay}`;
+    dateLabel = `${formattedDay}/${formattedMonth}`;
+    processed = processed.replace(slashedMatch[0], ' ');
+  } else {
+    const normalizedText = normalize(processed);
+    if (/\b(ayer)\b/.test(normalizedText)) {
+      targetDate = computeRelativeDate(today, -1);
+      dateLabel = 'Ayer';
+      processed = processed.replace(/\bayer\b/gi, ' ');
+    } else if (/\b(anteayer|ante\s+ayer)\b/.test(normalizedText)) {
+      targetDate = computeRelativeDate(today, -2);
+      dateLabel = 'Anteayer';
+      processed = processed.replace(/\b(anteayer|ante\s+ayer)\b/gi, ' ');
+    } else if (/\b(pasado\s+ma[nñ]ana)\b/.test(normalizedText)) {
+      targetDate = computeRelativeDate(today, 2);
+      dateLabel = 'Pasado mañana';
+      processed = processed.replace(/\b(pasado\s+ma[nñ]ana)\b/gi, ' ');
+    } else if (/\b(ma[nñ]ana)\b/.test(normalizedText)) {
+      targetDate = computeRelativeDate(today, 1);
+      dateLabel = 'Mañana';
+      processed = processed.replace(/\bma[nñ]ana\b/gi, ' ');
+    } else if (/\b(hoy)\b/.test(normalizedText)) {
+      targetDate = today;
+      dateLabel = 'Hoy';
+      processed = processed.replace(/\bhoy\b/gi, ' ');
+    } else {
+      const daysMap: Record<string, number> = {
+        domingo: 0,
+        lunes: 1,
+        martes: 2,
+        miercoles: 3,
+        jueves: 4,
+        viernes: 5,
+        sabado: 6,
+      };
+      for (const [dayName, dayIdx] of Object.entries(daysMap)) {
+        const reg = new RegExp(`\\b${dayName}\\b`, 'i');
+        if (reg.test(normalizedText)) {
+          targetDate = findClosestDayOfWeek(today, dayIdx);
+          dateLabel = formatDateLabel(targetDate, today);
+          processed = processed.replace(reg, ' ');
+          break;
+        }
+      }
+    }
+  }
+
+  // 6. Extract Amount (with explicit policy and unit protection)
   const MEASUREMENT_UNITS_SUFFIX = /^\s*(?:horas?|hs?\b|h\b|minutos?|mins?\b|min\b|segundos?|segs?\b|s\b|d[ií]as?|semanas?|meses|a[ñn]os?|km|kms?|kil[oó]metros?|metros?|m\b|cm\b|cent[ií]metros?|mm\b|millas?|kg|kgs?|kilos?|kilogramos?|gramos?|g\b|lbs?|libras?|reps?\b|repeticiones|series?\b|sets?\b|vueltas?|flexiones|caps?\b|c[aá]psulas?|pastillas?|gotas?|dosis|gb\b|mb\b|tb\b|kb\b|fps\b|hz\b|ghz\b|mhz\b|%|por ciento|pts?\b|puntos|p[aá]ginas?|p[aá]gs?\b|cap[ií]tulos?|episodios?|canciones?|art[ií]culos?|videos?)\b/i;
 
   let amount: number | null = null;
-  const numRegex = /(?:\$U|\$)?\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)\b/gi;
+  let isAmbiguous = false;
+
+  // Regex to match candidate number strings (e.g. $U 1.200,50, $500, 1200.50, 500, 1200)
+  const numRegex = /(?:\$U|\$)?\s*([0-9]{1,3}(?:[.,][0-9]{1,3})+|[0-9]+(?:[.,][0-9]+)?)\b/gi;
   let match: RegExpExecArray | null;
 
   while ((match = numRegex.exec(processed)) !== null) {
@@ -188,70 +357,31 @@ export function parseQuickFinance(
       continue;
     }
 
-    const rawNum = match[1].replace(/\./g, '').replace(',', '.');
-    const parsedNum = parseFloat(rawNum);
-    if (!isNaN(parsedNum) && parsedNum > 0) {
-      amount = parsedNum;
-      // Remove amount from text to avoid false keyword matches
+    const tokenRes = parseMonetaryToken(match[1]);
+    if (tokenRes.isAmbiguous) {
+      isAmbiguous = true;
+      amount = null;
+      processed = processed.slice(0, match.index) + ' ' + processed.slice(match.index + fullMatch.length);
+      break;
+    }
+
+    if (tokenRes.amount !== null && tokenRes.amount > 0) {
+      amount = tokenRes.amount;
       processed = processed.slice(0, match.index) + ' ' + processed.slice(match.index + fullMatch.length);
       break;
     }
   }
 
-  // 3. Extract Date (ayer, mañana, anteayer, viernes, 15/09, etc.)
-  let targetDate = today;
-  let dateLabel = 'Hoy';
+  // Remove currency words from remaining processed note text
+  processed = processed.replace(/\b(?:usd|eur|uyu|d[oó]lares?|pesos?)\b/gi, ' ');
 
-  const normalizedText = normalize(processed);
-
-  if (/\b(ayer)\b/.test(normalizedText)) {
-    targetDate = computeRelativeDate(today, -1);
-    dateLabel = 'Ayer';
-    processed = processed.replace(/\bayer\b/gi, ' ');
-  } else if (/\b(anteayer|ante\s+ayer)\b/.test(normalizedText)) {
-    targetDate = computeRelativeDate(today, -2);
-    dateLabel = 'Anteayer';
-    processed = processed.replace(/\b(anteayer|ante\s+ayer)\b/gi, ' ');
-  } else if (/\b(pasado\s+ma[nñ]ana)\b/.test(normalizedText)) {
-    targetDate = computeRelativeDate(today, 2);
-    dateLabel = 'Pasado mañana';
-    processed = processed.replace(/\b(pasado\s+ma[nñ]ana)\b/gi, ' ');
-  } else if (/\b(ma[nñ]ana)\b/.test(normalizedText)) {
-    targetDate = computeRelativeDate(today, 1);
-    dateLabel = 'Mañana';
-    processed = processed.replace(/\bma[nñ]ana\b/gi, ' ');
-  } else if (/\b(hoy)\b/.test(normalizedText)) {
-    targetDate = today;
-    dateLabel = 'Hoy';
-    processed = processed.replace(/\bhoy\b/gi, ' ');
-  } else {
-    // Check day names
-    const daysMap: Record<string, number> = {
-      domingo: 0,
-      lunes: 1,
-      martes: 2,
-      miercoles: 3,
-      jueves: 4,
-      viernes: 5,
-      sabado: 6,
-    };
-    for (const [dayName, dayIdx] of Object.entries(daysMap)) {
-      const reg = new RegExp(`\\b${dayName}\\b`, 'i');
-      if (reg.test(normalizedText)) {
-        targetDate = findClosestDayOfWeek(today, dayIdx);
-        dateLabel = formatDateLabel(targetDate, today);
-        processed = processed.replace(reg, ' ');
-        break;
-      }
-    }
-  }
-
-  // 4. Extract Account
+  // 7. Extract Account
   let matchedAccountId: string | null = null;
   let matchedAccountName: string | null = null;
+  let isAccountSuggested = false;
   const accounts = options.accounts || [];
 
-  // 4a. Check against user's actual accounts first
+  // 7a. User explicitly mentioned account name
   for (const acc of accounts) {
     const normAcc = normalize(acc.name);
     const tokens = normAcc.split(/\s+/).filter((t) => t.length > 2);
@@ -260,6 +390,7 @@ export function parseQuickFinance(
       if (reg.test(normalize(processed))) {
         matchedAccountId = acc.id;
         matchedAccountName = acc.name;
+        isAccountSuggested = false;
         processed = processed.replace(reg, ' ');
         break;
       }
@@ -267,23 +398,24 @@ export function parseQuickFinance(
     if (matchedAccountId) break;
   }
 
-  // 4b. If no direct account matched, check against default account keywords
+  // 7b. Check default account keywords
   if (!matchedAccountId) {
     for (const [canonicalAccount, keywords] of Object.entries(DEFAULT_ACCOUNT_KEYWORDS)) {
       for (const kw of keywords) {
         const reg = new RegExp(`\\b${normalize(kw)}\\b`, 'i');
         if (reg.test(normalize(processed))) {
-          // Find matching account in options.accounts
-          const found = accounts.find((a) =>
-            normalize(a.name).includes(canonicalAccount) ||
-            keywords.some((k) => normalize(a.name).includes(normalize(k)))
+          const found = accounts.find(
+            (a) =>
+              normalize(a.name).includes(canonicalAccount) ||
+              keywords.some((k) => normalize(a.name).includes(normalize(k)))
           );
           if (found) {
             matchedAccountId = found.id;
             matchedAccountName = found.name;
+            isAccountSuggested = false;
           } else {
-            // Capitalized alias
             matchedAccountName = canonicalAccount.charAt(0).toUpperCase() + canonicalAccount.slice(1);
+            isAccountSuggested = true;
           }
           processed = processed.replace(reg, ' ');
           break;
@@ -293,9 +425,20 @@ export function parseQuickFinance(
     }
   }
 
-  // 5. Extract Category
+  // 7c. Fallback suggested account if provided
+  if (!matchedAccountId && options.defaultAccountId) {
+    const defAcc = accounts.find((a) => a.id === options.defaultAccountId);
+    if (defAcc) {
+      matchedAccountId = defAcc.id;
+      matchedAccountName = defAcc.name;
+      isAccountSuggested = true;
+    }
+  }
+
+  // 8. Extract Category (Strictly Reutilize Active Categories)
   let matchedCategoryId: string | null = null;
   let matchedCategoryName: string | null = null;
+
   const rawCategories = options.categories && options.categories.length > 0
     ? options.categories
     : Object.keys(DEFAULT_CATEGORY_KEYWORDS);
@@ -307,19 +450,18 @@ export function parseQuickFinance(
     })
     .filter((c) => c.active !== false);
 
-  // 5a. Check against configured/default keyword map
+  // 8a. Check against configured/default keyword map
   for (const [catName, keywords] of Object.entries(DEFAULT_CATEGORY_KEYWORDS)) {
     for (const kw of keywords) {
       const reg = new RegExp(`\\b${normalize(kw)}\\b`, 'i');
       if (reg.test(normalize(processed))) {
-        // Map to exact category in user's categories if available
         const exactMatch = availableCategories.find(
           (c) => normalize(c.name) === normalize(catName) || normalize(c.name).includes(normalize(catName))
         );
         if (exactMatch) {
           matchedCategoryId = exactMatch.id;
           matchedCategoryName = exactMatch.name;
-        } else {
+        } else if (!options.categories || options.categories.length === 0) {
           matchedCategoryId = catName;
           matchedCategoryName = catName;
         }
@@ -330,7 +472,7 @@ export function parseQuickFinance(
     if (matchedCategoryId) break;
   }
 
-  // 5b. Check if any user category name appears directly
+  // 8b. Check if any user active category name appears directly
   if (!matchedCategoryId) {
     for (const cat of availableCategories) {
       const normCat = normalize(cat.name);
@@ -346,56 +488,91 @@ export function parseQuickFinance(
     }
   }
 
-  // 6. Any remaining text becomes the note
+  // 9. Remaining text becomes note
   const cleanNote = processed
     .replace(/[,\-;:]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-  // If fallback account is needed and default provided
-  if (!matchedAccountId && options.defaultAccountId) {
-    const defAcc = accounts.find((a) => a.id === options.defaultAccountId);
-    if (defAcc) {
-      matchedAccountId = defAcc.id;
-      matchedAccountName = defAcc.name;
-    }
-  }
-
-  // Build missing list
+  // 10. Build missing list
   const missing: ('amount' | 'category' | 'account')[] = [];
-  if (amount === null) missing.push('amount');
+  if (amount === null || isAmbiguous) missing.push('amount');
   if (!matchedCategoryId) missing.push('category');
-  if (!matchedAccountName && !matchedAccountId) missing.push('account');
+  if (!matchedAccountId && !matchedAccountName) missing.push('account');
 
-  // Build formatted preview:
-  // e.g.: "$U 500 · Comida · Banco · Hoy"
-  // or: "$U 1.200 · Transporte · Cuenta no especificada"
-  const formattedAmount = amount !== null
-    ? `$U ${Math.round(amount).toLocaleString('es-UY')}`
-    : '$U ?';
+  const formattedAmount =
+    amount !== null
+      ? (currency === 'USD' ? 'USD ' : currency === 'EUR' ? 'EUR ' : '$U ') +
+        Math.round(amount).toLocaleString('es-UY')
+      : '$U ?';
   const formattedCategory = matchedCategoryName || 'Categoría pendiente';
-  const formattedAccount = matchedAccountName || 'Cuenta no especificada';
+  const formattedAccount = matchedAccountName ? (isAccountSuggested ? `${matchedAccountName} (sugerida)` : matchedAccountName) : 'Cuenta no especificada';
 
   const preview = `${formattedAmount} · ${formattedCategory} · ${formattedAccount} · ${dateLabel}`;
 
   return {
     raw,
-    isValid: amount !== null && amount > 0,
+    isValid: amount !== null && amount > 0 && !isAmbiguous && !isCurrencyIncompatible,
     amount,
     type,
     category: matchedCategoryId,
     categoryMatched: matchedCategoryName,
     accountId: matchedAccountId,
     accountName: matchedAccountName,
+    isAccountSuggested,
+    currency,
+    isCurrencyIncompatible,
     date: targetDate,
     dateLabel,
     note: cleanNote,
     preview,
     missing,
     confidence: {
-      amount: amount !== null,
+      amount: amount !== null && !isAmbiguous,
       category: matchedCategoryId !== null,
-      account: (matchedAccountId !== null || matchedAccountName !== null),
+      account: matchedAccountId !== null || matchedAccountName !== null,
     },
+    isAmbiguous,
   };
+}
+
+/* =========================================================================
+   INTERNAL UTILITIES
+   ========================================================================= */
+
+function normalize(str: string): string {
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+function computeRelativeDate(baseISO: string, offsetDays: number): string {
+  const [y, m, d] = baseISO.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d + offsetDays));
+  return date.toISOString().slice(0, 10);
+}
+
+function findClosestDayOfWeek(baseISO: string, targetDayIdx: number): string {
+  const [y, m, d] = baseISO.split('-').map(Number);
+  const baseDate = new Date(Date.UTC(y, m - 1, d));
+  const currentDay = baseDate.getUTCDay();
+
+  let diff = targetDayIdx - currentDay;
+  if (diff > 0) {
+    diff -= 7;
+  }
+  return computeRelativeDate(baseISO, diff);
+}
+
+function formatDateLabel(targetISO: string, todayISOStr: string): string {
+  if (targetISO === todayISOStr) return 'Hoy';
+  if (targetISO === computeRelativeDate(todayISOStr, -1)) return 'Ayer';
+  if (targetISO === computeRelativeDate(todayISOStr, 1)) return 'Mañana';
+
+  const [y, m, d] = targetISO.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+  return days[dt.getUTCDay()];
 }
