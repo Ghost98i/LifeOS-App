@@ -25,7 +25,7 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import type { LifeOSState } from '../types';
-import { defaultState, normalizeStoredState, uid } from './storage';
+import { CURRENT_SCHEMA_VERSION, normalizeStoredState, uid } from './storage';
 import {
   SYNC_MODULES,
   isSyncModuleKey,
@@ -131,6 +131,7 @@ function services() {
     try {
       firestore = initializeFirestore(app, {
         localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+        ignoreUndefinedProperties: true,
       });
     } catch {
       firestore = getFirestore(app);
@@ -219,41 +220,44 @@ export function saveCloudBaselineData(userId: string, data: Partial<Record<SyncM
   }
 }
 
-export function hasMeaningfulData(state: LifeOSState): boolean {
-  const def = defaultState();
-  const agendaHasData = Object.values(state.agenda).some((blocks) => blocks.length > 0);
-  const recurringSignature = (items: LifeOSState['tasksRecurring']) => items.map(({ name, freq, days }) => ({ name, freq, days: days || [] }));
-  const defaultAccounts = state.finance.accounts.length === 2
-    && state.finance.accounts[0]?.name === 'Efectivo'
-    && state.finance.accounts[1]?.name === 'Banco'
-    && state.finance.accounts.every((account) => Number(account.balance) === 0);
-  const collections = [
-    state.todayExtras, state.dailyPriorities, state.dailyContext,
-    state.finance.transactions, state.finance.transfers, state.finance.reconciliations,
-    state.finance.debts, state.finance.investments, state.finance.subscriptions,
-    state.gym.weight, state.gym.measurements, state.gym.sessions, state.gym.routineTemplates,
-    state.study.subjects, state.study.exams, state.study.studyLog,
-    state.streaming.sessions, state.jobs.opportunities, state.jobs.applications,
-    state.resale.opportunities, state.resale.inventory, state.ideas, state.calendarEvents,
-    state.goals, state.notes.postits, state.notes.shopping, state.notes.links, state.notes.possessions,
-  ];
+const SNAPSHOT_PREFIX = 'lifeos-sync-snapshot-';
 
-  return Boolean(
-    state.profile.name.trim()
-      || state.profile.height !== def.profile.height
-      || state.profile.bodyCompositionSex
-      || agendaHasData
-      || JSON.stringify(recurringSignature(state.tasksRecurring)) !== JSON.stringify(recurringSignature(def.tasksRecurring))
-      || !defaultAccounts
-      || Object.keys(state.finance.budgets).some((key) => Number(state.finance.budgets[key]) !== 0)
-      || state.streaming.monthlyGoal !== def.streaming.monthlyGoal
-      || state.settings.darkMode
-      || state.settings.hiddenTabs.length > 0
-      || collections.some((items) => items.length > 0)
-      || Object.keys(state.checkoutLog).length > 0
-      || Object.keys(state.taskLog).length > 0
-  );
+export function saveSyncRecoverySnapshot(
+  userId: string,
+  type: 'local' | 'remote' | 'base',
+  state: LifeOSState
+): void {
+  try {
+    localStorage.setItem(`${SNAPSHOT_PREFIX}${type}:${userId}`, JSON.stringify(state));
+  } catch {
+    // Ignore quota issues
+  }
 }
+
+export function loadSyncRecoverySnapshot(
+  userId: string,
+  type: 'local' | 'remote' | 'base'
+): LifeOSState | null {
+  try {
+    const raw = localStorage.getItem(`${SNAPSHOT_PREFIX}${type}:${userId}`);
+    if (!raw) return null;
+    return normalizeStoredState(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+export function clearSyncRecoverySnapshots(userId: string): void {
+  try {
+    localStorage.removeItem(`${SNAPSHOT_PREFIX}local:${userId}`);
+    localStorage.removeItem(`${SNAPSHOT_PREFIX}remote:${userId}`);
+    localStorage.removeItem(`${SNAPSHOT_PREFIX}base:${userId}`);
+  } catch {
+    // Ignore
+  }
+}
+
+export { hasMeaningfulData } from './storage';
 
 export function observeCloudUser(onChange: (user: CloudUser | null) => void): () => void {
   if (!cloudSyncConfigured) {
@@ -346,6 +350,14 @@ export function subscribeCloudModules(
   );
 }
 
+function cleanForFirestore<T>(data: T): T {
+  try {
+    return JSON.parse(JSON.stringify(data));
+  } catch {
+    return data;
+  }
+}
+
 export function writeCloudModules(
   userId: string,
   state: LifeOSState,
@@ -361,14 +373,15 @@ export function writeCloudModules(
     const revision = `${clientUpdatedAt + index}-${deviceId}-${uid()}`;
     const parentRevision = baseRevisions[module] || null;
     const rawData = syncModuleData(state, module) as Record<string, unknown>;
-    const payloadData = Object.keys(tombstones).length > 0
+    const withTombstones = Object.keys(tombstones).length > 0
       ? { ...rawData, _tombstones: tombstones }
       : rawData;
+    const cleanData = cleanForFirestore(withTombstones);
 
     const payload = {
-      schemaVersion: state.schemaVersion,
+      schemaVersion: Math.round(Number(state.schemaVersion || CURRENT_SCHEMA_VERSION)),
       module,
-      data: payloadData,
+      data: cleanData,
       revision,
       parentRevision,
       deviceId,
@@ -392,10 +405,78 @@ export function writeAllCloudModules(
   return writeCloudModules(userId, state, [...SYNC_MODULES], deviceId, baseRevisions, tombstones);
 }
 
-export async function readLegacyCloudState(userId: string): Promise<LifeOSState | null> {
+export async function verifyRemoteRevisions(
+  userId: string,
+  modules: SyncModuleKey[],
+  baseRevisions: SyncRevisionMap
+): Promise<{ matches: boolean; divergedModules: SyncModuleKey[]; remoteRevisions: SyncRevisionMap }> {
+  if (!cloudSyncConfigured) return { matches: true, divergedModules: [], remoteRevisions: {} };
   const { db } = services();
-  const snapshot = await getDoc(doc(db, 'users', userId, 'lifeos', 'state'));
-  if (!snapshot.exists()) return null;
-  const data = snapshot.data();
-  return normalizeStoredState(data.state);
+  const divergedModules: SyncModuleKey[] = [];
+  const remoteRevisions: SyncRevisionMap = {};
+
+  for (const module of modules) {
+    const expectedRev = baseRevisions[module];
+    if (!expectedRev) continue;
+    try {
+      const snap = await getDoc(doc(db, 'users', userId, 'lifeosModules', module));
+      if (snap.exists()) {
+        const data = snap.data();
+        const currentRev = typeof data?.revision === 'string' ? data.revision : '';
+        remoteRevisions[module] = currentRev;
+        if (currentRev && currentRev !== expectedRev) {
+          divergedModules.push(module);
+        }
+      }
+    } catch {
+      // Ignore network errors in verification; batch commit will handle
+    }
+  }
+
+  return {
+    matches: divergedModules.length === 0,
+    divergedModules,
+    remoteRevisions,
+  };
+}
+
+export async function writeCloudModulesGuarded(
+  userId: string,
+  state: LifeOSState,
+  modules: SyncModuleKey[],
+  deviceId: string,
+  baseRevisions: SyncRevisionMap,
+  tombstones: Record<string, number> = {},
+  customVerifier?: (userId: string, modules: SyncModuleKey[], baseRevisions: SyncRevisionMap) => Promise<{ matches: boolean; divergedModules: SyncModuleKey[]; remoteRevisions: SyncRevisionMap }>
+): Promise<{ writes: PreparedCloudWrite[]; diverged: boolean; divergedModules?: SyncModuleKey[]; completion: Promise<void> }> {
+  const verifier = customVerifier || verifyRemoteRevisions;
+  const check = await verifier(userId, modules, baseRevisions);
+  if (!check.matches) {
+    return {
+      writes: [],
+      diverged: true,
+      divergedModules: check.divergedModules,
+      completion: Promise.reject(new Error(`Divergencia de revisiones remotas detectada en: ${check.divergedModules.join(', ')}`)),
+    };
+  }
+  const batch = writeCloudModules(userId, state, modules, deviceId, baseRevisions, tombstones);
+  return {
+    writes: batch.writes,
+    diverged: false,
+    completion: batch.completion,
+  };
+}
+
+export async function readLegacyCloudState(userId: string): Promise<LifeOSState | null> {
+  if (!cloudSyncConfigured) return null;
+  const { db } = services();
+  try {
+    const snapshot = await getDoc(doc(db, 'users', userId, 'lifeos', 'state'));
+    if (!snapshot.exists()) return null;
+    const data = snapshot.data();
+    return normalizeStoredState(data?.state);
+  } catch (error) {
+    console.warn('[CloudSync] Could not read legacy state:', error);
+    return null;
+  }
 }

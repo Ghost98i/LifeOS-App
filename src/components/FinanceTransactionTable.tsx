@@ -1,13 +1,14 @@
 import React, { useState, useMemo } from 'react';
-import { Transaction, Account } from '../types';
+import { Transaction, Account, FinanceCategoryInput } from '../types';
 import { fmtDate, fmtMoney } from '../lib/storage';
+import { getCategoryName, getAllCategories } from '../lib/financeCategories';
 import { AppIcon } from './AppIcon';
 import { PrivacyAmount } from './PrivacyAmount';
 
 interface FinanceTransactionTableProps {
   transactions: Transaction[];
   accounts: Account[];
-  categories: string[];
+  categories: FinanceCategoryInput[];
   onEdit: (transaction: Transaction) => void;
   onDelete: (id: string) => void;
   totalGastadoAnio?: number;
@@ -42,6 +43,8 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
     return map;
   }, [transactions]);
 
+  const allCats = useMemo(() => getAllCategories(categories), [categories]);
+
   // Filter logic
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => {
@@ -49,9 +52,16 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
       if (selectedAccount !== 'all' && t.accountId !== selectedAccount) {
         return false;
       }
-      // Category filter
-      if (selectedCategory !== 'all' && t.category !== selectedCategory) {
-        return false;
+      // Category filter (matches by category ID or historical name)
+      if (selectedCategory !== 'all') {
+        const selName = getCategoryName(categories, selectedCategory).toLowerCase();
+        const txCatName = getCategoryName(categories, t.category).toLowerCase();
+        if (
+          t.category !== selectedCategory &&
+          txCatName !== selName
+        ) {
+          return false;
+        }
       }
       // Type filter
       if (selectedType !== 'all' && t.type !== selectedType) {
@@ -63,17 +73,19 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
         const accountName = accounts.find((a) => a.id === t.accountId)?.name?.toLowerCase() || '';
         const note = (t.note || '').toLowerCase();
         const category = (t.category || '').toLowerCase();
+        const categoryDisplayName = getCategoryName(categories, t.category).toLowerCase();
         const amountStr = String(t.amount);
         const match =
           note.includes(query) ||
           category.includes(query) ||
+          categoryDisplayName.includes(query) ||
           accountName.includes(query) ||
           amountStr.includes(query);
         if (!match) return false;
       }
       return true;
     });
-  }, [transactions, selectedAccount, selectedCategory, selectedType, searchQuery, accounts]);
+  }, [transactions, selectedAccount, selectedCategory, selectedType, searchQuery, accounts, categories]);
 
   // Sort logic
   const sortedTransactions = useMemo(() => {
@@ -278,23 +290,26 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
             >
               Todas las categorías
             </button>
-            {categories.map((cat) => {
-              const isSelected = selectedCategory === cat;
+            {allCats.map((cat) => {
+              const isSelected = selectedCategory === cat.id;
               return (
                 <button
-                  key={cat}
+                  key={cat.id}
                   type="button"
                   onClick={() => {
-                    setSelectedCategory(cat);
+                    setSelectedCategory(cat.id);
                     setPage(1);
                   }}
-                  className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
                     isSelected
                       ? 'bg-[var(--blue)] text-white font-bold shadow-xs'
                       : 'border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--bg)]'
                   }`}
                 >
-                  {cat}
+                  <span>{cat.name}</span>
+                  {!cat.active && (
+                    <span className="text-[9px] opacity-75 font-normal">(archivada)</span>
+                  )}
                 </button>
               );
             })}
@@ -435,7 +450,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                           {isExpense ? 'Gasto' : 'Ingreso'}
                         </span>
                         <span className="rounded-md bg-[var(--surface-muted)] border border-[var(--border)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-soft)]">
-                          {t.category}
+                          {getCategoryName(categories, t.category)}
                         </span>
                         {account && (
                           <span className="text-[10px] text-[var(--text-faint)]">
@@ -444,7 +459,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                         )}
                       </div>
                       <p className="mt-1 text-sm font-semibold text-[var(--text)] truncate">
-                        {t.note || t.category}
+                        {t.note || getCategoryName(categories, t.category)}
                       </p>
                       <p className="text-[11px] text-[var(--text-faint)] font-mono">
                         {fmtDate(t.date)}
@@ -472,7 +487,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                         <button
                           type="button"
                           onClick={() => {
-                            if (confirm(`¿Eliminar movimiento "${t.note || t.category}"?`)) {
+                            if (confirm(`¿Eliminar movimiento "${t.note || getCategoryName(categories, t.category)}"?`)) {
                               onDelete(t.id);
                             }
                           }}
@@ -528,7 +543,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                       </td>
                       <td className="py-2.5 px-3.5 font-medium text-[var(--text)] whitespace-nowrap">
                         <span className="inline-block rounded-md bg-[var(--surface-muted)] border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--text)]">
-                          {t.category}
+                          {getCategoryName(categories, t.category)}
                         </span>
                       </td>
                       <td className="py-2.5 px-3.5 text-[var(--text-soft)] whitespace-nowrap">
@@ -576,7 +591,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                           <button
                             type="button"
                             onClick={() => {
-                              if (confirm(`¿Eliminar movimiento "${t.note || t.category}"?`)) {
+                              if (confirm(`¿Eliminar movimiento "${t.note || getCategoryName(categories, t.category)}"?`)) {
                                 onDelete(t.id);
                               }
                             }}

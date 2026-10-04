@@ -36,9 +36,66 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-function finiteNumber(value: unknown): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
+export function normalizeTextForComparison(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLowerCase();
+}
+
+export function parseStrictPositiveNumber(value: unknown, fieldName: string): number {
+  if (value === undefined || value === null) {
+    throw new Error(`El campo numérico "${fieldName}" es obligatorio.`);
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || Number.isNaN(value)) {
+      throw new Error(`El campo "${fieldName}" contiene un número inválido.`);
+    }
+    if (value < 0) {
+      throw new Error(`El campo "${fieldName}" no puede ser negativo.`);
+    }
+    return value;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      throw new Error(`El campo "${fieldName}" está vacío.`);
+    }
+    if (!/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+      throw new Error(`El campo "${fieldName}" contiene un valor no numérico: "${trimmed}".`);
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
+      throw new Error(`El campo "${fieldName}" contiene un número inválido.`);
+    }
+    if (parsed < 0) {
+      throw new Error(`El campo "${fieldName}" no puede ser negativo.`);
+    }
+    return parsed;
+  }
+  throw new Error(`El campo "${fieldName}" debe ser un valor numérico.`);
+}
+
+export function parseStrictRating(value: unknown, fieldName = 'rating'): number {
+  if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) {
+    return 3;
+  }
+  let num: number;
+  if (typeof value === 'number') {
+    num = value;
+  } else if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!/^\d+(?:\.\d+)?$/.test(trimmed)) {
+      throw new Error(`El campo "${fieldName}" contiene un valor no numérico: "${trimmed}".`);
+    }
+    num = Number(trimmed);
+  } else {
+    throw new Error(`El campo "${fieldName}" debe ser un valor numérico.`);
+  }
+  if (!Number.isFinite(num) || Number.isNaN(num)) {
+    throw new Error(`El campo "${fieldName}" contiene un número inválido.`);
+  }
+  return Math.min(5, Math.max(1, Math.round(num)));
 }
 
 function stripCodeFence(raw: string): string {
@@ -75,7 +132,7 @@ export function parseAIImport(raw: string): AIImportPreview {
     .map((item) => ({
       empresa: text(item.empresa),
       puesto: text(item.puesto),
-      rating: Math.min(5, Math.max(1, Math.round(finiteNumber(item.rating) || 3))),
+      rating: parseStrictRating(item.rating, 'rating'),
       link: text(item.link),
       nota: text(item.nota),
     }))
@@ -85,8 +142,8 @@ export function parseAIImport(raw: string): AIImportPreview {
     .filter(isRecord)
     .map((item) => ({
       item: text(item.item),
-      buyPrice: Math.max(0, finiteNumber(item.buyPrice)),
-      marketPrice: Math.max(0, finiteNumber(item.marketPrice)),
+      buyPrice: parseStrictPositiveNumber(item.buyPrice, 'buyPrice'),
+      marketPrice: parseStrictPositiveNumber(item.marketPrice, 'marketPrice'),
       nota: text(item.nota),
     }))
     .filter((item) => item.item);
@@ -100,29 +157,66 @@ export function parseAIImport(raw: string): AIImportPreview {
 }
 
 export function applyAIImport(state: LifeOSState, payload: AIImportPayload, date = todayISO()): number {
+  let addedCount = 0;
+
+  if (!state.jobs) state.jobs = { applications: [], opportunities: [] };
+  if (!state.jobs.opportunities) state.jobs.opportunities = [];
+  if (!state.resale) state.resale = { inventory: [], opportunities: [] };
+  if (!state.resale.opportunities) state.resale.opportunities = [];
+  if (!state.ideas) state.ideas = [];
+
   payload.empleo.forEach((opportunity) => {
-    state.jobs.opportunities.push({
-      id: uid(),
-      ...opportunity,
-      fecha: date,
-      status: 'nueva',
-    });
+    const normEmpresa = normalizeTextForComparison(opportunity.empresa);
+    const normPuesto = normalizeTextForComparison(opportunity.puesto);
+    const isDuplicate = state.jobs.opportunities.some(
+      (existing) =>
+        normalizeTextForComparison(existing.empresa) === normEmpresa &&
+        normalizeTextForComparison(existing.puesto || '') === normPuesto
+    );
+
+    if (!isDuplicate) {
+      state.jobs.opportunities.push({
+        id: uid(),
+        ...opportunity,
+        fecha: date,
+        status: 'nueva',
+      });
+      addedCount++;
+    }
   });
 
   payload.reventa.forEach((opportunity) => {
-    state.resale.opportunities.push({
-      id: uid(),
-      ...opportunity,
-      fecha: date,
-      status: 'nueva',
-    });
+    const normItem = normalizeTextForComparison(opportunity.item);
+    const isDuplicate = state.resale.opportunities.some(
+      (existing) =>
+        normalizeTextForComparison(existing.item) === normItem &&
+        existing.buyPrice === opportunity.buyPrice
+    );
+
+    if (!isDuplicate) {
+      state.resale.opportunities.push({
+        id: uid(),
+        ...opportunity,
+        fecha: date,
+        status: 'nueva',
+      });
+      addedCount++;
+    }
   });
 
   payload.ideas.forEach((idea) => {
-    state.ideas.push({ id: uid(), text: idea, date, source: 'ia' });
+    const normIdea = normalizeTextForComparison(idea);
+    const isDuplicate = state.ideas.some(
+      (existing) => normalizeTextForComparison(existing.text) === normIdea
+    );
+
+    if (!isDuplicate) {
+      state.ideas.push({ id: uid(), text: idea.trim(), date, source: 'ia' });
+      addedCount++;
+    }
   });
 
-  return payload.empleo.length + payload.reventa.length + payload.ideas.length;
+  return addedCount;
 }
 
 export function applyJobOpportunity(state: LifeOSState, opportunityId: string, date = todayISO()): boolean {

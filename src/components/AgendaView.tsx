@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { LifeOSState, DayKey, EffortLevel, TaskRecurring } from '../types';
 import {
   DAYS,
@@ -7,6 +7,7 @@ import {
   TEMPLATE_ESTUDIANTE,
   uid,
 } from '../lib/storage';
+import { getUnifiedTaskList } from '../lib/taskDependencies';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 
@@ -29,10 +30,37 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
     time: string;
     activity: string;
     effort: EffortLevel;
+    /** ID of the linked UnifiedTask — persisted to AgendaBlock.linkedTaskId */
+    linkedTaskId?: string;
+    /** Transient search filter for the task selector — not persisted */
+    taskSearch: string;
   } | null>(null);
+
+  // All unified tasks for the task selector (memoized per state change)
+  const allUnifiedTasks = useMemo(() => getUnifiedTaskList(state).filter((t) => !t.done), [state]);
+
+  const filteredTasks = useMemo(() => {
+    if (!editingBlock) return [];
+    const q = editingBlock.taskSearch.trim().toLowerCase();
+    if (!q) return allUnifiedTasks.slice(0, 8); // show up to 8 when no query
+    return allUnifiedTasks.filter((t) => t.text.toLowerCase().includes(q)).slice(0, 8);
+  }, [allUnifiedTasks, editingBlock]);
 
   // Editing state for Recurring Task
   const [editingTask, setEditingTask] = useState<TaskRecurring | null>(null);
+
+  useEffect(() => {
+    if (!editingBlock && !editingTask) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setEditingBlock(null);
+        setEditingTask(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editingBlock, editingTask]);
 
   const handleLoadTemplate = () => {
     if (confirm('¿Cargar plantilla sugerida de estudiante? Esto reemplazará tu horario actual.')) {
@@ -84,7 +112,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
   const handleSaveEditedBlock = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingBlock || !editingBlock.activity.trim()) return;
-    const { id, currentDay, newDay, time, activity, effort } = editingBlock;
+    const { id, currentDay, newDay, time, activity, effort, linkedTaskId } = editingBlock;
 
     onUpdateState((draft) => {
       if (!draft.agenda) draft.agenda = {} as any;
@@ -92,12 +120,13 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
       if (!draft.agenda[newDay]) draft.agenda[newDay] = [];
       // Remove from current day
       draft.agenda[currentDay] = draft.agenda[currentDay].filter((b) => b.id !== id);
-      // Add to new day
+      // Add to new day (with optional linkedTaskId)
       draft.agenda[newDay].push({
         id,
         time: time || '09:00',
         activity: activity.trim(),
         effort,
+        ...(linkedTaskId ? { linkedTaskId } : {}),
       });
     });
 
@@ -157,7 +186,6 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
   return (
     <div className="space-y-6">
       <PageHeader
-        category="Organización"
         title="Agenda & Rutinas"
         subtitle="Tu horario semanal y las rutinas que alimentan el checklist de Hoy."
         actions={
@@ -217,6 +245,18 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
                         <span className="text-[var(--text)] font-medium truncate">{b.activity}</span>
                       </div>
                       <div className="flex items-center gap-0.5 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+                        {/* Link indicator — shown when block has a linked task */}
+                        {b.linkedTaskId && (() => {
+                          const linked = allUnifiedTasks.find((t) => t.id === b.linkedTaskId);
+                          return (
+                            <span
+                              title={linked ? `Tarea vinculada: ${linked.text}` : 'Vínculo a tarea (tarea ya no existe)'}
+                              className={`p-1 rounded ${linked ? 'text-[var(--blue)]' : 'text-[var(--text-faint)]'}`}
+                            >
+                              <AppIcon name="link" className="h-3 w-3" />
+                            </span>
+                          );
+                        })()}
                         <button
                           onClick={() =>
                             setEditingBlock({
@@ -226,6 +266,8 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
                               time: b.time,
                               activity: b.activity,
                               effort: b.effort || 'medium',
+                              linkedTaskId: b.linkedTaskId,
+                              taskSearch: '',
                             })
                           }
                           className="text-[var(--text-faint)] hover:text-[var(--blue)] p-1 rounded hover:bg-[var(--surface-muted)] cursor-pointer"
@@ -254,14 +296,24 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
 
       {/* Modal / Drawer for editing agenda block */}
       {editingBlock && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 max-w-md w-full space-y-4 shadow-xl">
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in"
+          onClick={() => setEditingBlock(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-agenda-block-title"
+            className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto space-y-4 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
               <div className="flex items-center gap-2">
                 <AppIcon name="edit" className="h-4 w-4 text-[var(--blue)]" />
-                <h3 className="text-sm font-extrabold text-[var(--text)]">Editar Bloque de Agenda</h3>
+                <h3 id="edit-agenda-block-title" className="text-sm font-extrabold text-[var(--text)]">Editar Bloque de Agenda</h3>
               </div>
               <button
+                type="button"
                 onClick={() => setEditingBlock(null)}
                 className="text-xs text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded hover:bg-[var(--surface-muted)] cursor-pointer"
                 aria-label="Cerrar modal"
@@ -321,6 +373,77 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
                   placeholder="Ej: Ir al Gimnasio"
                   className="w-full px-3 py-2 text-xs font-semibold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden"
                 />
+              </div>
+
+              {/* Task Linking Section */}
+              <div className="border-t border-[var(--border)] pt-3 space-y-2">
+                <label className="text-[10px] font-bold uppercase text-[var(--text-faint)] block">
+                  Tarea vinculada
+                </label>
+
+                {/* Currently linked task display */}
+                {editingBlock.linkedTaskId ? (() => {
+                  const linked = allUnifiedTasks.find((t) => t.id === editingBlock.linkedTaskId);
+                  return (
+                    <div className="flex items-center gap-2 p-2 rounded-xl bg-[var(--blue-soft)]/20 border border-[var(--blue)]/30">
+                      <AppIcon name="link" className="h-3.5 w-3.5 text-[var(--blue)] shrink-0" />
+                      <span className="text-xs font-semibold text-[var(--text)] flex-1 truncate">
+                        {linked ? linked.text : <span className="text-[var(--text-faint)] italic">Tarea ya no existe</span>}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setEditingBlock({ ...editingBlock, linkedTaskId: undefined, taskSearch: '' })}
+                        className="text-[10px] font-bold text-rose-500 hover:text-rose-600 px-2 py-0.5 rounded-lg hover:bg-rose-500/10 transition cursor-pointer shrink-0"
+                        title="Quitar vínculo"
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  );
+                })() : (
+                  <p className="text-[11px] text-[var(--text-faint)]">Sin tarea vinculada.</p>
+                )}
+
+                {/* Task search + selector */}
+                <input
+                  type="text"
+                  value={editingBlock.taskSearch}
+                  onChange={(e) => setEditingBlock({ ...editingBlock, taskSearch: e.target.value })}
+                  placeholder="Buscar tarea para vincular..."
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-faint)] focus:border-[var(--blue)] outline-hidden"
+                />
+                {filteredTasks.length > 0 && (
+                  <div className="space-y-1 max-h-[120px] overflow-y-auto">
+                    {filteredTasks.map((t) => {
+                      const isSelected = editingBlock.linkedTaskId === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setEditingBlock({
+                            ...editingBlock,
+                            linkedTaskId: isSelected ? undefined : t.id,
+                            taskSearch: '',
+                          })}
+                          className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer flex items-center gap-2 ${
+                            isSelected
+                              ? 'bg-[var(--blue)]/15 border border-[var(--blue)]/40 text-[var(--text)]'
+                              : 'bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-soft)] hover:border-[var(--blue)] hover:text-[var(--text)]'
+                          }`}
+                        >
+                          {isSelected && <AppIcon name="check" className="h-3 w-3 text-[var(--blue)] shrink-0" />}
+                          <span className="truncate">{t.projectName ? `[${t.projectName}] ${t.text}` : t.text}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {filteredTasks.length === 0 && editingBlock.taskSearch.trim() !== '' && (
+                  <p className="text-[11px] text-[var(--text-faint)] text-center py-1">Sin resultados para "{editingBlock.taskSearch}"</p>
+                )}
+                {filteredTasks.length === 0 && editingBlock.taskSearch.trim() === '' && allUnifiedTasks.length === 0 && (
+                  <p className="text-[11px] text-[var(--text-faint)] text-center py-1">No hay tareas pendientes.</p>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)]">
@@ -425,14 +548,24 @@ export const AgendaView: React.FC<AgendaViewProps> = ({ state, onUpdateState }) 
 
         {/* Modal for editing recurring task */}
         {editingTask && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-            <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 max-w-md w-full space-y-4 shadow-xl">
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in"
+            onClick={() => setEditingTask(null)}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="edit-recurring-task-title"
+              className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto space-y-4 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
                 <div className="flex items-center gap-2">
                   <AppIcon name="edit" className="h-4 w-4 text-[var(--blue)]" />
-                  <h3 className="text-sm font-extrabold text-[var(--text)]">Editar Rutina Recurrente</h3>
+                  <h3 id="edit-recurring-task-title" className="text-sm font-extrabold text-[var(--text)]">Editar Rutina Recurrente</h3>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setEditingTask(null)}
                   className="text-xs text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded hover:bg-[var(--surface-muted)] cursor-pointer"
                   aria-label="Cerrar modal"

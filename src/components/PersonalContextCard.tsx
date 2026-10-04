@@ -69,8 +69,10 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({ state,
             <AppIcon name="flame" className="h-4 w-4" />
           </span>
           <div>
-            <h3 className="text-sm font-bold text-[var(--text)]">Tu Contexto de Hoy</h3>
-            <p className="text-[11px] text-[var(--text-soft)]">Energía y descanso para calibrar tu día.</p>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
+              Contexto
+            </span>
+            <h3 className="text-sm font-bold text-[var(--text)]">Energía y Descanso</h3>
           </div>
         </div>
         <div className="flex items-center gap-2">

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { LifeOSState } from '../types';
 import { NAV_ITEMS } from './Sidebar';
+import { isModuleHidden } from '../lib/moduleVisibility';
 import {
   CURRENT_SCHEMA_VERSION,
   defaultState,
@@ -171,7 +172,6 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   return (
     <div className="space-y-6">
       <PageHeader
-        category="Sistema & Preferencias"
         title="Configuración"
         subtitle="Ajustá tu perfil, módulos visibles, privacidad y backups de datos."
         badge={
@@ -525,15 +525,15 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
       {/* Hidden Tabs Customization */}
       <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-3">
         <div>
-          <h2 className="text-sm font-bold text-[var(--text)]">Personalizar Módulos Visibles</h2>
+          <h2 className="text-sm font-bold text-[var(--text)]">Módulos de LifeOS</h2>
           <p className="text-xs text-[var(--text-soft)]">
-            Elegí qué módulos querés ver en la barra lateral. Podés ocultar los que no utilices.
+            Activá o desactivá módulos según tus necesidades actuales. Al desactivar un módulo, desaparece de la interfaz pero tus datos permanecen 100% seguros y se recuperan al reactivarlo.
           </p>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2">
           {NAV_ITEMS.filter((item) => item.optional).map((item) => {
-            const isHidden = (state.settings?.hiddenTabs || []).includes(item.id);
+            const isHidden = isModuleHidden(state, item.id);
 
             return (
               <button
@@ -542,16 +542,25 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 onClick={() => handleToggleTab(item.id)}
                 className={`p-3 rounded-xl border text-left text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
                   !isHidden
-                    ? 'bg-[var(--bg-elevated)] border-[var(--blue)] text-[var(--text)]'
-                    : 'bg-[var(--bg)] border-[var(--border)] text-[var(--text-faint)] line-through'
+                    ? 'bg-[var(--bg-elevated)] border-[var(--blue)] text-[var(--text)] ring-1 ring-[var(--blue)]/30 shadow-2xs'
+                    : 'bg-[var(--bg)] border-[var(--border)] text-[var(--text-faint)] hover:border-[var(--border-hover)]'
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <AppIcon name={item.icon} className="h-4 w-4" />
+                  <AppIcon
+                    name={item.icon}
+                    className={`h-4 w-4 ${!isHidden ? 'text-[var(--blue)]' : 'text-[var(--text-faint)]'}`}
+                  />
                   <span>{item.label}</span>
                 </div>
-                <span className="text-[10px] font-bold">
-                  {!isHidden ? '✓' : 'Oculto'}
+                <span
+                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                    !isHidden
+                      ? 'bg-blue-500/10 text-[var(--blue)] border border-blue-500/20'
+                      : 'bg-[var(--surface-muted)] text-[var(--text-faint)] border border-[var(--border)]'
+                  }`}
+                >
+                  {!isHidden ? 'Activo' : 'Inactivo'}
                 </span>
               </button>
             );

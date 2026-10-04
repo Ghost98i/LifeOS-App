@@ -2,52 +2,111 @@
 
 :root {
   color-scheme: light;
-  --bg: #f4f7fb;
-  --bg-elevated: #ffffff;
-  --card: #ffffff;
-  --sidebar: #fbfcfe;
-  --topbar: rgb(244 247 251 / 0.88);
-  --nav-mobile: rgb(255 255 255 / 0.94);
-  --surface-muted: #f1f5f9;
-  --border: #dfe6ef;
-  --border-hover: #c5d0df;
-  --text: #142033;
-  --text-soft: #526078;
-  --text-faint: #728097;
-  --blue: #315cdd;
-  --blue-hover: #264bc0;
-  --blue-soft: #eaf0ff;
-  --card-shadow: 0 1px 2px rgb(15 23 42 / 0.03), 0 8px 26px rgb(15 23 42 / 0.035);
-  --card-shadow-hover: 0 2px 3px rgb(15 23 42 / 0.04), 0 14px 32px rgb(15 23 42 / 0.065);
+
+  /* Refined Canvas Tokens (Light) */
+  --bg: #F8F9FA;
+  --bg-elevated: #FFFFFF;
+  --card: #FFFFFF;
+  --sidebar: #F3F4F6;
+  --topbar: rgb(248 249 250 / 0.88);
+  --nav-mobile: rgb(255 255 255 / 0.95);
+  --surface-muted: #F3F4F6;
+  --border: #E5E7EB;
+  --border-hover: #D1D5DB;
+
+  /* High-Contrast Crisp Typography */
+  --text: #111827;
+  --text-soft: #4B5563;
+  --text-faint: #6B7280;
+
+  /* Cohesive Subtle Bento Surfaces (Light) */
+  --bento-blue-bg: #FFFFFF;
+  --bento-blue-border: #E5E7EB;
+  --bento-blue-text: #1E3A8A;
+  --bento-blue-accent: #2E5CE6;
+
+  --bento-peach-bg: #FFFFFF;
+  --bento-peach-border: #E5E7EB;
+  --bento-peach-text: #7C2D12;
+  --bento-peach-accent: #EA580C;
+
+  --bento-green-bg: #FFFFFF;
+  --bento-green-border: #E5E7EB;
+  --bento-green-text: #064E3B;
+  --bento-green-accent: #059669;
+
+  --bento-neutral-bg: #FFFFFF;
+  --bento-neutral-border: #E5E7EB;
+
+  /* Functional Accents - Sapphire / Slate Blue */
+  --blue: #2E5CE6;
+  --blue-hover: #1F4BC8;
+  --blue-soft: #EFF4FE;
+  --emerald: #10B981;
+  --rose: #EF4444;
+  --amber: #F59E0B;
+  --purple: #8B5CF6;
+
+  /* Whispering Elevation */
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --card-shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 .dark {
   color-scheme: dark;
-  --bg: #0D0F12;
-  --bg-elevated: #15181D;
-  --card: #181C21;
-  --sidebar: #15181D;
-  --topbar: rgb(13 15 18 / 0.90);
-  --nav-mobile: rgb(21 24 29 / 0.95);
-  --surface-muted: #20252C;
-  --border: #2A3038;
-  --border-hover: #3E4652;
-  --text: #F1F3F5;
-  --text-soft: #A6ADB8;
-  --text-faint: #6C7582;
-  --blue: #3B82F6;
-  --blue-hover: #60A5FA;
-  --blue-soft: rgba(59, 130, 246, 0.14);
-  --card-shadow: 0 1px 3px rgb(0 0 0 / 0.35), 0 8px 24px rgb(0 0 0 / 0.25);
-  --card-shadow-hover: 0 2px 5px rgb(0 0 0 / 0.4), 0 12px 30px rgb(0 0 0 / 0.35);
+
+  /* Refined Canvas Tokens (Dark) */
+  --bg: #0B0E14;
+  --bg-elevated: #131720;
+  --card: #131720;
+  --sidebar: #0E1118;
+  --topbar: rgb(11 14 20 / 0.90);
+  --nav-mobile: rgb(19 23 32 / 0.95);
+  --surface-muted: #181E2A;
+  --border: #1E2533;
+  --border-hover: #2B3447;
+
+  /* High-Contrast Crisp Typography (Dark) */
+  --text: #F9FAFB;
+  --text-soft: #9CA3AF;
+  --text-faint: #6B7280;
+
+  /* Cohesive Subtle Bento Surfaces (Dark) */
+  --bento-blue-bg: #131720;
+  --bento-blue-border: #1E2533;
+  --bento-blue-text: #93C5FD;
+  --bento-blue-accent: #4F7BF7;
+
+  --bento-peach-bg: #131720;
+  --bento-peach-border: #1E2533;
+  --bento-peach-text: #FDBA74;
+  --bento-peach-accent: #FB923C;
+
+  --bento-green-bg: #131720;
+  --bento-green-border: #1E2533;
+  --bento-green-text: #6EE7B7;
+  --bento-green-accent: #34D399;
+
+  --bento-neutral-bg: #131720;
+  --bento-neutral-border: #1E2533;
+
+  /* Functional Accents (Dark) */
+  --blue: #4F7BF7;
+  --blue-hover: #3B68ED;
+  --blue-soft: rgba(79, 123, 247, 0.14);
+  --emerald: #34D399;
+  --rose: #F87171;
+  --amber: #FBBF24;
+  --purple: #A78BFA;
+
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  --card-shadow-hover: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
 body {
   background-color: var(--bg);
-  background-image: radial-gradient(circle at 82% -18%, color-mix(in srgb, var(--blue) 7%, transparent), transparent 34rem);
-  background-attachment: fixed;
   color: var(--text);
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
   margin: 0;
   padding: 0;
   -webkit-font-smoothing: antialiased;
@@ -117,7 +176,7 @@ body {
   font-size: .8125rem;
   font-weight: 700;
   padding: .7rem 1rem;
-  box-shadow: 0 7px 18px color-mix(in srgb, var(--blue) 20%, transparent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .primary-button:hover { background: var(--blue-hover); }
@@ -150,13 +209,99 @@ details > summary::-webkit-details-marker { display: none; }
   box-shadow: var(--card-shadow-hover);
 }
 
-/* LifeOS Standardized Components */
-.lifeos-card {
+/* Bento Design System Components */
+.bento-card {
   background-color: var(--card);
   border: 1px solid var(--border);
-  border-radius: 1rem;
+  border-radius: 1.25rem;
   box-shadow: var(--card-shadow);
-  transition: border-color 0.18s ease-in-out, box-shadow 0.18s ease-in-out;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bento-card-interactive {
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  box-shadow: var(--card-shadow);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+
+.bento-card-interactive:hover {
+  border-color: var(--border-hover);
+  box-shadow: var(--card-shadow-hover);
+  transform: translateY(-1px);
+}
+
+.bento-blue {
+  background-color: var(--bento-blue-bg);
+  border: 1px solid var(--bento-blue-border);
+  border-radius: 1.25rem;
+  box-shadow: var(--card-shadow);
+}
+
+.bento-peach {
+  background-color: var(--bento-peach-bg);
+  border: 1px solid var(--bento-peach-border);
+  border-radius: 1.25rem;
+  box-shadow: var(--card-shadow);
+}
+
+.bento-green {
+  background-color: var(--bento-green-bg);
+  border: 1px solid var(--bento-green-border);
+  border-radius: 1.25rem;
+  box-shadow: var(--card-shadow);
+}
+
+.bento-neutral {
+  background-color: var(--bento-neutral-bg);
+  border: 1px solid var(--bento-neutral-border);
+  border-radius: 1.25rem;
+  box-shadow: var(--card-shadow);
+}
+
+.trend-badge-up {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background-color: rgb(16 185 129 / 0.12);
+  color: #059669;
+  border: 1px solid rgb(16 185 129 / 0.22);
+}
+.dark .trend-badge-up {
+  color: #34d399;
+}
+
+.trend-badge-down {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background-color: rgb(239 68 68 / 0.12);
+  color: #dc2626;
+  border: 1px solid rgb(239 68 68 / 0.22);
+}
+.dark .trend-badge-down {
+  color: #f87171;
+}
+
+.metric-hero {
+  font-size: clamp(1.85rem, 2.8vw, 2.5rem);
+  line-height: 1.1;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 
 .lifeos-card-interactive {
@@ -432,7 +577,7 @@ button:active {
 
 @media (pointer: coarse) {
   button, summary, input, select {
-    min-height: 40px;
+    min-height: 44px;
   }
 }
 

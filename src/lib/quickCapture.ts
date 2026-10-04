@@ -1,6 +1,8 @@
 import type { EffortLevel, LifeOSState, Transaction } from '../types';
 import { adjustAccountBalance, defaultAccountId } from './calculations';
 import { todayISO, uid } from './storage';
+import { getAllCategories } from './financeCategories';
+import { isModuleEnabled } from './moduleVisibility';
 
 export interface QuickTransactionInput {
   type: 'gasto' | 'ingreso';
@@ -24,15 +26,30 @@ export function suggestedQuickAccountId(state: LifeOSState, type: 'gasto' | 'ing
 }
 
 export function addQuickTransaction(state: LifeOSState, input: QuickTransactionInput): Transaction {
+  if (!isModuleEnabled(state, 'finanzas')) {
+    throw new Error('El módulo Finanzas está desactivado.');
+  }
   const amount = Number(input.amount);
   if (!Number.isFinite(amount) || amount <= 0) throw new Error('Ingresá un monto válido.');
 
   const accountId = input.accountId || defaultAccountId(state);
+  let resolvedCategory = input.category?.trim() || 'Otros';
+  if (Array.isArray(state.finance?.categories)) {
+    const allCats = getAllCategories(state.finance.categories);
+    const byId = allCats.find((c) => c.id === resolvedCategory);
+    if (!byId) {
+      const byName = allCats.find((c) => c.name.toLowerCase() === resolvedCategory.toLowerCase());
+      if (byName) {
+        resolvedCategory = byName.id;
+      }
+    }
+  }
+
   const transaction: Transaction = {
     id: uid(),
     type: input.type,
     amount,
-    category: input.category?.trim() || 'Otros',
+    category: resolvedCategory,
     fixed: 'variable',
     date: input.date || todayISO(),
     note: input.note?.trim() || '',
@@ -59,19 +76,51 @@ export function addQuickTask(
   return id;
 }
 
-export function addQuickNote(state: LifeOSState, text: string, date = todayISO()): string {
+export function addQuickNote(
+  state: LifeOSState,
+  text: string,
+  dateOrOptions?: string | { title?: string; tags?: string[]; pinned?: boolean },
+  options?: { title?: string; tags?: string[]; pinned?: boolean }
+): string {
+  if (!isModuleEnabled(state, 'notas')) {
+    throw new Error('El módulo Notas está desactivado.');
+  }
+  const date = typeof dateOrOptions === 'string' ? dateOrOptions : todayISO();
+  const opts = typeof dateOrOptions === 'object' && dateOrOptions !== null ? dateOrOptions : options;
   const cleanText = text.trim();
-  if (!cleanText) throw new Error('Escribí la nota.');
+  const cleanTitle = opts?.title?.trim();
+  if (!cleanText && !cleanTitle) throw new Error('Escribí la nota.');
   const id = uid();
-  state.notes.postits.push({ id, text: cleanText, date });
+  const now = new Date().toISOString();
+  if (!state.notes) {
+    state.notes = { postits: [], shopping: [], links: [], possessions: [] };
+  }
+  if (!Array.isArray(state.notes.postits)) {
+    state.notes.postits = [];
+  }
+  state.notes.postits.push({
+    id,
+    title: cleanTitle || undefined,
+    text: cleanText,
+    date,
+    pinned: opts?.pinned ? true : undefined,
+    archived: undefined,
+    tags: opts?.tags && opts.tags.length > 0 ? opts.tags : undefined,
+    createdAt: now,
+    updatedAt: now,
+  });
   return id;
 }
 
 export function addQuickIdea(state: LifeOSState, text: string): string {
+  if (!isModuleEnabled(state, 'ia')) {
+    throw new Error('El módulo IA está desactivado.');
+  }
   const cleanText = text.trim();
   if (!cleanText) throw new Error('Escribí la idea.');
   const id = uid();
-  state.notes.postits.push({ id, text: `[Idea] ${cleanText}`, date: todayISO() });
+  if (!state.ideas) state.ideas = [];
+  state.ideas.push({ id, text: cleanText, date: todayISO(), source: 'manual' });
   return id;
 }
 

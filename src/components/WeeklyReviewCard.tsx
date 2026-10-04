@@ -28,7 +28,9 @@ export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ state, onUpd
 
   return (
     <>
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 shadow-xs transition-all">
+      <section className={`rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xs transition-all ${
+        expanded ? 'p-4 sm:p-5' : 'p-3.5 sm:px-4 sm:py-3'
+      }`}>
         <button
           onClick={() => setExpanded((value) => !value)}
           className="flex w-full items-center gap-3 text-left cursor-pointer group"

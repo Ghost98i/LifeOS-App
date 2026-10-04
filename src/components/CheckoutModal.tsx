@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { LifeOSState, DayKey } from '../types';
 import { todayISO, fmtDate, DAYS, DAY_LABELS, uid } from '../lib/storage';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
+import { isModuleEnabled } from '../lib/moduleVisibility';
 
 interface CheckoutModalProps {
   state: LifeOSState;
@@ -11,6 +12,27 @@ interface CheckoutModalProps {
 }
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateState, onClose }) => {
+  const previousFocusedElementRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      previousFocusedElementRef.current = document.activeElement;
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (previousFocusedElementRef.current && typeof previousFocusedElementRef.current.focus === 'function') {
+        previousFocusedElementRef.current.focus();
+      }
+    };
+  }, [onClose]);
+
   const iso = todayISO();
   const existingLog = state.checkoutLog[iso] || {};
 
@@ -72,17 +94,28 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
   };
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl relative">
+    <div
+      className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="checkout-modal-title"
+        className="bg-[var(--card)] border border-[var(--border)] rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl relative"
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 text-sm text-[var(--text-faint)] hover:text-[var(--text)]"
+          aria-label="Cerrar modal"
+          className="absolute top-4 right-4 text-sm text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg cursor-pointer"
         >
           ✕
         </button>
 
         <div>
-          <h2 className="text-xl font-extrabold text-[var(--text)] flex items-center gap-2">
+          <h2 id="checkout-modal-title" className="text-xl font-extrabold text-[var(--text)] flex items-center gap-2">
             <span>🌙</span> Cierre Nocturno del Día
           </h2>
           <p className="text-xs text-[var(--text-soft)] mt-1">
@@ -92,64 +125,70 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
 
         <div className="space-y-3 text-xs">
           {/* Gym Check */}
-          <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-between">
-            <span className="font-bold text-sm text-[var(--text)]">🏋️ Entrenamiento</span>
-            {hasGymToday ? (
-              <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
-                ✓ Sesión cargada
-              </span>
-            ) : (
-              <label className="flex items-center gap-1.5 cursor-pointer text-[var(--text-soft)]">
-                <input
-                  type="checkbox"
-                  checked={trainedSkipped}
-                  onChange={(e) => setTrainedSkipped(e.target.checked)}
-                  className="rounded-xs cursor-pointer"
-                />
-                <span>Hoy fue descanso</span>
-              </label>
-            )}
-          </div>
+          {isModuleEnabled(state, 'gimnasio') && (
+            <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-between">
+              <span className="font-bold text-sm text-[var(--text)]">🏋️ Entrenamiento</span>
+              {hasGymToday ? (
+                <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                  ✓ Sesión cargada
+                </span>
+              ) : (
+                <label className="flex items-center gap-1.5 cursor-pointer text-[var(--text-soft)]">
+                  <input
+                    type="checkbox"
+                    checked={trainedSkipped}
+                    onChange={(e) => setTrainedSkipped(e.target.checked)}
+                    className="rounded-xs cursor-pointer"
+                  />
+                  <span>Hoy fue descanso</span>
+                </label>
+              )}
+            </div>
+          )}
 
           {/* Study Check */}
-          <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-between">
-            <span className="font-bold text-sm text-[var(--text)]">📚 Estudios</span>
-            {hasStudyToday ? (
-              <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
-                ✓ Horas cargadas
-              </span>
-            ) : (
-              <label className="flex items-center gap-1.5 cursor-pointer text-[var(--text-soft)]">
-                <input
-                  type="checkbox"
-                  checked={studiedSkipped}
-                  onChange={(e) => setStudiedSkipped(e.target.checked)}
-                  className="rounded-xs cursor-pointer"
-                />
-                <span>Sin estudio hoy</span>
-              </label>
-            )}
-          </div>
+          {isModuleEnabled(state, 'estudios') && (
+            <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-between">
+              <span className="font-bold text-sm text-[var(--text)]">📚 Estudios</span>
+              {hasStudyToday ? (
+                <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                  ✓ Horas cargadas
+                </span>
+              ) : (
+                <label className="flex items-center gap-1.5 cursor-pointer text-[var(--text-soft)]">
+                  <input
+                    type="checkbox"
+                    checked={studiedSkipped}
+                    onChange={(e) => setStudiedSkipped(e.target.checked)}
+                    className="rounded-xs cursor-pointer"
+                  />
+                  <span>Sin estudio hoy</span>
+                </label>
+              )}
+            </div>
+          )}
 
           {/* Expenses Check */}
-          <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-between">
-            <span className="font-bold text-sm text-[var(--text)]">💰 Gastos</span>
-            {hasTxToday ? (
-              <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
-                ✓ Movimientos cargados
-              </span>
-            ) : (
-              <label className="flex items-center gap-1.5 cursor-pointer text-[var(--text-soft)]">
-                <input
-                  type="checkbox"
-                  checked={expensesSkipped}
-                  onChange={(e) => setExpensesSkipped(e.target.checked)}
-                  className="rounded-xs cursor-pointer"
-                />
-                <span>Sin gastos hoy</span>
-              </label>
-            )}
-          </div>
+          {isModuleEnabled(state, 'finanzas') && (
+            <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] flex items-center justify-between">
+              <span className="font-bold text-sm text-[var(--text)]">💰 Gastos</span>
+              {hasTxToday ? (
+                <span className="text-emerald-500 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20">
+                  ✓ Movimientos cargados
+                </span>
+              ) : (
+                <label className="flex items-center gap-1.5 cursor-pointer text-[var(--text-soft)]">
+                  <input
+                    type="checkbox"
+                    checked={expensesSkipped}
+                    onChange={(e) => setExpensesSkipped(e.target.checked)}
+                    className="rounded-xs cursor-pointer"
+                  />
+                  <span>Sin gastos hoy</span>
+                </label>
+              )}
+            </div>
+          )}
 
           {/* Sleep Hours Check */}
           <div className="p-3.5 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] space-y-2">

@@ -140,7 +140,6 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({ state, onUpdateState
   return (
     <div className="space-y-6">
       <PageHeader
-        category="Aprendizaje & Formación"
         title="Estudios"
         subtitle="Materias, calendario de exámenes, temporizador de enfoque y horas de estudio."
       />

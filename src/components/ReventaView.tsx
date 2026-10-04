@@ -71,7 +71,6 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState }
   return (
     <div className="space-y-6">
       <PageHeader
-        category="Comercio & Ganancias"
         title="Reventa"
         subtitle="De la compra al cobro, con margen real de ganancia y Finanzas sincronizadas."
       />

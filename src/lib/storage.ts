@@ -1,5 +1,6 @@
 import { LifeOSState, DayKey, ResaleItem, Transaction } from '../types';
 import { migrateGym } from './gymMigration';
+import { DEFAULT_FINANCE_CATEGORIES, normalizeCategories } from './financeCategories';
 
 export const DAYS: DayKey[] = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
 export const DAY_LABELS: Record<DayKey, string> = {
@@ -147,6 +148,7 @@ export const TEMPLATE_ESTUDIANTE: Record<DayKey, { time: string; activity: strin
     { time: '08:00', activity: 'Clases' },
     { time: '13:00', activity: 'Almuerzo' },
     { time: '14:30', activity: 'Estudio' },
+    { time: '14:30', activity: 'Estudio' },
     { time: '19:00', activity: 'Stream' },
   ],
   miercoles: [
@@ -207,18 +209,7 @@ export function defaultState(): LifeOSState {
       transactions: [],
       transfers: [],
       reconciliations: [],
-      categories: [
-        'Comida',
-        'Gimnasio',
-        'Estudio',
-        'Ocio',
-        'Streaming',
-        'Admin/Hogar',
-        'Transporte',
-        'Suscripciones',
-        'Reventa',
-        'Otros',
-      ],
+      categories: [...DEFAULT_FINANCE_CATEGORIES],
       budgets: {},
       accounts: [
         { id: accEfectivoId, name: 'Efectivo', balance: 0, initialBalance: 0 },
@@ -227,6 +218,11 @@ export function defaultState(): LifeOSState {
       debts: [],
       investments: [],
       subscriptions: [],
+      expectedIncomes: [],
+      commitments: [],
+      minCushion: 5000,
+      cushionEnabled: true,
+      heroDisplayMode: 'actual',
     },
     gym: { weight: [], measurements: [], sessions: [], routineTemplates: [], restDays: [], activeTimer: null },
     study: { subjects: [], exams: [], studyLog: [] },
@@ -239,9 +235,52 @@ export function defaultState(): LifeOSState {
     projects: [],
     inbox: [],
     notes: { postits: [], shopping: [], links: [], possessions: [] },
-    settings: { darkMode: false, lastBackupAt: null, hiddenTabs: [] },
+    settings: { darkMode: false, lastBackupAt: null, hiddenTabs: ['ia'], onboardingCompleted: false },
     checkoutLog: {},
   };
+}
+
+export function hasMeaningfulData(state: LifeOSState): boolean {
+  if (!state) return false;
+  const def = defaultState();
+  const agendaHasData = state.agenda ? Object.values(state.agenda).some((blocks) => Array.isArray(blocks) && blocks.length > 0) : false;
+  const recurringSignature = (items: LifeOSState['tasksRecurring']) => (items || []).map(({ name, freq, days }) => ({ name, freq, days: days || [] }));
+  const accounts = state.finance?.accounts || [];
+  const defaultAccounts = accounts.length === 2
+    && accounts[0]?.name === 'Efectivo'
+    && accounts[1]?.name === 'Banco'
+    && accounts.every((account) => Number(account.balance) === 0);
+  const collections = [
+    state.todayExtras || [], state.dailyPriorities || [], state.dailyContext || [],
+    state.finance?.transactions || [], state.finance?.transfers || [], state.finance?.reconciliations || [],
+    state.finance?.debts || [], state.finance?.investments || [], state.finance?.subscriptions || [],
+    state.finance?.expectedIncomes || [],
+    state.gym?.weight || [], state.gym?.measurements || [], state.gym?.sessions || [], state.gym?.routineTemplates || [],
+    state.study?.subjects || [], state.study?.exams || [], state.study?.studyLog || [],
+    state.streaming?.sessions || [], state.jobs?.opportunities || [], state.jobs?.applications || [],
+    state.resale?.opportunities || [], state.resale?.inventory || [], state.ideas || [], state.calendarEvents || [],
+    state.goals || [], state.notes?.postits || [], state.notes?.shopping || [], state.notes?.links || [], state.notes?.possessions || [],
+  ];
+
+  return Boolean(
+    state.profile?.name?.trim()
+      || (state.profile?.height !== undefined && state.profile?.height !== def.profile.height)
+      || state.profile?.bodyCompositionSex
+      || agendaHasData
+      || JSON.stringify(recurringSignature(state.tasksRecurring)) !== JSON.stringify(recurringSignature(def.tasksRecurring))
+      || !defaultAccounts
+      || Object.keys(state.finance?.budgets || {}).some((key) => Number(state.finance?.budgets?.[key]) !== 0)
+      || (state.streaming?.monthlyGoal !== undefined && state.streaming?.monthlyGoal !== def.streaming.monthlyGoal)
+      || state.settings?.darkMode
+      || (state.settings?.hiddenTabs && (
+        state.settings.hiddenTabs.length !== def.settings.hiddenTabs.length
+        || state.settings.hiddenTabs.some((tab) => !def.settings.hiddenTabs.includes(tab))
+      ))
+      || state.settings?.onboardingCompleted
+      || collections.some((items) => items.length > 0)
+      || Object.keys(state.checkoutLog || {}).length > 0
+      || Object.keys(state.taskLog || {}).length > 0
+  );
 }
 
 export function normalizeStoredState(raw: unknown): LifeOSState {
@@ -276,8 +315,26 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
       }))
     : [];
 
+  const postits = Array.isArray(rawNotes.postits)
+    ? rawNotes.postits
+        .filter((p: any) => p && typeof p === 'object' && (typeof p.text === 'string' || typeof p.title === 'string'))
+        .map((p: any) => ({
+          id: typeof p.id === 'string' ? p.id : uid(),
+          text: typeof p.text === 'string' ? p.text : '',
+          title: typeof p.title === 'string' && p.title.trim().length > 0 ? p.title.trim() : undefined,
+          date: typeof p.date === 'string' ? p.date : todayISO(),
+          pinned: p.pinned ? true : undefined,
+          archived: p.archived ? true : undefined,
+          tags: Array.isArray(p.tags) && p.tags.length > 0
+            ? p.tags.map((t: any) => String(t || '').trim().toLowerCase()).filter(Boolean)
+            : undefined,
+          createdAt: typeof p.createdAt === 'string' ? p.createdAt : undefined,
+          updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : undefined,
+        }))
+    : [];
+
   const notes = {
-    postits: Array.isArray(rawNotes.postits) ? rawNotes.postits : [],
+    postits,
     shopping: Array.isArray(rawNotes.shopping) ? rawNotes.shopping : [],
     links: Array.isArray(rawNotes.links) ? rawNotes.links : [],
     possessions,
@@ -285,8 +342,8 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
 
   // Finance
   const rawFinance: any = candidate.finance || {};
-  const rawCategories = Array.isArray(rawFinance.categories) ? rawFinance.categories : def.finance.categories;
-  const categories = rawCategories.includes('Reventa') ? [...rawCategories] : [...rawCategories, 'Reventa'];
+  const rawTransactions = Array.isArray(rawFinance.transactions) ? rawFinance.transactions : [];
+  const categories = normalizeCategories(rawFinance.categories, rawTransactions);
   const finance = {
     transactions: Array.isArray(rawFinance.transactions) ? rawFinance.transactions : [],
     transfers: Array.isArray(rawFinance.transfers) ? rawFinance.transfers : [],
@@ -328,6 +385,52 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
     debts: Array.isArray(rawFinance.debts) ? rawFinance.debts : [],
     investments: Array.isArray(rawFinance.investments) ? rawFinance.investments : [],
     subscriptions: Array.isArray(rawFinance.subscriptions) ? rawFinance.subscriptions : [],
+    expectedIncomes: Array.isArray(rawFinance.expectedIncomes)
+      ? rawFinance.expectedIncomes
+          .filter((inc: any) => inc && typeof inc === 'object' && String(inc.name || '').trim().length > 0 && Number(inc.amount || 0) > 0)
+          .map((inc: any) => ({
+            id: typeof inc.id === 'string' ? inc.id : uid(),
+            name: String(inc.name).trim(),
+            amount: Number(inc.amount || 0),
+            startDate: typeof inc.startDate === 'string' ? inc.startDate : todayISO(),
+            frequency: ['once', 'weekly', 'biweekly', 'monthly', 'yearly'].includes(inc.frequency)
+              ? inc.frequency
+              : 'monthly',
+            active: inc.active !== false,
+            category: typeof inc.category === 'string' ? inc.category : null,
+            accountId: typeof inc.accountId === 'string' ? inc.accountId : null,
+            endDate: typeof inc.endDate === 'string' ? inc.endDate : null,
+            updatedAt: typeof inc.updatedAt === 'string' ? inc.updatedAt : undefined,
+          }))
+      : [],
+    commitments: Array.isArray(rawFinance.commitments)
+      ? rawFinance.commitments
+          .filter((c: any) => c && typeof c === 'object' && String(c.name || '').trim().length > 0 && Number(c.amount || 0) > 0)
+          .map((c: any) => ({
+            id: typeof c.id === 'string' ? c.id : uid(),
+            name: String(c.name).trim(),
+            amount: Number(c.amount || 0),
+            category: typeof c.category === 'string' ? c.category : 'Varios',
+            frequency: ['once', 'weekly', 'biweekly', 'monthly', 'yearly'].includes(c.frequency) ? c.frequency : 'monthly',
+            nextDueDate: typeof c.nextDueDate === 'string' ? c.nextDueDate : todayISO(),
+            active: c.active !== false && (typeof c.remainingOccurrences !== 'number' || c.remainingOccurrences > 0),
+            accountId: typeof c.accountId === 'string' ? c.accountId : null,
+            endDate: typeof c.endDate === 'string' ? c.endDate : null,
+            totalOccurrences: typeof c.totalOccurrences === 'number' && Number.isFinite(c.totalOccurrences) && c.totalOccurrences > 0 ? Math.round(c.totalOccurrences) : null,
+            remainingOccurrences: typeof c.remainingOccurrences === 'number' && Number.isFinite(c.remainingOccurrences) ? Math.max(0, Math.round(c.remainingOccurrences)) : null,
+            dueDay: typeof c.dueDay === 'number' && Number.isFinite(c.dueDay) ? Math.max(1, Math.min(31, Math.round(c.dueDay))) : (typeof c.nextDueDate === 'string' ? new Date(`${c.nextDueDate}T12:00:00`).getDate() : null),
+            notes: typeof c.notes === 'string' ? c.notes : undefined,
+            createdAt: typeof c.createdAt === 'string' ? c.createdAt : undefined,
+            updatedAt: typeof c.updatedAt === 'string' ? c.updatedAt : undefined,
+          }))
+      : [],
+    minCushion: typeof rawFinance.minCushion === 'number' && Number.isFinite(rawFinance.minCushion)
+      ? rawFinance.minCushion
+      : rawFinance.minCushion === null ? null : 5000,
+    cushionEnabled: rawFinance.cushionEnabled !== undefined ? Boolean(rawFinance.cushionEnabled) : true,
+    heroDisplayMode: ['actual', 'real_available', 'both'].includes(rawFinance.heroDisplayMode)
+      ? rawFinance.heroDisplayMode
+      : 'actual',
   };
 
   // Jobs
@@ -353,6 +456,10 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
               id: typeof t.id === 'string' ? t.id : uid(),
               text: typeof t.text === 'string' ? t.text : '',
               done: Boolean(t.done),
+              dueDate: typeof t.dueDate === 'string' ? t.dueDate : undefined,
+              priority: ['alta', 'media', 'baja'].includes(t.priority) ? t.priority : undefined,
+              effort: typeof t.effort === 'string' ? t.effort : undefined,
+              dependsOn: Array.isArray(t.dependsOn) ? t.dependsOn.filter((id: any) => typeof id === 'string') : undefined,
             }))
           : [],
         blockers: typeof p.blockers === 'string' ? p.blockers : undefined,
@@ -373,15 +480,49 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
       }))
     : [];
 
+  // TodayExtras normalization
+  const todayExtras = Array.isArray(candidate.todayExtras)
+    ? candidate.todayExtras.map((x: any) => ({
+        id: typeof x.id === 'string' ? x.id : uid(),
+        date: typeof x.date === 'string' ? x.date : todayISO(),
+        text: typeof x.text === 'string' ? x.text : '',
+        done: Boolean(x.done),
+        priority: ['alta', 'media', 'baja'].includes(x.priority) ? x.priority : 'media',
+        effort: typeof x.effort === 'string' ? x.effort : undefined,
+        dueDate: typeof x.dueDate === 'string' ? x.dueDate : undefined,
+        time: typeof x.time === 'string' ? x.time : undefined,
+        durationMinutes: typeof x.durationMinutes === 'number' ? x.durationMinutes : undefined,
+        dependsOn: Array.isArray(x.dependsOn) ? x.dependsOn.filter((id: any) => typeof id === 'string') : undefined,
+        linkedType: typeof x.linkedType === 'string' ? x.linkedType : undefined,
+        linkedId: typeof x.linkedId === 'string' ? x.linkedId : undefined,
+      }))
+    : [];
+
   return {
     ...def,
     ...candidate,
     schemaVersion: CURRENT_SCHEMA_VERSION,
     profile,
-    agenda: { ...def.agenda, ...(candidate.agenda || {}) },
+    agenda: (() => {
+      const rawAgenda = candidate.agenda || {};
+      const normalized: typeof def.agenda = { ...def.agenda };
+      for (const day of DAYS) {
+        const rawBlocks = rawAgenda[day];
+        normalized[day] = Array.isArray(rawBlocks)
+          ? rawBlocks.map((b: any) => ({
+              id: typeof b.id === 'string' ? b.id : uid(),
+              time: typeof b.time === 'string' ? b.time : '09:00',
+              activity: typeof b.activity === 'string' ? b.activity : '',
+              effort: typeof b.effort === 'string' ? b.effort : undefined,
+              linkedTaskId: typeof b.linkedTaskId === 'string' ? b.linkedTaskId : undefined,
+            }))
+          : normalized[day] || [];
+      }
+      return normalized;
+    })(),
     tasksRecurring: Array.isArray(candidate.tasksRecurring) ? candidate.tasksRecurring : def.tasksRecurring,
     taskLog: candidate.taskLog && typeof candidate.taskLog === 'object' ? candidate.taskLog : {},
-    todayExtras: Array.isArray(candidate.todayExtras) ? candidate.todayExtras : [],
+    todayExtras,
     dailyPriorities: Array.isArray(candidate.dailyPriorities) ? candidate.dailyPriorities : [],
     dailyContext: Array.isArray(candidate.dailyContext) ? candidate.dailyContext : [],
     finance,
@@ -402,7 +543,21 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
     projects,
     inbox,
     notes,
-    settings: { ...def.settings, ...(candidate.settings || {}) },
+    settings: (() => {
+      const rawSettings: any = candidate.settings || {};
+      let onboardingCompleted: boolean;
+      if (typeof rawSettings.onboardingCompleted === 'boolean') {
+        onboardingCompleted = rawSettings.onboardingCompleted;
+      } else {
+        onboardingCompleted = hasMeaningfulData(candidate as LifeOSState);
+      }
+      return {
+        ...def.settings,
+        ...rawSettings,
+        hiddenTabs: Array.isArray(rawSettings.hiddenTabs) ? rawSettings.hiddenTabs : [...def.settings.hiddenTabs],
+        onboardingCompleted,
+      };
+    })(),
     checkoutLog: candidate.checkoutLog && typeof candidate.checkoutLog === 'object' ? candidate.checkoutLog : {},
   };
 }
@@ -422,7 +577,11 @@ export function parseBackupJSON(text: string): LifeOSState {
   if (!hasRecognizedKey) {
     throw new Error('El archivo no parece pertenecer a LifeOS.');
   }
-  return normalizeStoredState(parsed);
+  const normalized = normalizeStoredState(parsed);
+  if (parsed?.settings?.onboardingCompleted === undefined) {
+    normalized.settings.onboardingCompleted = true;
+  }
+  return normalized;
 }
 
 export function getStorageDiagnostics(userId?: string | null): StorageDiagnostics {
@@ -502,7 +661,11 @@ export function loadStoredState(userId?: string | null): { state: LifeOSState; b
     const raw = localStorage.getItem(key);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { state: normalizeStoredState(parsed), backend: 'localStorage' };
+      const normalized = normalizeStoredState(parsed);
+      if (parsed?.settings?.onboardingCompleted === undefined) {
+        normalized.settings.onboardingCompleted = true;
+      }
+      return { state: normalized, backend: 'localStorage' };
     }
   } catch (e) {
     console.error('Error reading localStorage:', e);
@@ -520,3 +683,4 @@ export function saveStoredState(state: LifeOSState, userId?: string | null): boo
     return false;
   }
 }
+

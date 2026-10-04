@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { EffortLevel, LifeOSState, ViewType } from '../types';
 import {
   addQuickIdea,
@@ -13,8 +13,19 @@ import {
 } from '../lib/quickCapture';
 import { parseQuickFinance } from '../utils/quickFinanceParser';
 import { todayISO, uid, dayKeyFromDate, fmtDate } from '../lib/storage';
+import { applyHistoryToTemplateExercises } from '../lib/gymMetrics';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
+import { getActiveCategories } from '../lib/financeCategories';
+import { isModuleEnabled } from '../lib/moduleVisibility';
+import {
+  parseCaptureDrafts,
+  confirmCaptureDraft,
+  convertDraftToNote,
+  enableModuleForDraft,
+  type CaptureDraft,
+} from '../lib/quickCaptureDrafts';
+import { DraftConfirmationTray } from './DraftConfirmationTray';
 
 interface MobileQuickCaptureProps {
   state: LifeOSState;
@@ -22,17 +33,19 @@ interface MobileQuickCaptureProps {
   onClose: () => void;
   onUpdateState: (updater: (draft: LifeOSState) => void) => void;
   onNavigate?: (view: ViewType) => void;
+  initialKind?: CaptureKind;
 }
 
-export type CaptureKind = 'inbox' | 'tarea' | 'gasto' | 'nota' | 'idea' | 'entrenamiento' | 'recordatorio';
+export type CaptureKind = 'universal' | 'tarea' | 'gasto' | 'nota' | 'entrenamiento' | 'inbox' | 'idea' | 'recordatorio';
 
-const captureOptions: { kind: CaptureKind; label: string; icon: string; desc: string }[] = [
+const captureOptions: { kind: CaptureKind; label: string; icon: string; desc: string; primary?: boolean }[] = [
+  { kind: 'universal', label: 'Universal', icon: '✨', desc: 'Auto-detectar', primary: true },
+  { kind: 'tarea', label: 'Tarea', icon: '✓', desc: 'Acción para hoy', primary: true },
+  { kind: 'gasto', label: 'Gasto', icon: '−', desc: 'Parser rápido', primary: true },
+  { kind: 'nota', label: 'Nota', icon: '✎', desc: 'Post-it o apunte', primary: true },
+  { kind: 'entrenamiento', label: 'Entrenar', icon: '⚡', desc: 'Iniciar sesión', primary: true },
   { kind: 'inbox', label: 'Bandeja', icon: '📥', desc: 'Captura libre' },
-  { kind: 'tarea', label: 'Tarea', icon: '✓', desc: 'Acción para hoy' },
-  { kind: 'gasto', label: 'Gasto', icon: '−', desc: 'Parser rápido' },
-  { kind: 'nota', label: 'Nota', icon: '✎', desc: 'Post-it o apunte' },
   { kind: 'idea', label: 'Idea', icon: '💡', desc: 'Nueva propuesta' },
-  { kind: 'entrenamiento', label: 'Entrenar', icon: '⚡', desc: 'Iniciar sesión' },
   { kind: 'recordatorio', label: 'Alerta', icon: '⏰', desc: 'Con hora/fecha' },
 ];
 
@@ -42,10 +55,15 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
   onClose,
   onUpdateState,
   onNavigate,
+  initialKind,
 }) => {
   const [activeTab, setActiveTab] = useState<'capture' | 'inbox'>('capture');
-  const [kind, setKind] = useState<CaptureKind>('inbox');
+  const [kind, setKind] = useState<CaptureKind>(() => initialKind || 'universal');
+  const [universalInput, setUniversalInput] = useState('');
+  const [mobileDrafts, setMobileDrafts] = useState<CaptureDraft[]>([]);
   const [text, setText] = useState('');
+  const [noteTitle, setNoteTitle] = useState('');
+  const [notePinned, setNotePinned] = useState(false);
   const [priority, setPriority] = useState<'alta' | 'media' | 'baja'>('media');
   const [effort, setEffort] = useState<EffortLevel>('medium');
   const [reminderTime, setReminderTime] = useState('');
@@ -58,7 +76,13 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
   const [manualFinanceMode, setManualFinanceMode] = useState(false);
   const [manualAmount, setManualAmount] = useState('');
   const [manualAccountId, setManualAccountId] = useState('');
-  const [manualCategory, setManualCategory] = useState('Otros');
+
+  const activeCategories = useMemo(
+    () => getActiveCategories(state.finance?.categories),
+    [state.finance?.categories]
+  );
+
+  const [manualCategory, setManualCategory] = useState(() => activeCategories[0]?.id || 'Otros');
   const [selectedWorkoutTemplateId, setSelectedWorkoutTemplateId] = useState<string>('');
 
   // Suggested account for finance
@@ -87,24 +111,81 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
     );
   }, [state.gym?.routineTemplates, todayDayKey]);
 
+  const availableCaptureOptions = useMemo(() => {
+    return captureOptions.filter((opt) => {
+      if (opt.kind === 'gasto') return isModuleEnabled(state.settings, 'finanzas');
+      if (opt.kind === 'nota') return isModuleEnabled(state.settings, 'notas');
+      if (opt.kind === 'entrenamiento') return isModuleEnabled(state.settings, 'gimnasio');
+      if (opt.kind === 'idea') return isModuleEnabled(state.settings, 'ia');
+      return true;
+    });
+  }, [state.settings]);
+
   useEffect(() => {
     if (!open) return;
+    const isAllowed = (k: CaptureKind) => {
+      if (k === 'gasto') return isModuleEnabled(state.settings, 'finanzas');
+      if (k === 'nota') return isModuleEnabled(state.settings, 'notas');
+      if (k === 'entrenamiento') return isModuleEnabled(state.settings, 'gimnasio');
+      if (k === 'idea') return isModuleEnabled(state.settings, 'ia');
+      return true;
+    };
+    if (initialKind && isAllowed(initialKind)) {
+      setKind(initialKind);
+    } else {
+      setKind((prev) => (isAllowed(prev) ? prev : 'universal'));
+    }
+    setUniversalInput('');
+    setMobileDrafts([]);
     setDate(todayISO());
     setMessage('');
+    setNoteTitle('');
+    setNotePinned(false);
     setManualAccountId(fallbackAccountId);
     if (suggestedTemplate) {
       setSelectedWorkoutTemplateId(suggestedTemplate.id);
     }
-  }, [open, fallbackAccountId, suggestedTemplate]);
+  }, [open, initialKind, fallbackAccountId, suggestedTemplate, state.settings]);
+
+  const previousFocusedElementRef = useRef<HTMLElement | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const financeInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
+    if (document.activeElement instanceof HTMLElement) {
+      previousFocusedElementRef.current = document.activeElement;
+    }
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
       document.body.style.overflow = prev;
+      if (previousFocusedElementRef.current && typeof previousFocusedElementRef.current.focus === 'function') {
+        previousFocusedElementRef.current.focus();
+      }
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const timer = window.setTimeout(() => {
+      if (activeTab === 'capture') {
+        if (kind === 'gasto' && !manualFinanceMode) {
+          financeInputRef.current?.focus();
+        } else if (kind !== 'entrenamiento') {
+          inputRef.current?.focus();
+        }
+      }
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [open, kind, manualFinanceMode, activeTab]);
+
+  const handleDialogKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.stopPropagation();
+      onClose();
+    }
+  };
 
   if (!open) return null;
 
@@ -113,19 +194,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
       const template = (state.gym?.routineTemplates || []).find((t) => t.id === templateId) || null;
       const newSessionId = uid();
       const exercises = template
-        ? template.exercises.map((ex) => ({
-            id: uid(),
-            exerciseId: ex.exerciseId,
-            notes: ex.notes || '',
-            sets: Array.from({ length: ex.defaultSets || 3 }).map((_, idx) => ({
-              id: uid(),
-              setNumber: idx + 1,
-              weightKg: 0,
-              reps: ex.defaultReps || 10,
-              rpe: undefined,
-              completed: false,
-            })),
-          }))
+        ? applyHistoryToTemplateExercises(template.exercises, state.gym?.sessions || [])
         : [];
 
       onUpdateState((draft) => {
@@ -133,16 +202,18 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
         if (!draft.gym.sessions) draft.gym.sessions = [];
         // mark any previous active session as completed
         draft.gym.sessions.forEach((s) => {
-          if (s.status === 'active') s.status = 'completed';
+          if (s.status === 'active') {
+            s.status = 'completed';
+            if (!s.finishedAt) s.finishedAt = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          }
         });
         draft.gym.sessions.unshift({
           id: newSessionId,
           date: todayISO(),
-          startedAt: new Date().toISOString(),
+          weekLabel: template?.name || undefined,
+          startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          finishedAt: null,
           status: 'active',
-          templateId: template?.id || null,
-          title: template?.name || 'Entrenamiento Libre',
-          notes: '',
           exercises,
         });
       });
@@ -204,10 +275,16 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
         playSound('success');
       } else if (kind === 'nota') {
         onUpdateState((draft) => {
-          addQuickNote(draft, text, date);
+          addQuickNote(draft, text, date, {
+            title: noteTitle.trim() || undefined,
+            pinned: notePinned,
+          });
         });
         playSound('success');
       } else if (kind === 'idea') {
+        if (!isModuleEnabled(state.settings, 'ia')) {
+          throw new Error('El módulo IA está desactivado.');
+        }
         onUpdateState((draft) => {
           addQuickIdea(draft, text);
         });
@@ -275,12 +352,25 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
       if (transcript) {
         if (kind === 'gasto' && !manualFinanceMode) {
           setFinanceInput((c) => (c ? `${c} ${transcript}` : transcript));
+        } else if (kind === 'universal') {
+          setUniversalInput((c) => (c ? `${c} ${transcript}` : transcript));
         } else {
           setText((c) => (c ? `${c} ${transcript}` : transcript));
         }
       }
     };
     recognition.start();
+  };
+
+  const handleUniversalParse = () => {
+    const trimmed = universalInput.trim();
+    if (!trimmed) return;
+    const drafts = parseCaptureDrafts(trimmed, state);
+    if (drafts.length > 0) {
+      setMobileDrafts((prev) => [...prev, ...drafts]);
+      setUniversalInput('');
+      playSound('click');
+    }
   };
 
   return (
@@ -292,6 +382,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
         role="dialog"
         aria-modal="true"
         aria-label="Captura universal"
+        onKeyDown={handleDialogKeyDown}
         className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-[var(--card)] border border-[var(--border)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl transition-transform"
         onClick={(event) => event.stopPropagation()}
       >
@@ -301,26 +392,26 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('capture')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
                 activeTab === 'capture'
-                  ? 'bg-[var(--card)] text-[var(--blue)] shadow-xs border border-[var(--border)]'
+                  ? 'bg-[var(--card)] text-[var(--text)] shadow-xs border border-[var(--border)] font-bold'
                   : 'text-[var(--text-soft)] hover:text-[var(--text)]'
               }`}
             >
-              <span>⚡ Capturar</span>
+              <span>Captura</span>
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('inbox')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
                 activeTab === 'inbox'
-                  ? 'bg-[var(--card)] text-[var(--blue)] shadow-xs border border-[var(--border)]'
+                  ? 'bg-[var(--card)] text-[var(--text)] shadow-xs border border-[var(--border)] font-bold'
                   : 'text-[var(--text-soft)] hover:text-[var(--text)]'
               }`}
             >
-              <span>📥 Bandeja</span>
+              <span>Bandeja</span>
               {(state.inbox || []).length > 0 && (
-                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-black px-1 animate-pulse">
+                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold px-1">
                   {(state.inbox || []).length}
                 </span>
               )}
@@ -419,13 +510,15 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                         >
                           🎯 Proyecto
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleConvertInbox(item.id, 'nota')}
-                          className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition cursor-pointer"
-                        >
-                          📝 Nota
-                        </button>
+                        {isModuleEnabled(state, 'notas') && (
+                          <button
+                            type="button"
+                            onClick={() => handleConvertInbox(item.id, 'nota')}
+                            className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition cursor-pointer"
+                          >
+                            📝 Nota
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleConvertInbox(item.id, 'recordatorio')}
@@ -442,9 +535,9 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
           </div>
         ) : (
           <>
-            {/* 7 Category Selector Chips */}
-            <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5 rounded-2xl bg-[var(--bg)] p-1.5 mb-4">
-              {captureOptions.map((option) => (
+            {/* Category Selector Chips */}
+            <div className="flex flex-wrap gap-1.5 rounded-2xl bg-[var(--bg)] p-1.5 mb-4">
+              {availableCaptureOptions.map((option) => (
                 <button
                   key={option.kind}
                   type="button"
@@ -452,7 +545,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                     setKind(option.kind);
                     setMessage('');
                   }}
-                  className={`flex flex-col items-center justify-center rounded-xl py-2 px-1 text-[11px] font-bold transition cursor-pointer ${
+                  className={`flex-1 min-w-[52px] flex flex-col items-center justify-center rounded-xl py-2 px-1 text-[11px] font-bold transition cursor-pointer ${
                     kind === option.kind
                       ? 'bg-[var(--card)] text-[var(--blue)] shadow-xs border border-[var(--border)]'
                       : 'text-[var(--text-soft)] hover:text-[var(--text)]'
@@ -464,8 +557,134 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
               ))}
             </div>
 
-        {/* WORKOUT TAB: 1-click start */}
-        {kind === 'entrenamiento' ? (
+        {/* UNIVERSAL / WORKOUT / STANDARD TABS */}
+        {kind === 'universal' ? (
+          <div className="space-y-4 py-1">
+            <div className="space-y-3">
+              <label className="block">
+                <span className="text-xs font-semibold text-[var(--text)] mb-1.5 block">
+                  Captura Universal (intérprete inteligente)
+                </span>
+                <div className="relative flex gap-2">
+                  <input
+                    autoFocus
+                    value={universalInput}
+                    onChange={(e) => setUniversalInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleUniversalParse();
+                      }
+                    }}
+                    placeholder="Ej: 1200 nafta, estudiar redes mañana..."
+                    className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-3.5 px-4 text-sm font-medium outline-none focus:border-[var(--blue)] shadow-inner text-[var(--text)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={startDictation}
+                    className={`flex items-center justify-center w-12 h-12 rounded-2xl border transition cursor-pointer shrink-0 ${
+                      listening
+                        ? 'bg-rose-500 text-white animate-pulse border-rose-600'
+                        : 'bg-[var(--card)] text-[var(--text-soft)] border-[var(--border)] hover:text-[var(--text)]'
+                    }`}
+                    title="Dictado por voz"
+                  >
+                    🎤
+                  </button>
+                </div>
+              </label>
+
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[11px] text-[var(--text-faint)]">
+                  Podés combinar varias intenciones con &quot;y&quot;.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleUniversalParse}
+                  disabled={!universalInput.trim()}
+                  className="px-4 py-2 rounded-xl bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold hover:opacity-90 active:scale-95 disabled:opacity-30 transition cursor-pointer shadow-xs"
+                >
+                  Interpretar
+                </button>
+              </div>
+            </div>
+
+            {mobileDrafts.length > 0 && (
+              <DraftConfirmationTray
+                drafts={mobileDrafts}
+                state={state}
+                onUpdateDraft={(updated) =>
+                  setMobileDrafts((prev) => prev.map((d) => (d.id === updated.id ? updated : d)))
+                }
+                onConfirmDraft={(draft) => {
+                  try {
+                    let feedback: { message: string; sound: 'success' | 'coins' | 'click' } = {
+                      message: 'Elemento registrado.',
+                      sound: 'success',
+                    };
+                    onUpdateState((s) => {
+                      feedback = confirmCaptureDraft(s, draft);
+                    });
+                    playSound(feedback.sound);
+                    showToast(feedback.message);
+                    setMobileDrafts((prev) => {
+                      const next = prev.filter((d) => d.id !== draft.id);
+                      if (next.length === 0) onClose();
+                      return next;
+                    });
+                  } catch (err) {
+                    setMessage(err instanceof Error ? err.message : 'Error al registrar.');
+                  }
+                }}
+                onConfirmAll={() => {
+                  try {
+                    let count = 0;
+                    onUpdateState((s) => {
+                      for (const d of mobileDrafts) {
+                        if (
+                          d.isModuleEnabled &&
+                          (!d.missingFields || d.missingFields.length === 0) &&
+                          (d.kind !== 'finance' || (d.amount !== undefined && d.amount > 0))
+                        ) {
+                          confirmCaptureDraft(s, d);
+                          count++;
+                        }
+                      }
+                    });
+                    playSound('success');
+                    showToast(`${count} elementos registrados.`);
+                    setMobileDrafts([]);
+                    onClose();
+                  } catch (err) {
+                    setMessage(err instanceof Error ? err.message : 'Error al registrar borradores.');
+                  }
+                }}
+                onDiscardDraft={(draftId) => {
+                  setMobileDrafts((prev) => prev.filter((d) => d.id !== draftId));
+                }}
+                onDiscardAll={() => {
+                  setMobileDrafts([]);
+                }}
+                onEnableModule={(draft) => {
+                  onUpdateState((s) => {
+                    enableModuleForDraft(s, draft);
+                  });
+                  setMobileDrafts((prev) =>
+                    prev.map((d) => (d.id === draft.id ? { ...d, isModuleEnabled: true } : d))
+                  );
+                  showToast('Módulo activado.');
+                }}
+                onConvertToNote={(draft) => {
+                  const noteDraft = convertDraftToNote(draft);
+                  setMobileDrafts((prev) =>
+                    prev.map((d) => (d.id === draft.id ? noteDraft : d))
+                  );
+                  showToast('Convertido a nota.');
+                }}
+              />
+            )}
+          </div>
+        ) : kind === 'entrenamiento' ? (
           <div className="space-y-4 py-1">
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 space-y-3">
               <span className="text-xs font-bold text-[var(--text)] block">
@@ -530,7 +749,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                   <div>
                     <label className="block">
                       <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-xs font-bold text-[var(--text)]">Entrada inteligente</span>
+                        <span className="text-xs font-semibold text-[var(--text)]">Entrada rápida</span>
                         <button
                           type="button"
                           onClick={() => setManualFinanceMode(true)}
@@ -541,11 +760,12 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                       </div>
                       <div className="relative flex gap-2">
                         <input
+                          ref={financeInputRef}
                           autoFocus
                           value={financeInput}
                           onChange={(e) => setFinanceInput(e.target.value)}
-                          placeholder="Ej: 500 comida banco, 1200 nafta, 2000 super..."
-                          className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-3.5 px-4 text-sm font-medium outline-none focus:border-[var(--blue)] shadow-inner"
+                          placeholder="Monto, categoría o cuenta (ej: 500 super)..."
+                          className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-3.5 px-4 text-sm font-medium outline-none focus:border-[var(--blue)] shadow-inner text-[var(--text)]"
                         />
                         <button
                           type="button"
@@ -563,11 +783,11 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                     </label>
 
                     {/* Compact Live Parser Preview Badge */}
-                    <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
+                    <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <span className="text-[10px] uppercase font-bold tracking-wider text-[var(--text-faint)] block">
-                            Interpretación en tiempo real:
+                            Interpretación:
                           </span>
                           <span
                             className={`text-xs font-mono font-bold block mt-0.5 truncate ${
@@ -579,7 +799,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                         </div>
                         {parsedFinance.isValid && (
                           <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-500 shrink-0">
-                            Listo para guardar
+                            Listo
                           </span>
                         )}
                       </div>
@@ -588,7 +808,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                       {parsedFinance.missing.includes('account') && (state.finance?.accounts || []).length > 0 && (
                         <div className="mt-2 pt-2 border-t border-[var(--border)]">
                           <span className="text-[10px] text-[var(--text-faint)] block mb-1">
-                            Seleccionar cuenta con un toque:
+                            Cuenta:
                           </span>
                           <div className="flex flex-wrap gap-1.5">
                             {(state.finance?.accounts || []).map((acc) => (
@@ -659,9 +879,9 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                           onChange={(e) => setManualCategory(e.target.value)}
                           className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-xs"
                         >
-                          {(state.finance?.categories || []).map((c) => (
-                            <option key={c} value={c}>
-                              {c}
+                          {activeCategories.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.name}
                             </option>
                           ))}
                         </select>
@@ -690,6 +910,22 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
               </div>
             )}
 
+            {/* Optional Title for Note */}
+            {kind === 'nota' && (
+              <label className="block mb-2">
+                <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">
+                  Título (opcional)
+                </span>
+                <input
+                  type="text"
+                  value={noteTitle}
+                  onChange={(e) => setNoteTitle(e.target.value)}
+                  placeholder="Ej.: Soporte monitor, Configuración OBS..."
+                  className="min-w-0 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs font-semibold text-[var(--text)] outline-none focus:border-[var(--blue)]"
+                />
+              </label>
+            )}
+
             {/* TEXT INPUT FOR INBOX, TASKS, NOTES, IDEAS, REMINDERS */}
             {kind !== 'gasto' && (
               <label className="block">
@@ -697,7 +933,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                   {kind === 'inbox'
                     ? '¿Qué querés guardar en tu bandeja?'
                     : kind === 'tarea'
-                    ? '¿Qué hay que hacer?'
+                    ? '¿Qué querés registrar para hoy?'
                     : kind === 'nota'
                     ? '¿Qué querés guardar?'
                     : kind === 'idea'
@@ -706,6 +942,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                 </span>
                 <div className="flex gap-2">
                   <input
+                    ref={inputRef}
                     autoFocus
                     required
                     value={text}
@@ -714,7 +951,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                       kind === 'inbox'
                         ? 'Ej.: Averiguar trámite, mandar presupuesto a cliente, probar app...'
                         : kind === 'tarea'
-                        ? 'Ej.: Pedir turno con el médico...'
+                        ? 'Ej.: Enviar CV a Micro1, Comprar alimento para gatos...'
                         : kind === 'nota'
                         ? 'Ej.: Código de acceso al portón es 4912...'
                         : kind === 'idea'
@@ -737,6 +974,21 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                   </button>
                 </div>
               </label>
+            )}
+
+            {/* NOTE EXTRAS: Pin toggle */}
+            {kind === 'nota' && (
+              <div className="flex items-center justify-between pt-1 text-xs">
+                <label className="flex items-center gap-2 cursor-pointer select-none text-[var(--text-soft)] hover:text-[var(--text)]">
+                  <input
+                    type="checkbox"
+                    checked={notePinned}
+                    onChange={(e) => setNotePinned(e.target.checked)}
+                    className="rounded border-[var(--border)] text-[var(--blue)] focus:ring-0"
+                  />
+                  <span>📌 Fijar nota arriba</span>
+                </label>
+              </div>
             )}
 
             {/* TAREA EXTRAS: Priority & Effort */}

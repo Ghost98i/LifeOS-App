@@ -154,103 +154,104 @@ export const WeatherWidget: React.FC = () => {
     : { label: 'Cargando...', icon: '🌤' };
 
   return (
-    <div className="bg-[var(--card)] border border-[var(--border)] hover:border-[var(--border-hover)] rounded-2xl p-4 shadow-xs hover:shadow-md transition-all relative overflow-hidden group">
+    <div className="bg-[var(--card)] border border-[var(--border)] hover:border-[var(--border-hover)] rounded-2xl p-3 shadow-2xs transition-all relative overflow-hidden group">
       {/* Subtle ambient gradient overlay */}
-      <div className="absolute -right-8 -top-8 w-28 h-28 bg-gradient-to-br from-blue-500/10 via-indigo-500/5 to-transparent rounded-full blur-xl pointer-events-none group-hover:scale-125 transition-transform duration-500" />
+      <div className="absolute -right-8 -top-8 w-24 h-24 bg-gradient-to-br from-blue-500/8 via-indigo-500/4 to-transparent rounded-full blur-xl pointer-events-none group-hover:scale-110 transition-transform duration-300" />
 
-      <div className="flex items-center justify-between gap-3 relative z-10">
-        {/* Left info: Location & Temp */}
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-[var(--bg)] border border-[var(--border)] flex items-center justify-center text-2xl shrink-0 shadow-2xs group-hover:scale-105 transition-transform">
+      <div className="flex items-center justify-between gap-2.5 relative z-10">
+        {/* Left info: Icon, Location, Temp & State */}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-[var(--bg)] border border-[var(--border)] flex items-center justify-center text-xl shrink-0 shadow-2xs">
             {info.icon}
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-xs text-[var(--text)] tracking-tight">
+              <span className="font-extrabold text-[11px] text-[var(--text)] tracking-tight truncate max-w-[120px] sm:max-w-[180px]">
                 {weather?.locationName || 'Melo, Cerro Largo'}
               </span>
               <button
+                type="button"
                 onClick={() => setIsSearching(!isSearching)}
-                className="p-1 text-[10px] text-[var(--blue)] hover:bg-[var(--blue-soft)] rounded-lg transition-colors cursor-pointer"
-                title="Buscar o cambiar ciudad"
+                className="p-0.5 text-[10px] text-[var(--blue)] hover:bg-[var(--blue-soft)] rounded transition-colors cursor-pointer"
+                title="Buscar o cambiar ciudad / más detalles"
               >
                 🔍
               </button>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-black font-mono text-[var(--text)] tracking-tight">
+            <div className="flex items-baseline gap-1.5 mt-0.5">
+              <span className="text-xl font-black font-mono text-[var(--text)] tracking-tight tabular-nums">
                 {weather ? `${weather.temp}°C` : '—'}
               </span>
-              <span className="text-xs text-[var(--text-soft)] font-semibold">
+              <span className="text-[11px] text-[var(--text-soft)] font-medium truncate">
                 {info.label}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Right info: Max / Min / Wind */}
-        <div className="text-right flex flex-col items-end gap-1.5 text-xs">
+        {/* Right info: Max / Min & subtle location trigger */}
+        <div className="text-right flex flex-col items-end gap-1 shrink-0">
           {weather?.maxTemp != null && weather?.minTemp != null && (
-            <div className="flex items-center gap-1.5 font-mono text-[11px]">
-              <span className="px-2 py-0.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold rounded-lg border border-rose-500/20">
-                Max: {weather.maxTemp}°
+            <div className="flex items-center gap-1 font-mono text-[10px] tabular-nums">
+              <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold rounded-md border border-rose-500/20">
+                ↑{weather.maxTemp}°
               </span>
-              <span className="px-2 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold rounded-lg border border-blue-500/20">
-                Min: {weather.minTemp}°
+              <span className="px-1.5 py-0.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold rounded-md border border-blue-500/20">
+                ↓{weather.minTemp}°
               </span>
             </div>
           )}
-          {weather?.windSpeed != null && (
-            <span className="text-[11px] text-[var(--text-soft)] font-medium">
-              💨 Viento: {weather.windSpeed} km/h
-            </span>
-          )}
           <button
+            type="button"
             onClick={getLocationAndFetch}
             disabled={loading}
-            title="Solo se solicita permiso al tocar este botón. La ubicación se envía a Open-Meteo para consultar el clima."
-            className="text-[10px] font-semibold text-[var(--blue)] hover:underline flex items-center gap-1 cursor-pointer transition-opacity disabled:opacity-50"
+            title="Actualizar ubicación"
+            className="text-[9px] font-semibold text-[var(--text-faint)] hover:text-[var(--blue)] hover:underline flex items-center gap-0.5 cursor-pointer disabled:opacity-50"
           >
-            {loading ? '🔄 Actualizando...' : '📍 Ubicación (opcional)'}
+            {loading ? '🔄 Cargando...' : '📍 Ubicación'}
           </button>
         </div>
       </div>
 
-      {/* Optional Search Input Drawer */}
+      {/* Optional Search / Extended Info Drawer */}
       {isSearching && (
-        <form
-          onSubmit={handleSearchCity}
-          className="mt-3 pt-3 border-t border-[var(--border)] flex gap-2 animate-in fade-in duration-200"
-        >
-          <input
-            type="text"
-            value={cityInput}
-            onChange={(e) => setCityInput(e.target.value)}
-            placeholder="Buscar ciudad (Ej: Melo, Montevideo, Madrid...)"
-            className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue)]/20 outline-hidden transition-all text-[var(--text)]"
-          />
-          <button
-            type="submit"
-            className="px-3 py-1.5 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shrink-0 shadow-2xs"
-          >
-            Buscar
-          </button>
-        </form>
+        <div className="mt-2.5 pt-2.5 border-t border-[var(--border)] space-y-2 animate-in fade-in duration-150">
+          <form onSubmit={handleSearchCity} className="flex gap-2">
+            <input
+              type="text"
+              value={cityInput}
+              onChange={(e) => setCityInput(e.target.value)}
+              placeholder="Buscar ciudad (Ej: Melo, Montevideo, Buenos Aires...)"
+              className="flex-1 px-2.5 py-1 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden transition-all text-[var(--text)]"
+            />
+            <button
+              type="submit"
+              className="px-2.5 py-1 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shrink-0 shadow-2xs"
+            >
+              Buscar
+            </button>
+          </form>
+          {weather?.windSpeed != null && (
+            <div className="flex items-center justify-between text-[10px] text-[var(--text-soft)] px-1">
+              <span>💨 Viento: {weather.windSpeed} km/h</span>
+              <a
+                href="https://open-meteo.com/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[9px] text-[var(--text-faint)] hover:underline"
+              >
+                Open-Meteo
+              </a>
+            </div>
+          )}
+        </div>
       )}
 
       {error && (
-        <p className="text-[11px] text-amber-500 mt-2 font-medium">
+        <p className="text-[10px] text-amber-500 mt-1.5 font-medium">
           ⚠️ {error}
         </p>
       )}
-      <a
-        href="https://open-meteo.com/"
-        target="_blank"
-        rel="noreferrer"
-        className="relative z-10 mt-2 inline-block text-[9px] font-medium text-[var(--text-faint)] hover:text-[var(--blue)]"
-      >
-        Datos del clima: Open-Meteo
-      </a>
     </div>
   );
 };

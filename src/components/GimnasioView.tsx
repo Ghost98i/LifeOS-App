@@ -15,6 +15,8 @@ import { GymRestTimerBar } from './GymRestTimerBar';
 import { GymPlateCalculator } from './GymPlateCalculator';
 import { PersonalRecordsCard } from './PersonalRecordsCard';
 import { BodyCompositionCard } from './BodyCompositionCard';
+import { WorkoutSummaryModal } from './WorkoutSummaryModal';
+import { ExerciseHistoryModal } from './ExerciseHistoryModal';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 import {
@@ -22,6 +24,13 @@ import {
   fmtDate,
   uid,
 } from '../lib/storage';
+import {
+  applyHistoryToTemplateExercises,
+  getExerciseGhostValues,
+  calcDetailedPRs,
+  detectSessionPRs,
+  NewPRRecord,
+} from '../lib/gymMetrics';
 import {
   currentWeight,
   weightVariation,
@@ -122,6 +131,15 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
     setIndex: number;
     initialWeight: number;
     barWeight: number;
+  } | null>(null);
+
+  // Exercise History Modal state
+  const [historyExerciseName, setHistoryExerciseName] = useState<string | null>(null);
+
+  // Workout Summary Modal state (after finishing a workout)
+  const [completedSummarySession, setCompletedSummarySession] = useState<{
+    session: GymSession;
+    newPRs: NewPRRecord[];
   } | null>(null);
 
   const allExerciseNames = Array.from(
@@ -297,27 +315,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
         startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         finishedAt: null,
         exercises: template
-          ? template.exercises.map((ex) => ({
-              id: uid(),
-              name: ex.name,
-              muscleGroup: ex.muscleGroup || inferMuscleGroup(ex.name),
-              barWeight: ex.barWeight ?? 20,
-              restSeconds: ex.restSeconds || 90,
-              timerEnabled: true,
-              sets:
-                ex.sets && ex.sets.length > 0
-                  ? ex.sets.map((s) => ({
-                      id: uid(),
-                      weight: s.weight,
-                      reps: s.reps,
-                      completed: false,
-                    }))
-                  : [
-                      { id: uid(), weight: Number(ex.weight) || 20, reps: 10, completed: false },
-                      { id: uid(), weight: Number(ex.weight) || 20, reps: 10, completed: false },
-                      { id: uid(), weight: Number(ex.weight) || 20, reps: 10, completed: false },
-                    ],
-            }))
+          ? applyHistoryToTemplateExercises(template.exercises, state.gym.sessions)
           : [],
       };
       draft.gym.sessions.unshift(newSession);
@@ -326,20 +324,39 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
     setLiveSetIdx(0);
     setActiveTab('entrenar');
     playSound('click');
-    showToast('🏋️ Entrenamiento iniciado.');
+    showToast('🏋️ Entrenamiento iniciado con tu historial más reciente.');
   };
 
   const handleFinishWorkout = (sessionId: string) => {
+    const sessionToFinish = state.gym.sessions.find((x) => x.id === sessionId);
+    const finishTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    let summaryPayload: { session: GymSession; newPRs: NewPRRecord[] } | null = null;
+    if (sessionToFinish) {
+      const historicalPRs = calcDetailedPRs(state.gym.sessions, sessionId);
+      const finishedSnapshot: GymSession = {
+        ...sessionToFinish,
+        status: 'completed',
+        finishedAt: sessionToFinish.finishedAt || finishTime,
+      };
+      const newPRs = detectSessionPRs(finishedSnapshot, historicalPRs);
+      summaryPayload = { session: finishedSnapshot, newPRs };
+    }
+
     onUpdateState((draft) => {
       const s = draft.gym.sessions.find((x) => x.id === sessionId);
       if (s) {
         s.status = 'completed';
-        s.finishedAt = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        s.finishedAt = finishTime;
       }
       draft.gym.activeTimer = null;
     });
     playSound('success');
-    showToast('🎉 ¡Entrenamiento completado con éxito!');
+    if (summaryPayload) {
+      setCompletedSummarySession(summaryPayload);
+    } else {
+      showToast('🎉 ¡Entrenamiento completado con éxito!');
+    }
   };
 
   const handleAddSession = (overrideWeek?: string) => {
@@ -393,11 +410,23 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
     const eq = equipment || inferred.equipment;
     const barW = eq === 'barra' ? (barWeight !== undefined ? barWeight : inferred.barWeight) : 0;
     const group = muscleGroup || inferMuscleGroup(name);
-    const newSets: GymSet[] = [
-      { id: uid(), weight: initialWeight, reps: initialReps, completed: false },
-      { id: uid(), weight: initialWeight, reps: initialReps, completed: false },
-      { id: uid(), weight: initialWeight, reps: initialReps, completed: false },
-    ];
+
+    // Si existe historial previo del ejercicio, utilizar las series y pesos reales
+    const ghost = getExerciseGhostValues(state.gym.sessions, name, sessionId);
+    const startW = ghost && ghost.sets[0] ? ghost.sets[0].weight : initialWeight;
+    const startR = ghost && ghost.sets[0] ? ghost.sets[0].reps : initialReps;
+    const newSets: GymSet[] = ghost && ghost.sets.length > 0
+      ? ghost.sets.map((gs) => ({
+          id: uid(),
+          weight: gs.weight,
+          reps: gs.reps,
+          completed: false,
+        }))
+      : [
+          { id: uid(), weight: startW, reps: startR, completed: false },
+          { id: uid(), weight: startW, reps: startR, completed: false },
+          { id: uid(), weight: startW, reps: startR, completed: false },
+        ];
 
     onUpdateState((draft) => {
       const s = draft.gym.sessions.find((x) => x.id === sessionId);
@@ -411,7 +440,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
           restSeconds: 90,
           timerEnabled: true,
           sets: newSets,
-          weight: initialWeight,
+          weight: startW,
         });
       }
     });
@@ -736,7 +765,6 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
     <div className="space-y-6">
       {/* Page Header */}
       <PageHeader
-        category="Entrenamiento & Fuerza"
         title="Gimnasio"
         subtitle="Modo entreno móvil, cálculo de discos, descanso guiado y progresión."
         actions={
@@ -792,7 +820,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
           onClick={() => setActiveTab('entrenar')}
           className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === 'entrenar'
-              ? 'bg-[var(--card)] text-[var(--blue)] shadow-xs'
+              ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
               : 'text-[var(--text-soft)] hover:text-[var(--text)]'
           }`}
         >
@@ -808,13 +836,13 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
           onClick={() => setActiveTab('historial')}
           className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === 'historial'
-              ? 'bg-[var(--card)] text-[var(--blue)] shadow-xs'
+              ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
               : 'text-[var(--text-soft)] hover:text-[var(--text)]'
           }`}
         >
           <AppIcon name="calendar" className="h-4 w-4" />
           <span>Historial de Semanas</span>
-          <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--bg)] border border-[var(--border)] text-[var(--text-soft)]">
+          <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--surface-muted)] border border-[var(--border)] text-[var(--text-soft)]">
             {state.gym.sessions.length}
           </span>
         </button>
@@ -824,7 +852,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
           onClick={() => setActiveTab('progresion')}
           className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === 'progresion'
-              ? 'bg-[var(--card)] text-[var(--blue)] shadow-xs'
+              ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
               : 'text-[var(--text-soft)] hover:text-[var(--text)]'
           }`}
         >
@@ -929,14 +957,29 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="text-base font-black text-[var(--text)] tracking-tight">
-                          {liveCurrentEx.name}
-                        </h3>
+                        <button
+                          type="button"
+                          onClick={() => setHistoryExerciseName(liveCurrentEx.name)}
+                          className="text-base font-black text-[var(--text)] tracking-tight hover:text-[var(--blue)] transition text-left cursor-pointer flex items-center gap-1.5"
+                          title="Ver historial completo y récords de este ejercicio"
+                        >
+                          <span>{liveCurrentEx.name}</span>
+                          <span className="text-xs font-normal text-[var(--blue)]">↗</span>
+                        </button>
                         {liveCurrentEx.muscleGroup && (
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[var(--card)] border border-[var(--border)] text-[var(--text-soft)]">
                             {liveCurrentEx.muscleGroup}
                           </span>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => setHistoryExerciseName(liveCurrentEx.name)}
+                          className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 px-2 py-0.5 rounded-md cursor-pointer transition flex items-center gap-1"
+                          title="Ver ficha e historial"
+                        >
+                          <AppIcon name="activity" className="h-3 w-3" />
+                          <span>Historial</span>
+                        </button>
                       </div>
                       {getPreviousExerciseStats(state.gym.sessions, activeWorkoutSession.id, liveCurrentEx.name) && (
                         <p className="text-xs text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">
@@ -1083,6 +1126,38 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                           </span>
                         </div>
                       </div>
+                      {/* GHOST VALUE BANNER FOR ACTIVE SET */}
+                      {(() => {
+                        const ghost = liveCurrentEx ? getExerciseGhostValues(state.gym.sessions, liveCurrentEx.name, activeWorkoutSession.id) : null;
+                        const ghostSet = ghost?.sets[liveSafeSetIdx];
+                        if (!ghostSet) return null;
+                        return (
+                          <div className="flex items-center justify-between p-2.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)] text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
+                                Anterior #{liveSafeSetIdx + 1}:
+                              </span>
+                              <strong className="font-mono text-xs text-[var(--text)]">
+                                {ghostSet.weight} kg × {ghostSet.reps} reps
+                              </strong>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleUpdateSet(activeWorkoutSession.id, liveSafeExIdx, liveSafeSetIdx, {
+                                  weight: ghostSet.weight,
+                                  reps: ghostSet.reps,
+                                });
+                                playSound('click');
+                                showToast(`Serie #${liveSafeSetIdx + 1}: ${ghostSet.weight} kg × ${ghostSet.reps}`);
+                              }}
+                              className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-[var(--blue-soft)] text-[var(--blue)] hover:bg-[var(--blue)] hover:text-white transition cursor-pointer shrink-0"
+                            >
+                              Usar anterior
+                            </button>
+                          </div>
+                        );
+                      })()}
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {/* Weight Adjuster */}
@@ -1247,6 +1322,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                       barWeight: barW,
                     })
                   }
+                  onOpenHistory={setHistoryExerciseName}
                 />
               </div>
             </div>
@@ -1254,38 +1330,27 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
             /* NO ACTIVE WORKOUT: TODAY LAUNCHER */
             <div className="space-y-6">
               {/* Today's Gym Status Hero Card */}
-              <div className="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <span
-                    className={`flex h-12 w-12 items-center justify-center rounded-2xl font-bold text-xl shadow-xs ${
-                      isTrainedToday
-                        ? 'bg-emerald-500/10 text-emerald-600'
-                        : isRestDayToday
-                        ? 'bg-purple-500/10 text-purple-600'
-                        : 'bg-amber-500/10 text-amber-600'
-                    }`}
-                  >
-                    <AppIcon
-                      name={isTrainedToday ? 'checkCircle' : isRestDayToday ? 'moon' : 'dumbbell'}
-                      className="h-6 w-6"
-                    />
+              <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
+                    Entrenamiento
                   </span>
-                  <div>
-                    <h2 className="text-base font-black text-[var(--text)]">
-                      {isTrainedToday
-                        ? '¡Entrenamiento de Hoy Completado!'
-                        : isRestDayToday
-                        ? 'Día de Descanso Activo'
-                        : '¿Listo para entrenar hoy?'}
-                    </h2>
-                    <p className="text-xs text-[var(--text-soft)] mt-0.5">
-                      {isTrainedToday
-                        ? 'Excelente sesión. Tus datos y volumen quedaron registrados.'
-                        : isRestDayToday
-                        ? 'Racha de consistencia protegida. Tu musculatura se recupera.'
-                        : 'Elegí una plantilla o iniciá en blanco para registrar tus series con un toque.'}
-                    </p>
-                  </div>
+                  <h2 className="text-base sm:text-lg font-bold text-[var(--text)]">
+                    {isTrainedToday
+                      ? 'Sesión de hoy completada'
+                      : isRestDayToday
+                      ? 'Día de descanso activo'
+                      : sessionTemplate
+                      ? `Rutina: ${state.gym.routineTemplates.find((t) => t.id === sessionTemplate)?.name || 'Personalizada'}`
+                      : 'Rutina de hoy'}
+                  </h2>
+                  <p className="text-xs text-[var(--text-soft)] mt-0.5">
+                    {isTrainedToday
+                      ? 'Tus datos de series y volumen quedaron registrados.'
+                      : isRestDayToday
+                      ? 'Racha protegida. Día de recuperación muscular.'
+                      : `${state.gym.routineTemplates.length} plantilla(s) disponible(s) · Racha de ${streak}d`}
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-2.5 flex-wrap w-full sm:w-auto">
@@ -1293,20 +1358,16 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                     <button
                       type="button"
                       onClick={handleToggleRestDay}
-                      className={`px-3 py-2 rounded-xl text-xs font-bold border transition cursor-pointer ${
-                        isRestDayToday
-                          ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30'
-                          : 'bg-[var(--surface-muted)] text-[var(--text-soft)] border-[var(--border)] hover:text-[var(--text)]'
-                      }`}
+                      className="px-3.5 py-2 rounded-xl text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] border border-[var(--border)] bg-[var(--surface-muted)] transition cursor-pointer"
                     >
-                      {isRestDayToday ? 'Cancelar descanso' : '🛋️ Hoy descanso'}
+                      {isRestDayToday ? 'Cancelar descanso' : 'Descanso hoy'}
                     </button>
                   )}
 
                   <button
                     type="button"
                     onClick={() => handleStartWorkout(sessionTemplate || undefined)}
-                    className="px-5 py-2.5 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-[0.98] cursor-pointer flex items-center gap-2"
+                    className="px-4 py-2 bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 text-xs font-bold rounded-xl shadow-2xs transition-all active:scale-[0.98] cursor-pointer flex items-center gap-2"
                   >
                     <AppIcon name="dumbbell" className="h-4 w-4" />
                     <span>Iniciar Entrenamiento</span>
@@ -1589,6 +1650,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                         barWeight: barW,
                       })
                     }
+                    onOpenHistory={setHistoryExerciseName}
                   />
                 </div>
               )}
@@ -1729,6 +1791,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                           barWeight: barW,
                         })
                       }
+                      onOpenHistory={setHistoryExerciseName}
                     />
                   ))}
                 </div>
@@ -1797,6 +1860,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                             barWeight: barW,
                           })
                         }
+                        onOpenHistory={setHistoryExerciseName}
                       />
                     ))}
                   </div>
@@ -1904,7 +1968,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
             </div>
             {showPRs && (
               <div className="mt-3 pt-3 border-t border-[var(--border)] animate-in fade-in">
-                <PersonalRecordsCard state={state} />
+                <PersonalRecordsCard state={state} onSelectExercise={setHistoryExerciseName} />
               </div>
             )}
           </div>
@@ -2035,6 +2099,24 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
               barW
             );
           }}
+        />
+      )}
+
+      {/* Workout Completion Summary Modal */}
+      {completedSummarySession && (
+        <WorkoutSummaryModal
+          session={completedSummarySession.session}
+          newPRs={completedSummarySession.newPRs}
+          onClose={() => setCompletedSummarySession(null)}
+        />
+      )}
+
+      {/* Exercise History Modal */}
+      {historyExerciseName && (
+        <ExerciseHistoryModal
+          exerciseName={historyExerciseName}
+          sessions={state.gym?.sessions || []}
+          onClose={() => setHistoryExerciseName(null)}
         />
       )}
     </div>
@@ -2201,6 +2283,7 @@ interface WorkoutSessionCardProps {
     initialWeight: number,
     barWeight: number
   ) => void;
+  onOpenHistory?: (exerciseName: string) => void;
 }
 
 const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
@@ -2220,6 +2303,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
   onUpdateExerciseEquipment,
   onPropagateExercise,
   onOpenCalculator,
+  onOpenHistory,
 }) => {
   const [newExName, setNewExName] = useState('');
   const [newExMuscle, setNewExMuscle] = useState<MuscleGroup>('Pecho');
@@ -2364,6 +2448,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
         ) : (
           session.exercises.map((exercise, exIdx) => {
             const previousBest = getPreviousExerciseStats(allSessions, session.id, exercise.name);
+            const exerciseGhost = getExerciseGhostValues(allSessions, exercise.name, session.id);
             const inferred = inferExerciseEquipment(exercise.name);
             const currentEquipment: ExerciseEquipment =
               exercise.equipment ||
@@ -2379,9 +2464,15 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                 {/* Exercise Header */}
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
-                    <strong className="text-sm font-extrabold text-[var(--text)]">
-                      {exercise.name}
-                    </strong>
+                    <button
+                      type="button"
+                      onClick={() => onOpenHistory?.(exercise.name)}
+                      className="text-sm font-extrabold text-[var(--text)] hover:text-[var(--blue)] transition text-left cursor-pointer flex items-center gap-1"
+                      title="Ver historial de este ejercicio"
+                    >
+                      <span>{exercise.name}</span>
+                      <span className="text-xs font-normal text-[var(--blue)]">↗</span>
+                    </button>
                     {exercise.muscleGroup && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[var(--card)] border border-[var(--border)] text-[var(--text-soft)]">
                         {exercise.muscleGroup}
@@ -2490,6 +2581,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                       {(exercise.sets || []).map((set, setIdx) => {
                         const setWeight = Number(set.weight) || 0;
                         const platePerSide = Math.max(0, (setWeight - currentBarWeight) / 2);
+                        const ghostSet = exerciseGhost?.sets[setIdx];
 
                         return (
                           <tr
@@ -2498,8 +2590,33 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                               set.completed ? 'bg-emerald-500/5' : 'hover:bg-[var(--card)]/50'
                             }`}
                           >
-                            <td className="py-1.5 font-mono font-bold text-[var(--text-soft)]">
-                              #{setIdx + 1}
+                            <td className="py-1.5 font-mono text-[var(--text-soft)]">
+                              <div className="font-bold">#{setIdx + 1}</div>
+                              {ghostSet && (
+                                <div
+                                  className="text-[10px] text-[var(--text-faint)] leading-tight whitespace-nowrap"
+                                  title={`Sesión previa: ${ghostSet.weight}kg × ${ghostSet.reps}`}
+                                >
+                                  <span className="opacity-70">Ant:</span> {ghostSet.weight}k×{ghostSet.reps}
+                                  {!set.completed &&
+                                    (Number(set.weight) !== ghostSet.weight ||
+                                      Number(set.reps) !== ghostSet.reps) && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          onUpdateSet(exIdx, setIdx, {
+                                            weight: ghostSet.weight,
+                                            reps: ghostSet.reps,
+                                          })
+                                        }
+                                        className="ml-1 text-[9px] text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 underline cursor-pointer font-sans"
+                                        title="Copiar valores de la sesión anterior"
+                                      >
+                                        Usar
+                                      </button>
+                                    )}
+                                </div>
+                              )}
                             </td>
                             <td className="py-1.5">
                               <div className="flex items-center gap-1">
@@ -2519,6 +2636,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                   type="number"
                                   step="0.5"
                                   min="0"
+                                  placeholder={ghostSet ? String(ghostSet.weight) : undefined}
                                   value={set.weight}
                                   onChange={(e) =>
                                     onUpdateSet(exIdx, setIdx, {
@@ -2602,6 +2720,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                 <input
                                   type="number"
                                   min="1"
+                                  placeholder={ghostSet ? String(ghostSet.reps) : undefined}
                                   value={set.reps}
                                   onChange={(e) =>
                                     onUpdateSet(exIdx, setIdx, {

@@ -97,7 +97,6 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
   return (
     <div className="space-y-6">
       <PageHeader
-        category="Carrera Profesional"
         title="Trabajo & Empleo"
         subtitle="Postulaciones, embudo de entrevistas y seguimiento laboral centralizado."
         actions={

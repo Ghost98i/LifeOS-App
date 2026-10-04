@@ -3,9 +3,12 @@ import type { JobApplication, LifeOSState, ViewType } from '../types';
 import { AppIcon, type AppIconName } from './AppIcon';
 import { searchLifeOS, type SearchResult } from '../lib/search';
 import { fmtMoney, todayISO, uid } from '../lib/storage';
+import { PrivacyAmount } from './PrivacyAmount';
 import { addTransaction } from '../lib/financeFlows';
 import { showToast } from '../lib/toast';
 import { playSound } from '../lib/audio';
+import { getActiveCategories } from '../lib/financeCategories';
+import { isModuleEnabled } from '../lib/moduleVisibility';
 
 export interface GlobalSearchModalProps {
   state: LifeOSState;
@@ -50,18 +53,6 @@ const VIEW_METADATA: { view: ViewType; label: string; desc: string; icon: AppIco
   { view: 'checkout', label: 'Cerrar Día (Checkout)', desc: 'Revisión nocturna y balance de la jornada', icon: 'moon', keywords: ['checkout', 'cerrar', 'noche', 'balance', 'dia'] },
 ];
 
-const DEFAULT_CATEGORIES = [
-  'Comida',
-  'Supermercado',
-  'Transporte',
-  'Servicios',
-  'Ocio',
-  'Salud',
-  'Educación',
-  'Suscripciones',
-  'Varios',
-];
-
 export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   state,
   open,
@@ -78,9 +69,16 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'actions' | 'views' | 'notes' | 'finance' | 'calendar' | 'gym'>('all');
 
+  const activeFinanceCategories = useMemo(
+    () => getActiveCategories(state.finance?.categories),
+    [state.finance?.categories]
+  );
+
   // Micro-form state: Expense
   const [expenseAmount, setExpenseAmount] = useState('');
-  const [expenseCategory, setExpenseCategory] = useState(state.finance.categories[0] || 'Comida');
+  const [expenseCategory, setExpenseCategory] = useState(
+    () => getActiveCategories(state.finance?.categories)[0]?.id || 'Comida'
+  );
   const [expenseAccount, setExpenseAccount] = useState(state.finance.accounts[0]?.id || '');
   const [expenseNote, setExpenseNote] = useState('');
   const [expenseSaving, setExpenseSaving] = useState(false);
@@ -98,11 +96,16 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   const jobEmpresaRef = useRef<HTMLInputElement>(null);
   const itemRefs = useRef<Record<number, HTMLButtonElement | null>>({});
 
+  const previousFocusedElementRef = useRef<HTMLElement | null>(null);
+
   // Reset & focus on open
   useEffect(() => {
     if (!open) {
       setMode('palette');
       return;
+    }
+    if (document.activeElement instanceof HTMLElement) {
+      previousFocusedElementRef.current = document.activeElement;
     }
     setMode('palette');
     setQuery(initialQuery);
@@ -115,6 +118,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     return () => {
       document.body.style.overflow = prevOverflow;
       window.clearTimeout(timer);
+      if (previousFocusedElementRef.current && typeof previousFocusedElementRef.current.focus === 'function') {
+        previousFocusedElementRef.current.focus();
+      }
     };
   }, [open, initialQuery, state.finance.accounts]);
 
@@ -150,8 +156,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   }, [selectedIdx]);
 
   // Quick action items
-  const quickActions: PaletteItem[] = useMemo(() => [
-    {
+  const quickActions: PaletteItem[] = useMemo(() => {
+    const list: PaletteItem[] = [];
+    list.push({
       id: 'action-task',
       category: 'Acciones Rápidas',
       categoryOrder: 1,
@@ -165,62 +172,75 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         onClose();
         if (onOpenCapture) onOpenCapture();
       },
-    },
-    {
-      id: 'action-expense',
-      category: 'Acciones Rápidas',
-      categoryOrder: 1,
-      title: 'Nuevo Gasto / Registrar Gasto',
-      subtitle: 'Abre un micro-formulario para ingresar monto, categoría y cuenta',
-      iconName: 'wallet',
-      badge: 'Rápido',
-      badgeTone: 'blue',
-      shortcutHint: '↵ Micro-form',
-      onSelect: () => setMode('new-expense'),
-    },
-    {
-      id: 'action-note',
-      category: 'Acciones Rápidas',
-      categoryOrder: 1,
-      title: 'Nueva Nota',
-      subtitle: 'Crear apunte, post-it o idea al instante',
-      iconName: 'note',
-      badge: 'Nota',
-      badgeTone: 'gray',
-      shortcutHint: 'N',
-      onSelect: () => {
-        onClose();
-        if (onOpenCapture) onOpenCapture();
-      },
-    },
-    {
-      id: 'action-gym',
-      category: 'Acciones Rápidas',
-      categoryOrder: 1,
-      title: 'Iniciar Entrenamiento',
-      subtitle: 'Redirige directamente al módulo de Gimnasio para comenzar la sesión',
-      iconName: 'dumbbell',
-      badge: 'Gym',
-      badgeTone: 'green',
-      shortcutHint: 'G G',
-      onSelect: () => {
-        onNavigate('gimnasio');
-        onClose();
-      },
-    },
-    {
-      id: 'action-job',
-      category: 'Acciones Rápidas',
-      categoryOrder: 1,
-      title: 'Nueva Postulación',
-      subtitle: 'Registrar nueva postulación de empleo en el pipeline',
-      iconName: 'briefcase',
-      badge: 'Trabajo',
-      badgeTone: 'blue',
-      shortcutHint: '↵ Micro-form',
-      onSelect: () => setMode('new-job'),
-    },
-    {
+    });
+
+    if (isModuleEnabled(state, 'finanzas')) {
+      list.push({
+        id: 'action-expense',
+        category: 'Acciones Rápidas',
+        categoryOrder: 1,
+        title: 'Nuevo Gasto / Registrar Gasto',
+        subtitle: 'Abre un micro-formulario para ingresar monto, categoría y cuenta',
+        iconName: 'wallet',
+        badge: 'Rápido',
+        badgeTone: 'blue',
+        shortcutHint: '↵ Micro-form',
+        onSelect: () => setMode('new-expense'),
+      });
+    }
+
+    if (isModuleEnabled(state, 'notas')) {
+      list.push({
+        id: 'action-note',
+        category: 'Acciones Rápidas',
+        categoryOrder: 1,
+        title: 'Nueva Nota',
+        subtitle: 'Crear apunte, post-it o idea al instante',
+        iconName: 'note',
+        badge: 'Nota',
+        badgeTone: 'gray',
+        shortcutHint: 'N',
+        onSelect: () => {
+          onClose();
+          if (onOpenCapture) onOpenCapture();
+        },
+      });
+    }
+
+    if (isModuleEnabled(state, 'gimnasio')) {
+      list.push({
+        id: 'action-gym',
+        category: 'Acciones Rápidas',
+        categoryOrder: 1,
+        title: 'Iniciar Entrenamiento',
+        subtitle: 'Redirige directamente al módulo de Gimnasio para comenzar la sesión',
+        iconName: 'dumbbell',
+        badge: 'Gym',
+        badgeTone: 'green',
+        shortcutHint: 'G G',
+        onSelect: () => {
+          onNavigate('gimnasio');
+          onClose();
+        },
+      });
+    }
+
+    if (isModuleEnabled(state, 'trabajo')) {
+      list.push({
+        id: 'action-job',
+        category: 'Acciones Rápidas',
+        categoryOrder: 1,
+        title: 'Nueva Postulación',
+        subtitle: 'Registrar nueva postulación de empleo en el pipeline',
+        iconName: 'briefcase',
+        badge: 'Trabajo',
+        badgeTone: 'blue',
+        shortcutHint: '↵ Micro-form',
+        onSelect: () => setMode('new-job'),
+      });
+    }
+
+    list.push({
       id: 'action-capture',
       category: 'Acciones Rápidas',
       categoryOrder: 1,
@@ -232,8 +252,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         onClose();
         if (onOpenCapture) onOpenCapture();
       },
-    },
-    {
+    });
+
+    list.push({
       id: 'action-theme',
       category: 'Acciones Rápidas',
       categoryOrder: 1,
@@ -245,8 +266,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         playSound('click');
         showToast(state.settings.darkMode ? 'Modo claro activado' : 'Modo oscuro activado');
       },
-    },
-    {
+    });
+
+    list.push({
       id: 'action-privacy',
       category: 'Acciones Rápidas',
       categoryOrder: 1,
@@ -259,12 +281,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         playSound('click');
         showToast(state.settings.privacyMode ? 'Privacidad desactivada' : 'Modo privacidad activado');
       },
-    },
-  ], [state.settings.darkMode, state.settings.privacyMode, onNavigate, onClose, onOpenCapture, onToggleTheme, onTogglePrivacy]);
+    });
+
+    return list;
+  }, [state, onNavigate, onClose, onOpenCapture, onToggleTheme, onTogglePrivacy]);
 
   // View navigation items
   const viewItems: PaletteItem[] = useMemo(() => {
-    return VIEW_METADATA.map((v) => ({
+    return VIEW_METADATA.filter((v) => isModuleEnabled(state, v.view)).map((v) => ({
       id: `view-${v.view}`,
       category: 'Cambiar Vista',
       categoryOrder: 2,
@@ -277,7 +301,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         onClose();
       },
     }));
-  }, [onNavigate, onClose]);
+  }, [state, onNavigate, onClose]);
 
   // Search results from LifeOS state
   const contentResults = useMemo(() => {
@@ -296,7 +320,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       );
 
       const matchedViews = VIEW_METADATA.filter(
-        (v) => v.label.toLowerCase().includes(q) || v.desc.toLowerCase().includes(q) || v.keywords.some((k) => k.includes(q))
+        (v) =>
+          isModuleEnabled(state, v.view) &&
+          (v.label.toLowerCase().includes(q) || v.desc.toLowerCase().includes(q) || v.keywords.some((k) => k.includes(q)))
       ).map((v) => ({
         id: `view-${v.view}`,
         category: 'Cambiar Vista',
@@ -349,31 +375,53 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     }
 
     // Default mode (empty query or 1 char): Show quick actions, views, and recent notes/events
-    const recentNotes: PaletteItem[] = state.notes.postits.slice(0, 3).map((n) => ({
-      id: `recent-note-${n.id}`,
-      category: 'Notas Recientes',
-      categoryOrder: 3,
-      title: n.text.slice(0, 60),
-      subtitle: `Nota · ${n.date}`,
-      iconName: 'note',
-      onSelect: () => {
-        onNavigate('notas');
-        onClose();
-      },
-    }));
+    const recentNotes: PaletteItem[] = isModuleEnabled(state, 'notas')
+      ? [...(state.notes?.postits || [])]
+          .filter((n) => !n.archived)
+          .sort((a, b) => {
+            if (a.pinned && !b.pinned) return -1;
+            if (!a.pinned && b.pinned) return 1;
+            const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : new Date(a.date).getTime();
+            const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : new Date(b.date).getTime();
+            return timeB - timeA;
+          })
+          .slice(0, 4)
+          .map((n) => {
+            const title = n.title?.trim();
+            const firstLine = n.text.trim().split('\n')[0]?.trim() || '';
+            const displayTitle = title || firstLine.slice(0, 60) || 'Nota sin título';
+            const displaySub = title ? n.text.slice(0, 50) : `Nota · ${n.date}`;
+            return {
+              id: `recent-note-${n.id}`,
+              category: 'Notas Recientes',
+              categoryOrder: 3,
+              title: displayTitle,
+              subtitle: `${n.pinned ? '📌 ' : ''}${displaySub}`,
+              iconName: 'note',
+              badge: n.pinned ? 'Fijada' : undefined,
+              badgeTone: n.pinned ? 'blue' : undefined,
+              onSelect: () => {
+                onNavigate('notas', `note-${n.id}`);
+                onClose();
+              },
+            };
+          })
+      : [];
 
-    const upcomingEvents: PaletteItem[] = state.calendarEvents.slice(0, 3).map((e) => ({
-      id: `recent-event-${e.id}`,
-      category: 'Próximos Eventos',
-      categoryOrder: 4,
-      title: e.name,
-      subtitle: `Evento (${e.type}) · ${e.date}`,
-      iconName: 'calendarDays',
-      onSelect: () => {
-        onNavigate('calendario');
-        onClose();
-      },
-    }));
+    const upcomingEvents: PaletteItem[] = isModuleEnabled(state, 'calendario')
+      ? state.calendarEvents.slice(0, 3).map((e) => ({
+          id: `recent-event-${e.id}`,
+          category: 'Próximos Eventos',
+          categoryOrder: 4,
+          title: e.name,
+          subtitle: `Evento (${e.type}) · ${e.date}`,
+          iconName: 'calendarDays',
+          onSelect: () => {
+            onNavigate('calendario');
+            onClose();
+          },
+        }))
+      : [];
 
     let defaultItems = [...quickActions, ...viewItems, ...recentNotes, ...upcomingEvents];
 
@@ -383,7 +431,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     else if (categoryFilter === 'calendar') defaultItems = upcomingEvents;
 
     return defaultItems;
-  }, [query, quickActions, viewItems, contentResults, categoryFilter, state.notes.postits, state.calendarEvents, onNavigate, onClose]);
+  }, [query, quickActions, viewItems, contentResults, categoryFilter, state, onNavigate, onClose]);
 
   // Group visible items by category
   const groupedItems = useMemo(() => {
@@ -570,11 +618,13 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 { key: 'all', label: 'Todos' },
                 { key: 'actions', label: 'Acciones' },
                 { key: 'views', label: 'Vistas' },
-                { key: 'notes', label: 'Notas' },
-                { key: 'finance', label: 'Finanzas' },
-                { key: 'calendar', label: 'Calendario' },
-                { key: 'gym', label: 'Gimnasio' },
-              ].map((f) => (
+                { key: 'notes', label: 'Notas', view: 'notas' },
+                { key: 'finance', label: 'Finanzas', view: 'finanzas' },
+                { key: 'calendar', label: 'Calendario', view: 'calendario' },
+                { key: 'gym', label: 'Gimnasio', view: 'gimnasio' },
+              ]
+                .filter((f) => !('view' in f) || isModuleEnabled(state, f.view as ViewType))
+                .map((f) => (
                 <button
                   key={f.key}
                   type="button"
@@ -797,7 +847,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                         >
                           <span className="text-xs font-bold text-[var(--text)] truncate w-full">{acc.name}</span>
                           <span className="text-[11px] font-mono text-[var(--text-soft)] mt-0.5">
-                            {fmtMoney(acc.balance)}
+                            <PrivacyAmount>{fmtMoney(acc.balance)}</PrivacyAmount>
                           </span>
                         </button>
                       );
@@ -812,20 +862,20 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                   Categoría
                 </label>
                 <div className="flex flex-wrap gap-1.5">
-                  {(state.finance.categories.length > 0 ? state.finance.categories : DEFAULT_CATEGORIES).map((cat) => {
-                    const isSelected = expenseCategory === cat;
+                  {activeFinanceCategories.map((cat) => {
+                    const isSelected = expenseCategory === cat.id;
                     return (
                       <button
-                        key={cat}
+                        key={cat.id}
                         type="button"
-                        onClick={() => setExpenseCategory(cat)}
+                        onClick={() => setExpenseCategory(cat.id)}
                         className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
                           isSelected
                             ? 'bg-[var(--blue)] text-white shadow-xs'
                             : 'border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:text-[var(--text)]'
                         }`}
                       >
-                        {cat}
+                        {cat.name}
                       </button>
                     );
                   })}

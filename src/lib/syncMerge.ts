@@ -44,9 +44,11 @@ import type {
   Transaction,
   UsefulLink,
   WeightPoint,
+  FinanceCategory,
 } from '../types';
-import type { SyncModuleKey } from './syncModel';
+import type { SyncModuleKey, SyncConflictItem, ModuleMergeResult } from './syncModel';
 import { computeAccountBalance } from './financeFlows';
+import { normalizeCategories, getCategoryName } from './financeCategories';
 
 const TOMBSTONE_PREFIX = 'lifeos-cloud-tombstones-v2:';
 const DEFAULT_MAX_TOMBSTONE_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -126,8 +128,11 @@ function collectEntityIds(state: LifeOSState): Set<string> {
     add(state.finance.debts);
     add(state.finance.investments);
     add(state.finance.subscriptions);
+    add(state.finance.expectedIncomes);
+    add(state.finance.commitments);
     add(state.finance.reconciliations);
     add(state.finance.accounts);
+    add(state.finance.categories);
   }
 
   if (state.gym) {
@@ -254,7 +259,9 @@ export function mergeEntityCollection<T extends { id: string }>(
   remote: T[] = [],
   baseline?: T[],
   tombstones: Record<string, number> = {},
-  customMergeSame?: (localItem: T, remoteItem: T, baseItem?: T) => T
+  customMergeSame?: (localItem: T, remoteItem: T, baseItem?: T) => T,
+  onConflict?: (conflict: SyncConflictItem) => void,
+  moduleContext?: { module: SyncModuleKey; entityType: string; getLabel?: (item: T) => string }
 ): T[] {
   const localMap = new Map<string, T>(local.map((item) => [item.id, item]));
   const remoteMap = new Map<string, T>(remote.map((item) => [item.id, item]));
@@ -298,6 +305,22 @@ export function mergeEntityCollection<T extends { id: string }>(
       if (customMergeSame) {
         result.push(customMergeSame(inLocal, inRemote, inBase));
       } else {
+        if (inBase && !stableEqual(inLocal, inBase) && !stableEqual(inRemote, inBase) && onConflict && moduleContext) {
+          const label = moduleContext.getLabel ? moduleContext.getLabel(inLocal) : (inLocal as any).name || (inLocal as any).title || (inLocal as any).text || id;
+          onConflict({
+            id: `conflict-${moduleContext.module}-${id}`,
+            module: moduleContext.module,
+            entityType: 'entity',
+            entityId: id,
+            label: `${moduleContext.entityType}: ${label}`,
+            localSummary: String((inLocal as any).name || (inLocal as any).title || (inLocal as any).text || 'Modificado local'),
+            remoteSummary: String((inRemote as any).name || (inRemote as any).title || (inRemote as any).text || 'Modificado remoto'),
+            baseSummary: inBase ? String((inBase as any).name || (inBase as any).title || (inBase as any).text || 'Base') : undefined,
+            localValue: inLocal,
+            remoteValue: inRemote,
+            baseValue: inBase,
+          });
+        }
         const localTs = extractTimestamp(inLocal);
         const remoteTs = extractTimestamp(inRemote);
         if (remoteTs > localTs) {
@@ -320,7 +343,23 @@ export function mergeEntityCollection<T extends { id: string }>(
           // Local never modified it -> honor Remote deletion
           continue;
         }
-        // Local modified it after baseline -> preserve local modification
+        // Local modified it after baseline -> preserve local modification & record delete vs modify conflict
+        if (onConflict && moduleContext) {
+          const label = moduleContext.getLabel ? moduleContext.getLabel(inLocal) : (inLocal as any).name || (inLocal as any).title || (inLocal as any).text || id;
+          onConflict({
+            id: `conflict-del-${moduleContext.module}-${id}`,
+            module: moduleContext.module,
+            entityType: 'delete_vs_modify',
+            entityId: id,
+            label: `${moduleContext.entityType}: ${label}`,
+            localSummary: 'Modificado en este dispositivo',
+            remoteSummary: 'Eliminado en remoto',
+            baseSummary: 'Existía en base',
+            localValue: inLocal,
+            remoteValue: null,
+            baseValue: inBase,
+          });
+        }
         result.push(inLocal);
         continue;
       }
@@ -333,7 +372,23 @@ export function mergeEntityCollection<T extends { id: string }>(
     if (!inLocal && inRemote) {
       if (inBase) {
         if (!stableEqual(inRemote, inBase)) {
-          // Remote modified it after baseline -> preserve remote modification
+          // Remote modified it after baseline -> preserve remote modification & record delete vs modify conflict
+          if (onConflict && moduleContext) {
+            const label = moduleContext.getLabel ? moduleContext.getLabel(inRemote) : (inRemote as any).name || (inRemote as any).title || (inRemote as any).text || id;
+            onConflict({
+              id: `conflict-del-${moduleContext.module}-${id}`,
+              module: moduleContext.module,
+              entityType: 'delete_vs_modify',
+              entityId: id,
+              label: `${moduleContext.entityType}: ${label}`,
+              localSummary: 'Eliminado en este dispositivo',
+              remoteSummary: 'Modificado en remoto',
+              baseSummary: 'Existía en base',
+              localValue: null,
+              remoteValue: inRemote,
+              baseValue: inBase,
+            });
+          }
           result.push(inRemote);
           continue;
         }
@@ -437,20 +492,32 @@ export function mergeFinanceModule(
   local: Finance,
   remote: Finance,
   baseline?: Finance,
-  tombstones: Record<string, number> = {}
+  tombstones: Record<string, number> = {},
+  onConflict?: (conflict: SyncConflictItem) => void
 ): Finance {
   const transactions = mergeEntityCollection(
     local.transactions,
     remote.transactions,
     baseline?.transactions,
-    tombstones
+    tombstones,
+    undefined,
+    onConflict,
+    {
+      module: 'finance',
+      entityType: 'Transacción',
+      getLabel: (t) =>
+        `${t.type === 'ingreso' ? '+' : '-'}${t.amount} ${getCategoryName(remote.categories || local.categories, t.category) || t.category || ''}`,
+    }
   );
 
   const transfers = mergeEntityCollection(
     local.transfers,
     remote.transfers,
     baseline?.transfers,
-    tombstones
+    tombstones,
+    undefined,
+    onConflict,
+    { module: 'finance', entityType: 'Transferencia' }
   );
 
   const reconciliations = mergeEntityCollection(
@@ -464,29 +531,156 @@ export function mergeFinanceModule(
     local.debts,
     remote.debts,
     baseline?.debts,
-    tombstones
+    tombstones,
+    undefined,
+    onConflict,
+    { module: 'finance', entityType: 'Deuda', getLabel: (d) => d.name }
   );
 
   const investments = mergeEntityCollection(
     local.investments,
     remote.investments,
     baseline?.investments,
-    tombstones
+    tombstones,
+    undefined,
+    onConflict,
+    { module: 'finance', entityType: 'Inversión', getLabel: (i) => i.name }
   );
 
   const subscriptions = mergeEntityCollection(
     local.subscriptions,
     remote.subscriptions,
     baseline?.subscriptions,
-    tombstones
+    tombstones,
+    undefined,
+    onConflict,
+    { module: 'finance', entityType: 'Suscripción', getLabel: (s) => s.name }
   );
 
-  // Union categories
-  const categories = Array.from(
-    new Set([...(local.categories || []), ...(remote.categories || [])])
+  const expectedIncomes = mergeEntityCollection(
+    local.expectedIncomes || [],
+    remote.expectedIncomes || [],
+    baseline?.expectedIncomes || [],
+    tombstones,
+    undefined,
+    onConflict,
+    { module: 'finance', entityType: 'Ingreso Esperado', getLabel: (e) => e.name }
   );
 
-  // Merge budgets map
+  const commitments = mergeEntityCollection(
+    local.commitments || [],
+    remote.commitments || [],
+    baseline?.commitments || [],
+    tombstones,
+    undefined,
+    onConflict,
+    { module: 'finance', entityType: 'Compromiso Financiero', getLabel: (c) => c.name }
+  );
+
+  let minCushion = local.minCushion;
+  if (baseline && local.minCushion === baseline.minCushion) {
+    minCushion = remote.minCushion !== undefined ? remote.minCushion : local.minCushion;
+  } else if (baseline && remote.minCushion === baseline.minCushion) {
+    minCushion = local.minCushion !== undefined ? local.minCushion : remote.minCushion;
+  } else {
+    minCushion = remote.minCushion !== undefined ? remote.minCushion : local.minCushion;
+  }
+
+  let cushionEnabled = local.cushionEnabled;
+  if (baseline && local.cushionEnabled === baseline.cushionEnabled) {
+    cushionEnabled = remote.cushionEnabled !== undefined ? remote.cushionEnabled : local.cushionEnabled;
+  } else if (baseline && remote.cushionEnabled === baseline.cushionEnabled) {
+    cushionEnabled = local.cushionEnabled !== undefined ? local.cushionEnabled : remote.cushionEnabled;
+  } else {
+    cushionEnabled = remote.cushionEnabled !== undefined ? remote.cushionEnabled : local.cushionEnabled;
+  }
+
+  let heroDisplayMode = local.heroDisplayMode;
+  if (baseline && local.heroDisplayMode === baseline.heroDisplayMode) {
+    heroDisplayMode = remote.heroDisplayMode !== undefined ? remote.heroDisplayMode : local.heroDisplayMode;
+  } else if (baseline && remote.heroDisplayMode === baseline.heroDisplayMode) {
+    heroDisplayMode = local.heroDisplayMode !== undefined ? local.heroDisplayMode : remote.heroDisplayMode;
+  } else {
+    heroDisplayMode = remote.heroDisplayMode !== undefined ? remote.heroDisplayMode : local.heroDisplayMode;
+  }
+
+  // 3-Way merge categories with conflict detection and tombstones
+  const localCats = normalizeCategories(local.categories, local.transactions);
+  const remoteCats = normalizeCategories(remote.categories, remote.transactions);
+  const baseCats = baseline?.categories ? normalizeCategories(baseline.categories, baseline.transactions) : undefined;
+
+  const categories = mergeEntityCollection<FinanceCategory>(
+    localCats,
+    remoteCats,
+    baseCats,
+    tombstones,
+    (lCat, rCat, bCat) => {
+      let name = lCat.name;
+      let active = lCat.active;
+      if (bCat) {
+        if (lCat.name === bCat.name && rCat.name !== bCat.name) name = rCat.name;
+        else if (rCat.name === bCat.name && lCat.name !== bCat.name) name = lCat.name;
+        else if (lCat.name !== bCat.name && rCat.name !== bCat.name && lCat.name !== rCat.name) {
+          if (onConflict) {
+            onConflict({
+              id: `conflict-category-${lCat.id}`,
+              module: 'finance',
+              entityType: 'entity',
+              entityId: lCat.id,
+              field: 'name',
+              label: `Categoría: ${lCat.name}`,
+              localSummary: lCat.name,
+              remoteSummary: rCat.name,
+              baseSummary: bCat.name,
+              localValue: lCat,
+              remoteValue: rCat,
+              baseValue: bCat,
+            });
+          }
+          const lTime = extractTimestamp(lCat);
+          const rTime = extractTimestamp(rCat);
+          name = rTime >= lTime ? rCat.name : lCat.name;
+        }
+
+        if (lCat.active === bCat.active && rCat.active !== bCat.active) active = rCat.active;
+        else if (rCat.active === bCat.active && lCat.active !== bCat.active) active = lCat.active;
+        else if (lCat.active !== bCat.active && rCat.active !== bCat.active && lCat.active !== rCat.active) {
+          active = rCat.active;
+        }
+      } else {
+        if (lCat.name !== rCat.name && onConflict) {
+          onConflict({
+            id: `conflict-category-${lCat.id}`,
+            module: 'finance',
+            entityType: 'entity',
+            entityId: lCat.id,
+            field: 'name',
+            label: `Categoría: ${lCat.name}`,
+            localSummary: lCat.name,
+            remoteSummary: rCat.name,
+            localValue: lCat,
+            remoteValue: rCat,
+          });
+        }
+        const lTime = extractTimestamp(lCat);
+        const rTime = extractTimestamp(rCat);
+        name = rTime >= lTime ? rCat.name : lCat.name;
+        active = rCat.active !== undefined ? rCat.active : lCat.active;
+      }
+
+      return {
+        id: lCat.id,
+        name,
+        active,
+        createdAt: lCat.createdAt || rCat.createdAt,
+        updatedAt: rCat.updatedAt || lCat.updatedAt || new Date().toISOString(),
+      };
+    },
+    onConflict,
+    { module: 'finance', entityType: 'Categoría', getLabel: (c) => c.name }
+  );
+
+  // Merge budgets map with conflict detection
   const budgets: Record<string, number> = { ...(baseline?.budgets || {}) };
   const allBudgetCats = new Set([
     ...Object.keys(local.budgets || {}),
@@ -498,11 +692,44 @@ export function mergeFinanceModule(
     const bVal = baseline?.budgets?.[cat];
     if (lVal !== undefined && rVal !== undefined) {
       if (bVal !== undefined) {
-        if (lVal === bVal) budgets[cat] = rVal;
-        else if (rVal === bVal) budgets[cat] = lVal;
-        else budgets[cat] = rVal; // LWW remote
+        if (lVal === bVal) {
+          budgets[cat] = rVal;
+        } else if (rVal === bVal) {
+          budgets[cat] = lVal;
+        } else {
+          // Both changed to different values -> conflict!
+          if (lVal !== rVal && onConflict) {
+            onConflict({
+              id: `conflict-budget-${cat}`,
+              module: 'finance',
+              entityType: 'budget',
+              entityId: cat,
+              label: `Presupuesto: ${cat}`,
+              localSummary: `$${lVal}`,
+              remoteSummary: `$${rVal}`,
+              baseSummary: `$${bVal}`,
+              localValue: lVal,
+              remoteValue: rVal,
+              baseValue: bVal,
+            });
+          }
+          budgets[cat] = lVal; // Conservative fallback: keep local
+        }
       } else {
-        budgets[cat] = rVal;
+        if (lVal !== rVal && onConflict) {
+          onConflict({
+            id: `conflict-budget-${cat}`,
+            module: 'finance',
+            entityType: 'budget',
+            entityId: cat,
+            label: `Presupuesto: ${cat}`,
+            localSummary: `$${lVal}`,
+            remoteSummary: `$${rVal}`,
+            localValue: lVal,
+            remoteValue: rVal,
+          });
+        }
+        budgets[cat] = lVal;
       }
     } else if (lVal !== undefined) {
       budgets[cat] = lVal;
@@ -529,43 +756,82 @@ export function mergeFinanceModule(
     return delta;
   };
 
+  const getInitial = (acc?: Account, txs?: Transaction[], trfs?: FinanceTransfer[]): number => {
+    if (!acc) return 0;
+    if (typeof acc.initialBalance === 'number' && Number.isFinite(acc.initialBalance)) {
+      return Math.round(acc.initialBalance * 100) / 100;
+    }
+    const delta = calcAccountDelta(acc.id, txs, trfs);
+    return Math.round((Number(acc.balance || 0) - delta) * 100) / 100;
+  };
+
   const resolveAccountInitialBalance = (
     accId: string,
     lAcc?: Account,
     rAcc?: Account,
     bAcc?: Account
   ): number => {
-    if (typeof rAcc?.initialBalance === 'number' && Number.isFinite(rAcc.initialBalance)) {
-      return rAcc.initialBalance;
-    }
-    if (typeof lAcc?.initialBalance === 'number' && Number.isFinite(lAcc.initialBalance)) {
-      return lAcc.initialBalance;
-    }
-    if (typeof bAcc?.initialBalance === 'number' && Number.isFinite(bAcc.initialBalance)) {
-      return bAcc.initialBalance;
+    if (bAcc && lAcc && rAcc) {
+      const bBase = getInitial(bAcc, baseline?.transactions, baseline?.transfers);
+      const lBase = getInitial(lAcc, local.transactions, local.transfers);
+      const rBase = getInitial(rAcc, remote.transactions, remote.transfers);
+
+      // Both changed balance directly to different amounts -> conflict!
+      if (lBase !== bBase && rBase !== bBase && lBase !== rBase) {
+        if (onConflict) {
+          onConflict({
+            id: `conflict-account-${accId}`,
+            module: 'finance',
+            entityType: 'account',
+            entityId: accId,
+            field: 'initialBalance',
+            label: `Cuenta: ${lAcc.name || rAcc.name}`,
+            localSummary: `Saldo: $${lAcc.balance}`,
+            remoteSummary: `Saldo: $${rAcc.balance}`,
+            baseSummary: `Saldo: $${bAcc.balance}`,
+            localValue: lBase,
+            remoteValue: rBase,
+            baseValue: bBase,
+          });
+        }
+        return lBase; // Preserve local on conflict
+      }
+
+      if (lBase !== bBase && rBase === bBase) return lBase; // Only local changed
+      if (rBase !== bBase && lBase === bBase) return rBase; // Only remote changed
+      return lBase;
     }
 
     if (bAcc) {
-      const bDelta = calcAccountDelta(accId, baseline?.transactions, baseline?.transfers);
-      return Math.round((Number(bAcc.balance || 0) - bDelta) * 100) / 100;
+      return getInitial(bAcc, baseline?.transactions, baseline?.transfers);
     }
 
     if (lAcc && rAcc) {
-      const lDelta = calcAccountDelta(accId, local.transactions, local.transfers);
-      const rDelta = calcAccountDelta(accId, remote.transactions, remote.transfers);
-      const lBase = Number(lAcc.balance || 0) - lDelta;
-      const rBase = Number(rAcc.balance || 0) - rDelta;
-      return Math.round((Number.isFinite(rBase) ? rBase : lBase) * 100) / 100;
+      const lBase = getInitial(lAcc, local.transactions, local.transfers);
+      const rBase = getInitial(rAcc, remote.transactions, remote.transfers);
+      if (lBase !== rBase && onConflict) {
+        onConflict({
+          id: `conflict-account-${accId}`,
+          module: 'finance',
+          entityType: 'account',
+          entityId: accId,
+          field: 'initialBalance',
+          label: `Cuenta: ${lAcc.name || rAcc.name}`,
+          localSummary: `Saldo: $${lAcc.balance}`,
+          remoteSummary: `Saldo: $${rAcc.balance}`,
+          localValue: lBase,
+          remoteValue: rBase,
+        });
+      }
+      return Math.round((Number.isFinite(lBase) ? lBase : rBase) * 100) / 100;
     }
 
     if (lAcc) {
-      const lDelta = calcAccountDelta(accId, local.transactions, local.transfers);
-      return Math.round((Number(lAcc.balance || 0) - lDelta) * 100) / 100;
+      return getInitial(lAcc, local.transactions, local.transfers);
     }
 
     if (rAcc) {
-      const rDelta = calcAccountDelta(accId, remote.transactions, remote.transfers);
-      return Math.round((Number(rAcc.balance || 0) - rDelta) * 100) / 100;
+      return getInitial(rAcc, remote.transactions, remote.transfers);
     }
 
     return 0;
@@ -614,6 +880,11 @@ export function mergeFinanceModule(
     debts,
     investments,
     subscriptions,
+    expectedIncomes,
+    commitments,
+    minCushion,
+    cushionEnabled,
+    heroDisplayMode,
   };
 }
 
@@ -743,13 +1014,17 @@ export function mergeTasksModule(
     dailyPriorities: DailyPriority[];
     inbox: InboxItem[];
   },
-  tombstones: Record<string, number> = {}
+  tombstones: Record<string, number> = {},
+  onConflict?: (conflict: SyncConflictItem) => void
 ) {
   const tasksRecurring = mergeEntityCollection(
     local.tasksRecurring,
     remote.tasksRecurring,
     baseline?.tasksRecurring,
-    tombstones
+    tombstones,
+    undefined,
+    onConflict,
+    { module: 'tasks', entityType: 'Rutina recurrente', getLabel: (r) => r.name }
   );
 
   const todayExtras = mergeEntityCollection<TodayExtra>(
@@ -757,12 +1032,36 @@ export function mergeTasksModule(
     remote.todayExtras,
     baseline?.todayExtras,
     tombstones,
-    (l, r) => ({
-      ...l,
-      ...r,
-      text: r.text !== baseline?.todayExtras?.find((b) => b.id === l.id)?.text ? r.text : l.text,
-      done: Boolean(l.done || r.done),
-    })
+    (l, r, b) => {
+      if (b && l.text !== b.text && r.text !== b.text && l.text !== r.text && onConflict) {
+        onConflict({
+          id: `conflict-task-${l.id}`,
+          module: 'tasks',
+          entityType: 'entity',
+          entityId: l.id,
+          label: `Tarea: ${l.text}`,
+          localSummary: l.text,
+          remoteSummary: r.text,
+          baseSummary: b.text,
+          localValue: l,
+          remoteValue: r,
+          baseValue: b,
+        });
+      }
+
+      const combinedDeps = Array.from(new Set([...(l.dependsOn || []), ...(r.dependsOn || [])]))
+        .filter((id) => !tombstones[id]);
+      return {
+        ...l,
+        ...r,
+        text: r.text !== baseline?.todayExtras?.find((bItem) => bItem.id === l.id)?.text ? r.text : l.text,
+        done: Boolean(l.done || r.done),
+        dueDate: r.dueDate || l.dueDate,
+        dependsOn: combinedDeps.length > 0 ? combinedDeps : undefined,
+      };
+    },
+    onConflict,
+    { module: 'tasks', entityType: 'Tarea para hoy', getLabel: (t) => t.text }
   );
 
   const dailyPriorities = mergeEntityCollection<DailyPriority>(
@@ -781,7 +1080,10 @@ export function mergeTasksModule(
     local.inbox || [],
     remote.inbox || [],
     baseline?.inbox,
-    tombstones
+    tombstones,
+    undefined,
+    onConflict,
+    { module: 'tasks', entityType: 'Bandeja de entrada', getLabel: (i) => i.text }
   );
 
   // Deep merge taskLog: date -> taskId -> boolean
@@ -857,7 +1159,8 @@ export function mergeNotesModule(
   local: Notes,
   remote: Notes,
   baseline?: Notes,
-  tombstones: Record<string, number> = {}
+  tombstones: Record<string, number> = {},
+  onConflict?: (conflict: SyncConflictItem) => void
 ): Notes {
   const postits = mergeEntityCollection<Postit>(
     local.postits,
@@ -865,13 +1168,49 @@ export function mergeNotesModule(
     baseline?.postits,
     tombstones,
     (l, r, b) => {
-      // If one changed text from baseline, that one wins
       if (b) {
-        if (l.text === b.text && r.text !== b.text) return r;
-        if (r.text === b.text && l.text !== b.text) return l;
+        const lContentChanged = l.text !== b.text || (l.title || undefined) !== (b.title || undefined);
+        const rContentChanged = r.text !== b.text || (r.title || undefined) !== (b.title || undefined);
+        const lMetaChanged = Boolean(l.pinned) !== Boolean(b.pinned) || Boolean(l.archived) !== Boolean(b.archived);
+        const rMetaChanged = Boolean(r.pinned) !== Boolean(b.pinned) || Boolean(r.archived) !== Boolean(b.archived);
+
+        if (lContentChanged && rContentChanged && (l.text !== r.text || l.title !== r.title) && onConflict) {
+          onConflict({
+            id: `conflict-postit-${l.id}`,
+            module: 'notes',
+            entityType: 'entity',
+            entityId: l.id,
+            label: `Nota: ${(l.title || l.text).slice(0, 30)}`,
+            localSummary: l.title ? `${l.title}: ${l.text}` : l.text,
+            remoteSummary: r.title ? `${r.title}: ${r.text}` : r.text,
+            baseSummary: b.title ? `${b.title}: ${b.text}` : b.text,
+            localValue: l,
+            remoteValue: r,
+            baseValue: b,
+          });
+          return l;
+        }
+
+        const chosenText = rContentChanged && !lContentChanged ? r.text : l.text;
+        const chosenTitle = rContentChanged && !lContentChanged ? r.title : l.title;
+        const chosenPinned = rMetaChanged && !lMetaChanged ? r.pinned : (lMetaChanged ? l.pinned : (l.pinned || r.pinned));
+        const chosenArchived = rMetaChanged && !lMetaChanged ? r.archived : (lMetaChanged ? l.archived : (l.archived || r.archived));
+        const chosenTags = r.tags && (!l.tags || l.tags.length === 0) ? r.tags : l.tags;
+
+        return {
+          ...l,
+          text: chosenText,
+          title: chosenTitle,
+          pinned: chosenPinned ? true : undefined,
+          archived: chosenArchived ? true : undefined,
+          tags: chosenTags && chosenTags.length > 0 ? chosenTags : undefined,
+          updatedAt: extractTimestamp(r) >= extractTimestamp(l) ? r.updatedAt : l.updatedAt,
+        };
       }
       return extractTimestamp(r) >= extractTimestamp(l) ? r : l;
-    }
+    },
+    onConflict,
+    { module: 'notes', entityType: 'Nota', getLabel: (p) => (p.title || p.text).slice(0, 30) }
   );
 
   const shopping = mergeEntityCollection<ShoppingItem>(
@@ -879,25 +1218,50 @@ export function mergeNotesModule(
     remote.shopping,
     baseline?.shopping,
     tombstones,
-    (l, r) => ({
-      ...l,
-      ...r,
-      done: Boolean(l.done || r.done),
-    })
+    (l, r, b) => {
+      if (b && l.text !== b.text && r.text !== b.text && l.text !== r.text && onConflict) {
+        onConflict({
+          id: `conflict-shopping-${l.id}`,
+          module: 'notes',
+          entityType: 'entity',
+          entityId: l.id,
+          label: `Comprar: ${l.text}`,
+          localSummary: l.text,
+          remoteSummary: r.text,
+          baseSummary: b.text,
+          localValue: l,
+          remoteValue: r,
+          baseValue: b,
+        });
+      }
+      return {
+        ...l,
+        ...r,
+        done: Boolean(l.done || r.done),
+      };
+    },
+    onConflict,
+    { module: 'notes', entityType: 'Artículo de compras', getLabel: (s) => s.text }
   );
 
   const links = mergeEntityCollection<UsefulLink>(
     local.links,
     remote.links,
     baseline?.links,
-    tombstones
+    tombstones,
+    undefined,
+    onConflict,
+    { module: 'notes', entityType: 'Enlace', getLabel: (l) => l.name }
   );
 
   const possessions = mergeEntityCollection<PossessionItem>(
     local.possessions,
     remote.possessions,
     baseline?.possessions,
-    tombstones
+    tombstones,
+    undefined,
+    onConflict,
+    { module: 'notes', entityType: 'Posesión', getLabel: (p) => p.name }
   );
 
   return {
@@ -912,13 +1276,39 @@ export function mergeGoalsModule(
   local: { goals: Goal[]; projects: Project[] },
   remote: { goals: Goal[]; projects: Project[] },
   baseline?: { goals: Goal[]; projects: Project[] },
-  tombstones: Record<string, number> = {}
+  tombstones: Record<string, number> = {},
+  onConflict?: (conflict: SyncConflictItem) => void
 ) {
   const goals = mergeEntityCollection<Goal>(
     local.goals,
     remote.goals,
     baseline?.goals,
-    tombstones
+    tombstones,
+    (l, r, b) => {
+      if (b) {
+        const targetConflict = l.target !== b.target && r.target !== b.target && l.target !== r.target;
+        const nameConflict = l.name !== b.name && r.name !== b.name && l.name !== r.name;
+        const currentConflict = l.current !== b.current && r.current !== b.current && l.current !== r.current;
+        if ((targetConflict || nameConflict || currentConflict) && onConflict) {
+          onConflict({
+            id: `conflict-goal-${l.id}`,
+            module: 'goals',
+            entityType: 'entity',
+            entityId: l.id,
+            label: `Meta: ${l.name}`,
+            localSummary: `${l.name} (${l.target})`,
+            remoteSummary: `${r.name} (${r.target})`,
+            baseSummary: `${b.name} (${b.target})`,
+            localValue: l,
+            remoteValue: r,
+            baseValue: b,
+          });
+        }
+      }
+      return { ...l, ...r };
+    },
+    onConflict,
+    { module: 'goals', entityType: 'Meta', getLabel: (g) => g.name }
   );
 
   const projects = mergeEntityCollection<Project>(
@@ -927,10 +1317,29 @@ export function mergeGoalsModule(
     baseline?.projects,
     tombstones,
     (lProj, rProj, bProj) => {
-      const lUpdated = extractTimestamp(lProj);
-      const rUpdated = extractTimestamp(rProj);
-      const primary = rUpdated >= lUpdated ? rProj : lProj;
-      const secondary = primary === rProj ? lProj : rProj;
+      let name = lProj.name;
+      if (bProj) {
+        if (lProj.name === bProj.name && rProj.name !== bProj.name) name = rProj.name;
+        else if (rProj.name === bProj.name && lProj.name !== bProj.name) name = lProj.name;
+        else if (lProj.name !== bProj.name && rProj.name !== bProj.name && lProj.name !== rProj.name) {
+          if (onConflict) {
+            onConflict({
+              id: `conflict-project-${lProj.id}`,
+              module: 'goals',
+              entityType: 'entity',
+              entityId: lProj.id,
+              label: `Proyecto: ${lProj.name}`,
+              localSummary: lProj.name,
+              remoteSummary: rProj.name,
+              baseSummary: bProj.name,
+              localValue: lProj,
+              remoteValue: rProj,
+              baseValue: bProj,
+            });
+          }
+          name = lProj.name;
+        }
+      }
 
       // Merge subtasks by ID
       const mergedTasks = mergeEntityCollection<ProjectTask>(
@@ -938,19 +1347,30 @@ export function mergeGoalsModule(
         rProj.tasks || [],
         bProj?.tasks,
         tombstones,
-        (lTask, rTask) => ({
-          ...lTask,
-          ...rTask,
-          done: Boolean(lTask.done || rTask.done),
-        })
+        (lTask, rTask) => {
+          const combinedDeps = Array.from(new Set([...(lTask.dependsOn || []), ...(rTask.dependsOn || [])]))
+            .filter((id) => !tombstones[id]);
+          return {
+            ...lTask,
+            ...rTask,
+            done: Boolean(lTask.done || rTask.done),
+            dueDate: rTask.dueDate || lTask.dueDate,
+            dependsOn: combinedDeps.length > 0 ? combinedDeps : undefined,
+          };
+        },
+        onConflict,
+        { module: 'goals', entityType: 'Subtarea de Proyecto', getLabel: (t) => t.text }
       );
 
       return {
-        ...secondary,
-        ...primary,
+        ...rProj,
+        ...lProj,
+        name,
         tasks: mergedTasks,
       };
-    }
+    },
+    onConflict,
+    { module: 'goals', entityType: 'Proyecto', getLabel: (p) => p.name }
   );
 
   return { goals, projects };
@@ -1077,14 +1497,36 @@ export function mergeIdeasModule(
   local: { ideas: Idea[] },
   remote: { ideas: Idea[] },
   baseline?: { ideas: Idea[] },
-  tombstones: Record<string, number> = {}
+  tombstones: Record<string, number> = {},
+  onConflict?: (conflict: SyncConflictItem) => void
 ) {
   return {
     ideas: mergeEntityCollection<Idea>(
       local.ideas,
       remote.ideas,
       baseline?.ideas,
-      tombstones
+      tombstones,
+      (l, r, b) => {
+        if (b && !stableEqual(l, b) && !stableEqual(r, b) && !stableEqual(l, r) && onConflict) {
+          onConflict({
+            id: `conflict-idea-${l.id}`,
+            module: 'ideas',
+            entityType: 'entity',
+            entityId: l.id,
+            label: `Idea: ${l.text}`,
+            localSummary: l.text,
+            remoteSummary: r.text,
+            baseSummary: b.text,
+            localValue: l,
+            remoteValue: r,
+            baseValue: b,
+          });
+          return l;
+        }
+        return extractTimestamp(r) >= extractTimestamp(l) ? r : l;
+      },
+      onConflict,
+      { module: 'ideas', entityType: 'Idea', getLabel: (i) => i.text }
     ),
   };
 }
@@ -1151,12 +1593,177 @@ export function mergeProfileModule(
       hiddenTabs: Array.from(
         new Set([...(local.settings?.hiddenTabs || []), ...(remote.settings?.hiddenTabs || [])])
       ),
+      onboardingCompleted: Boolean(
+        local.settings?.onboardingCompleted ||
+        remote.settings?.onboardingCompleted ||
+        baseline?.settings?.onboardingCompleted
+      ),
     },
   };
 }
 
 /**
- * High-level 3-Way Merge for any LifeOS module data.
+ * 3-Way Merge for any LifeOS module data returning merged data AND detected conflicts.
+ */
+export function mergeModuleDataWithConflicts(
+  module: SyncModuleKey,
+  localData: unknown,
+  remoteData: unknown,
+  baselineData?: unknown,
+  tombstones: Record<string, number> = {}
+): ModuleMergeResult {
+  const conflicts: SyncConflictItem[] = [];
+  const onConflict = (c: SyncConflictItem) => conflicts.push(c);
+
+  let data: unknown;
+  switch (module) {
+    case 'finance':
+      data = {
+        finance: mergeFinanceModule(
+          (localData as { finance: Finance }).finance,
+          (remoteData as { finance: Finance }).finance,
+          baselineData ? (baselineData as { finance: Finance }).finance : undefined,
+          tombstones,
+          onConflict
+        ),
+      };
+      break;
+    case 'gym':
+      data = {
+        gym: mergeGymModule(
+          (localData as { gym: Gym }).gym,
+          (remoteData as { gym: Gym }).gym,
+          baselineData ? (baselineData as { gym: Gym }).gym : undefined,
+          tombstones
+        ),
+      };
+      break;
+    case 'tasks':
+      data = mergeTasksModule(
+        localData as any,
+        remoteData as any,
+        baselineData as any,
+        tombstones,
+        onConflict
+      );
+      break;
+    case 'agenda':
+      data = {
+        agenda: mergeAgendaModule(
+          (localData as { agenda: AgendaWeek }).agenda,
+          (remoteData as { agenda: AgendaWeek }).agenda,
+          baselineData ? (baselineData as { agenda: AgendaWeek }).agenda : undefined,
+          tombstones
+        ),
+      };
+      break;
+    case 'notes':
+      data = {
+        notes: mergeNotesModule(
+          (localData as { notes: Notes }).notes,
+          (remoteData as { notes: Notes }).notes,
+          baselineData ? (baselineData as { notes: Notes }).notes : undefined,
+          tombstones,
+          onConflict
+        ),
+      };
+      break;
+    case 'goals':
+      data = mergeGoalsModule(
+        localData as any,
+        remoteData as any,
+        baselineData as any,
+        tombstones,
+        onConflict
+      );
+      break;
+    case 'calendar':
+      data = mergeCalendarModule(
+        localData as any,
+        remoteData as any,
+        baselineData as any,
+        tombstones
+      );
+      break;
+    case 'context':
+      data = mergeContextModule(
+        localData as any,
+        remoteData as any,
+        baselineData as any
+      );
+      break;
+    case 'study':
+      data = {
+        study: mergeStudyModule(
+          (localData as { study: Study }).study,
+          (remoteData as { study: Study }).study,
+          baselineData ? (baselineData as { study: Study }).study : undefined,
+          tombstones
+        ),
+      };
+      break;
+    case 'streaming':
+      data = {
+        streaming: mergeStreamingModule(
+          (localData as { streaming: Streaming }).streaming,
+          (remoteData as { streaming: Streaming }).streaming,
+          baselineData ? (baselineData as { streaming: Streaming }).streaming : undefined,
+          tombstones
+        ),
+      };
+      break;
+    case 'jobs':
+      data = {
+        jobs: mergeJobsModule(
+          (localData as { jobs: Jobs }).jobs,
+          (remoteData as { jobs: Jobs }).jobs,
+          baselineData ? (baselineData as { jobs: Jobs }).jobs : undefined,
+          tombstones
+        ),
+      };
+      break;
+    case 'resale':
+      data = {
+        resale: mergeResaleModule(
+          (localData as { resale: Resale }).resale,
+          (remoteData as { resale: Resale }).resale,
+          baselineData ? (baselineData as { resale: Resale }).resale : undefined,
+          tombstones
+        ),
+      };
+      break;
+    case 'ideas':
+      data = mergeIdeasModule(
+        localData as any,
+        remoteData as any,
+        baselineData as any,
+        tombstones,
+        onConflict
+      );
+      break;
+    case 'checkout':
+      data = mergeCheckoutModule(
+        localData as any,
+        remoteData as any,
+        baselineData as any
+      );
+      break;
+    case 'profile':
+      data = mergeProfileModule(
+        localData as any,
+        remoteData as any,
+        baselineData as any
+      );
+      break;
+    default:
+      data = remoteData;
+  }
+
+  return { data, conflicts };
+}
+
+/**
+ * High-level 3-Way Merge for any LifeOS module data (backward-compatible pure data return).
  */
 export function mergeModuleData(
   module: SyncModuleKey,
@@ -1165,126 +1772,18 @@ export function mergeModuleData(
   baselineData?: unknown,
   tombstones: Record<string, number> = {}
 ): unknown {
-  switch (module) {
-    case 'finance':
-      return {
-        finance: mergeFinanceModule(
-          (localData as { finance: Finance }).finance,
-          (remoteData as { finance: Finance }).finance,
-          baselineData ? (baselineData as { finance: Finance }).finance : undefined,
-          tombstones
-        ),
-      };
-    case 'gym':
-      return {
-        gym: mergeGymModule(
-          (localData as { gym: Gym }).gym,
-          (remoteData as { gym: Gym }).gym,
-          baselineData ? (baselineData as { gym: Gym }).gym : undefined,
-          tombstones
-        ),
-      };
-    case 'tasks':
-      return mergeTasksModule(
-        localData as any,
-        remoteData as any,
-        baselineData as any,
-        tombstones
-      );
-    case 'agenda':
-      return {
-        agenda: mergeAgendaModule(
-          (localData as { agenda: AgendaWeek }).agenda,
-          (remoteData as { agenda: AgendaWeek }).agenda,
-          baselineData ? (baselineData as { agenda: AgendaWeek }).agenda : undefined,
-          tombstones
-        ),
-      };
-    case 'notes':
-      return {
-        notes: mergeNotesModule(
-          (localData as { notes: Notes }).notes,
-          (remoteData as { notes: Notes }).notes,
-          baselineData ? (baselineData as { notes: Notes }).notes : undefined,
-          tombstones
-        ),
-      };
-    case 'goals':
-      return mergeGoalsModule(
-        localData as any,
-        remoteData as any,
-        baselineData as any,
-        tombstones
-      );
-    case 'calendar':
-      return mergeCalendarModule(
-        localData as any,
-        remoteData as any,
-        baselineData as any,
-        tombstones
-      );
-    case 'context':
-      return mergeContextModule(
-        localData as any,
-        remoteData as any,
-        baselineData as any
-      );
-    case 'study':
-      return {
-        study: mergeStudyModule(
-          (localData as { study: Study }).study,
-          (remoteData as { study: Study }).study,
-          baselineData ? (baselineData as { study: Study }).study : undefined,
-          tombstones
-        ),
-      };
-    case 'streaming':
-      return {
-        streaming: mergeStreamingModule(
-          (localData as { streaming: Streaming }).streaming,
-          (remoteData as { streaming: Streaming }).streaming,
-          baselineData ? (baselineData as { streaming: Streaming }).streaming : undefined,
-          tombstones
-        ),
-      };
-    case 'jobs':
-      return {
-        jobs: mergeJobsModule(
-          (localData as { jobs: Jobs }).jobs,
-          (remoteData as { jobs: Jobs }).jobs,
-          baselineData ? (baselineData as { jobs: Jobs }).jobs : undefined,
-          tombstones
-        ),
-      };
-    case 'resale':
-      return {
-        resale: mergeResaleModule(
-          (localData as { resale: Resale }).resale,
-          (remoteData as { resale: Resale }).resale,
-          baselineData ? (baselineData as { resale: Resale }).resale : undefined,
-          tombstones
-        ),
-      };
-    case 'ideas':
-      return mergeIdeasModule(
-        localData as any,
-        remoteData as any,
-        baselineData as any,
-        tombstones
-      );
-    case 'checkout':
-      return mergeCheckoutModule(
-        localData as any,
-        remoteData as any,
-        baselineData as any
-      );
-    case 'profile':
-      return mergeProfileModule(
-        localData as any,
-        remoteData as any,
-        baselineData as any
-      );
-    default:
-      return remoteData;
-  }
+  return mergeModuleDataWithConflicts(module, localData, remoteData, baselineData, tombstones).data;
+}
+
+/**
+ * Returns any detected conflicts for a module between local, remote, and baseline.
+ */
+export function detectModuleConflicts(
+  module: SyncModuleKey,
+  localData: unknown,
+  remoteData: unknown,
+  baselineData?: unknown,
+  tombstones: Record<string, number> = {}
+): SyncConflictItem[] {
+  return mergeModuleDataWithConflicts(module, localData, remoteData, baselineData, tombstones).conflicts;
 }

@@ -57,3 +57,21 @@ test('reconstruye un estado remoto modular con valores por defecto', () => {
   assert.equal(rebuilt.profile.name, 'Christian');
   assert.equal(rebuilt.finance.accounts.length, 2);
 });
+
+test('los datos del módulo con propiedades undefined se limpian sin perder integridad', () => {
+  const state = defaultState();
+  state.goals.push({
+    id: 'g-1',
+    name: 'Goal 1',
+    initial: 0,
+    target: 10,
+    current: 0,
+    linked: undefined,
+  });
+
+  const raw = syncModuleData(state, 'goals');
+  const cleaned = JSON.parse(JSON.stringify(raw));
+  assert.equal('linked' in (cleaned as any).goals[0], false);
+  assert.equal((cleaned as any).goals[0].name, 'Goal 1');
+});
+

@@ -1,6 +1,7 @@
 import type { LifeOSState, ViewType } from '../types';
 import type { AppIconName } from '../components/AppIcon';
 import { fmtMoney } from './storage';
+import { getCategoryName } from './financeCategories';
 
 export type SearchCategoryKey =
   | 'actions'
@@ -51,17 +52,22 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
   Object.entries(state.agenda).forEach(([day, blocks]) => blocks.forEach((item) => matches(query, item.activity, item.time, day) && add({ id: `agenda-${item.id}`, icon: '📅', iconName: 'calendar', title: item.activity, subtitle: `${day} · ${item.time}`, view: 'agenda', category: 'calendar' })));
 
   // Transacciones y Finanzas
-  state.finance.transactions.forEach((item) => matches(query, item.category, item.note, item.amount, item.type) && add({
-    id: `tx-${item.id}`,
-    icon: item.type === 'ingreso' ? '↗' : '↘',
-    iconName: 'wallet',
-    title: item.note || item.category,
-    subtitle: `${item.type === 'ingreso' ? 'Ingreso' : 'Gasto'} · ${fmtMoney(item.amount)} · ${item.category} · ${item.date}`,
-    view: 'finanzas',
-    focusId: 'qa-focus-tx',
-    category: 'finance',
-    badge: `${item.type === 'ingreso' ? '+' : '-'}${fmtMoney(item.amount)}`,
-  }));
+  state.finance.transactions.forEach((item) => {
+    const catName = getCategoryName(state.finance.categories, item.category);
+    if (matches(query, item.category, catName, item.note, item.amount, item.type)) {
+      add({
+        id: `tx-${item.id}`,
+        icon: item.type === 'ingreso' ? '↗' : '↘',
+        iconName: 'wallet',
+        title: item.note || catName,
+        subtitle: `${item.type === 'ingreso' ? 'Ingreso' : 'Gasto'} · ${fmtMoney(item.amount)} · ${catName} · ${item.date}`,
+        view: 'finanzas',
+        focusId: 'qa-focus-tx',
+        category: 'finance',
+        badge: `${item.type === 'ingreso' ? '+' : '-'}${fmtMoney(item.amount)}`,
+      });
+    }
+  });
   state.finance.accounts.forEach((item) => matches(query, item.name, item.balance) && add({ id: `account-${item.id}`, icon: '💳', iconName: 'wallet', title: item.name, subtitle: `Cuenta · Saldo: ${fmtMoney(item.balance)}`, view: 'finanzas', category: 'finance' }));
   state.finance.transfers.forEach((item) => matches(query, item.note, item.amount) && add({ id: `transfer-${item.id}`, icon: '⇄', iconName: 'repeat', title: item.note || 'Transferencia', subtitle: `${fmtMoney(item.amount)} · ${item.date}`, view: 'finanzas', category: 'finance' }));
   state.finance.subscriptions.forEach((item) => matches(query, item.name, item.amount, 'suscripcion') && add({ id: `subscription-${item.id}`, icon: '🔔', iconName: 'clock', title: item.name, subtitle: `Suscripción · ${fmtMoney(item.amount)}/mes`, view: 'finanzas', category: 'finance' }));
@@ -128,7 +134,27 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
   state.calendarEvents.forEach((item) => matches(query, item.name, item.type, item.date) && add({ id: `event-${item.id}`, icon: '📅', iconName: 'calendarDays', title: item.name, subtitle: `Evento (${item.type}) · ${item.date}`, view: 'calendario', category: 'calendar' }));
 
   // Notas
-  state.notes.postits.forEach((item) => matches(query, item.text, item.date) && add({ id: `note-${item.id}`, icon: '📝', iconName: 'note', title: item.text.slice(0, 60), subtitle: `Nota · ${item.date}`, view: 'notas', category: 'notes' }));
+  state.notes.postits.forEach((item) => {
+    const title = item.title?.trim();
+    const firstLine = item.text.trim().split('\n')[0]?.trim() || '';
+    const displayTitle = title || firstLine.slice(0, 60) || 'Nota sin título';
+    const displaySubtitle = title ? item.text.slice(0, 60) : `Nota · ${item.date}`;
+    const tagsString = (item.tags || []).join(' ');
+
+    if (matches(query, title, item.text, tagsString, item.date)) {
+      add({
+        id: `note-${item.id}`,
+        icon: '📝',
+        iconName: 'note',
+        title: displayTitle,
+        subtitle: `${item.pinned ? '📌 ' : ''}${displaySubtitle}`,
+        view: 'notas',
+        focusId: `note-${item.id}`,
+        category: 'notes',
+        badge: item.archived ? 'Archivada' : item.pinned ? 'Fijada' : undefined,
+      });
+    }
+  });
   state.notes.shopping.forEach((item) => matches(query, item.text) && add({ id: `shopping-${item.id}`, icon: '🛒', iconName: 'check', title: item.text, subtitle: `Lista de compras · ${item.done ? 'Comprado' : 'Pendiente'}`, view: 'notas', category: 'notes' }));
   state.notes.links.forEach((item) => matches(query, item.name, item.url) && add({ id: `link-${item.id}`, icon: '🔗', iconName: 'sparkles', title: item.name, subtitle: `Enlace · ${item.url}`, view: 'notas', category: 'notes' }));
 

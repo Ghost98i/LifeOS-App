@@ -555,7 +555,10 @@ test('TEST 7: Celular en modo avión registra 5 transacciones, 1 sesión gym y 2
 test('TEST 8: PC y celular modifican concurrentemente el mismo módulo (finance.budgets y categories). Cambios se combinan sin pisarse', async () => {
   const backend = new MockCloudBackend();
   const initial = defaultState();
-  initial.finance.categories = ['Comida', 'Alquiler'];
+  initial.finance.categories = [
+    { id: 'Comida', name: 'Comida', active: true },
+    { id: 'Alquiler', name: 'Alquiler', active: true },
+  ];
   initial.finance.budgets = { Comida: 30000, Alquiler: 80000 };
 
   const phone = new SimulatedDevice('phone', backend, initial);
@@ -565,27 +568,27 @@ test('TEST 8: PC y celular modifican concurrentemente el mismo módulo (finance.
 
   // Phone adds category 'Gimnasio' and budget
   phone.updateState((draft) => {
-    draft.finance.categories.push('Gimnasio');
+    draft.finance.categories.push({ id: 'Gimnasio', name: 'Gimnasio', active: true });
     draft.finance.budgets['Gimnasio'] = 15000;
   });
 
   // PC adds category 'Libros' and budget
   pc.updateState((draft) => {
-    draft.finance.categories.push('Libros');
+    draft.finance.categories.push({ id: 'Libros', name: 'Libros', active: true });
     draft.finance.budgets['Libros'] = 5000;
   });
 
   await pc.reconnectAndSync();
 
   // Both categories and budgets should coexist on both devices
-  assert.equal(pc.state.finance.categories.includes('Gimnasio'), true);
-  assert.equal(pc.state.finance.categories.includes('Libros'), true);
+  assert.equal(pc.state.finance.categories.some((c) => c.name === 'Gimnasio'), true);
+  assert.equal(pc.state.finance.categories.some((c) => c.name === 'Libros'), true);
   assert.equal(pc.state.finance.budgets['Gimnasio'], 15000);
   assert.equal(pc.state.finance.budgets['Libros'], 5000);
   assert.equal(pc.state.finance.budgets['Comida'], 30000);
 
-  assert.equal(phone.state.finance.categories.includes('Gimnasio'), true);
-  assert.equal(phone.state.finance.categories.includes('Libros'), true);
+  assert.equal(phone.state.finance.categories.some((c) => c.name === 'Gimnasio'), true);
+  assert.equal(phone.state.finance.categories.some((c) => c.name === 'Libros'), true);
   assert.equal(phone.state.finance.budgets['Gimnasio'], 15000);
   assert.equal(phone.state.finance.budgets['Libros'], 5000);
 

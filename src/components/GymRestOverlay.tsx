@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { LifeOSState } from '../types';
 import { playSound } from '../lib/audio';
+import { isModuleEnabled } from '../lib/moduleVisibility';
 
 interface GymRestOverlayProps {
   state: LifeOSState;
@@ -34,7 +35,7 @@ export const GymRestOverlay: React.FC<GymRestOverlayProps> = ({ state, onUpdateS
   }, [announcedEnd, left, onUpdateState, timer]);
 
   const progress = useMemo(() => timer ? Math.max(0, Math.min(100, (left / Math.max(1, timer.durationSeconds)) * 100)) : 0, [left, timer]);
-  if (!timer || left <= 0) return null;
+  if (!isModuleEnabled(state, 'gimnasio') || !timer || left <= 0) return null;
 
   const minutes = Math.floor(left / 60);
   const seconds = left % 60;

@@ -1,6 +1,8 @@
 import type { LifeOSState, ViewType } from '../types';
 import { daysBetween, todayISO } from './storage';
 import { sleepSummary } from './contextInsights';
+import { getCategoryName } from './financeCategories';
+import { isModuleEnabled } from './moduleVisibility';
 
 export interface ReviewException {
   id: string;
@@ -35,19 +37,24 @@ export function weeklyReviewExceptions(state: LifeOSState): ReviewException[] {
   if (staleAccounts.length) exceptions.push({ id: 'stale-accounts', title: `${staleAccounts.length} cuenta(s) sin conciliar`, detail: staleAccounts.map((account) => account.name).join(' · '), view: 'finanzas', tone: 'attention' });
 
   const budgetOverruns = state.finance.categories.filter((category) => {
-    const budget = Number(state.finance.budgets[category] || 0);
+    const catId = typeof category === 'string' ? category : category.id;
+    const catName = typeof category === 'string' ? category : category.name;
+    const budget = Number(state.finance.budgets[catId] || (catName !== catId ? state.finance.budgets[catName] : 0) || 0);
     if (!budget) return false;
-    const spent = state.finance.transactions.filter((transaction) => transaction.type === 'gasto' && transaction.origin !== 'adjustment' && transaction.category === category && transaction.date.slice(0, 7) === today.slice(0, 7)).reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
+    const spent = state.finance.transactions.filter((transaction) => transaction.type === 'gasto' && transaction.origin !== 'adjustment' && (transaction.category === catId || transaction.category === catName) && transaction.date.slice(0, 7) === today.slice(0, 7)).reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0);
     return spent > budget;
   });
-  if (budgetOverruns.length) exceptions.push({ id: 'budget-overruns', title: `${budgetOverruns.length} presupuesto(s) excedidos`, detail: budgetOverruns.join(' · '), view: 'finanzas', tone: 'urgent' });
+  if (budgetOverruns.length) {
+    const overrunNames = budgetOverruns.map((c) => (typeof c === 'string' ? c : c.name)).join(' · ');
+    exceptions.push({ id: 'budget-overruns', title: `${budgetOverruns.length} presupuesto(s) excedidos`, detail: overrunNames, view: 'finanzas', tone: 'urgent' });
+  }
 
   const soonExams = state.study.exams.filter((exam) => exam.status === 'pendiente' && exam.date >= today && daysBetween(today, exam.date) <= 14);
   const studiedRecently = state.study.studyLog.some((log) => daysBetween(log.date, today) <= 7);
   if (soonExams.length && !studiedRecently) exceptions.push({ id: 'exam-no-study', title: 'Examen cerca sin estudio reciente', detail: 'Hay un examen en los próximos 14 días y no registraste estudio esta semana.', view: 'estudios', tone: 'urgent' });
 
   if (!state.settings.lastBackupAt || daysBetween(state.settings.lastBackupAt, today) >= 7) exceptions.push({ id: 'backup', title: 'Backup pendiente', detail: 'Tu última copia tiene una semana o más.', view: 'config', tone: 'info' });
-  return exceptions;
+  return exceptions.filter((item) => isModuleEnabled(state, item.view));
 }
 
 export function reviewedThisWeek(state: LifeOSState): boolean {
@@ -168,7 +175,7 @@ export function gatherWeeklyReviewData(state: LifeOSState, today = todayISO()): 
     const amt = Number(t.amount || 0);
     if (t.type === 'gasto') {
       totalExpenses += amt;
-      const cat = t.category || 'Otros';
+      const cat = getCategoryName(state.finance.categories, t.category) || 'Otros';
       categoryExpenses[cat] = (categoryExpenses[cat] || 0) + amt;
     } else if (t.type === 'ingreso') {
       totalIncome += amt;
@@ -264,24 +271,31 @@ export function gatherWeeklyReviewData(state: LifeOSState, today = todayISO()): 
 export function formatWeeklyReviewSummaryNote(
   data: WeeklyReviewData,
   learnings: string,
-  nextWeekPriorities: string[]
+  nextWeekPriorities: string[],
+  options?: { showGym?: boolean; showFinances?: boolean }
 ): string {
+  const showGym = options?.showGym ?? true;
+  const showFinances = options?.showFinances ?? true;
   const parts: string[] = [];
   parts.push(`📅 REVISIÓN SEMANAL (${data.windowEnd})`);
   parts.push('');
   parts.push('📊 HECHOS VERIFICADOS DE LOS ÚLTIMOS 7 DÍAS:');
   parts.push(`• Tareas completadas: ${data.tasks.totalCompleted} | Postergadas: ${data.tasks.totalOverdue}`);
-  parts.push(
-    `• Gimnasio: ${data.gym.sessionsCount} sesiones (${data.gym.totalSets} series, ${data.gym.totalVolumeKg.toLocaleString()} kg volumen total)` +
-      (data.gym.currentWeight ? ` · Peso actual: ${data.gym.currentWeight} kg` : '')
-  );
-  parts.push(
-    `• Finanzas: Gastos: $${data.finances.totalExpenses.toLocaleString()} | Ingresos: $${data.finances.totalIncome.toLocaleString()} | Balance neto: $${data.finances.netBalance.toLocaleString()}`
-  );
-  if (data.finances.topCategories.length > 0) {
+  if (showGym) {
     parts.push(
-      `  Top gastos: ${data.finances.topCategories.map((c) => `${c.category} ($${c.amount})`).join(', ')}`
+      `• Gimnasio: ${data.gym.sessionsCount} sesiones (${data.gym.totalSets} series, ${data.gym.totalVolumeKg.toLocaleString()} kg volumen total)` +
+        (data.gym.currentWeight ? ` · Peso actual: ${data.gym.currentWeight} kg` : '')
     );
+  }
+  if (showFinances) {
+    parts.push(
+      `• Finanzas: Gastos: $${data.finances.totalExpenses.toLocaleString()} | Ingresos: $${data.finances.totalIncome.toLocaleString()} | Balance neto: $${data.finances.netBalance.toLocaleString()}`
+    );
+    if (data.finances.topCategories.length > 0) {
+      parts.push(
+        `  Top gastos: ${data.finances.topCategories.map((c) => `${c.category} ($${c.amount})`).join(', ')}`
+      );
+    }
   }
   if (data.sleep.avgHours !== null) {
     parts.push(

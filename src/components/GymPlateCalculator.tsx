@@ -59,6 +59,28 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
   onClose,
   onApplyWeight,
 }) => {
+  const previousFocusedElementRef = React.useRef<HTMLElement | null>(null);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    if (document.activeElement instanceof HTMLElement) {
+      previousFocusedElementRef.current = document.activeElement;
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (previousFocusedElementRef.current && typeof previousFocusedElementRef.current.focus === 'function') {
+        previousFocusedElementRef.current.focus();
+      }
+    };
+  }, [isOpen, onClose]);
+
   const [barWeight, setBarWeight] = useState(initialBarWeight);
   const [totalWeight, setTotalWeight] = useState(initialWeight);
   const [activeTab, setActiveTab] = useState<'calc' | 'manual'>('calc');
@@ -95,8 +117,17 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-      <div className="w-full max-w-md bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="plate-calculator-title"
+        className="w-full max-w-md bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-[var(--border)]">
           <div className="flex items-center gap-2">
@@ -104,13 +135,14 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
               <AppIcon name="dumbbell" className="h-4 w-4" />
             </span>
             <div>
-              <h2 className="text-sm font-bold text-[var(--text)]">Calculadora de Pesos Colocados</h2>
+              <h2 id="plate-calculator-title" className="text-sm font-bold text-[var(--text)]">Calculadora de Pesos Colocados</h2>
               <p className="text-[11px] text-[var(--text-soft)]">Desglose de discos y barra</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
+            aria-label="Cerrar calculadora"
             className="p-1 rounded-lg text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer"
           >
             ✕

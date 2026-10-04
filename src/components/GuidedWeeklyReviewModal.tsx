@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { LifeOSState, ViewType } from '../types';
 import {
   gatherWeeklyReviewData,
@@ -8,6 +8,7 @@ import {
 import { fmtDate, fmtMoney, todayISO, uid } from '../lib/storage';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
+import { PrivacyAmount } from './PrivacyAmount';
 
 interface GuidedWeeklyReviewModalProps {
   state: LifeOSState;
@@ -16,15 +17,14 @@ interface GuidedWeeklyReviewModalProps {
   onUpdateState: (updater: (draft: LifeOSState) => void) => void;
   onNavigate?: (view: ViewType) => void;
 }
+import { isModuleEnabled } from '../lib/moduleVisibility';
 
-const STEPS = [
-  { id: 1, label: 'Tareas' },
-  { id: 2, label: 'Gimnasio' },
-  { id: 3, label: 'Finanzas' },
-  { id: 4, label: 'Descanso' },
-  { id: 5, label: 'Proyectos' },
-  { id: 6, label: 'Conclusiones' },
-];
+export type ReviewStepKey = 'tasks' | 'gym' | 'finances' | 'sleep' | 'projects' | 'conclusions';
+
+export interface ReviewStepItem {
+  key: ReviewStepKey;
+  label: string;
+}
 
 export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = ({
   state,
@@ -39,9 +39,54 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
   const [priorityInput, setPriorityInput] = useState('');
   const [nextWeekPriorities, setNextWeekPriorities] = useState<string[]>([]);
 
+  const steps: ReviewStepItem[] = useMemo(() => {
+    const list: ReviewStepItem[] = [{ key: 'tasks', label: 'Tareas' }];
+    if (isModuleEnabled(state, 'gimnasio')) {
+      list.push({ key: 'gym', label: 'Gimnasio' });
+    }
+    if (isModuleEnabled(state, 'finanzas')) {
+      list.push({ key: 'finances', label: 'Finanzas' });
+    }
+    list.push(
+      { key: 'sleep', label: 'Descanso' },
+      { key: 'projects', label: 'Proyectos' },
+      { key: 'conclusions', label: 'Conclusiones' }
+    );
+    return list;
+  }, [state]);
+
+  const currentStep = steps[step - 1] || steps[0];
+  const totalSteps = steps.length;
+
+  useEffect(() => {
+    if (step > steps.length) {
+      setStep(steps.length);
+    }
+  }, [step, steps.length]);
+
   const reviewData: WeeklyReviewData = useMemo(() => {
     return gatherWeeklyReviewData(state, today);
   }, [state, today]);
+
+  const previousFocusedElementRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    previousFocusedElementRef.current = document.activeElement as HTMLElement | null;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      previousFocusedElementRef.current?.focus?.();
+    };
+  }, [open, onClose]);
 
   if (!open) return null;
 
@@ -95,7 +140,11 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
     const summaryNoteText = formatWeeklyReviewSummaryNote(
       reviewData,
       learnings,
-      nextWeekPriorities
+      nextWeekPriorities,
+      {
+        showGym: isModuleEnabled(state, 'gimnasio'),
+        showFinances: isModuleEnabled(state, 'finanzas'),
+      }
     );
 
     onUpdateState((draft) => {
@@ -157,7 +206,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
                   Revisión Semanal Guiada
                 </h2>
                 <p className="text-xs text-[var(--text-soft)]">
-                  Paso {step} de {STEPS.length}: {STEPS[step - 1].label}
+                  Paso {step} de {totalSteps}: {currentStep.label}
                 </p>
               </div>
             </div>
@@ -172,28 +221,31 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
 
           {/* Stepper bar */}
           <div className="flex items-center gap-1.5 mt-4">
-            {STEPS.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setStep(s.id)}
-                className={`flex-1 h-1.5 rounded-full transition-all cursor-pointer ${
-                  step === s.id
-                    ? 'bg-purple-500'
-                    : step > s.id
-                    ? 'bg-purple-500/40'
-                    : 'bg-[var(--border)]'
-                }`}
-                title={s.label}
-              />
-            ))}
+            {steps.map((s, idx) => {
+              const stepNum = idx + 1;
+              return (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => setStep(stepNum)}
+                  className={`flex-1 h-1.5 rounded-full transition-all cursor-pointer ${
+                    step === stepNum
+                      ? 'bg-purple-500'
+                      : step > stepNum
+                      ? 'bg-purple-500/40'
+                      : 'bg-[var(--border)]'
+                  }`}
+                  title={s.label}
+                />
+              );
+            })}
           </div>
         </div>
 
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
           {/* STEP 1: TASKS */}
-          {step === 1 && (
+          {currentStep.key === 'tasks' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
@@ -269,7 +321,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
           )}
 
           {/* STEP 2: GYM & FITNESS */}
-          {step === 2 && (
+          {currentStep.key === 'gym' && (
             <div className="space-y-4">
               <div>
                 <h3 className="text-sm font-bold text-[var(--text)]">Gimnasio & Entrenamiento 🏋️</h3>
@@ -347,7 +399,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
           )}
 
           {/* STEP 3: FINANCES */}
-          {step === 3 && (
+          {currentStep.key === 'finances' && (
             <div className="space-y-4">
               <div>
                 <h3 className="text-sm font-bold text-[var(--text)]">Finanzas & Flujo Semanal 💰</h3>
@@ -359,7 +411,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
               <div className="grid grid-cols-3 gap-2.5">
                 <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-3 text-center">
                   <span className="text-lg font-black text-rose-500 block">
-                    {fmtMoney(reviewData.finances.totalExpenses)}
+                    <PrivacyAmount>{fmtMoney(reviewData.finances.totalExpenses)}</PrivacyAmount>
                   </span>
                   <span className="text-[10px] font-bold text-[var(--text-faint)] uppercase">
                     Gastos
@@ -367,7 +419,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
                 </div>
                 <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-center">
                   <span className="text-lg font-black text-emerald-500 block">
-                    {fmtMoney(reviewData.finances.totalIncome)}
+                    <PrivacyAmount>{fmtMoney(reviewData.finances.totalIncome)}</PrivacyAmount>
                   </span>
                   <span className="text-[10px] font-bold text-[var(--text-faint)] uppercase">
                     Ingresos
@@ -379,7 +431,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
                       reviewData.finances.netBalance >= 0 ? 'text-emerald-500' : 'text-rose-500'
                     }`}
                   >
-                    {fmtMoney(reviewData.finances.netBalance)}
+                    <PrivacyAmount>{fmtMoney(reviewData.finances.netBalance)}</PrivacyAmount>
                   </span>
                   <span className="text-[10px] font-bold text-[var(--text-faint)] uppercase">
                     Balance Neto
@@ -399,7 +451,9 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
                         className="flex items-center justify-between p-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] text-xs"
                       >
                         <span className="font-semibold text-[var(--text)]">{c.category}</span>
-                        <span className="font-mono font-bold text-rose-500">{fmtMoney(c.amount)}</span>
+                        <span className="font-mono font-bold text-rose-500">
+                          <PrivacyAmount>{fmtMoney(c.amount)}</PrivacyAmount>
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -409,7 +463,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
           )}
 
           {/* STEP 4: SLEEP & HABITS */}
-          {step === 4 && (
+          {currentStep.key === 'sleep' && (
             <div className="space-y-4">
               <div>
                 <h3 className="text-sm font-bold text-[var(--text)]">Descanso & Energía 🌙</h3>
@@ -460,7 +514,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
           )}
 
           {/* STEP 5: PROJECTS & BLOCKERS */}
-          {step === 5 && (
+          {currentStep.key === 'projects' && (
             <div className="space-y-4">
               <div>
                 <h3 className="text-sm font-bold text-[var(--text)]">Proyectos & Bloqueos 🎯</h3>
@@ -552,7 +606,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
           )}
 
           {/* STEP 6: PRIORITIES & CONCLUSIONS */}
-          {step === 6 && (
+          {currentStep.key === 'conclusions' && (
             <div className="space-y-4">
               <div>
                 <h3 className="text-sm font-bold text-[var(--text)]">
@@ -642,10 +696,10 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
             <div />
           )}
 
-          {step < STEPS.length ? (
+          {step < totalSteps ? (
             <button
               type="button"
-              onClick={() => setStep((s) => Math.min(STEPS.length, s + 1))}
+              onClick={() => setStep((s) => Math.min(totalSteps, s + 1))}
               className="rounded-xl bg-[var(--text)] px-5 py-2 text-xs font-bold text-[var(--bg-elevated)] hover:opacity-90 cursor-pointer flex items-center gap-1.5"
             >
               <span>Siguiente</span>

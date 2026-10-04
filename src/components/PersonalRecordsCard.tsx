@@ -2,20 +2,19 @@ import React, { useMemo, useState } from 'react';
 import type { LifeOSState, MuscleGroup } from '../types';
 import { calcPRs, PRInfo } from '../lib/calculations';
 import { inferMuscleGroup } from '../lib/gymMigration';
+import { calculate1RM } from '../lib/gymMetrics';
 import { fmtDate } from '../lib/storage';
 import { AppIcon } from './AppIcon';
 
 interface PersonalRecordsCardProps {
   state: LifeOSState;
+  onSelectExercise?: (exerciseName: string) => void;
 }
 
 const MUSCLE_GROUPS: MuscleGroup[] = ['Pecho', 'Espalda', 'Piernas', 'Hombros', 'Brazos', 'Core', 'Cardio', 'Otros'];
 
 export function estimate1RM(weight: number, reps: number): number {
-  if (weight <= 0) return 0;
-  if (reps <= 1) return weight;
-  // Brzycki formula / Epley: weight * (1 + reps / 30)
-  return Math.round(weight * (1 + reps / 30));
+  return calculate1RM(weight, reps);
 }
 
 const MUSCLE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
@@ -29,7 +28,7 @@ const MUSCLE_COLORS: Record<string, { bg: string; text: string; border: string }
   Otros: { bg: 'bg-slate-500/10 dark:bg-slate-500/20', text: 'text-slate-600 dark:text-slate-400', border: 'border-slate-500/20' },
 };
 
-export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = ({ state }) => {
+export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = ({ state, onSelectExercise }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const prs = useMemo(() => calcPRs(state), [state]);
   const [selectedMuscle, setSelectedMuscle] = useState<string>('Todos');
@@ -113,7 +112,11 @@ export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = ({ state 
                   return (
                     <div
                       key={item.name}
-                      className="flex items-center justify-between py-2 transition"
+                      onClick={() => onSelectExercise?.(item.name)}
+                      className={`flex items-center justify-between py-2 transition ${
+                        onSelectExercise ? 'cursor-pointer hover:bg-[var(--surface-muted)]/60 rounded-xl px-2 -mx-2' : ''
+                      }`}
+                      title={onSelectExercise ? `Ver historial de ${item.name}` : undefined}
                     >
                       <div className="flex items-center gap-2 min-w-0 pr-2">
                         <span
@@ -232,9 +235,13 @@ export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = ({ state 
                 return (
                   <div
                     key={item.name}
-                    className={`rounded-xl border bg-[var(--card)] p-3 space-y-1.5 transition hover:border-[var(--border-hover)] ${
+                    onClick={() => onSelectExercise?.(item.name)}
+                    className={`rounded-xl border bg-[var(--card)] p-3 space-y-1.5 transition ${
+                      onSelectExercise ? 'cursor-pointer hover:border-[var(--blue)] shadow-xs' : 'hover:border-[var(--border-hover)]'
+                    } ${
                       isTop3 ? 'border-amber-500/30' : 'border-[var(--border)]'
                     }`}
+                    title={onSelectExercise ? `Ver historial de ${item.name}` : undefined}
                   >
                     <div className="flex items-center justify-between gap-1">
                       <span

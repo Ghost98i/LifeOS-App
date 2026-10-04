@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LifeOSState, Goal } from '../types';
+import type { LifeOSState, Goal, Postit } from '../types';
 import {
   todayISO,
   fmtDate,
@@ -13,8 +13,20 @@ import {
   goalCurrentValue,
   goalProgressPct,
 } from '../lib/calculations';
+import {
+  addNote,
+  updateNote,
+  deleteNote,
+  togglePinNote,
+  toggleArchiveNote,
+  convertNoteToTask,
+  getSortedNotes,
+  formatRelativeTime,
+} from '../lib/notesFlows';
+import { showToast } from '../lib/toast';
 import { PageHeader } from './PageHeader';
 import { ProjectsManager } from './ProjectsManager';
+import { AppIcon } from './AppIcon';
 
 interface NotasViewProps {
   state: LifeOSState;
@@ -22,7 +34,7 @@ interface NotasViewProps {
 }
 
 export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) => {
-  const [activeTab, setActiveTab] = useState<'proyectos' | 'notas' | 'streaming'>('proyectos');
+  const [activeTab, setActiveTab] = useState<'notas' | 'proyectos' | 'streaming'>('notas');
   const [streamDate, setStreamDate] = useState(todayISO());
   const [streamHours, setStreamHours] = useState('');
   const [checklistLabel, setChecklistLabel] = useState('');
@@ -34,6 +46,22 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
   const [goalLinked, setGoalLinked] = useState<'weight' | 'available' | null>(null);
 
   const [postitText, setPostitText] = useState('');
+  const [noteTitle, setNoteTitle] = useState('');
+  const [noteContent, setNoteContent] = useState('');
+  const [noteTags, setNoteTags] = useState('');
+  const [notePinned, setNotePinned] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [noteSearch, setNoteSearch] = useState('');
+  const [noteFilter, setNoteFilter] = useState<'activas' | 'fijadas' | 'archivadas'>('activas');
+
+  // Edit note modal state
+  const [editingNote, setEditingNote] = useState<Postit | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editText, setEditText] = useState('');
+  const [editTags, setEditTags] = useState('');
+  const [editPinned, setEditPinned] = useState(false);
+  const [editArchived, setEditArchived] = useState(false);
+
   const [shopItem, setShopItem] = useState('');
 
   const [linkName, setLinkName] = useState('');
@@ -58,7 +86,6 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
   ] as const;
 
   const activeProjectsCount = (state.projects || []).filter((p) => p.status === 'activo').length;
-  const postitCount = (state.notes?.postits || []).length;
   const pendingShopCount = (state.notes?.shopping || []).filter((s) => !s.done).length;
 
   const handleAddStream = (e: React.FormEvent) => {
@@ -138,24 +165,78 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
 
   const handleAddPostit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!postitText.trim()) return;
+    const content = noteContent.trim() || postitText.trim();
+    if (!content) return;
+    const rawTags = noteTags.split(',').map((t) => t.trim()).filter(Boolean);
     onUpdateState((draft) => {
-      if (!draft.notes) draft.notes = { postits: [], shopping: [], links: [], possessions: [] };
-      if (!draft.notes.postits) draft.notes.postits = [];
-      draft.notes.postits.push({
-        id: uid(),
-        text: postitText.trim(),
-        date: todayISO(),
+      addNote(draft, {
+        title: noteTitle.trim() || undefined,
+        text: content,
+        tags: rawTags.length > 0 ? rawTags : undefined,
+        pinned: notePinned,
       });
     });
     setPostitText('');
+    setNoteTitle('');
+    setNoteContent('');
+    setNoteTags('');
+    setNotePinned(false);
+    setShowAddForm(false);
+    showToast('Nota guardada', 'success');
+  };
+
+  const handleStartEdit = (note: Postit) => {
+    setEditingNote(note);
+    setEditTitle(note.title || '');
+    setEditText(note.text);
+    setEditTags(note.tags ? note.tags.join(', ') : '');
+    setEditPinned(Boolean(note.pinned));
+    setEditArchived(Boolean(note.archived));
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingNote || !editText.trim()) return;
+    const rawTags = editTags.split(',').map((t) => t.trim()).filter(Boolean);
+    onUpdateState((draft) => {
+      updateNote(draft, editingNote.id, {
+        title: editTitle.trim() || undefined,
+        text: editText.trim(),
+        tags: rawTags.length > 0 ? rawTags : undefined,
+        pinned: editPinned,
+        archived: editArchived,
+      });
+    });
+    setEditingNote(null);
+    showToast('Nota actualizada', 'success');
+  };
+
+  const handleTogglePin = (id: string, currentlyPinned: boolean) => {
+    onUpdateState((draft) => {
+      togglePinNote(draft, id);
+    });
+    showToast(currentlyPinned ? 'Nota desfijada' : 'Nota fijada arriba', 'info');
+  };
+
+  const handleToggleArchive = (id: string, currentlyArchived: boolean) => {
+    onUpdateState((draft) => {
+      toggleArchiveNote(draft, id);
+    });
+    showToast(currentlyArchived ? 'Nota restaurada a activas' : 'Nota archivada', 'info');
+  };
+
+  const handleConvertToTask = (id: string) => {
+    onUpdateState((draft) => {
+      convertNoteToTask(draft, id, todayISO());
+    });
+    showToast('Nota convertida en tarea para Hoy', 'success');
   };
 
   const handleDeletePostit = (id: string) => {
     onUpdateState((draft) => {
-      if (!draft.notes?.postits) return;
-      draft.notes.postits = draft.notes.postits.filter((p) => p.id !== id);
+      deleteNote(draft, id);
     });
+    showToast('Nota eliminada', 'info');
   };
 
   const handleAddShop = (e: React.FormEvent) => {
@@ -232,16 +313,61 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
   const possessionQuery = possessionSearch.trim().toLocaleLowerCase('es');
   const visiblePossessions = (state.notes?.possessions || []).filter((item) => !possessionQuery || [item.name, item.category, item.location, item.note].some((value) => String(value || '').toLocaleLowerCase('es').includes(possessionQuery)));
 
+  const allNotes = state.notes?.postits || [];
+  const totalActiveNotes = allNotes.filter((n) => !n.archived).length;
+  const totalPinnedNotes = allNotes.filter((n) => !n.archived && n.pinned).length;
+  const totalArchivedNotes = allNotes.filter((n) => n.archived).length;
+
+  const filteredNotes = allNotes.filter((note) => {
+    if (noteFilter === 'activas' && note.archived) return false;
+    if (noteFilter === 'fijadas' && (note.archived || !note.pinned)) return false;
+    if (noteFilter === 'archivadas' && !note.archived) return false;
+
+    const q = noteSearch.trim().toLowerCase();
+    if (!q) return true;
+
+    const matchesTitle = note.title ? note.title.toLowerCase().includes(q) : false;
+    const matchesText = note.text.toLowerCase().includes(q);
+    const matchesTags = note.tags ? note.tags.some((t) => t.toLowerCase().includes(q)) : false;
+    const matchesDate = note.date.includes(q);
+
+    return matchesTitle || matchesText || matchesTags || matchesDate;
+  });
+
+  const displayedNotes = getSortedNotes(filteredNotes, { includeArchived: true });
+
   return (
     <div className="space-y-6">
       <PageHeader
-        category="Conocimiento & Metas"
         title="Notas & Proyectos"
         subtitle="Proyectos con próximos pasos, metas anuales, notas rápidas, inventario y creación de contenido."
       />
 
       {/* Subtab navigation */}
       <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-2">
+        <button
+          type="button"
+          onClick={() => setActiveTab('notas')}
+          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+            activeTab === 'notas'
+              ? 'bg-[var(--text)] text-[var(--bg-elevated)] shadow-sm'
+              : 'text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--card)]'
+          }`}
+        >
+          <span>📝 Notas Rápidas</span>
+          {totalActiveNotes > 0 && (
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                activeTab === 'notas'
+                  ? 'bg-amber-500 text-white'
+                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+              }`}
+            >
+              {totalActiveNotes}
+            </span>
+          )}
+        </button>
+
         <button
           type="button"
           onClick={() => setActiveTab('proyectos')}
@@ -261,29 +387,6 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
               }`}
             >
               {activeProjectsCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('notas')}
-          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-            activeTab === 'notas'
-              ? 'bg-[var(--text)] text-[var(--bg-elevated)] shadow-sm'
-              : 'text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--card)]'
-          }`}
-        >
-          <span>📝 Notas & Personal</span>
-          {postitCount > 0 && (
-            <span
-              className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                activeTab === 'notas'
-                  ? 'bg-amber-500 text-white'
-                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-              }`}
-            >
-              {postitCount}
             </span>
           )}
         </button>
@@ -358,8 +461,12 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
               className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
             >
               <option value="">Manual</option>
-              <option value="weight">Peso corporal</option>
-              <option value="available">Dinero disponible</option>
+              <option value="weight">Peso corporal (kg)</option>
+              <option value="available">Dinero disponible ($)</option>
+              <option value="net_worth">Patrimonio neto ($)</option>
+              <option value="gym_sessions">Sesiones de gimnasio</option>
+              <option value="study_hours">Horas de estudio</option>
+              <option value="resale_profit">Ganancia de reventa ($)</option>
             </select>
           </div>
           <button
@@ -379,9 +486,30 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
             (state.goals || []).map((g) => {
               const cur = goalCurrentValue(state, g);
               const pct = goalProgressPct(g, cur);
+              const isFinancial = g.linked === 'available' || g.linked === 'net_worth' || g.linked === 'resale_profit';
+
+              const fmtVal = (val: number) => {
+                if (isFinancial) return fmtMoney(val);
+                if (g.linked === 'study_hours') return `${Number(val).toFixed(1)}h`;
+                if (g.linked === 'weight') return `${Number(val).toFixed(1)} kg`;
+                if (g.linked === 'gym_sessions') return `${Math.round(val)}`;
+                return Number(val).toFixed(1);
+              };
+
+              const getBadge = () => {
+                switch (g.linked) {
+                  case 'weight': return '⚖️ Peso';
+                  case 'available': return '💰 Disponible';
+                  case 'net_worth': return '💎 Patrimonio';
+                  case 'gym_sessions': return '🏋️ Gimnasio';
+                  case 'study_hours': return '📚 Estudio';
+                  case 'resale_profit': return '🔁 Reventa';
+                  default: return '✋ Manual';
+                }
+              };
 
               return (
-                <div key={g.id} className={`bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 relative overflow-hidden space-y-3 ${g.linked === 'available' ? 'privacy-sensitive' : ''}`}>
+                <div key={g.id} className={`bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 relative overflow-hidden space-y-3 ${isFinancial ? 'privacy-sensitive' : ''}`}>
                   <div className="absolute top-0 left-0 w-1.5 h-full bg-purple-500" />
                   <div className="flex items-start justify-between">
                     <span className="font-bold text-sm text-[var(--text)]">{g.name}</span>
@@ -394,9 +522,9 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
                   </div>
 
                   <div className="font-mono text-2xl font-extrabold text-[var(--text)]">
-                    {g.linked === 'available' ? fmtMoney(cur) : Number(cur).toFixed(1)}
+                    {fmtVal(cur)}
                     <span className="text-xs font-normal text-[var(--text-faint)] ml-1">
-                      / {g.linked === 'available' ? fmtMoney(g.target) : g.target}
+                      / {fmtVal(g.target)}
                     </span>
                   </div>
 
@@ -406,7 +534,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
 
                   <div className="flex items-center justify-between text-xs pt-1">
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                      {g.linked === 'weight' ? '⚖️ Peso' : g.linked === 'available' ? '💰 Disponible' : '✋ Manual'}
+                      {getBadge()}
                     </span>
                     {!g.linked && (
                       <button
@@ -429,58 +557,417 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
   {/* Tab: Notas & Personal */}
   {activeTab === 'notas' && (
     <div className="space-y-6">
-      {/* Post-its Grid */}
-      <div className="space-y-3 privacy-sensitive">
-        <div className="flex items-center justify-between">
+      {/* Post-its / Notas Grid */}
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold text-[var(--text)]">Post-its 📌</h2>
-            <p className="text-xs text-[var(--text-faint)]">Recordatorios visuales rápidos y notas adhesivas.</p>
+            <h2 className="text-sm font-bold text-[var(--text)] flex items-center gap-2">
+              <span>Notas & Post-its</span>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                {totalActiveNotes} {totalActiveNotes === 1 ? 'activa' : 'activas'}
+              </span>
+            </h2>
+            <p className="text-xs text-[var(--text-faint)]">
+              Capturas rápidas, ideas, recordatorios y apuntes inmediatos.
+            </p>
           </div>
-          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
-            {(state.notes?.postits || []).length} notas
-          </span>
+
+          <button
+            type="button"
+            onClick={() => setShowAddForm(!showAddForm)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold transition shadow-2xs cursor-pointer self-start sm:self-auto"
+          >
+            <AppIcon name="plus" className="h-3.5 w-3.5 text-white" />
+            <span>{showAddForm ? 'Cerrar formulario' : 'Nueva nota'}</span>
+          </button>
         </div>
 
-        <form onSubmit={handleAddPostit} className="flex gap-2 p-3 bg-[var(--bg)] border border-dashed border-[var(--border)] rounded-xl">
-          <input
-            type="text"
-            value={postitText}
-            onChange={(e) => setPostitText(e.target.value)}
-            placeholder="Escribí una nota rápida..."
-            className="flex-1 px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
-          />
-          <button
-            type="submit"
-            className="px-3.5 py-1.5 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-semibold rounded-lg hover:opacity-90 cursor-pointer"
+        {/* Quick Add / Form */}
+        {showAddForm && (
+          <form
+            onSubmit={handleAddPostit}
+            className="p-4 bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-sm space-y-3 animate-in fade-in duration-150"
           >
-            ＋ Agregar
-          </button>
-        </form>
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[var(--text)]">Crear nota</span>
+              <label className="flex items-center gap-1.5 text-xs text-[var(--text-soft)] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={notePinned}
+                  onChange={(e) => setNotePinned(e.target.checked)}
+                  className="rounded accent-amber-500"
+                />
+                <span>📌 Fijar arriba</span>
+              </label>
+            </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-          {(state.notes?.postits || []).length === 0 ? (
-            <p className="text-center py-6 text-xs text-[var(--text-faint)] col-span-3">Sin post-its guardados.</p>
+            <input
+              type="text"
+              value={noteTitle}
+              onChange={(e) => setNoteTitle(e.target.value)}
+              placeholder="Título (opcional)..."
+              className="w-full px-3 py-2 text-xs font-semibold rounded-xl bg-[var(--bg)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)]"
+            />
+
+            <textarea
+              value={noteContent}
+              onChange={(e) => setNoteContent(e.target.value)}
+              placeholder="Escribí el contenido de la nota..."
+              rows={3}
+              className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)] resize-y"
+              required
+            />
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+              <input
+                type="text"
+                value={noteTags}
+                onChange={(e) => setNoteTags(e.target.value)}
+                placeholder="Etiquetas (separadas por comas, ej: ideas, estudio)..."
+                className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-[var(--bg)] border border-[var(--border)] text-[var(--text)]"
+              />
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(false)}
+                  className="px-3 py-1.5 text-xs text-[var(--text-soft)] hover:text-[var(--text)] rounded-xl border border-[var(--border)] cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!noteContent.trim()}
+                  className="px-4 py-1.5 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold rounded-xl hover:opacity-90 disabled:opacity-40 cursor-pointer shadow-2xs"
+                >
+                  Guardar nota
+                </button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* Search & Filter Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+          {/* Search */}
+          <div className="relative flex-1 max-w-md">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]">
+              <AppIcon name="search" className="h-3.5 w-3.5" />
+            </span>
+            <input
+              type="text"
+              value={noteSearch}
+              onChange={(e) => setNoteSearch(e.target.value)}
+              placeholder="Buscar notas por título, texto o etiqueta..."
+              className="w-full pl-8 pr-8 py-1.5 text-xs rounded-xl bg-[var(--card)] border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-faint)] focus:border-[var(--blue)] outline-none transition"
+            />
+            {noteSearch && (
+              <button
+                type="button"
+                onClick={() => setNoteSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[var(--text-faint)] hover:text-[var(--text)] p-0.5"
+                title="Limpiar búsqueda"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Filter Tabs */}
+          <div className="flex items-center gap-1 bg-[var(--surface-muted)] p-1 rounded-xl border border-[var(--border)] text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => setNoteFilter('activas')}
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                noteFilter === 'activas'
+                  ? 'bg-[var(--card)] text-[var(--text)] shadow-2xs'
+                  : 'text-[var(--text-faint)] hover:text-[var(--text)]'
+              }`}
+            >
+              Activas ({totalActiveNotes})
+            </button>
+            <button
+              type="button"
+              onClick={() => setNoteFilter('fijadas')}
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                noteFilter === 'fijadas'
+                  ? 'bg-[var(--card)] text-amber-600 dark:text-amber-400 shadow-2xs'
+                  : 'text-[var(--text-faint)] hover:text-[var(--text)]'
+              }`}
+            >
+              📌 Fijadas ({totalPinnedNotes})
+            </button>
+            <button
+              type="button"
+              onClick={() => setNoteFilter('archivadas')}
+              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
+                noteFilter === 'archivadas'
+                  ? 'bg-[var(--card)] text-[var(--text)] shadow-2xs'
+                  : 'text-[var(--text-faint)] hover:text-[var(--text)]'
+              }`}
+            >
+              Archivadas ({totalArchivedNotes})
+            </button>
+          </div>
+        </div>
+
+        {/* Notes Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {displayedNotes.length === 0 ? (
+            <div className="py-12 text-center col-span-full bg-[var(--surface-muted)]/40 rounded-2xl border border-dashed border-[var(--border)] p-6">
+              <p className="text-xs text-[var(--text-faint)] font-medium">
+                {noteSearch.trim()
+                  ? `No se encontraron notas para "${noteSearch}".`
+                  : noteFilter === 'fijadas'
+                  ? 'No tenés notas fijadas. Fijá una nota importante para verla arriba.'
+                  : noteFilter === 'archivadas'
+                  ? 'No hay notas archivadas.'
+                  : 'No tenés notas guardadas. ¡Creá una nota para comenzar!'}
+              </p>
+              {!showAddForm && !noteSearch.trim() && noteFilter === 'activas' && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddForm(true)}
+                  className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 transition cursor-pointer"
+                >
+                  <AppIcon name="plus" className="h-3.5 w-3.5" />
+                  <span>Crear primera nota</span>
+                </button>
+              )}
+            </div>
           ) : (
-            [...(state.notes?.postits || [])]
-              .sort((a, b) => b.date.localeCompare(a.date))
-              .map((p) => (
+            displayedNotes.map((p) => {
+              const relative = formatRelativeTime(p.updatedAt || p.date);
+              const isPinned = Boolean(p.pinned);
+              const isArchived = Boolean(p.archived);
+
+              return (
                 <div
                   key={p.id}
-                  className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs space-y-2 relative min-h-[90px] flex flex-col justify-between"
+                  className={`p-4 rounded-2xl border text-xs space-y-3 flex flex-col justify-between transition-all group ${
+                    isPinned
+                      ? 'bg-amber-500/10 border-amber-500/30 shadow-2xs'
+                      : isArchived
+                      ? 'bg-[var(--surface-muted)]/50 border-[var(--border)] opacity-75'
+                      : 'bg-[var(--card)] border-[var(--border)] hover:border-[var(--blue)]/40 shadow-2xs'
+                  }`}
                 >
-                  <button
-                    onClick={() => handleDeletePostit(p.id)}
-                    className="absolute top-2 right-2 text-xs text-[var(--text-faint)] hover:text-red-500"
-                  >
-                    ✕
-                  </button>
-                  <p className="text-[var(--text)] font-medium pr-4 whitespace-pre-wrap">{p.text}</p>
-                  <span className="font-mono text-[10px] text-[var(--text-faint)]">{fmtDate(p.date)}</span>
+                  {/* Top Header */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {isPinned && (
+                        <span className="text-xs shrink-0" title="Nota fijada">📌</span>
+                      )}
+                      {p.title && (
+                        <h3 className={`font-bold text-xs text-[var(--text)] truncate ${state.settings.privacyMode ? 'privacy-sensitive' : ''}`}>
+                          {p.title}
+                        </h3>
+                      )}
+                    </div>
+
+                    {/* Action buttons */}
+                    <div className="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+                      {/* Pin Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePin(p.id, isPinned)}
+                        className={`p-1 rounded-lg transition cursor-pointer ${
+                          isPinned
+                            ? 'text-amber-600 hover:bg-amber-500/20'
+                            : 'text-[var(--text-faint)] hover:text-amber-600 hover:bg-[var(--surface-muted)]'
+                        }`}
+                        title={isPinned ? 'Desfijar' : 'Fijar arriba'}
+                        aria-label={isPinned ? 'Desfijar' : 'Fijar arriba'}
+                      >
+                        <span className="text-[11px] leading-none">📌</span>
+                      </button>
+
+                      {/* Convert to Task */}
+                      <button
+                        type="button"
+                        onClick={() => handleConvertToTask(p.id)}
+                        className="p-1 rounded-lg text-[var(--text-faint)] hover:text-emerald-600 hover:bg-emerald-500/10 transition cursor-pointer"
+                        title="Convertir en tarea de Hoy"
+                        aria-label="Convertir en tarea de Hoy"
+                      >
+                        <AppIcon name="check" className="h-3 w-3" />
+                      </button>
+
+                      {/* Archive Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleArchive(p.id, isArchived)}
+                        className="p-1 rounded-lg text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] transition cursor-pointer"
+                        title={isArchived ? 'Desarchivar' : 'Archivar'}
+                        aria-label={isArchived ? 'Desarchivar' : 'Archivar'}
+                      >
+                        <span className="text-[10px] leading-none">{isArchived ? '📤' : '📥'}</span>
+                      </button>
+
+                      {/* Edit */}
+                      <button
+                        type="button"
+                        onClick={() => handleStartEdit(p)}
+                        className="p-1 rounded-lg text-[var(--text-faint)] hover:text-[var(--blue)] hover:bg-blue-500/10 transition cursor-pointer"
+                        title="Editar nota"
+                        aria-label="Editar nota"
+                      >
+                        <AppIcon name="edit" className="h-3 w-3" />
+                      </button>
+
+                      {/* Delete */}
+                      <button
+                        type="button"
+                        onClick={() => handleDeletePostit(p.id)}
+                        className="p-1 rounded-lg text-[var(--text-faint)] hover:text-rose-600 hover:bg-rose-500/10 transition cursor-pointer"
+                        title="Eliminar nota"
+                        aria-label="Eliminar nota"
+                      >
+                        <AppIcon name="trash" className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-1">
+                    <p className={`text-[var(--text)] text-xs font-normal whitespace-pre-wrap leading-relaxed ${state.settings.privacyMode ? 'privacy-sensitive' : ''}`}>
+                      {p.text}
+                    </p>
+                  </div>
+
+                  {/* Footer: Tags and Relative Date */}
+                  <div className="pt-2 border-t border-[var(--border)]/60 flex flex-wrap items-center justify-between gap-1.5 text-[10px]">
+                    {p.tags && p.tags.length > 0 ? (
+                      <div className="flex flex-wrap items-center gap-1">
+                        {p.tags.map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            onClick={() => setNoteSearch(tag)}
+                            className="px-1.5 py-0.5 rounded font-medium bg-[var(--surface-muted)] hover:bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)] border border-[var(--border)] transition cursor-pointer"
+                            title={`Filtrar por #${tag}`}
+                          >
+                            #{tag}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div />
+                    )}
+
+                    <div className="flex items-center gap-1.5 font-mono text-[var(--text-faint)] shrink-0 ml-auto">
+                      {isArchived && (
+                        <span className="px-1.5 py-0.2 rounded bg-[var(--surface-muted)] text-[9px] font-sans font-semibold">
+                          Archivada
+                        </span>
+                      )}
+                      <span title={p.updatedAt ? `Modificada: ${p.updatedAt}` : `Creada: ${p.date}`}>
+                        {relative}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              ))
+              );
+            })
           )}
         </div>
       </div>
+
+      {/* Edit Note Modal */}
+      {editingNote && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="w-full max-w-lg rounded-2xl bg-[var(--card)] border border-[var(--border)] p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-[var(--text)]">Editar nota</h3>
+              <button
+                type="button"
+                onClick={() => setEditingNote(null)}
+                className="p-1 rounded-lg text-[var(--text-faint)] hover:text-[var(--text)] transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
+                  Título (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  placeholder="Título de la nota..."
+                  className="w-full px-3 py-2 text-xs font-semibold rounded-xl bg-[var(--bg)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)]"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
+                  Contenido
+                </label>
+                <textarea
+                  value={editText}
+                  onChange={(e) => setEditText(e.target.value)}
+                  rows={5}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)] resize-y"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
+                  Etiquetas (separadas por comas)
+                </label>
+                <input
+                  type="text"
+                  value={editTags}
+                  onChange={(e) => setEditTags(e.target.value)}
+                  placeholder="ideas, recordatorio, trabajo"
+                  className="w-full px-3 py-1.5 text-xs rounded-xl bg-[var(--bg)] border border-[var(--border)] text-[var(--text)]"
+                />
+              </div>
+
+              <div className="flex items-center gap-4 pt-1">
+                <label className="flex items-center gap-1.5 text-xs text-[var(--text-soft)] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={editPinned}
+                    onChange={(e) => setEditPinned(e.target.checked)}
+                    className="rounded accent-amber-500"
+                  />
+                  <span>📌 Fijar arriba</span>
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-[var(--text-soft)] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={editArchived}
+                    onChange={(e) => setEditArchived(e.target.checked)}
+                    className="rounded accent-[var(--blue)]"
+                  />
+                  <span>📥 Archivada</span>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border)]">
+                <button
+                  type="button"
+                  onClick={() => setEditingNote(null)}
+                  className="px-3.5 py-1.5 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] rounded-xl border border-[var(--border)] cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!editText.trim()}
+                  className="px-4 py-1.5 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl disabled:opacity-40 cursor-pointer shadow-2xs"
+                >
+                  Guardar cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Mis cosas */}
       <section className="space-y-3 pt-4 border-t border-[var(--border)]">

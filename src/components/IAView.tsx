@@ -101,8 +101,16 @@ export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState }) => {
 
   const handleConfirmImport = () => {
     if (!preview) return;
-    onUpdateState((draft) => applyAIImport(draft, preview.payload));
-    setMessage(`Se importaron ${preview.total} elemento(s). Revisalos antes de actuar.`);
+    let added = 0;
+    onUpdateState((draft) => {
+      added = applyAIImport(draft, preview.payload);
+    });
+    const skipped = preview.total - added;
+    if (skipped > 0) {
+      setMessage(`Se importaron ${added} elemento(s). (${skipped} duplicado(s) omitido(s)). Revisalos antes de actuar.`);
+    } else {
+      setMessage(`Se importaron ${added} elemento(s). Revisalos antes de actuar.`);
+    }
     setRawImport('');
     setPreview(null);
   };
@@ -195,7 +203,6 @@ export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState }) => {
   return (
     <div className="space-y-6">
       <PageHeader
-        category="Asistente & Automatización"
         title="IA bajo demanda"
         subtitle="LifeOS prepara el trabajo; vos elegís la IA, revisás el resultado y decidís qué importar."
       />

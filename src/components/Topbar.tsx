@@ -4,6 +4,7 @@ import { isSoundEnabled, setSoundEnabled, playSound } from '../lib/audio';
 import type { CloudSyncStatus, CloudUser } from '../lib/cloudSync';
 import lifeOSIcon from '../assets/lifeos-icon.png';
 import { AppIcon, type AppIconName } from './AppIcon';
+import { isModuleEnabled } from '../lib/moduleVisibility';
 
 interface TopbarProps {
   currentView: ViewType;
@@ -50,8 +51,7 @@ export const Topbar: React.FC<TopbarProps> = ({
   const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
   const [showCloudMenu, setShowCloudMenu] = useState(false);
   const [showQuickMenu, setShowQuickMenu] = useState(false);
-  const hidden = state.settings.hiddenTabs || [];
-  const actions = QUICK_ACTIONS.filter((q) => !hidden.includes(q.view));
+  const actions = QUICK_ACTIONS.filter((q) => isModuleEnabled(state, q.view));
   const currentMeta: Record<ViewType, { icon: AppIconName; label: string }> = {
     dashboard: { icon: 'home', label: 'Hoy' }, agenda: { icon: 'calendar', label: 'Agenda' }, calendario: { icon: 'calendarDays', label: 'Calendario' },
     trabajo: { icon: 'briefcase', label: 'Trabajo' }, reventa: { icon: 'repeat', label: 'Reventa' }, finanzas: { icon: 'wallet', label: 'Finanzas' },
@@ -69,43 +69,43 @@ export const Topbar: React.FC<TopbarProps> = ({
   const syncLed = (() => {
     if (syncStatus === 'synced') {
       return {
-        dotClass: 'bg-emerald-400 dark:bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]',
+        dotClass: 'bg-emerald-500 dark:bg-emerald-400',
         label: 'Sincronizado',
-        textColor: 'text-emerald-700 dark:text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
+        textColor: 'text-[var(--text-soft)] hover:text-[var(--text)] border-transparent bg-transparent hover:bg-[var(--surface-muted)]',
       };
     }
     if (syncStatus === 'saving' || syncStatus === 'connecting') {
       return {
-        dotClass: 'bg-amber-400 dark:bg-amber-400 animate-pulse shadow-[0_0_6px_rgba(251,191,36,0.7)]',
-        label: 'Guardando...',
-        textColor: 'text-amber-700 dark:text-amber-300 border-amber-500/30 bg-amber-500/10',
+        dotClass: 'bg-amber-400 animate-pulse',
+        label: 'Guardando…',
+        textColor: 'text-amber-700 dark:text-amber-400 border-amber-500/20 bg-amber-500/10',
       };
     }
     if (syncStatus === 'conflict') {
       return {
         dotClass: 'bg-rose-500 animate-ping',
-        label: 'Conflicto',
-        textColor: 'text-rose-700 dark:text-rose-300 border-rose-500/30 bg-rose-500/10',
+        label: 'Conflicto pendiente',
+        textColor: 'text-rose-700 dark:text-rose-300 border-rose-500/40 bg-rose-500/15 font-bold shadow-xs',
       };
     }
     if (syncStatus === 'error') {
       return {
         dotClass: 'bg-rose-500 animate-pulse',
-        label: 'Error al subir',
-        textColor: 'text-rose-700 dark:text-rose-300 border-rose-500/30 bg-rose-500/10',
+        label: 'Error al sincronizar',
+        textColor: 'text-rose-700 dark:text-rose-300 border-rose-500/40 bg-rose-500/15 font-bold shadow-xs',
       };
     }
     if (cloudConfigured && !cloudUser) {
       return {
-        dotClass: 'bg-blue-400 dark:bg-blue-400 animate-pulse',
+        dotClass: 'bg-[var(--blue)]',
         label: 'Conectar Google',
-        textColor: 'text-blue-700 dark:text-blue-300 border-blue-500/30 bg-blue-500/10 hover:bg-blue-500/20',
+        textColor: 'text-[var(--text-soft)] hover:text-[var(--text)] border-[var(--border)] bg-[var(--card)] hover:bg-[var(--surface-muted)]',
       };
     }
     return {
       dotClass: 'bg-slate-400 dark:bg-slate-500',
-      label: 'Offline (Local)',
-      textColor: 'text-[var(--text-soft)] border-[var(--border)] bg-[var(--card)]',
+      label: 'Local',
+      textColor: 'text-[var(--text-faint)] border-transparent bg-transparent',
     };
   })();
 
@@ -170,7 +170,7 @@ export const Topbar: React.FC<TopbarProps> = ({
           <button
             onClick={onOpenCapture}
             title={(state.inbox || []).length > 0 ? `Capturar / Bandeja (${(state.inbox || []).length} pendientes)` : "Capturar (C)"}
-            className="flex h-9 items-center gap-1.5 rounded-xl bg-[var(--blue)] px-3 text-xs font-bold text-white shadow-sm hover:opacity-90 transition-all active:scale-[0.98] cursor-pointer"
+            className="flex h-9 items-center gap-1.5 rounded-xl bg-[var(--text)] px-3 text-xs font-bold text-[var(--bg-elevated)] shadow-xs hover:opacity-90 transition-all active:scale-[0.98] cursor-pointer"
           >
             <AppIcon name="plus" className="h-3.5 w-3.5" />
             <span>Capturar</span>
@@ -179,7 +179,7 @@ export const Topbar: React.FC<TopbarProps> = ({
                 {(state.inbox || []).length}
               </span>
             ) : (
-              <kbd className="ml-0.5 rounded bg-white/20 px-1 py-0.5 text-[9px] font-mono">C</kbd>
+              <kbd className="ml-0.5 rounded bg-white/20 dark:bg-black/20 px-1 py-0.5 text-[9px] font-mono">C</kbd>
             )}
           </button>
 

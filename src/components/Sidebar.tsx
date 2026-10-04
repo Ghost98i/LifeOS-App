@@ -2,6 +2,7 @@ import React from 'react';
 import { ViewType, LifeOSState } from '../types';
 import lifeOSIcon from '../assets/lifeos-icon.png';
 import { AppIcon, type AppIconName } from './AppIcon';
+import { isModuleEnabled } from '../lib/moduleVisibility';
 
 interface SidebarProps {
   currentView: ViewType;
@@ -34,8 +35,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile,
 }) => {
-  const hidden = state.settings.hiddenTabs || [];
-  const items = NAV_ITEMS.filter((item) => !hidden.includes(item.id));
+  const items = NAV_ITEMS.filter((item) => isModuleEnabled(state, item.id));
 
   return (
     <>
@@ -52,11 +52,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           isOpenMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
-        <div className="flex items-center gap-3 px-2 pb-5 pt-1">
-          <img src={lifeOSIcon} alt="" className="h-9 w-9 shrink-0 rounded-xl shadow-sm" />
-          <div className="flex flex-col">
-            <span className="text-lg font-bold leading-none tracking-tight text-[var(--text)]">LifeOS</span>
-            <span className="mt-1 text-xs text-[var(--text-faint)]">Tu centro personal</span>
+        <div className="flex items-center justify-between px-2 pb-5 pt-1">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img src={lifeOSIcon} alt="" className="h-8 w-8 shrink-0 rounded-xl shadow-xs" />
+            <div className="flex flex-col min-w-0">
+              <span className="text-base font-bold leading-none tracking-tight text-[var(--text)] truncate">LifeOS</span>
+              <span className="mt-1 text-[11px] font-medium text-[var(--text-faint)] truncate">Personal Workspace</span>
+            </div>
           </div>
         </div>
 
@@ -90,19 +92,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onCloseMobile();
                   }}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium transition-all ${
+                  className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-[var(--blue-soft)] font-semibold text-[var(--blue)] shadow-2xs'
-                      : 'text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]'
+                      ? 'bg-[var(--card)] font-bold text-[var(--text)] shadow-xs border border-[var(--border)]'
+                      : 'text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] border border-transparent'
                   }`}
                 >
-                  {isActive && (
-                    <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-[var(--blue)]" />
-                  )}
                   <AppIcon
                     name={item.icon}
                     className={`h-[18px] w-[18px] shrink-0 transition-colors ${
-                      isActive ? 'text-[var(--blue)]' : 'text-[var(--text-faint)] group-hover:text-[var(--text)]'
+                      isActive ? 'text-[var(--text)]' : 'text-[var(--text-faint)] group-hover:text-[var(--text)]'
                     }`}
                   />
                   <span className="truncate">{item.label}</span>
@@ -115,14 +114,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="pt-3 border-t border-[var(--border)] mt-2">
           <button
             onClick={onToggleTheme}
-            className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-xs font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] transition-all cursor-pointer shadow-2xs"
+            className="flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition-all cursor-pointer shadow-2xs"
             title={state.settings.darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           >
-            <div className="flex items-center gap-2.5">
-              <AppIcon name={state.settings.darkMode ? 'sun' : 'moon'} className="h-4 w-4 text-[var(--blue)]" />
+            <div className="flex items-center gap-2">
+              <AppIcon name={state.settings.darkMode ? 'sun' : 'moon'} className="h-4 w-4 text-[var(--text)]" />
               <span>Modo {state.settings.darkMode ? 'Oscuro' : 'Claro'}</span>
             </div>
-            <span className="text-[10px] font-bold text-[var(--text-faint)] uppercase">
+            <span className="text-[10px] font-bold text-[var(--text-faint)] uppercase font-mono">
               {state.settings.darkMode ? 'ON' : 'OFF'}
             </span>
           </button>

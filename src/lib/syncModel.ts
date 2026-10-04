@@ -1,6 +1,6 @@
 import type { LifeOSState } from '../types';
 import { defaultState, normalizeStoredState } from './storage';
-import { mergeModuleData } from './syncMerge';
+import { mergeModuleData, mergeModuleDataWithConflicts, detectModuleConflicts } from './syncMerge';
 
 export const SYNC_MODULES = [
   'profile',
@@ -23,6 +23,26 @@ export const SYNC_MODULES = [
 export type SyncModuleKey = typeof SYNC_MODULES[number];
 export type SyncRevisionMap = Partial<Record<SyncModuleKey, string>>;
 export type SyncBaselineMap = Partial<Record<SyncModuleKey, string>>;
+
+export interface SyncConflictItem {
+  id: string;
+  module: SyncModuleKey;
+  entityType: 'account' | 'budget' | 'entity' | 'delete_vs_modify';
+  entityId: string;
+  field?: string;
+  label: string;
+  localSummary: string;
+  remoteSummary: string;
+  baseSummary?: string;
+  localValue: unknown;
+  remoteValue: unknown;
+  baseValue?: unknown;
+}
+
+export interface ModuleMergeResult<T = unknown> {
+  data: T;
+  conflicts: SyncConflictItem[];
+}
 
 export const SYNC_MODULE_LABELS: Record<SyncModuleKey, string> = {
   profile: 'Perfil y configuración',
@@ -130,6 +150,38 @@ export function mergeSyncModule(
   const mergedData = mergeModuleData(module, localData, pureRemote, pureBaseline, tombstones);
   const candidate = { ...state, ...(mergedData as Partial<LifeOSState>) };
   return normalizeStoredState(candidate);
+}
+
+export function mergeSyncModuleWithConflicts(
+  state: LifeOSState,
+  module: SyncModuleKey,
+  remoteData: unknown,
+  baselineData?: unknown,
+  tombstones: Record<string, number> = {}
+): { state: LifeOSState; conflicts: SyncConflictItem[] } {
+  if (!remoteData || typeof remoteData !== 'object' || Array.isArray(remoteData)) {
+    throw new Error(`El módulo sincronizado “${module}” no contiene datos válidos.`);
+  }
+  const pureRemote = extractPureModuleData(remoteData);
+  const pureBaseline = extractPureModuleData(baselineData);
+  const localData = syncModuleData(state, module);
+  const { data: mergedData, conflicts } = mergeModuleDataWithConflicts(module, localData, pureRemote, pureBaseline, tombstones);
+  const candidate = { ...state, ...(mergedData as Partial<LifeOSState>) };
+  return { state: normalizeStoredState(candidate), conflicts };
+}
+
+export function detectSyncModuleConflicts(
+  state: LifeOSState,
+  module: SyncModuleKey,
+  remoteData: unknown,
+  baselineData?: unknown,
+  tombstones: Record<string, number> = {}
+): SyncConflictItem[] {
+  if (!remoteData || typeof remoteData !== 'object' || Array.isArray(remoteData)) return [];
+  const pureRemote = extractPureModuleData(remoteData);
+  const pureBaseline = extractPureModuleData(baselineData);
+  const localData = syncModuleData(state, module);
+  return detectModuleConflicts(module, localData, pureRemote, pureBaseline, tombstones);
 }
 
 export function buildStateFromModules(modules: Partial<Record<SyncModuleKey, unknown>>): LifeOSState {

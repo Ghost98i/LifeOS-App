@@ -5,8 +5,9 @@ export type AppIconName =
   | 'dumbbell' | 'book' | 'note' | 'sparkles' | 'settings' | 'plus' | 'more'
   | 'sun' | 'moon' | 'menu' | 'search' | 'shield' | 'volume' | 'volumeOff'
   | 'cloud' | 'check' | 'clock' | 'chart' | 'scale' | 'chevronLeft' | 'chevronRight'
-  | 'trophy' | 'play' | 'pause' | 'rotateCcw' | 'filter' | 'kanban' | 'list' | 'arrowRight' | 'trash' | 'edit' | 'flame' | 'trendingUp'
-  | 'eye' | 'eyeOff' | 'target' | 'zap' | 'bell' | 'chevronDown' | 'chevronUp' | 'x' | 'checkCircle' | 'activity';
+  | 'trophy' | 'play' | 'pause' | 'rotateCcw' | 'filter' | 'kanban' | 'list' | 'arrowRight' | 'arrowUp' | 'trash' | 'edit' | 'flame' | 'trendingUp'
+  | 'eye' | 'eyeOff' | 'target' | 'zap' | 'bell' | 'chevronDown' | 'chevronUp' | 'x' | 'checkCircle' | 'activity'
+  | 'lock' | 'unlock' | 'link';
 
 interface AppIconProps extends React.SVGProps<SVGSVGElement> {
   name: AppIconName;
@@ -48,6 +49,7 @@ const paths: Record<AppIconName, React.ReactNode> = {
   kanban: <><rect width="6" height="14" x="3" y="5" rx="1.5"/><rect width="6" height="9" x="10" y="5" rx="1.5"/><rect width="6" height="12" x="17" y="5" rx="1.5"/></>,
   list: <><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></>,
   arrowRight: <path d="M5 12h14M12 5l7 7-7 7"/>,
+  arrowUp: <path d="M12 19V5M5 12l7-7 7 7"/>,
   trash: <><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></>,
   edit: <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>,
   flame: <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>,
@@ -62,6 +64,9 @@ const paths: Record<AppIconName, React.ReactNode> = {
   x: <path d="M18 6 6 18M6 6l12 12"/>,
   checkCircle: <><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></>,
   activity: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>,
+  lock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,
+  unlock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></>,
+  link: <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>,
 };
 
 export const AppIcon: React.FC<AppIconProps> = ({ name, className = 'h-5 w-5', ...props }) => (

@@ -1,7 +1,8 @@
 import React from 'react';
-import type { ViewType } from '../types';
+import type { LifeOSState, ViewType } from '../types';
 import type { CloudSyncStatus } from '../lib/cloudSync';
 import { AppIcon } from './AppIcon';
+import { getMobileNavSlots } from '../lib/moduleVisibility';
 
 interface MobileNavProps {
   currentView: ViewType;
@@ -15,6 +16,8 @@ interface MobileNavProps {
   cloudConfigured?: boolean;
   cloudUser?: unknown | null;
   onCloudSignIn?: () => void;
+  state?: LifeOSState;
+  hiddenTabs?: string[];
 }
 
 export const MobileNav: React.FC<MobileNavProps> = ({
@@ -29,12 +32,16 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   cloudConfigured = false,
   cloudUser = null,
   onCloudSignIn,
+  state,
+  hiddenTabs,
 }) => {
+  const { slot2, slot4 } = getMobileNavSlots(state || (hiddenTabs ? { settings: { hiddenTabs } as any } : undefined));
+
   const itemClass = (active: boolean) =>
-    `flex min-w-0 flex-1 flex-col items-center gap-1 py-1 text-[11px] font-semibold ${
-      active ? 'text-[var(--blue)]' : 'text-[var(--text-faint)]'
+    `flex min-w-0 flex-1 flex-col items-center gap-1 py-1 text-[11px] transition-colors ${
+      active ? 'text-[var(--text)] font-bold' : 'text-[var(--text-faint)] hover:text-[var(--text-soft)]'
     }`;
-  const moreActive = !['dashboard', 'gimnasio', 'finanzas'].includes(currentView);
+  const moreActive = !['dashboard', slot2?.id, slot4?.id].filter(Boolean).includes(currentView);
 
   const syncLed = (() => {
     if (syncStatus === 'synced') {
@@ -127,18 +134,22 @@ export const MobileNav: React.FC<MobileNavProps> = ({
           <AppIcon name="home" className="h-[21px] w-[21px]" />
           <span>Hoy</span>
         </button>
-        <button
-          onClick={() => onNavigate('gimnasio')}
-          className={itemClass(currentView === 'gimnasio')}
-          aria-label="Ir a Gimnasio"
-          aria-current={currentView === 'gimnasio' ? 'page' : undefined}
-        >
-          <AppIcon name="dumbbell" className="h-[21px] w-[21px]" />
-          <span>Gimnasio</span>
-        </button>
+        {slot2 ? (
+          <button
+            onClick={() => onNavigate(slot2.id)}
+            className={itemClass(currentView === slot2.id)}
+            aria-label={`Ir a ${slot2.label}`}
+            aria-current={currentView === slot2.id ? 'page' : undefined}
+          >
+            <AppIcon name={slot2.icon} className="h-[21px] w-[21px]" />
+            <span className="truncate max-w-[64px]">{slot2.label}</span>
+          </button>
+        ) : (
+          <div className="flex min-w-0 flex-1" />
+        )}
         <button
           onClick={onOpenCapture}
-          className="relative mx-2 -mt-5 flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-[var(--blue)] text-white shadow-lg shadow-blue-500/25 active:scale-95 transition-transform cursor-pointer"
+          className="relative mx-2 -mt-5 flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-[var(--text)] text-[var(--bg-elevated)] shadow-lg shadow-black/15 active:scale-95 transition-transform cursor-pointer border border-[var(--border)]"
           aria-label="Captura rápida"
         >
           <AppIcon name="plus" className="h-6 w-6" />
@@ -148,15 +159,19 @@ export const MobileNav: React.FC<MobileNavProps> = ({
             </span>
           )}
         </button>
-        <button
-          onClick={() => onNavigate('finanzas')}
-          className={itemClass(currentView === 'finanzas')}
-          aria-label="Ir a Finanzas"
-          aria-current={currentView === 'finanzas' ? 'page' : undefined}
-        >
-          <AppIcon name="wallet" className="h-[21px] w-[21px]" />
-          <span>Finanzas</span>
-        </button>
+        {slot4 ? (
+          <button
+            onClick={() => onNavigate(slot4.id)}
+            className={itemClass(currentView === slot4.id)}
+            aria-label={`Ir a ${slot4.label}`}
+            aria-current={currentView === slot4.id ? 'page' : undefined}
+          >
+            <AppIcon name={slot4.icon} className="h-[21px] w-[21px]" />
+            <span className="truncate max-w-[64px]">{slot4.label}</span>
+          </button>
+        ) : (
+          <div className="flex min-w-0 flex-1" />
+        )}
         <button
           onClick={onOpenMore}
           className={itemClass(moreActive)}

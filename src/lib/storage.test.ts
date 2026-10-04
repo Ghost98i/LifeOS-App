@@ -8,7 +8,7 @@ test('migra un estado antiguo conservando datos y agregando defaults', () => {
   });
 
   assert.equal(migrated.schemaVersion, CURRENT_SCHEMA_VERSION);
-  assert.ok(migrated.finance.categories.includes('Reventa'));
+  assert.ok(migrated.finance.categories.some((c) => c.name === 'Reventa'));
   assert.deepEqual(migrated.jobs.applications, []);
   assert.deepEqual(migrated.finance.transfers, []);
   assert.deepEqual(migrated.dailyPriorities, []);

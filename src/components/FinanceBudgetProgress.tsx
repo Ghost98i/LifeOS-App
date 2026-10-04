@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
+import { FinanceCategoryInput } from '../types';
 import { fmtMoney } from '../lib/storage';
+import { getAllCategories } from '../lib/financeCategories';
 import { AppIcon } from './AppIcon';
 import { PrivacyAmount } from './PrivacyAmount';
 
 interface FinanceBudgetProgressProps {
-  categories: string[];
+  categories: FinanceCategoryInput[];
   catSpent: Record<string, number>;
   budgets: Record<string, number>;
   onSetBudget: (category: string, amountStr: string) => void;
+  onOpenCategoryManager?: () => void;
 }
 
 type BudgetFilter = 'all' | 'configured' | 'alerts';
@@ -17,16 +20,19 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
   catSpent,
   budgets,
   onSetBudget,
+  onOpenCategoryManager,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [filter, setFilter] = useState<BudgetFilter>('all');
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [tempBudget, setTempBudget] = useState<string>('');
 
+  const allCats = getAllCategories(categories);
+
   // Computations
-  const categoryStats = categories.map((cat) => {
-    const spent = catSpent[cat] || 0;
-    const budget = Number(budgets[cat] || 0);
+  const categoryStats = allCats.map((cat) => {
+    const spent = (catSpent[cat.id] || 0) + (cat.id !== cat.name ? (catSpent[cat.name] || 0) : 0);
+    const budget = Number(budgets[cat.id] ?? (cat.id !== cat.name ? budgets[cat.name] : undefined) ?? 0);
     const hasBudget = budget > 0;
     const pct = hasBudget ? (spent / budget) * 100 : 0;
     const isExceeded = hasBudget && spent > budget;
@@ -34,7 +40,9 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
     const remaining = hasBudget ? budget - spent : 0;
 
     return {
-      category: cat,
+      category: cat.name,
+      categoryId: cat.id,
+      active: cat.active !== false,
       spent,
       budget,
       hasBudget,
@@ -125,14 +133,26 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
           )}
         </div>
 
-        {/* Toggle Expand / Full Action */}
-        <button
-          type="button"
-          onClick={() => setIsExpanded((prev) => !prev)}
-          className="inline-flex items-center gap-1 text-xs font-bold text-[var(--blue)] hover:text-[var(--blue-hover)] transition cursor-pointer self-start sm:self-auto shrink-0"
-        >
-          <span>{isExpanded ? 'Contraer resumen' : 'Ver todos / Gestionar →'}</span>
-        </button>
+        {/* Header Actions */}
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          {onOpenCategoryManager && (
+            <button
+              type="button"
+              onClick={onOpenCategoryManager}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition cursor-pointer"
+            >
+              <AppIcon name="settings" className="h-3.5 w-3.5" />
+              <span>Categorías</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsExpanded((prev) => !prev)}
+            className="inline-flex items-center gap-1 text-xs font-bold text-[var(--blue)] hover:text-[var(--blue-hover)] transition cursor-pointer shrink-0"
+          >
+            <span>{isExpanded ? 'Contraer resumen' : 'Ver todos / Gestionar →'}</span>
+          </button>
+        </div>
       </div>
 
       {/* COMPACT VIEW (Default) */}
@@ -205,9 +225,16 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                       className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 space-y-2 hover:border-[var(--border-hover)] transition"
                     >
                       <div className="flex items-center justify-between gap-1">
-                        <span className="text-xs font-bold text-[var(--text)] truncate">
-                          {item.category}
-                        </span>
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className="text-xs font-bold text-[var(--text)] truncate">
+                            {item.category}
+                          </span>
+                          {!item.active && (
+                            <span className="text-[9px] text-[var(--text-faint)] font-normal shrink-0">
+                              (archivada)
+                            </span>
+                          )}
+                        </div>
                         {item.hasBudget ? (
                           <span
                             className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${badgeClass}`}
@@ -346,7 +373,8 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
           {/* Category Progress Bars List */}
           <div className="space-y-2.5 max-h-[480px] overflow-y-auto pr-1">
             {filteredCategories.map((item) => {
-              const isEditing = editingCategory === item.category;
+              const currentCatKey = item.categoryId || item.category;
+              const isEditing = editingCategory === currentCatKey;
               const displayPct = item.hasBudget ? Math.min(item.pct, 100) : 0;
 
               let barColor = 'bg-emerald-500';
@@ -361,7 +389,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
 
               return (
                 <div
-                  key={item.category}
+                  key={currentCatKey}
                   className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 space-y-2 hover:border-[var(--blue)]/40 transition-colors"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -369,6 +397,11 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                       <span className="font-bold text-xs sm:text-sm text-[var(--text)]">
                         {item.category}
                       </span>
+                      {!item.active && (
+                        <span className="text-[10px] text-[var(--text-faint)] font-normal">
+                          (archivada)
+                        </span>
+                      )}
                       {item.hasBudget && (
                         <span
                           className={`inline-flex items-center rounded-md border px-1.5 py-0.5 font-mono text-[10px] font-bold ${badgeColor}`}
@@ -398,7 +431,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                           />
                           <button
                             type="button"
-                            onClick={() => saveEdit(item.category)}
+                            onClick={() => saveEdit(currentCatKey)}
                             className="rounded-lg bg-[var(--blue)] text-white px-2 py-1 text-[11px] font-bold cursor-pointer"
                           >
                             OK
@@ -429,7 +462,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                           </div>
                           <button
                             type="button"
-                            onClick={() => startEdit(item.category, item.budget)}
+                            onClick={() => startEdit(currentCatKey, item.budget)}
                             className="rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-[10px] font-semibold text-[var(--blue)] hover:bg-[var(--blue-soft)] cursor-pointer"
                             title="Modificar presupuesto de esta categoría"
                           >
@@ -470,7 +503,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                       <span>Gastado este mes: <PrivacyAmount>{fmtMoney(item.spent)}</PrivacyAmount></span>
                       <button
                         type="button"
-                        onClick={() => startEdit(item.category, 0)}
+                        onClick={() => startEdit(currentCatKey, 0)}
                         className="text-[10px] font-medium text-[var(--blue)] hover:underline cursor-pointer"
                       >
                         ＋ Asignar presupuesto mensual

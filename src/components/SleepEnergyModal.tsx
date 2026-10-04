@@ -16,6 +16,28 @@ export const SleepEnergyModal: React.FC<SleepEnergyModalProps> = ({
   state,
   onUpdateState,
 }) => {
+  const previousFocusedElementRef = React.useRef<HTMLElement | null>(null);
+
+  React.useEffect(() => {
+    if (!isOpen) return;
+    if (document.activeElement instanceof HTMLElement) {
+      previousFocusedElementRef.current = document.activeElement;
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      if (previousFocusedElementRef.current && typeof previousFocusedElementRef.current.focus === 'function') {
+        previousFocusedElementRef.current.focus();
+      }
+    };
+  }, [isOpen, onClose]);
+
   const todayIso = todayISO();
   const todayLog = state.checkoutLog[todayIso] || {};
 
@@ -52,7 +74,10 @@ export const SleepEnergyModal: React.FC<SleepEnergyModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-[var(--card)] border border-[var(--border)] rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-2xl space-y-5"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sleep-energy-title"
+        className="bg-[var(--card)] border border-[var(--border)] rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto p-5 sm:p-6 shadow-2xl space-y-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
@@ -61,7 +86,7 @@ export const SleepEnergyModal: React.FC<SleepEnergyModalProps> = ({
               ⚡
             </div>
             <div>
-              <h2 className="text-base font-extrabold text-[var(--text)] tracking-tight">
+              <h2 id="sleep-energy-title" className="text-base font-extrabold text-[var(--text)] tracking-tight">
                 Estado Diario: Sueño & Energía
               </h2>
               <p className="text-xs text-[var(--text-soft)]">

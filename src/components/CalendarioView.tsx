@@ -1,29 +1,53 @@
-import React, { useState } from 'react';
-import { LifeOSState } from '../types';
+import React, { useState, useEffect } from 'react';
+import { LifeOSState, Transaction } from '../types';
 import {
   todayISO,
   daysBetween,
+  fmtDate,
+  fmtMoney,
   uid,
 } from '../lib/storage';
 import {
   EVENT_TYPE_META,
-  eventsOnDate,
+  calendarItemsOnDate,
   upcomingEvents,
+  defaultAccountId,
+  CalendarDisplayItem,
+  advanceCommitmentDueDate,
+  advanceExpectedIncomeDate,
 } from '../lib/calculations';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
+import { isModuleEnabled } from '../lib/moduleVisibility';
+import { showToast } from '../lib/toast';
+import { playSound } from '../lib/audio';
+import { getCategoryName } from '../lib/financeCategories';
 
 interface CalendarioViewProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => void;
+  onNavigate?: (view: any) => void;
 }
 
-export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateState }) => {
+export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateState, onNavigate }) => {
   const [viewDate, setViewDate] = useState<Date>(new Date());
+  const [selectedItem, setSelectedItem] = useState<CalendarDisplayItem | null>(null);
   const [eventName, setEventName] = useState('');
   const [eventDate, setEventDate] = useState(todayISO());
   const [eventType, setEventType] = useState<'cumpleanos' | 'estreno' | 'importante' | 'otro'>('cumpleanos');
   const [eventRecurring, setEventRecurring] = useState(false);
+
+  useEffect(() => {
+    if (!selectedItem) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setSelectedItem(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedItem]);
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -70,12 +94,75 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
     });
   };
 
+  const handleConfirmFinancialFromCalendar = (item: CalendarDisplayItem) => {
+    if (item.financialType === 'commitment') {
+      onUpdateState((draft) => {
+        if (!draft.finance) return;
+        const target = draft.finance.commitments?.find((c) => c.id === item.financialId);
+        if (!target) return;
+        const accId = target.accountId || defaultAccountId(draft) || draft.finance.accounts[0]?.id || 'acc-1';
+        const tx: Transaction = {
+          id: uid(),
+          amount: Number(target.amount),
+          type: 'gasto',
+          category: target.category || 'Varios',
+          accountId: accId,
+          fixed: 'fijo',
+          date: item.date || todayISO(),
+          note: `Pago de compromiso: ${target.name}`,
+        };
+        draft.finance.transactions.push(tx);
+        const acc = draft.finance.accounts.find((a) => a.id === accId);
+        if (acc) {
+          acc.balance = Number(acc.balance || 0) - tx.amount;
+        }
+        const advanced = advanceCommitmentDueDate(target);
+        target.nextDueDate = advanced.nextDueDate;
+        target.remainingOccurrences = advanced.remainingOccurrences;
+        target.active = advanced.active;
+        if (advanced.dueDay) target.dueDay = advanced.dueDay;
+        target.updatedAt = new Date().toISOString();
+      });
+      playSound('coins');
+      showToast(`Pago registrado: -$${Number(item.financialAmount || 0).toLocaleString('es-UY')}`);
+      setSelectedItem(null);
+    } else if (item.financialType === 'income') {
+      onUpdateState((draft) => {
+        if (!draft.finance) return;
+        const target = draft.finance.expectedIncomes?.find((i) => i.id === item.financialId);
+        if (!target) return;
+        const accId = target.accountId || defaultAccountId(draft) || draft.finance.accounts[0]?.id || 'acc-1';
+        const tx: Transaction = {
+          id: uid(),
+          amount: Number(target.amount),
+          type: 'ingreso',
+          category: target.category || 'Varios',
+          accountId: accId,
+          fixed: 'variable',
+          date: item.date || todayISO(),
+          note: `Previsión confirmada: ${target.name}`,
+        };
+        draft.finance.transactions.push(tx);
+        const acc = draft.finance.accounts.find((a) => a.id === accId);
+        if (acc) {
+          acc.balance = Number(acc.balance || 0) + tx.amount;
+        }
+        const advanced = advanceExpectedIncomeDate(target);
+        target.startDate = advanced.startDate;
+        target.active = advanced.active;
+        target.updatedAt = new Date().toISOString();
+      });
+      playSound('coins');
+      showToast(`Ingreso registrado: +$${Number(item.financialAmount || 0).toLocaleString('es-UY')}`);
+      setSelectedItem(null);
+    }
+  };
+
   const upcoming = upcomingEvents(state, 6);
 
   return (
     <div className="space-y-6">
       <PageHeader
-        category="Organización"
         title="Calendario & Fechas"
         subtitle="Cumpleaños, estrenos, vencimientos y fechas especiales."
       />
@@ -126,7 +213,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
           }
 
           const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-          const evs = eventsOnDate(state, iso);
+          const items = calendarItemsOnDate(state, iso);
           const isToday = iso === todayIso;
 
           return (
@@ -147,16 +234,16 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                 )}
               </div>
               <div className="space-y-1 overflow-y-auto max-h-[56px] no-scrollbar">
-                {evs.map((e) => (
-                  <div
-                    key={e.id}
-                    title={e.name}
-                    className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-md truncate ${
-                      EVENT_TYPE_META[e.type].pill
-                    }`}
+                {items.map((item) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    onClick={() => setSelectedItem(item)}
+                    title={`${item.isDeadline ? '⏰ Vence: ' : ''}${item.name}`}
+                    className={`w-full text-left text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-md truncate cursor-pointer hover:opacity-90 transition-all ${item.pill}${item.isDone ? ' opacity-40 line-through' : ''}`}
                   >
-                    {EVENT_TYPE_META[e.type].icon} {e.name}
-                  </div>
+                    {item.icon} {item.name}
+                  </button>
                 ))}
               </div>
             </div>
@@ -255,6 +342,124 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
           )}
         </div>
       </div>
+
+      {/* Selected Item Details Modal */}
+      {selectedItem && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setSelectedItem(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="calendar-item-title"
+            className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto shadow-xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{selectedItem.icon}</span>
+                <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-faint)]">
+                  {selectedItem.financialType === 'commitment'
+                    ? 'Compromiso Financiero'
+                    : selectedItem.financialType === 'income'
+                    ? 'Ingreso Previsto'
+                    : selectedItem.type === 'examen'
+                    ? 'Examen'
+                    : selectedItem.type === 'entrega'
+                    ? 'Vencimiento de Tarea'
+                    : 'Evento de Calendario'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedItem(null)}
+                aria-label="Cerrar detalles"
+                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg cursor-pointer"
+              >
+                <AppIcon name="x" className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div>
+              <h3 id="calendar-item-title" className="text-base font-bold text-[var(--text)]">{selectedItem.name}</h3>
+              <p className="text-xs text-[var(--text-soft)] mt-0.5">
+                Fecha: <strong className="font-mono text-[var(--text)]">{fmtDate(selectedItem.date)}</strong>
+              </p>
+            </div>
+
+            {selectedItem.financialAmount !== undefined && (
+              <div className="p-3.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)] space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-[var(--text-soft)] font-medium">Monto programado:</span>
+                  <span
+                    className={`font-mono font-black text-base ${
+                      selectedItem.financialType === 'income'
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-rose-600 dark:text-rose-400'
+                    }`}
+                  >
+                    {selectedItem.financialType === 'income' ? '+' : '−'}{fmtMoney(selectedItem.financialAmount)}
+                  </span>
+                </div>
+                {selectedItem.frequency && (
+                  <div className="flex items-center justify-between text-xs text-[var(--text-soft)]">
+                    <span>Frecuencia:</span>
+                    <span className="font-semibold text-[var(--text)] capitalize">{selectedItem.frequency}</span>
+                  </div>
+                )}
+                {selectedItem.remainingOccurrences !== undefined && selectedItem.remainingOccurrences !== null && (
+                  <div className="flex items-center justify-between text-xs text-[var(--text-soft)]">
+                    <span>Cuotas restantes:</span>
+                    <span className="font-mono font-bold text-[var(--text)]">
+                      {selectedItem.remainingOccurrences} cuota{selectedItem.remainingOccurrences === 1 ? '' : 's'}
+                    </span>
+                  </div>
+                )}
+                {selectedItem.category && (
+                  <div className="flex items-center justify-between text-xs text-[var(--text-soft)]">
+                    <span>Categoría:</span>
+                    <span className="font-semibold text-[var(--text)]">{getCategoryName(state.finance?.categories, selectedItem.category)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-[var(--border)]">
+              {selectedItem.financialType && isModuleEnabled(state, 'finanzas') && (
+                <>
+                  {onNavigate && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedItem(null);
+                        onNavigate('finanzas');
+                      }}
+                      className="px-3.5 py-2 text-xs font-bold rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] hover:border-[var(--blue)] text-[var(--text)] transition-colors cursor-pointer"
+                    >
+                      Ir a Finanzas →
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmFinancialFromCalendar(selectedItem)}
+                    className="px-3.5 py-2 text-xs font-bold rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white transition-colors cursor-pointer shadow-2xs"
+                  >
+                    {selectedItem.financialType === 'income' ? 'Registrar ingreso real' : 'Registrar pago real'}
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => setSelectedItem(null)}
+                className="px-3.5 py-2 text-xs font-bold rounded-xl border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

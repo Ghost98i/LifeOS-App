@@ -4,6 +4,13 @@ import { AppIcon } from './AppIcon';
 import { daysBetween, fmtDate, todayISO, uid } from '../lib/storage';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
+import {
+  getUnifiedTaskMap,
+  isTaskBlocked,
+  getBlockingTasks,
+  validateTaskDependencies,
+  getUnblockedCountIfCompleted,
+} from '../lib/taskDependencies';
 
 interface ProjectsManagerProps {
   state: LifeOSState;
@@ -25,6 +32,8 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
 
   // Quick subtask input for specific project
   const [taskInputs, setTaskInputs] = useState<Record<string, string>>({});
+  const [editingDepTaskId, setEditingDepTaskId] = useState<string | null>(null);
+  const [editingDueDateTaskId, setEditingDueDateTaskId] = useState<string | null>(null);
 
   const projects = state.projects || [];
   const today = todayISO();
@@ -152,6 +161,23 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
   };
 
   const handleToggleTask = (projectId: string, taskId: string) => {
+    const taskMap = getUnifiedTaskMap(state);
+    const task = taskMap.get(taskId);
+
+    if (task && !task.done) {
+      const blockers = getBlockingTasks(task, taskMap);
+      if (blockers.length > 0) {
+        const proceed = window.confirm(
+          `Esta tarea depende de:\n${blockers.map((b) => `• ${b.text}`).join('\n')}\n\n¿Deseas marcarla como completada de todos modos?`
+        );
+        if (!proceed) return;
+      }
+      const unblocks = getUnblockedCountIfCompleted(taskId, taskMap);
+      if (unblocks > 0) {
+        showToast(`✦ Tarea completada. ¡Desbloqueaste ${unblocks} tarea(s)!`, 'success');
+      }
+    }
+
     onUpdateState((draft) => {
       const p = (draft.projects || []).find((x) => x.id === projectId);
       if (p && p.tasks) {
@@ -163,6 +189,47 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
       }
     });
     playSound('click');
+  };
+
+  const handleToggleTaskDependency = (projectId: string, taskId: string, depId: string) => {
+    const taskMap = getUnifiedTaskMap(state);
+    const p = (state.projects || []).find((x) => x.id === projectId);
+    const t = p?.tasks?.find((x) => x.id === taskId);
+    if (!t) return;
+
+    const currentDeps = t.dependsOn || [];
+    let nextDeps: string[];
+    if (currentDeps.includes(depId)) {
+      nextDeps = currentDeps.filter((id) => id !== depId);
+    } else {
+      nextDeps = [...currentDeps, depId];
+      const check = validateTaskDependencies(taskId, nextDeps, taskMap);
+      if (!check.valid) {
+        showToast(check.error || 'Dependencia no permitida', 'info');
+        return;
+      }
+    }
+
+    onUpdateState((draft) => {
+      const proj = (draft.projects || []).find((x) => x.id === projectId);
+      const task = proj?.tasks?.find((x) => x.id === taskId);
+      if (task) {
+        task.dependsOn = nextDeps.length > 0 ? nextDeps : undefined;
+        proj.updatedAt = todayISO();
+      }
+    });
+  };
+
+  const handleSetTaskDueDate = (projectId: string, taskId: string, dueDate: string) => {
+    onUpdateState((draft) => {
+      const proj = (draft.projects || []).find((x) => x.id === projectId);
+      const task = proj?.tasks?.find((x) => x.id === taskId);
+      if (task) {
+        task.dueDate = dueDate || undefined;
+        proj.updatedAt = todayISO();
+      }
+    });
+    setEditingDueDateTaskId(null);
   };
 
   const handleDeleteTask = (projectId: string, taskId: string) => {
@@ -529,28 +596,183 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
 
                   {/* Task List */}
                   <div className="divide-y divide-[var(--border)]">
-                    {(project.tasks || []).map((t) => (
-                      <div key={t.id} className="py-2 flex items-center justify-between gap-2 group">
-                        <label className="flex items-center gap-2 cursor-pointer min-w-0 flex-1">
-                          <input
-                            type="checkbox"
-                            checked={t.done}
-                            onChange={() => handleToggleTask(project.id, t.id)}
-                            className="rounded text-blue-600 cursor-pointer"
-                          />
-                          <span className={`text-xs ${t.done ? 'line-through text-[var(--text-faint)]' : 'text-[var(--text)]'}`}>
-                            {t.text}
-                          </span>
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteTask(project.id, t.id)}
-                          className="opacity-0 group-hover:opacity-100 text-xs text-[var(--text-faint)] hover:text-rose-500 p-1 cursor-pointer"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ))}
+                    {(project.tasks || []).map((t) => {
+                      const isBlocked = isTaskBlocked(t.id, state);
+                      const taskMap = getUnifiedTaskMap(state);
+                      const blockers = getBlockingTasks(t.id, taskMap);
+                      const unblocks = getUnblockedCountIfCompleted(t.id, taskMap);
+                      const isEditingDeps = editingDepTaskId === t.id;
+                      const isEditingDueDate = editingDueDateTaskId === t.id;
+                      const otherTasksInProject = (project.tasks || []).filter((other) => other.id !== t.id);
+
+                      return (
+                        <div key={t.id} className="py-2 border-b border-[var(--border)] last:border-b-0">
+                          <div className="flex items-center justify-between gap-2 group">
+                            <label className="flex items-center gap-2 cursor-pointer min-w-0 flex-1 flex-wrap">
+                              <input
+                                type="checkbox"
+                                checked={t.done}
+                                onChange={() => handleToggleTask(project.id, t.id)}
+                                className="rounded text-blue-600 cursor-pointer shrink-0"
+                              />
+                              <span
+                                className={`text-xs ${
+                                  t.done ? 'line-through text-[var(--text-faint)]' : 'text-[var(--text)] font-medium'
+                                }`}
+                              >
+                                {t.text}
+                              </span>
+
+                              {/* Blocked indicator */}
+                              {!t.done && isBlocked && (
+                                <span
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 shrink-0"
+                                  title={`Bloqueada por:\n${blockers.map((b) => `• ${b.text}`).join('\n')}`}
+                                >
+                                  <AppIcon name="lock" className="h-2.5 w-2.5" />
+                                  <span>Bloqueada</span>
+                                </span>
+                              )}
+
+                              {/* Unblocks indicator */}
+                              {!t.done && unblocks > 0 && (
+                                <span
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shrink-0"
+                                  title={`Completar esta tarea desbloqueará ${unblocks} tarea(s)`}
+                                >
+                                  <AppIcon name="unlock" className="h-2.5 w-2.5" />
+                                  <span>Desbloquea {unblocks}</span>
+                                </span>
+                              )}
+
+                              {/* Due Date pill */}
+                              {t.dueDate && (
+                                <span
+                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold border shrink-0 ${
+                                    t.dueDate < today
+                                      ? 'bg-rose-500/15 text-rose-600 border-rose-500/30'
+                                      : t.dueDate === today
+                                      ? 'bg-amber-500/15 text-amber-600 border-amber-500/30'
+                                      : 'bg-blue-500/10 text-blue-600 border-blue-500/20'
+                                  }`}
+                                  title={`Fecha límite: ${fmtDate(t.dueDate)}`}
+                                >
+                                  <AppIcon name="clock" className="h-2.5 w-2.5" />
+                                  <span>{t.dueDate === today ? 'Hoy' : fmtDate(t.dueDate)}</span>
+                                </span>
+                              )}
+                            </label>
+
+                            <div className="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+                              {/* Toggle dependency edit */}
+                              {otherTasksInProject.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingDepTaskId(isEditingDeps ? null : t.id)}
+                                  className={`p-1 rounded-lg text-xs cursor-pointer transition ${
+                                    isEditingDeps || (t.dependsOn && t.dependsOn.length > 0)
+                                      ? 'bg-blue-500/15 text-[var(--blue)] font-bold'
+                                      : 'text-[var(--text-faint)] hover:text-[var(--text)]'
+                                  }`}
+                                  title="Configurar dependencias"
+                                >
+                                  <AppIcon name="link" className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+
+                              {/* Toggle DueDate edit */}
+                              <button
+                                type="button"
+                                onClick={() => setEditingDueDateTaskId(isEditingDueDate ? null : t.id)}
+                                className={`p-1 rounded-lg text-xs cursor-pointer transition ${
+                                  isEditingDueDate || t.dueDate
+                                    ? 'bg-amber-500/15 text-amber-600 font-bold'
+                                    : 'text-[var(--text-faint)] hover:text-[var(--text)]'
+                                }`}
+                                title="Configurar fecha límite"
+                              >
+                                <AppIcon name="calendar" className="h-3.5 w-3.5" />
+                              </button>
+
+                              {/* Delete task */}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTask(project.id, t.id)}
+                                className="text-xs text-[var(--text-faint)] hover:text-rose-500 p-1 cursor-pointer"
+                                title="Eliminar tarea"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Inline Dependencies Selector */}
+                          {isEditingDeps && (
+                            <div className="mt-2 p-2 bg-[var(--surface-muted)] rounded-xl border border-[var(--border)] text-xs space-y-1.5">
+                              <div className="flex items-center justify-between text-[11px] font-bold text-[var(--text-soft)]">
+                                <span>Esta tarea depende de:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingDepTaskId(null)}
+                                  className="text-[10px] text-[var(--text-faint)] hover:text-[var(--text)] cursor-pointer"
+                                >
+                                  Cerrar ✕
+                                </button>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {otherTasksInProject.map((other) => {
+                                  const isSelected = (t.dependsOn || []).includes(other.id);
+                                  return (
+                                    <button
+                                      key={other.id}
+                                      type="button"
+                                      onClick={() => handleToggleTaskDependency(project.id, t.id, other.id)}
+                                      className={`px-2 py-1 rounded-lg text-[11px] font-semibold border cursor-pointer transition ${
+                                        isSelected
+                                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
+                                          : 'bg-[var(--card)] text-[var(--text-soft)] border-[var(--border)] hover:border-[var(--blue)]'
+                                      }`}
+                                    >
+                                      {isSelected ? '✓ ' : '+ '}
+                                      {other.text}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Inline Due Date Picker */}
+                          {isEditingDueDate && (
+                            <div className="mt-2 p-2 bg-[var(--surface-muted)] rounded-xl border border-[var(--border)] text-xs flex items-center gap-2">
+                              <span className="text-[11px] font-bold text-[var(--text-soft)]">Fecha límite:</span>
+                              <input
+                                type="date"
+                                defaultValue={t.dueDate || today}
+                                onChange={(e) => handleSetTaskDueDate(project.id, t.id, e.target.value)}
+                                className="px-2 py-1 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs text-[var(--text)] outline-hidden"
+                              />
+                              {t.dueDate && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSetTaskDueDate(project.id, t.id, '')}
+                                  className="text-[10px] text-rose-500 hover:underline cursor-pointer"
+                                >
+                                  Quitar fecha
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setEditingDueDateTaskId(null)}
+                                className="ml-auto text-[10px] text-[var(--text-faint)] hover:text-[var(--text)] cursor-pointer"
+                              >
+                                Listo ✓
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
 
                   {/* Add Subtask Input */}

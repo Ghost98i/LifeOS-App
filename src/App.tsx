@@ -2,6 +2,12 @@ import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { ViewType, LifeOSState } from './types';
 import { defaultState, loadStoredState, parseBackupJSON, saveRecoveryState, saveStoredState, todayISO } from './lib/storage';
 import {
+  isModuleEnabled,
+  isModuleHidden,
+  isUserPendingOnboarding,
+  computeHiddenTabsFromSelection,
+} from './lib/moduleVisibility';
+import {
   cloudSyncConfigured,
   getLastCloudUserId,
   getOrCreateDeviceId,
@@ -17,10 +23,11 @@ import {
   saveCloudBaselineData,
   saveCloudBaselines,
   saveCloudRevisions,
+  saveSyncRecoverySnapshot,
   signInToCloud,
   signOutFromCloud,
   subscribeCloudModules,
-  writeCloudModules,
+  writeCloudModulesGuarded,
   type CloudSyncStatus,
   type CloudUser,
 } from './lib/cloudSync';
@@ -32,11 +39,12 @@ import {
   classifyInitialModuleChanges,
   equivalentLifeOSState,
   extractPureModuleData,
-  mergeSyncModule,
+  mergeSyncModuleWithConflicts,
   syncDataFingerprint,
   syncModuleData,
   syncModuleFingerprint,
   type SyncBaselineMap,
+  type SyncConflictItem,
   type SyncModuleKey,
   type SyncRevisionMap,
 } from './lib/syncModel';
@@ -53,13 +61,14 @@ import { Topbar } from './components/Topbar';
 
 import { DashboardView, DashboardSkeleton } from './components/DashboardView';
 import { CheckoutModal } from './components/CheckoutModal';
-import { MobileQuickCapture } from './components/MobileQuickCapture';
+import { MobileQuickCapture, type CaptureKind } from './components/MobileQuickCapture';
 import { MobileNav } from './components/MobileNav';
 import { CloudConflictModal } from './components/CloudConflictModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { ToastViewport } from './components/ToastViewport';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { GymRestOverlay } from './components/GymRestOverlay';
+import { OnboardingView } from './components/OnboardingView';
 import { showToast } from './lib/toast';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
@@ -87,6 +96,7 @@ export default function App() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [quickTransactionType, setQuickTransactionType] = useState<'gasto' | 'ingreso'>('gasto');
   const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false);
+  const [quickCaptureKind, setQuickCaptureKind] = useState<CaptureKind>('tarea');
   const [cloudUser, setCloudUser] = useState<CloudUser | null>(null);
   const [storageUserId, setStorageUserId] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<CloudSyncStatus>(cloudSyncConfigured ? 'connecting' : 'unavailable');
@@ -97,8 +107,10 @@ export default function App() {
     remoteRevisions: SyncRevisionMap;
     localModules?: SyncModuleKey[];
     needsMigration?: boolean;
+    conflicts?: SyncConflictItem[];
   } | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const [dismissedAnywhereBanner, setDismissedAnywhereBanner] = useState(false);
 
   const stateRef = useRef(state);
   const cloudUserRef = useRef<CloudUser | null>(null);
@@ -176,49 +188,87 @@ export default function App() {
     if (!cloudSyncConfigured || !user || modules.length === 0 || storageUserIdRef.current !== user.uid) return;
     setSyncStatus(navigator.onLine ? 'saving' : 'offline');
 
-    const batch = writeCloudModules(user.uid, currentState, modules, deviceIdRef.current, optimisticRevisionMap(), tombstonesRef.current);
-    batch.writes.forEach((write) => {
-      pendingRevisionsRef.current[write.module] = [...(pendingRevisionsRef.current[write.module] || []), write.revision];
-    });
+    void writeCloudModulesGuarded(user.uid, currentState, modules, deviceIdRef.current, optimisticRevisionMap(), tombstonesRef.current)
+      .then((res) => {
+        if (res.diverged) {
+          // Divergencia de versión remota detectada: abortar escritura para no sobreescribir silenciosamente
+          setSyncStatus('conflict');
+          modules.forEach((mod) => queuedModulesRef.current.add(mod));
+          return;
+        }
 
-    void batch.completion
-      .then(() => {
-        retryAttemptRef.current = 0;
-        if (retryTimeoutRef.current !== null) {
-          window.clearTimeout(retryTimeoutRef.current);
-          retryTimeoutRef.current = null;
-        }
-        batch.writes.forEach((write) => {
-          failedSyncModulesRef.current.delete(write.module);
-          baselineDataRef.current[write.module] = syncModuleData(currentState, write.module);
+        res.writes.forEach((write) => {
+          pendingRevisionsRef.current[write.module] = [...(pendingRevisionsRef.current[write.module] || []), write.revision];
         });
-        saveCloudBaselineData(user.uid, baselineDataRef.current);
-        setFailedSyncModules([...failedSyncModulesRef.current]);
-        if (failedSyncModulesRef.current.size === 0) {
-          setSyncStatus(navigator.onLine ? 'synced' : 'offline');
-          setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-        }
+
+        void res.completion
+          .then(() => {
+            retryAttemptRef.current = 0;
+            if (retryTimeoutRef.current !== null) {
+              window.clearTimeout(retryTimeoutRef.current);
+              retryTimeoutRef.current = null;
+            }
+            res.writes.forEach((write) => {
+              failedSyncModulesRef.current.delete(write.module);
+              baselineDataRef.current[write.module] = syncModuleData(currentState, write.module);
+            });
+            saveCloudBaselineData(user.uid, baselineDataRef.current);
+            setFailedSyncModules([...failedSyncModulesRef.current]);
+            if (failedSyncModulesRef.current.size === 0) {
+              setSyncStatus(navigator.onLine ? 'synced' : 'offline');
+              setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+            }
+          })
+          .catch((err) => {
+            console.error('[CloudSync] Batch commit failed:', err);
+            res.writes.forEach((write) => {
+              const remaining = (pendingRevisionsRef.current[write.module] || []).filter((revision) => revision !== write.revision);
+              if (remaining.length) pendingRevisionsRef.current[write.module] = remaining;
+              else delete pendingRevisionsRef.current[write.module];
+              failedSyncModulesRef.current.add(write.module);
+              queuedModulesRef.current.add(write.module);
+            });
+            queuedStateRef.current = currentState;
+            setFailedSyncModules([...failedSyncModulesRef.current]);
+            setSyncStatus(navigator.onLine ? 'error' : 'offline');
+
+            if (retryAttemptRef.current < 5) {
+              const delay = Math.min(30000, 1000 * Math.pow(2, retryAttemptRef.current));
+              retryAttemptRef.current += 1;
+              if (retryTimeoutRef.current !== null) window.clearTimeout(retryTimeoutRef.current);
+              retryTimeoutRef.current = window.setTimeout(() => {
+                if (queuedModulesRef.current.size > 0 && navigator.onLine) {
+                  flushCloudSave();
+                }
+              }, delay);
+            }
+          });
       })
-      .catch(() => {
-        batch.writes.forEach((write) => {
-          const remaining = (pendingRevisionsRef.current[write.module] || []).filter((revision) => revision !== write.revision);
-          if (remaining.length) pendingRevisionsRef.current[write.module] = remaining;
-          else delete pendingRevisionsRef.current[write.module];
-          failedSyncModulesRef.current.add(write.module);
-          queuedModulesRef.current.add(write.module);
+      .catch((err) => {
+        console.error('[CloudSync] Guarded write failed:', err);
+        if (err && String(err.message).includes('Divergencia')) {
+          setSyncStatus('conflict');
+          modules.forEach((mod) => queuedModulesRef.current.add(mod));
+          return;
+        }
+        modules.forEach((mod) => {
+          failedSyncModulesRef.current.add(mod);
+          queuedModulesRef.current.add(mod);
         });
         queuedStateRef.current = currentState;
         setFailedSyncModules([...failedSyncModulesRef.current]);
         setSyncStatus(navigator.onLine ? 'error' : 'offline');
 
-        const delay = Math.min(30000, 1000 * Math.pow(2, retryAttemptRef.current));
-        retryAttemptRef.current += 1;
-        if (retryTimeoutRef.current !== null) window.clearTimeout(retryTimeoutRef.current);
-        retryTimeoutRef.current = window.setTimeout(() => {
-          if (queuedModulesRef.current.size > 0 && navigator.onLine) {
-            flushCloudSave();
-          }
-        }, delay);
+        if (retryAttemptRef.current < 5) {
+          const delay = Math.min(30000, 1000 * Math.pow(2, retryAttemptRef.current));
+          retryAttemptRef.current += 1;
+          if (retryTimeoutRef.current !== null) window.clearTimeout(retryTimeoutRef.current);
+          retryTimeoutRef.current = window.setTimeout(() => {
+            if (queuedModulesRef.current.size > 0 && navigator.onLine) {
+              flushCloudSave();
+            }
+          }, delay);
+        }
       });
   };
 
@@ -249,9 +299,12 @@ export default function App() {
 
     const saved = saveStoredState(draft, storageUserIdRef.current);
     stateRef.current = draft;
-    setStateObj(({ storageBackend: currentBackend }) => ({
+    if (!saved) {
+      showToast('Error al persistir localmente: espacio lleno o almacenamiento restringido', 'error');
+    }
+    setStateObj(() => ({
       state: draft,
-      storageBackend: saved ? 'localStorage' : currentBackend,
+      storageBackend: saved ? 'localStorage' : 'ninguno',
     }));
 
     if (tabChannelRef.current && storageUserIdRef.current) {
@@ -276,6 +329,14 @@ export default function App() {
     setSyncStatus('connecting');
     return observeCloudUser((user) => {
       const previousUser = cloudUserRef.current;
+
+      // Si el usuario es el mismo (ej. renovación de credenciales o evento interno), solo actualizamos datos y evitamos reiniciar la sincronización
+      if (user && previousUser && user.uid === previousUser.uid) {
+        cloudUserRef.current = user;
+        setCloudUser(user);
+        return;
+      }
+
       cloudUserRef.current = user;
       pendingRevisionsRef.current = {};
       failedSyncModulesRef.current.clear();
@@ -390,18 +451,37 @@ export default function App() {
           baselineDataRef.current[module] = syncModuleData(remoteState, module);
         });
 
+        const initialConflicts: SyncConflictItem[] = [];
         conflictModules.forEach((module) => {
-          mergedState = mergeSyncModule(
+          const { state: nextMerged, conflicts } = mergeSyncModuleWithConflicts(
             mergedState,
             module,
             syncModuleData(remoteState, module),
             baselineDataRef.current[module],
             tombstonesRef.current
           );
+          mergedState = nextMerged;
+          if (conflicts.length > 0) {
+            initialConflicts.push(...conflicts);
+          }
           nextRevisions[module] = remoteRevisions[module];
           nextBaselines[module] = syncModuleFingerprint(mergedState, module);
           baselineDataRef.current[module] = syncModuleData(mergedState, module);
         });
+
+        if (initialConflicts.length > 0) {
+          saveSyncRecoverySnapshot(cloudUser.uid, 'local', localState);
+          saveSyncRecoverySnapshot(cloudUser.uid, 'remote', remoteState);
+          saveSyncRecoverySnapshot(cloudUser.uid, 'base', buildStateFromModules(baselineDataRef.current));
+          setCloudConflict({
+            remoteState,
+            modules: conflictModules,
+            remoteRevisions,
+            conflicts: initialConflicts,
+          });
+          setSyncStatus('conflict');
+          return;
+        }
 
         storeRevisions(nextRevisions);
         persistBaselines(cloudUser.uid, nextBaselines);
@@ -531,14 +611,37 @@ export default function App() {
             continue;
           }
 
-          // Concurrent modification: perform automatic 3-way merge!
-          nextState = mergeSyncModule(
+          // Concurrent modification: perform 3-way merge with conflict detection!
+          const { state: mergedWithModule, conflicts: moduleConflicts } = mergeSyncModuleWithConflicts(
             nextState,
             head.module,
             pureHeadData,
             baselineDataRef.current[head.module],
             tombstonesRef.current
           );
+
+          if (moduleConflicts.length > 0) {
+            // Conflicto real detectado: no sobreescribir silenciosamente
+            const remoteStateBuilt = buildStateFromModules({ [head.module]: pureHeadData });
+            const baseStateBuilt = baselineDataRef.current[head.module]
+              ? buildStateFromModules({ [head.module]: baselineDataRef.current[head.module] })
+              : undefined;
+
+            saveSyncRecoverySnapshot(cloudUser.uid, 'local', stateRef.current);
+            saveSyncRecoverySnapshot(cloudUser.uid, 'remote', remoteStateBuilt);
+            if (baseStateBuilt) saveSyncRecoverySnapshot(cloudUser.uid, 'base', baseStateBuilt);
+
+            setCloudConflict({
+              remoteState: remoteStateBuilt,
+              modules: [head.module],
+              remoteRevisions: { [head.module]: head.revision },
+              conflicts: moduleConflicts,
+            });
+            setSyncStatus('conflict');
+            return;
+          }
+
+          nextState = mergedWithModule;
           nextRevisions[head.module] = head.revision;
           nextBaselines[head.module] = syncDataFingerprint(pureHeadData);
           baselineDataRef.current[head.module] = syncModuleData(nextState, head.module);
@@ -562,7 +665,10 @@ export default function App() {
           setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         }
       },
-      onError: () => setSyncStatus(navigator.onLine ? 'error' : 'offline'),
+      onError: (err) => {
+        console.error('[CloudSync] Snapshot error:', err);
+        setSyncStatus(navigator.onLine ? 'error' : 'offline');
+      },
     });
   // The upload queue reads current values from refs; resubscribing on every
   // render would duplicate Firestore listeners.
@@ -625,12 +731,14 @@ export default function App() {
   };
 
   const handleRetrySync = () => {
+    retryAttemptRef.current = 0;
     const modules = failedSyncModules.length ? failedSyncModules : [...SYNC_MODULES];
     queueCloudSave(stateRef.current, modules);
   };
 
   const handleUseLocalState = () => {
     if (!cloudUser || !cloudConflict) return;
+    saveSyncRecoverySnapshot(cloudUser.uid, 'remote', cloudConflict.remoteState);
     saveRecoveryState(cloudConflict.remoteState, cloudUser.uid);
     const baseRevisions = { ...revisionsRef.current, ...cloudConflict.remoteRevisions };
     persistRevisionMap(cloudUser.uid, baseRevisions);
@@ -648,6 +756,7 @@ export default function App() {
 
   const handleUseCloudState = () => {
     if (!cloudUser || !cloudConflict) return;
+    saveSyncRecoverySnapshot(cloudUser.uid, 'local', stateRef.current);
     saveRecoveryState(stateRef.current, cloudUser.uid);
     applyRemoteState(cloudConflict.remoteState, cloudUser.uid);
     persistRevisionMap(cloudUser.uid, { ...revisionsRef.current, ...cloudConflict.remoteRevisions });
@@ -681,7 +790,14 @@ export default function App() {
 
   useEffect(() => {
     const action = new URLSearchParams(window.location.search).get('action');
-    if (action === 'capture') setIsQuickCaptureOpen(true);
+    if (action === 'capture') {
+      setQuickCaptureKind('tarea');
+      setIsQuickCaptureOpen(true);
+    }
+    if (action === 'note' || action === 'nota') {
+      setQuickCaptureKind('nota');
+      setIsQuickCaptureOpen(true);
+    }
     if (action === 'gym') setCurrentView('gimnasio');
   }, []);
 
@@ -692,7 +808,14 @@ export default function App() {
       setIsQuickCaptureOpen(false);
       setIsOpenMobile(false);
     },
-    onOpenQuickCapture: () => setIsQuickCaptureOpen(true),
+    onOpenQuickCapture: () => {
+      setQuickCaptureKind('tarea');
+      setIsQuickCaptureOpen(true);
+    },
+    onOpenQuickNote: () => {
+      setQuickCaptureKind('nota');
+      setIsQuickCaptureOpen(true);
+    },
     onToggleCommandPalette: () => setIsSearchOpen((prev) => !prev),
     onTogglePrivacy: () => {
       updateStateRef.current((draft) => {
@@ -722,10 +845,17 @@ export default function App() {
     if (view === 'checkout') {
       setIsCheckoutOpen(true);
     } else {
-      setCurrentView(view);
+      const targetView = isModuleHidden(stateRef.current, view) ? 'dashboard' : view;
+      setCurrentView(targetView);
       window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     }
   };
+
+  useEffect(() => {
+    if (isModuleHidden(state.settings, currentView)) {
+      setCurrentView('dashboard');
+    }
+  }, [state.settings, currentView]);
 
   const handleQuickAction = (view: ViewType, focusId: string, txType?: 'gasto' | 'ingreso') => {
     if (txType) setQuickTransactionType(txType);
@@ -782,6 +912,29 @@ export default function App() {
     reader.readAsText(file);
   };
 
+  const isPendingOnboarding = isUserPendingOnboarding(state, storageBackend);
+
+  const handleCompleteOnboarding = (selectedModuleIds: ViewType[]) => {
+    updateState((draft) => {
+      draft.settings.onboardingCompleted = true;
+      draft.settings.hiddenTabs = computeHiddenTabsFromSelection(
+        selectedModuleIds,
+        draft.settings.hiddenTabs
+      );
+    });
+    setCurrentView('dashboard');
+    showToast('¡Configuración inicial completada! Bienvenido a LifeOS.', 'success');
+  };
+
+  if (isPendingOnboarding) {
+    return (
+      <OnboardingView
+        state={state}
+        onComplete={handleCompleteOnboarding}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex flex-col lg:flex-row antialiased selection:bg-blue-500/20 selection:text-blue-500">
       {/* Sidebar */}
@@ -813,14 +966,35 @@ export default function App() {
           onCloudSignOut={handleCloudSignOut}
         />
 
-        <main className="mx-auto w-full max-w-[1440px] flex-1 space-y-6 p-4 pb-28 sm:p-6 sm:pb-28 lg:p-8">
-          {cloudSyncConfigured && !cloudUser && (
-            <div className="flex flex-col gap-3 rounded-2xl border border-blue-500/25 bg-blue-500/10 p-4 sm:flex-row sm:items-center">
-              <div className="flex-1">
-                <p className="text-sm font-extrabold text-[var(--text)]">LifeOS Anywhere está listo</p>
-                <p className="text-xs text-[var(--text-soft)]">Conectá tu cuenta de Google para compartir estos datos con el celular.</p>
+        <main className="mx-auto w-full max-w-7xl flex-1 space-y-6 p-4 pb-28 sm:p-6 sm:pb-28 lg:p-8">
+          {cloudSyncConfigured && !cloudUser && !dismissedAnywhereBanner && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-blue-500/25 bg-blue-500/10 p-3 sm:px-4 text-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 text-[var(--blue)] font-bold">
+                  ☁️
+                </span>
+                <div className="min-w-0">
+                  <p className="font-extrabold text-[var(--text)] truncate">LifeOS Anywhere</p>
+                  <p className="text-[11px] text-[var(--text-soft)] truncate">Conectá Google para sincronizar con tu celular.</p>
+                </div>
               </div>
-              <button onClick={handleCloudSignIn} className="rounded-xl bg-[var(--blue)] px-4 py-2.5 text-xs font-extrabold text-white">Conectar con Google</button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleCloudSignIn}
+                  className="rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs transition-colors cursor-pointer"
+                >
+                  Conectar con Google
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDismissedAnywhereBanner(true)}
+                  className="p-1 text-sm font-bold text-[var(--text-faint)] hover:text-[var(--text)] transition-colors cursor-pointer"
+                  title="Descartar aviso"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
           )}
           {syncStatus === 'error' && (
@@ -834,6 +1008,11 @@ export default function App() {
               LifeOS recuperó automáticamente la última copia local válida. Exportá un backup antes de seguir cargando datos.
             </div>
           )}
+          {storageBackend === 'ninguno' && (
+            <div className="rounded-2xl border border-rose-500/25 bg-rose-500/10 p-4 text-xs font-semibold text-rose-700 dark:text-rose-300">
+              Atención: No se pueden guardar cambios localmente en este navegador (almacenamiento bloqueado o cuota excedida). Cualquier cambio nuevo se perderá al recargar. Exportá un backup para no perder datos.
+            </div>
+          )}
           {/* View Router */}
           <AppErrorBoundary key={currentView} inline fallbackTitle={`Error al cargar la pantalla`}>
             <Suspense fallback={<DashboardSkeleton />}>
@@ -844,7 +1023,9 @@ export default function App() {
                   onNavigate={handleNavigate}
                   onExportJSON={handleExportJSON}
                   onOpenSearch={() => { setSearchQuery(''); setIsSearchOpen(true); }}
-                  onOpenCapture={() => setIsQuickCaptureOpen(true)}
+                  onOpenCapture={() => { setQuickCaptureKind('tarea'); setIsQuickCaptureOpen(true); }}
+                  onOpenQuickNote={() => { setQuickCaptureKind('nota'); setIsQuickCaptureOpen(true); }}
+                  onQuickAction={handleQuickAction}
                 />
               )}
 
@@ -853,7 +1034,7 @@ export default function App() {
               )}
 
               {currentView === 'calendario' && (
-                <CalendarioView state={state} onUpdateState={updateState} />
+                <CalendarioView state={state} onUpdateState={updateState} onNavigate={handleNavigate} />
               )}
 
               {currentView === 'trabajo' && (
@@ -922,7 +1103,10 @@ export default function App() {
       <MobileNav
         currentView={currentView}
         onNavigate={handleNavigate}
-        onOpenCapture={() => setIsQuickCaptureOpen(true)}
+        onOpenCapture={() => {
+          setQuickCaptureKind('tarea');
+          setIsQuickCaptureOpen(true);
+        }}
         onOpenMore={() => setIsOpenMobile(true)}
         syncStatus={syncStatus}
         privacyMode={state.settings.privacyMode}
@@ -931,18 +1115,25 @@ export default function App() {
         cloudConfigured={cloudSyncConfigured}
         cloudUser={cloudUser}
         onCloudSignIn={handleCloudSignIn}
+        state={state}
       />
 
       <MobileQuickCapture
         state={state}
         open={isQuickCaptureOpen}
+        initialKind={quickCaptureKind}
         onClose={() => setIsQuickCaptureOpen(false)}
         onUpdateState={updateState}
         onNavigate={handleNavigate}
       />
 
       {cloudConflict && (
-        <CloudConflictModal modules={cloudConflict.modules} onUseLocal={handleUseLocalState} onUseCloud={handleUseCloudState} />
+        <CloudConflictModal
+          modules={cloudConflict.modules}
+          conflicts={cloudConflict.conflicts}
+          onUseLocal={handleUseLocalState}
+          onUseCloud={handleUseCloudState}
+        />
       )}
 
       <GlobalSearchModal
@@ -952,7 +1143,10 @@ export default function App() {
         onClose={() => setIsSearchOpen(false)}
         onNavigate={handleSearchNavigate}
         onUpdateState={updateState}
-        onOpenCapture={() => setIsQuickCaptureOpen(true)}
+        onOpenCapture={() => {
+          setQuickCaptureKind('tarea');
+          setIsQuickCaptureOpen(true);
+        }}
         onToggleTheme={handleToggleTheme}
         onTogglePrivacy={handleTogglePrivacy}
       />
@@ -969,7 +1163,9 @@ export default function App() {
         <AppIcon name="search" className="h-4 w-4 text-[var(--blue)]" />
       </button>
       <ToastViewport />
-      <GymRestOverlay state={state} onUpdateState={updateState} onOpenGym={() => handleNavigate('gimnasio')} />
+      {isModuleEnabled(state, 'gimnasio') && (
+        <GymRestOverlay state={state} onUpdateState={updateState} onOpenGym={() => handleNavigate('gimnasio')} />
+      )}
       {!__LIFEOS_PORTABLE__ && <PwaUpdatePrompt />}
     </div>
   );

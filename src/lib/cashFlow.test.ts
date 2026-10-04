@@ -21,3 +21,21 @@ test('omite cuotas con vencimiento fuera del horizonte', () => {
   state.finance.debts = [{ id: 'debt', name: 'Tarjeta', amount: 800, monthlyPayment: 120, dueDate: '2026-10-25' }];
   assert.equal(cashFlow30Days(state, '2026-08-20').committed, 0);
 });
+
+test('evalúa umbral mínimo de seguridad de liquidez y déficit', () => {
+  const state = defaultState();
+  state.finance.accounts = [{ id: 'bank', name: 'Banco', balance: 3000 }];
+  state.finance.subscriptions = [{ id: 'sub', name: 'Alquiler', amount: 4000, dueDay: 5 }];
+
+  const alertResult = cashFlow30Days(state, '2026-08-01');
+  assert.equal(alertResult.isDeficit, true);
+  assert.equal(alertResult.thresholdWarning, true);
+  assert.equal(alertResult.projectedBalance, -1000);
+
+  // Ample liquidity case
+  state.finance.accounts = [{ id: 'bank', name: 'Banco', balance: 25000 }];
+  const safeResult = cashFlow30Days(state, '2026-08-01');
+  assert.equal(safeResult.isDeficit, false);
+  assert.equal(safeResult.thresholdWarning, false);
+});
+

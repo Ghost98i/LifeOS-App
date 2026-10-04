@@ -1,9 +1,9 @@
 import { todayISO } from '../lib/storage';
-import type { Account } from '../types';
+import type { Account, FinanceCategoryInput } from '../types';
 
 export interface QuickFinanceParserOptions {
   accounts?: Account[];
-  categories?: string[];
+  categories?: FinanceCategoryInput[];
   defaultDate?: string;
   defaultAccountId?: string;
 }
@@ -169,17 +169,32 @@ export function parseQuickFinance(
   }
 
   // 2. Extract Amount
-  // Matches: 500, 1200, 1.200, 1200.50, 1200,50, $500, $U 500
-  let amount: number | null = null;
-  const amountMatch = processed.match(/(?:\$U|\$)?\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)\b/);
+  // Matches: 500, 1200, 1.200, 1200.50, 1200,50, $500, $U 500, 500 USD, 500 EUR, 500 UYU
+  // Avoid false positives with measurement units (e.g., 23 horas, 5 km, 80 kg)
+  const MEASUREMENT_UNITS_SUFFIX = /^\s*(?:horas?|hs?\b|h\b|minutos?|mins?\b|min\b|segundos?|segs?\b|s\b|d[ií]as?|semanas?|meses|a[ñn]os?|km|kms?|kil[oó]metros?|metros?|m\b|cm\b|cent[ií]metros?|mm\b|millas?|kg|kgs?|kilos?|kilogramos?|gramos?|g\b|lbs?|libras?|reps?\b|repeticiones|series?\b|sets?\b|vueltas?|flexiones|caps?\b|c[aá]psulas?|pastillas?|gotas?|dosis|gb\b|mb\b|tb\b|kb\b|fps\b|hz\b|ghz\b|mhz\b|%|por ciento|pts?\b|puntos|p[aá]ginas?|p[aá]gs?\b|cap[ií]tulos?|episodios?|canciones?|art[ií]culos?|videos?)\b/i;
 
-  if (amountMatch) {
-    const rawNum = amountMatch[1].replace(/\./g, '').replace(',', '.');
+  let amount: number | null = null;
+  const numRegex = /(?:\$U|\$)?\s*([0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)\b/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = numRegex.exec(processed)) !== null) {
+    const fullMatch = match[0];
+    const hasCurrencyPrefix = /(?:\$U|\$)/i.test(fullMatch);
+    const afterMatch = processed.slice(match.index + fullMatch.length);
+    const hasCurrencySuffix = /^\s*(?:usd|eur|uyu|\$)/i.test(afterMatch);
+
+    // If it has no currency prefix or suffix, and is followed by a measurement unit, it's not money
+    if (!hasCurrencyPrefix && !hasCurrencySuffix && MEASUREMENT_UNITS_SUFFIX.test(afterMatch)) {
+      continue;
+    }
+
+    const rawNum = match[1].replace(/\./g, '').replace(',', '.');
     const parsedNum = parseFloat(rawNum);
     if (!isNaN(parsedNum) && parsedNum > 0) {
       amount = parsedNum;
       // Remove amount from text to avoid false keyword matches
-      processed = processed.replace(amountMatch[0], ' ');
+      processed = processed.slice(0, match.index) + ' ' + processed.slice(match.index + fullMatch.length);
+      break;
     }
   }
 
@@ -279,10 +294,18 @@ export function parseQuickFinance(
   }
 
   // 5. Extract Category
-  let matchedCategory: string | null = null;
-  const availableCategories = options.categories && options.categories.length > 0
+  let matchedCategoryId: string | null = null;
+  let matchedCategoryName: string | null = null;
+  const rawCategories = options.categories && options.categories.length > 0
     ? options.categories
     : Object.keys(DEFAULT_CATEGORY_KEYWORDS);
+
+  const availableCategories: { id: string; name: string }[] = rawCategories
+    .map((c) => {
+      if (typeof c === 'string') return { id: c, name: c, active: true };
+      return { id: c.id, name: c.name, active: c.active !== false };
+    })
+    .filter((c) => c.active !== false);
 
   // 5a. Check against configured/default keyword map
   for (const [catName, keywords] of Object.entries(DEFAULT_CATEGORY_KEYWORDS)) {
@@ -291,24 +314,31 @@ export function parseQuickFinance(
       if (reg.test(normalize(processed))) {
         // Map to exact category in user's categories if available
         const exactMatch = availableCategories.find(
-          (c) => normalize(c) === normalize(catName) || normalize(c).includes(normalize(catName))
+          (c) => normalize(c.name) === normalize(catName) || normalize(c.name).includes(normalize(catName))
         );
-        matchedCategory = exactMatch || catName;
+        if (exactMatch) {
+          matchedCategoryId = exactMatch.id;
+          matchedCategoryName = exactMatch.name;
+        } else {
+          matchedCategoryId = catName;
+          matchedCategoryName = catName;
+        }
         processed = processed.replace(reg, ' ');
         break;
       }
     }
-    if (matchedCategory) break;
+    if (matchedCategoryId) break;
   }
 
   // 5b. Check if any user category name appears directly
-  if (!matchedCategory) {
+  if (!matchedCategoryId) {
     for (const cat of availableCategories) {
-      const normCat = normalize(cat);
+      const normCat = normalize(cat.name);
       if (normCat.length > 2) {
         const reg = new RegExp(`\\b${normCat}\\b`, 'i');
         if (reg.test(normalize(processed))) {
-          matchedCategory = cat;
+          matchedCategoryId = cat.id;
+          matchedCategoryName = cat.name;
           processed = processed.replace(reg, ' ');
           break;
         }
@@ -334,7 +364,7 @@ export function parseQuickFinance(
   // Build missing list
   const missing: ('amount' | 'category' | 'account')[] = [];
   if (amount === null) missing.push('amount');
-  if (!matchedCategory) missing.push('category');
+  if (!matchedCategoryId) missing.push('category');
   if (!matchedAccountName && !matchedAccountId) missing.push('account');
 
   // Build formatted preview:
@@ -343,7 +373,7 @@ export function parseQuickFinance(
   const formattedAmount = amount !== null
     ? `$U ${Math.round(amount).toLocaleString('es-UY')}`
     : '$U ?';
-  const formattedCategory = matchedCategory || 'Categoría pendiente';
+  const formattedCategory = matchedCategoryName || 'Categoría pendiente';
   const formattedAccount = matchedAccountName || 'Cuenta no especificada';
 
   const preview = `${formattedAmount} · ${formattedCategory} · ${formattedAccount} · ${dateLabel}`;
@@ -353,8 +383,8 @@ export function parseQuickFinance(
     isValid: amount !== null && amount > 0,
     amount,
     type,
-    category: matchedCategory,
-    categoryMatched: matchedCategory,
+    category: matchedCategoryId,
+    categoryMatched: matchedCategoryName,
     accountId: matchedAccountId,
     accountName: matchedAccountName,
     date: targetDate,
@@ -364,7 +394,7 @@ export function parseQuickFinance(
     missing,
     confidence: {
       amount: amount !== null,
-      category: matchedCategory !== null,
+      category: matchedCategoryId !== null,
       account: (matchedAccountId !== null || matchedAccountName !== null),
     },
   };

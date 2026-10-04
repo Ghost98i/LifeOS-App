@@ -15,6 +15,8 @@ export interface AgendaBlock {
   time: string;
   activity: string;
   effort?: EffortLevel;
+  /** ID of a linked UnifiedTask (TodayExtra or ProjectTask). Purely referential — completing a session does NOT auto-complete the task. */
+  linkedTaskId?: string;
 }
 
 export type AgendaWeek = Record<DayKey, AgendaBlock[]>;
@@ -34,6 +36,12 @@ export interface TodayExtra {
   done: boolean;
   priority: 'alta' | 'media' | 'baja';
   effort?: EffortLevel;
+  dueDate?: string;
+  time?: string;
+  durationMinutes?: number;
+  dependsOn?: string[];
+  linkedType?: 'study' | 'gym' | 'calendar' | 'project' | null;
+  linkedId?: string | null;
 }
 
 export interface DailyPriority {
@@ -42,6 +50,8 @@ export interface DailyPriority {
   text: string;
   done?: boolean;
   rank?: number;
+  /** Reasons why Smart Priorities 2.0 recommended this item. Used for display only. */
+  reasons?: string[];
 }
 
 export interface DailyContextEntry {
@@ -114,17 +124,99 @@ export interface Investment {
   amount: number;
 }
 
+export type ExpectedIncomeFrequency = 'once' | 'weekly' | 'biweekly' | 'monthly' | 'yearly';
+
+export interface ExpectedIncome {
+  id: string;
+  name: string;
+  amount: number;
+  startDate: string; // ISO date YYYY-MM-DD
+  frequency: ExpectedIncomeFrequency;
+  active: boolean;
+  category?: string | null;
+  accountId?: string | null;
+  endDate?: string | null; // ISO date YYYY-MM-DD or null
+  updatedAt?: string;
+}
+
+export type FinancialCommitmentFrequency = 'once' | 'weekly' | 'biweekly' | 'monthly' | 'yearly';
+
+export interface FinancialCommitment {
+  id: string;
+  name: string;
+  amount: number;
+  category?: string | null;
+  frequency: FinancialCommitmentFrequency;
+  nextDueDate: string; // ISO date YYYY-MM-DD
+  active: boolean;
+  accountId?: string | null;
+  endDate?: string | null; // ISO date YYYY-MM-DD or null
+  totalOccurrences?: number | null; // Total planned installments (e.g. 3)
+  remainingOccurrences?: number | null; // Remaining unpaid installments (e.g. 2)
+  dueDay?: number | null; // Anchor day of month (1-31) to prevent date drift
+  notes?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CashFlowCommitment {
+  id: string;
+  label: string;
+  amount: number;
+  dueDate: string | null;
+  kind: 'subscription' | 'debt' | 'commitment';
+}
+
+export interface CashFlowDayPoint {
+  date: string; // YYYY-MM-DD
+  startingBalance: number;
+  expectedIncome: number;
+  expectedExpenses: number;
+  debtPayments: number;
+  endingBalance: number;
+  netDayChange: number;
+}
+
+export interface CashFlowForecastItem {
+  id: string;
+  date: string; // YYYY-MM-DD
+  label: string;
+  amount: number;
+  type: 'income' | 'expense' | 'debt';
+  category?: string | null;
+  accountId?: string | null;
+  sourceId: string;
+  isOverdue?: boolean;
+}
+
+export interface FinanceCategory {
+  id: string;
+  name: string;
+  active: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type FinanceCategoryInput = string | FinanceCategory;
+
 export interface Finance {
   transactions: Transaction[];
   transfers: FinanceTransfer[];
   reconciliations: AccountReconciliation[];
-  categories: string[];
+  categories: FinanceCategory[];
   budgets: Record<string, number>;
   accounts: Account[];
   debts: Debt[];
   investments: Investment[];
   subscriptions: Subscription[];
+  expectedIncomes?: ExpectedIncome[];
+  commitments?: FinancialCommitment[];
+  minCushion?: number | null;
+  cushionEnabled?: boolean;
+  heroDisplayMode?: FinanceHeroDisplayMode;
 }
+
+export type FinanceHeroDisplayMode = 'actual' | 'real_available' | 'both';
 
 export interface WeightPoint {
   date: string;
@@ -319,7 +411,11 @@ export interface CalendarEvent {
   date: string;
   type: 'cumpleanos' | 'estreno' | 'importante' | 'otro';
   recurring: boolean;
+  linkedTaskId?: string;
+  linkedType?: 'task' | 'study' | 'gym' | 'custom';
 }
+
+export type GoalLinkedSource = 'weight' | 'available' | 'gym_sessions' | 'study_hours' | 'resale_profit' | 'net_worth';
 
 export interface Goal {
   id: string;
@@ -327,13 +423,17 @@ export interface Goal {
   initial: number;
   target: number;
   current: number;
-  linked?: 'weight' | 'available' | null;
+  linked?: GoalLinkedSource | null;
 }
 
 export interface ProjectTask {
   id: string;
   text: string;
   done: boolean;
+  dueDate?: string;
+  priority?: 'alta' | 'media' | 'baja';
+  effort?: EffortLevel;
+  dependsOn?: string[];
 }
 
 export type ProjectStatus = 'activo' | 'en_pausa' | 'completado' | 'cancelado';
@@ -357,12 +457,20 @@ export interface InboxItem {
   text: string;
   createdAt: string;
   source?: 'quick-capture' | 'voice' | 'manual';
+  notes?: string;
+  updatedAt?: string;
 }
 
 export interface Postit {
   id: string;
   text: string;
+  title?: string;
   date: string;
+  pinned?: boolean;
+  archived?: boolean;
+  tags?: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ShoppingItem {
@@ -399,6 +507,7 @@ export interface Settings {
   hiddenTabs: string[];
   lastWeeklyReviewAt?: string | null;
   privacyMode?: boolean;
+  onboardingCompleted?: boolean;
 }
 
 export interface CheckoutLogDay {
