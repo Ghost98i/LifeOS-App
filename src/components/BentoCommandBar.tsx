@@ -338,7 +338,7 @@ const LiveDraftPreview: React.FC<{ draft: CaptureDraft }> = ({ draft }) => {
             <>
               {' '}de{' '}
               <strong className="text-[var(--text)]">
-                <PrivacyAmount>${fmtMoney(draft.amount)}</PrivacyAmount>
+                <PrivacyAmount>{fmtMoney(draft.amount)}</PrivacyAmount>
               </strong>
             </>
           )}
@@ -411,7 +411,7 @@ const LiveDraftPreview: React.FC<{ draft: CaptureDraft }> = ({ draft }) => {
           Detectado como <strong className="text-[var(--text)]">Reventa</strong>: {draft.title}
           {draft.price !== undefined && (
             <>
-              {' '}(<PrivacyAmount>$U {fmtMoney(draft.price)}</PrivacyAmount>)
+              {' '}(<PrivacyAmount>{fmtMoney(draft.price)}</PrivacyAmount>)
             </>
           )}
         </span>

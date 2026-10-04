@@ -125,6 +125,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   const [incCategory, setIncCategory] = useState<string>(activeCategories[0]?.id || 'Varios');
   const [incAccount, setIncAccount] = useState<string>(defaultAccountId(state) || '');
   const [incEndDate, setIncEndDate] = useState('');
+  const [editingIncId, setEditingIncId] = useState<string | null>(null);
 
   // Financial Commitments
   const [comName, setComName] = useState('');
@@ -138,8 +139,15 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   const [comRemainingOccurrences, setComRemainingOccurrences] = useState('');
   const [comEndDate, setComEndDate] = useState('');
   const [comNotes, setComNotes] = useState('');
+  const [finTotalAmount, setFinTotalAmount] = useState('');
   const [editingComId, setEditingComId] = useState<string | null>(null);
   const [isCommitmentModalOpen, setIsCommitmentModalOpen] = useState(false);
+
+  // Payment confirmation modal
+  const [payingCommitment, setPayingCommitment] = useState<FinancialCommitment | null>(null);
+  const [payAmount, setPayAmount] = useState('');
+  const [payAccount, setPayAccount] = useState('');
+  const [payUpdateFuture, setPayUpdateFuture] = useState(false);
 
   // Financial Cushion
   const [isCushionModalOpen, setIsCushionModalOpen] = useState(false);
@@ -355,27 +363,74 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       showToast('Completá nombre y monto del ingreso previsto.', 'error');
       return;
     }
+    const amt = Number(incAmount);
+    if (amt <= 0) {
+      showToast('El monto debe ser mayor a 0.', 'error');
+      return;
+    }
     onUpdateState((draft) => {
       if (!draft.finance) draft.finance = { accounts: [], transactions: [], categories: [], budgets: {}, subscriptions: [], debts: [], investments: [], expectedIncomes: [] } as any;
       if (!draft.finance.expectedIncomes) draft.finance.expectedIncomes = [];
-      draft.finance.expectedIncomes.push({
-        id: uid(),
-        name: incName.trim(),
-        amount: Number(incAmount),
-        startDate: incDate || todayISO(),
-        frequency: incFreq,
-        active: true,
-        category: incCategory || null,
-        accountId: incAccount || null,
-        endDate: incEndDate || null,
-        updatedAt: new Date().toISOString(),
-      });
+
+      if (editingIncId) {
+        const target = draft.finance.expectedIncomes.find((i) => i.id === editingIncId);
+        if (target) {
+          target.name = incName.trim();
+          target.amount = amt;
+          target.startDate = incDate || todayISO();
+          target.frequency = incFreq;
+          target.category = incCategory || null;
+          target.accountId = incAccount || null;
+          target.endDate = incEndDate || null;
+          target.updatedAt = new Date().toISOString();
+        }
+      } else {
+        draft.finance.expectedIncomes.push({
+          id: uid(),
+          name: incName.trim(),
+          amount: amt,
+          startDate: incDate || todayISO(),
+          frequency: incFreq,
+          active: true,
+          category: incCategory || null,
+          accountId: incAccount || null,
+          endDate: incEndDate || null,
+          updatedAt: new Date().toISOString(),
+        });
+      }
     });
     setIncName('');
     setIncAmount('');
     setIncEndDate('');
+    setEditingIncId(null);
     playSound('success');
-    showToast('Ingreso previsto registrado para proyecciones.');
+    showToast(editingIncId ? 'Ingreso previsto actualizado.' : 'Ingreso previsto registrado para proyecciones.');
+  };
+
+  const beginEditExpectedIncome = (inc: ExpectedIncome) => {
+    setActiveTab('compromisos');
+    setEditingIncId(inc.id);
+    setIncName(inc.name);
+    setIncAmount(String(inc.amount));
+    setIncDate(inc.startDate);
+    setIncFreq(inc.frequency);
+    setIncCategory(inc.category || activeCategories[0]?.id || 'Varios');
+    setIncAccount(inc.accountId || defaultAccountId(state) || '');
+    setIncEndDate(inc.endDate || '');
+    setTimeout(() => {
+      document.getElementById('qa-focus-inc')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
+  };
+
+  const cancelEditExpectedIncome = () => {
+    setEditingIncId(null);
+    setIncName('');
+    setIncAmount('');
+    setIncDate(todayISO());
+    setIncFreq('monthly');
+    setIncCategory(activeCategories[0]?.id || 'Varios');
+    setIncAccount(defaultAccountId(state) || '');
+    setIncEndDate('');
   };
 
   const handleToggleExpectedIncome = (id: string) => {
@@ -390,6 +445,9 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   };
 
   const handleDeleteExpectedIncome = (id: string) => {
+    if (editingIncId === id) {
+      cancelEditExpectedIncome();
+    }
     onUpdateState((draft) => {
       if (!draft.finance?.expectedIncomes) return;
       draft.finance.expectedIncomes = draft.finance.expectedIncomes.filter((i) => i.id !== id);
@@ -425,12 +483,16 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       }
     });
     playSound('coins');
-    showToast(`Ingreso real registrado: $${Number(inc.amount).toLocaleString('es-UY')}`);
+    const toastMsg = state.settings?.privacyMode
+      ? 'Ingreso real registrado: +$U ••••'
+      : `Ingreso real registrado: +$${Number(inc.amount).toLocaleString('es-UY')}`;
+    showToast(toastMsg);
   };
 
   const resetComForm = () => {
     setComName('');
     setComAmount('');
+    setFinTotalAmount('');
     setComDate(todayISO());
     setComFreq('monthly');
     setComCategory(activeCategories[0]?.id || 'Varios');
@@ -560,13 +622,19 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
     showToast('Compromiso eliminado.', 'info');
   };
 
-  const handleConfirmCommitmentPayment = (com: FinancialCommitment) => {
+  const handleConfirmCommitmentPayment = (
+    com: FinancialCommitment,
+    paidAmount?: number,
+    paidAccountId?: string,
+    updateFutureAmount?: boolean
+  ) => {
+    const actualAmount = paidAmount !== undefined && !isNaN(paidAmount) ? paidAmount : Number(com.amount);
     onUpdateState((draft) => {
       if (!draft.finance) return;
-      const accId = com.accountId || defaultAccountId(draft) || draft.finance.accounts[0]?.id || 'acc-1';
+      const accId = paidAccountId || com.accountId || defaultAccountId(draft) || draft.finance.accounts[0]?.id || 'acc-1';
       const tx: Transaction = {
         id: uid(),
-        amount: Number(com.amount),
+        amount: actualAmount,
         type: 'gasto',
         category: com.category || 'Varios',
         accountId: accId,
@@ -586,11 +654,41 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         targetCom.remainingOccurrences = advanced.remainingOccurrences;
         targetCom.active = advanced.active;
         if (advanced.dueDay) targetCom.dueDay = advanced.dueDay;
+        if (updateFutureAmount) {
+          targetCom.amount = actualAmount;
+        }
         targetCom.updatedAt = new Date().toISOString();
       }
     });
     playSound('coins');
-    showToast(`Pago registrado y compromiso actualizado: -$${Number(com.amount).toLocaleString('es-UY')}`);
+    const toastMsg = state.settings?.privacyMode
+      ? 'Pago registrado y compromiso actualizado: -$U ••••'
+      : `Pago registrado y compromiso actualizado: -$${Number(actualAmount).toLocaleString('es-UY')}`;
+    showToast(toastMsg);
+  };
+
+  const openPayCommitment = (com: FinancialCommitment) => {
+    setPayingCommitment(com);
+    setPayAmount(String(com.amount));
+    setPayAccount(com.accountId || defaultAccountId(state) || '');
+    setPayUpdateFuture(false);
+  };
+
+  const handleExecutePayment = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!payingCommitment) return;
+    const numAmount = Number(payAmount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      showToast('El monto debe ser mayor a 0.', 'error');
+      return;
+    }
+    handleConfirmCommitmentPayment(
+      payingCommitment,
+      numAmount,
+      payAccount || undefined,
+      payUpdateFuture
+    );
+    setPayingCommitment(null);
   };
 
   const handleSaveCushion = (e: React.FormEvent) => {
@@ -606,16 +704,17 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   };
 
   useEffect(() => {
-    if (!isCommitmentModalOpen && !isCushionModalOpen) return;
+    if (!isCommitmentModalOpen && !isCushionModalOpen && !payingCommitment) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (isCommitmentModalOpen) setIsCommitmentModalOpen(false);
         if (isCushionModalOpen) setIsCushionModalOpen(false);
+        if (payingCommitment) setPayingCommitment(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isCommitmentModalOpen, isCushionModalOpen]);
+  }, [isCommitmentModalOpen, isCushionModalOpen, payingCommitment]);
 
   const monthGroups = groupTransactionsByMonth(state);
 
@@ -992,7 +1091,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                       <div className="mt-2 pt-2 border-t border-[var(--border)]/60 flex items-center justify-between">
                         <button
                           type="button"
-                          onClick={() => handleConfirmCommitmentPayment(comEntity)}
+                          onClick={() => openPayCommitment(comEntity)}
                           className="text-[10px] font-bold text-[var(--blue)] hover:underline cursor-pointer flex items-center gap-1"
                           title="Registrar gasto real ahora y avanzar fecha"
                         >
@@ -2161,32 +2260,67 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                 </div>
 
                 {comIsFinite && (
-                  <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)]">
-                    <div>
-                      <label className="text-[9px] font-bold uppercase text-[var(--text-faint)] block mb-1">
-                        Cuotas Totales
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="Ej. 3"
-                        value={comTotalOccurrences}
-                        onChange={(e) => setComTotalOccurrences(e.target.value)}
-                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1.5 text-xs font-mono text-[var(--text)]"
-                      />
+                  <div className="space-y-2 p-2.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)]">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[9px] font-bold uppercase text-[var(--text-faint)] block mb-1">
+                          Cuotas Totales
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          placeholder="Ej. 3"
+                          value={comTotalOccurrences}
+                          onChange={(e) => setComTotalOccurrences(e.target.value)}
+                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1.5 text-xs font-mono text-[var(--text)]"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-bold uppercase text-[var(--text-faint)] block mb-1">
+                          Cuotas Restantes
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          placeholder="Ej. 2"
+                          value={comRemainingOccurrences}
+                          onChange={(e) => setComRemainingOccurrences(e.target.value)}
+                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1.5 text-xs font-mono text-[var(--text)]"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="text-[9px] font-bold uppercase text-[var(--text-faint)] block mb-1">
-                        Cuotas Restantes
+                    <div className="pt-1.5 border-t border-[var(--border)]/70">
+                      <label className="text-[9px] font-medium text-[var(--text-soft)] block mb-0.5">
+                        Sugerir cuota desde total financiado:
                       </label>
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="Ej. 2"
-                        value={comRemainingOccurrences}
-                        onChange={(e) => setComRemainingOccurrences(e.target.value)}
-                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1.5 text-xs font-mono text-[var(--text)]"
-                      />
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min="1"
+                          step="any"
+                          placeholder="Total compra (opcional)"
+                          value={finTotalAmount}
+                          onChange={(e) => setFinTotalAmount(e.target.value)}
+                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1 text-xs font-mono text-[var(--text)] placeholder-[var(--text-faint)]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const tot = Number(finTotalAmount);
+                            const n = Number(comTotalOccurrences);
+                            if (tot > 0 && n > 0) {
+                              const suggested = Math.round((tot / n) * 100) / 100;
+                              setComAmount(String(suggested));
+                            } else {
+                              showToast('Ingresá el total de compra y cuotas totales para sugerir.', 'info');
+                            }
+                          }}
+                          className="px-2 py-1 text-[11px] font-semibold rounded-lg bg-[var(--surface-muted)] hover:bg-[var(--border)] text-[var(--text)] border border-[var(--border)] shrink-0 cursor-pointer"
+                          title="Calcular cuota sugerida (total / cuotas)"
+                        >
+                          Calcular
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -2274,7 +2408,17 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                                 Vencido
                               </span>
                             )}
-                            {!com.active && (
+                            {com.nextDueDate === todayISO() && com.active && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300">
+                                Vence hoy
+                              </span>
+                            )}
+                            {!com.active && com.remainingOccurrences === 0 && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                                Finalizado
+                              </span>
+                            )}
+                            {!com.active && com.remainingOccurrences !== 0 && (
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-zinc-500/10 text-zinc-500">
                                 Pausado
                               </span>
@@ -2295,7 +2439,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                           {com.active && (
                             <button
                               type="button"
-                              onClick={() => handleConfirmCommitmentPayment(com)}
+                              onClick={() => openPayCommitment(com)}
                               className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
                               title="Registrar gasto real ahora y avanzar fecha"
                             >
@@ -2342,9 +2486,11 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
           {/* Expected Incomes Form & List */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Form */}
-            <div className="surface p-4 sm:p-5 space-y-4">
+            <div id="qa-focus-inc" className="surface p-4 sm:p-5 space-y-4">
               <div>
-                <h3 className="section-title">Nuevo Ingreso Previsto</h3>
+                <h3 className="section-title">
+                  {editingIncId ? 'Editar Ingreso Previsto' : 'Nuevo Ingreso Previsto'}
+                </h3>
                 <p className="text-xs text-[var(--text-soft)] mt-1">
                   Se usa exclusivamente para simulación financiera. No crea transacciones contables reales hasta que confirmes su cobro.
                 </p>
@@ -2474,13 +2620,24 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   </div>
                 )}
 
-                <button
-                  type="submit"
-                  className="w-full primary-button py-2.5 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer mt-2"
-                >
-                  <AppIcon name="plus" className="h-4 w-4" />
-                  <span>Programar Ingreso Previsto</span>
-                </button>
+                <div className="flex items-center gap-2 mt-2">
+                  {editingIncId && (
+                    <button
+                      type="button"
+                      onClick={cancelEditExpectedIncome}
+                      className="w-1/3 py-2.5 text-xs font-bold rounded-xl border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    className={`${editingIncId ? 'w-2/3' : 'w-full'} primary-button py-2.5 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer`}
+                  >
+                    <AppIcon name={editingIncId ? 'check' : 'plus'} className="h-4 w-4" />
+                    <span>{editingIncId ? 'Guardar Cambios' : 'Programar Ingreso Previsto'}</span>
+                  </button>
+                </div>
               </form>
             </div>
 
@@ -2566,6 +2723,16 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                             title={inc.active ? 'Pausar previsión' : 'Reanudar previsión'}
                           >
                             <AppIcon name={inc.active ? 'pause' : 'play'} className="h-4 w-4" />
+                          </button>
+
+                          {/* Edit */}
+                          <button
+                            type="button"
+                            onClick={() => beginEditExpectedIncome(inc)}
+                            className="p-1.5 rounded-lg text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] transition-all cursor-pointer"
+                            title="Editar ingreso previsto"
+                          >
+                            <AppIcon name="edit" className="h-3.5 w-3.5" />
                           </button>
 
                           {/* Delete */}
@@ -2788,32 +2955,67 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
               </div>
 
               {comIsFinite && (
-                <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)]">
-                  <div>
-                    <label className="text-[9px] font-bold uppercase text-[var(--text-faint)] block mb-1">
-                      Cuotas Totales
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="Ej. 3"
-                      value={comTotalOccurrences}
-                      onChange={(e) => setComTotalOccurrences(e.target.value)}
-                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1.5 text-xs font-mono text-[var(--text)]"
-                    />
+                <div className="space-y-2 p-2.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)]">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-[var(--text-faint)] block mb-1">
+                        Cuotas Totales
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Ej. 3"
+                        value={comTotalOccurrences}
+                        onChange={(e) => setComTotalOccurrences(e.target.value)}
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1.5 text-xs font-mono text-[var(--text)]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-bold uppercase text-[var(--text-faint)] block mb-1">
+                        Cuotas Restantes
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Ej. 2"
+                        value={comRemainingOccurrences}
+                        onChange={(e) => setComRemainingOccurrences(e.target.value)}
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1.5 text-xs font-mono text-[var(--text)]"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="text-[9px] font-bold uppercase text-[var(--text-faint)] block mb-1">
-                      Cuotas Restantes
+                  <div className="pt-1.5 border-t border-[var(--border)]/70">
+                    <label className="text-[9px] font-medium text-[var(--text-soft)] block mb-0.5">
+                      Sugerir cuota desde total financiado:
                     </label>
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="Ej. 2"
-                      value={comRemainingOccurrences}
-                      onChange={(e) => setComRemainingOccurrences(e.target.value)}
-                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1.5 text-xs font-mono text-[var(--text)]"
-                    />
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min="1"
+                        step="any"
+                        placeholder="Total compra (opcional)"
+                        value={finTotalAmount}
+                        onChange={(e) => setFinTotalAmount(e.target.value)}
+                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1 text-xs font-mono text-[var(--text)] placeholder-[var(--text-faint)]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const tot = Number(finTotalAmount);
+                          const n = Number(comTotalOccurrences);
+                          if (tot > 0 && n > 0) {
+                            const suggested = Math.round((tot / n) * 100) / 100;
+                            setComAmount(String(suggested));
+                          } else {
+                            showToast('Ingresá el total de compra y cuotas totales para sugerir.', 'info');
+                          }
+                        }}
+                        className="px-2 py-1 text-[11px] font-semibold rounded-lg bg-[var(--surface-muted)] hover:bg-[var(--border)] text-[var(--text)] border border-[var(--border)] shrink-0 cursor-pointer"
+                        title="Calcular cuota sugerida (total / cuotas)"
+                      >
+                        Calcular
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -2862,6 +3064,110 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   className="primary-button py-2 px-4 text-xs font-bold cursor-pointer"
                 >
                   {editingComId ? 'Guardar Cambios' : 'Registrar Compromiso'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Confirmation Modal */}
+      {payingCommitment && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setPayingCommitment(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Confirmar Pago de Compromiso"
+            className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">💳</span>
+                <h3 className="section-title">Confirmar Pago</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPayingCommitment(null)}
+                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg cursor-pointer"
+              >
+                <AppIcon name="x" className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-[var(--text-soft)]">
+              Se registrará un gasto real y se avanzará el vencimiento de{' '}
+              <strong className="text-[var(--text)]">{payingCommitment.name}</strong>.
+            </p>
+
+            <form onSubmit={handleExecutePayment} className="space-y-3">
+              <div>
+                <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
+                  Monto a Pagar (UYU)
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0.01"
+                  step="any"
+                  value={payAmount}
+                  onChange={(e) => setPayAmount(e.target.value)}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs font-mono text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                />
+                <span className="text-[10px] text-[var(--text-faint)] block mt-0.5">
+                  Podés ajustar el valor si la factura o cuota real difiere del estimado.
+                </span>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
+                  Cuenta de Débito
+                </label>
+                <select
+                  value={payAccount}
+                  onChange={(e) => setPayAccount(e.target.value)}
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                >
+                  {(state.finance.accounts || []).map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} (Saldo: {state.settings?.privacyMode ? '••••' : fmtMoney(acc.balance)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Checkbox to also update future occurrences */}
+              <div className="pt-1">
+                <label className="flex items-start gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={payUpdateFuture}
+                    onChange={(e) => setPayUpdateFuture(e.target.checked)}
+                    className="rounded cursor-pointer mt-0.5"
+                  />
+                  <span className="text-xs text-[var(--text-soft)] leading-snug">
+                    Actualizar también el monto de cuotas o vencimientos futuros con este nuevo valor ({payAmount ? (state.settings?.privacyMode ? '••••' : fmtMoney(Number(payAmount) || 0)) : '$0'})
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border)]">
+                <button
+                  type="button"
+                  onClick={() => setPayingCommitment(null)}
+                  className="px-4 py-2 text-xs font-bold rounded-xl border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-xs font-bold rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white shadow-2xs cursor-pointer flex items-center gap-1.5"
+                >
+                  <AppIcon name="check" className="h-3.5 w-3.5" />
+                  <span>Confirmar Pago</span>
                 </button>
               </div>
             </form>

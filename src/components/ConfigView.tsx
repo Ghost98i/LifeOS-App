@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { LifeOSState } from '../types';
 import { NAV_ITEMS } from './Sidebar';
 import { isModuleHidden } from '../lib/moduleVisibility';
@@ -7,6 +7,10 @@ import {
   defaultState,
   fmtDate,
   getStorageDiagnostics,
+  inspectBackupJSON,
+  loadRecoveryState,
+  saveRecoveryState,
+  BackupPreviewSummary,
   StorageDiagnostics,
   todayISO,
 } from '../lib/storage';
@@ -15,12 +19,16 @@ import { computeAccountBalance } from '../lib/financeFlows';
 import { showToast } from '../lib/toast';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
+import { PrivacyAmount } from './PrivacyAmount';
 
 interface ConfigViewProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => void;
   onExportJSON: () => void;
-  onImportJSON: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onImportJSON?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onImportState?: (importedState: LifeOSState, description?: string) => void;
+  onRestoreRecovery?: () => void;
+  onResetData?: () => void;
   storageUserId?: string | null;
   cloudConnected?: boolean;
   cloudConfigured?: boolean;
@@ -36,9 +44,12 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   state,
   onUpdateState,
   onExportJSON,
-  onImportJSON,
+  onImportJSON: _onImportJSON,
+  onImportState,
+  onRestoreRecovery,
+  onResetData,
   storageUserId,
-  cloudConnected = false,
+  cloudConnected: _cloudConnected = false,
   cloudConfigured = true,
   cloudUser = null,
   syncStatus = 'signed-out',
@@ -65,7 +76,64 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   const latestCompletedGym = sortedGymSessions.find((s) => s.status === 'completed') || sortedGymSessions[0] || null;
   const staleGymCount = sortedGymSessions.filter((s) => (s.date || '') < todayISO() && s.status === 'active').length;
 
-  const handleRepairFinanceBalances = () => {
+  // Safe Recovery & Modal States
+  const [importPreview, setImportPreview] = useState<BackupPreviewSummary | null>(null);
+  const [importFileName, setImportFileName] = useState('');
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+  const [isRepairModalOpen, setIsRepairModalOpen] = useState(false);
+  const [accountDiffs, setAccountDiffs] = useState<Array<{
+    id: string;
+    name: string;
+    currentBalance: number;
+    computedBalance: number;
+  }>>([]);
+
+  const recoveryInfo = loadRecoveryState(storageUserId);
+
+  useEffect(() => {
+    if (!importPreview && !isResetModalOpen && !isRestoreModalOpen && !isRepairModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (importPreview) setImportPreview(null);
+        if (isResetModalOpen) setIsResetModalOpen(false);
+        if (isRestoreModalOpen) setIsRestoreModalOpen(false);
+        if (isRepairModalOpen) setIsRepairModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [importPreview, isResetModalOpen, isRestoreModalOpen, isRepairModalOpen]);
+
+  const handleOpenRepairModal = () => {
+    const diffs = (state.finance?.accounts || [])
+      .map((acc) => {
+        const computed = computeAccountBalance(
+          acc,
+          state.finance?.transactions,
+          state.finance?.transfers,
+          state.finance?.reconciliations
+        );
+        return {
+          id: acc.id,
+          name: acc.name,
+          currentBalance: Number(acc.balance || 0),
+          computedBalance: computed,
+        };
+      })
+      .filter((d) => Math.abs(d.currentBalance - d.computedBalance) > 0.001);
+
+    if (diffs.length === 0) {
+      showToast('✨ Todas las cuentas coinciden exactamente con el libro mayor.');
+      return;
+    }
+
+    setAccountDiffs(diffs);
+    setIsRepairModalOpen(true);
+  };
+
+  const handleConfirmRepairBalances = () => {
+    saveRecoveryState(state, storageUserId, 'repair_balances', 'Previo a reparación de saldos con libro mayor');
     let corrected = 0;
     onUpdateState((draft) => {
       draft.finance.accounts.forEach((acc) => {
@@ -81,18 +149,15 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
         }
       });
     });
-    if (corrected > 0) {
-      showToast(`✅ Se recalcularon ${corrected} cuenta(s) según el libro mayor cerrado.`);
-    } else {
-      showToast('✨ Todas las cuentas coinciden exactamente con el libro mayor.');
-    }
+    setIsRepairModalOpen(false);
+    showToast(`✅ Se recalcularon ${corrected} cuenta(s) según el libro mayor cerrado. Copia anterior guardada en recuperación.`);
   };
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     onUpdateState((draft) => {
       if (!draft.profile) draft.profile = { name: '', height: 170, bodyCompositionSex: null };
-      if (!draft.streaming) draft.streaming = { sessions: [], monthlyGoal: 12, platforms: [] };
+      if (!draft.streaming) draft.streaming = { sessions: [], monthlyGoal: 12, preStreamChecklist: [], contentPipeline: [] };
       draft.profile.name = profileName.trim();
       draft.profile.height = Number(profileHeight) || 170;
       draft.profile.bodyCompositionSex = profileBodySex || null;
@@ -113,17 +178,70 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
     });
   };
 
-  const handleResetData = () => {
-    const scope = cloudConnected
-      ? 'Se guardará una copia de recuperación y el reinicio se sincronizará con tus otros dispositivos.'
-      : 'Se guardará una copia local de recuperación.';
-    if (confirm(`⚠️ ¿Estás seguro de reiniciar TODOS tus datos? ${scope}`)) {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const summary = inspectBackupJSON(text);
+        setImportPreview(summary);
+        setImportFileName(file.name);
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Error al validar el archivo JSON de backup.', 'error');
+      } finally {
+        e.target.value = '';
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleConfirmImport = () => {
+    if (!importPreview) return;
+    if (onImportState) {
+      onImportState(importPreview.state, `Previo a importar ${importFileName || 'backup'}`);
+    } else {
+      saveRecoveryState(state, storageUserId, 'import_backup', `Previo a importar ${importFileName || 'backup'}`);
+      onUpdateState((draft) => {
+        Object.assign(draft, importPreview.state);
+      });
+      showToast('Backup importado correctamente. Copia anterior guardada en recuperación.', 'success');
+    }
+    setImportPreview(null);
+  };
+
+  const handleConfirmReset = () => {
+    if (onResetData) {
+      onResetData();
+    } else {
+      saveRecoveryState(state, storageUserId, 'reset_data', 'Previo a reiniciar datos a valores de fábrica');
       const def = defaultState();
       onUpdateState((draft) => {
         Object.assign(draft, def);
       });
-      showToast('Datos reiniciados a los valores por defecto.', 'info');
+      showToast('Datos reiniciados a los valores por defecto. Copia anterior guardada en recuperación.', 'info');
     }
+    setIsResetModalOpen(false);
+  };
+
+  const handleConfirmRestoreRecovery = () => {
+    if (onRestoreRecovery) {
+      onRestoreRecovery();
+    } else {
+      const rec = loadRecoveryState(storageUserId);
+      if (!rec) {
+        showToast('No se encontró copia de recuperación.', 'error');
+        return;
+      }
+      saveRecoveryState(state, storageUserId, 'manual_snapshot', 'Previo a restaurar copia de recuperación');
+      onUpdateState((draft) => {
+        Object.assign(draft, rec.state);
+      });
+      showToast('Copia de recuperación restaurada con éxito.', 'success');
+    }
+    setIsRestoreModalOpen(false);
   };
 
   const syncStatusMeta = (() => {
@@ -232,6 +350,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                   <button
                     type="button"
                     onClick={onForceSync}
+                    title="Envía los cambios locales pendientes y reconcilia con la nube"
                     className="flex items-center gap-1.5 px-3.5 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs"
                   >
                     <AppIcon name="rotateCcw" className="h-3.5 w-3.5" />
@@ -248,6 +367,12 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                   </button>
                 )}
               </div>
+              {cloudUser && syncStatus === 'offline' && (
+                <div className="p-2.5 rounded-lg bg-[var(--surface-muted)] border border-[var(--border)] text-[11px] text-[var(--text-soft)] flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" />
+                  <span>Sin conexión a internet. Los cambios se guardan localmente y se sincronizarán al reconectar.</span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -295,133 +420,146 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {/* Tarjeta Finanzas */}
-          <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <AppIcon name="wallet" className="h-4 w-4 text-[var(--emerald)]" />
-                <h3 className="text-xs font-bold text-[var(--text)]">Consistencia de Finanzas</h3>
+        {(() => {
+          const isGymHidden = isModuleHidden(state, 'gimnasio');
+          const shouldShowGymAudit = !isGymHidden || staleGymCount > 0;
+
+          return (
+            <div className={`grid grid-cols-1 ${shouldShowGymAudit ? 'md:grid-cols-2' : ''} gap-3`}>
+              {/* Tarjeta Finanzas */}
+              <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AppIcon name="wallet" className="h-4 w-4 text-[var(--emerald)]" />
+                    <h3 className="text-xs font-bold text-[var(--text)]">Consistencia de Finanzas</h3>
+                  </div>
+                  {Math.abs(balanceDifference) < 0.01 ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      Libro Mayor Íntegro
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse">
+                      Divergencia Detectada
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 rounded-lg bg-[var(--surface-muted)]">
+                    <span className="block text-[10px] font-semibold text-[var(--text-faint)] uppercase">Saldo Cuentas</span>
+                    <span className="font-mono font-bold text-[var(--text)]">
+                      <PrivacyAmount>${totalAccountBalance.toLocaleString('es-UY', { minimumFractionDigits: 2 })}</PrivacyAmount>
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-[var(--surface-muted)]">
+                    <span className="block text-[10px] font-semibold text-[var(--text-faint)] uppercase">Libro Mayor Cerrado</span>
+                    <span className="font-mono font-bold text-[var(--text)]">
+                      <PrivacyAmount>${ledgerTotalBalance.toLocaleString('es-UY', { minimumFractionDigits: 2 })}</PrivacyAmount>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-[var(--text-soft)] space-y-1">
+                  <div className="flex justify-between">
+                    <span>Transacciones registradas:</span>
+                    <strong className="text-[var(--text)]">{state.finance?.transactions?.length || 0}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Transferencias registradas:</span>
+                    <strong className="text-[var(--text)]">{state.finance?.transfers?.length || 0}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Conciliaciones / Arqueos:</span>
+                    <strong className="text-[var(--text)]">{state.finance?.reconciliations?.length || 0}</strong>
+                  </div>
+                </div>
+
+                {Math.abs(balanceDifference) > 0.01 && (
+                  <div className="pt-2 border-t border-[var(--border)] space-y-2">
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400">
+                      Existe una diferencia de <strong><PrivacyAmount>${balanceDifference.toLocaleString('es-UY', { minimumFractionDigits: 2 })} UYU</PrivacyAmount></strong> entre los saldos locales en caché y el libro contable inmutable.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleOpenRepairModal}
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-2xs"
+                    >
+                      <AppIcon name="rotateCcw" className="h-3.5 w-3.5" />
+                      <span>Auditar y Reparar Saldos con Libro Mayor</span>
+                    </button>
+                  </div>
+                )}
+                {Math.abs(balanceDifference) <= 0.01 && (
+                  <div className="pt-2 border-t border-[var(--border)]">
+                    <button
+                      type="button"
+                      onClick={handleOpenRepairModal}
+                      className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] font-medium text-xs rounded-xl transition-all cursor-pointer"
+                    >
+                      <AppIcon name="check" className="h-3.5 w-3.5 text-emerald-500" />
+                      <span>Recalcular libro mayor</span>
+                    </button>
+                  </div>
+                )}
               </div>
-              {Math.abs(balanceDifference) < 0.01 ? (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  Libro Mayor Íntegro
-                </span>
-              ) : (
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse">
-                  Divergencia Detectada
-                </span>
+
+              {/* Tarjeta Gimnasio */}
+              {shouldShowGymAudit && (
+                <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <AppIcon name="dumbbell" className="h-4 w-4 text-[var(--purple)]" />
+                      <h3 className="text-xs font-bold text-[var(--text)]">Consistencia de Gimnasio</h3>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[var(--surface-muted)] text-[var(--text-soft)] border border-[var(--border)]">
+                      {sortedGymSessions.length} sesiones
+                    </span>
+                  </div>
+
+                  <div className="text-xs space-y-2">
+                    <div className="p-2.5 rounded-lg bg-[var(--surface-muted)]">
+                      <span className="block text-[10px] font-semibold text-[var(--text-faint)] uppercase">Última rutina registrada</span>
+                      <span className="font-semibold text-[var(--text)]">
+                        {latestCompletedGym ? (
+                          <>
+                            {fmtDate(latestCompletedGym.date)} · <span className="text-[var(--text-soft)]">{latestCompletedGym.routineName}</span>
+                          </>
+                        ) : (
+                          'Sin sesiones aún'
+                        )}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-[var(--text-soft)] space-y-1">
+                    <div className="flex justify-between">
+                      <span>Sesiones completadas:</span>
+                      <strong className="text-[var(--text)]">{sortedGymSessions.filter((s) => s.status === 'completed').length}</strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Sesión activa de hoy:</span>
+                      <strong className="text-[var(--text)]">
+                        {sortedGymSessions.some((s) => s.date === todayISO() && s.status === 'active') ? 'Sí (en curso)' : 'Ninguna'}
+                      </strong>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Sesiones huérfanas de días anteriores:</span>
+                      <strong className={staleGymCount > 0 ? 'text-amber-500 font-bold' : 'text-[var(--text)]'}>
+                        {staleGymCount}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {staleGymCount > 0 && (
+                    <div className="pt-2 border-t border-[var(--border)] text-[11px] text-amber-600 dark:text-amber-400">
+                      Las sesiones incompletas de días previos están aisladas y no bloquean los entrenamientos de hoy.
+                    </div>
+                  )}
+                </div>
               )}
             </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="p-2.5 rounded-lg bg-[var(--surface-muted)]">
-                <span className="block text-[10px] font-semibold text-[var(--text-faint)] uppercase">Saldo Cuentas</span>
-                <span className="font-mono font-bold text-[var(--text)]">${totalAccountBalance.toLocaleString('es-UY', { minimumFractionDigits: 2 })}</span>
-              </div>
-              <div className="p-2.5 rounded-lg bg-[var(--surface-muted)]">
-                <span className="block text-[10px] font-semibold text-[var(--text-faint)] uppercase">Libro Mayor Cerrado</span>
-                <span className="font-mono font-bold text-[var(--text)]">${ledgerTotalBalance.toLocaleString('es-UY', { minimumFractionDigits: 2 })}</span>
-              </div>
-            </div>
-
-            <div className="text-[11px] text-[var(--text-soft)] space-y-1">
-              <div className="flex justify-between">
-                <span>Transacciones registradas:</span>
-                <strong className="text-[var(--text)]">{state.finance?.transactions?.length || 0}</strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Transferencias registradas:</span>
-                <strong className="text-[var(--text)]">{state.finance?.transfers?.length || 0}</strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Conciliaciones / Arqueos:</span>
-                <strong className="text-[var(--text)]">{state.finance?.reconciliations?.length || 0}</strong>
-              </div>
-            </div>
-
-            {Math.abs(balanceDifference) > 0.01 && (
-              <div className="pt-2 border-t border-[var(--border)] space-y-2">
-                <p className="text-[11px] text-amber-600 dark:text-amber-400">
-                  Existe una diferencia de <strong>${balanceDifference.toLocaleString('es-UY', { minimumFractionDigits: 2 })} UYU</strong> entre los saldos locales en caché y el libro contable inmutable.
-                </p>
-                <button
-                  type="button"
-                  onClick={handleRepairFinanceBalances}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-2xs"
-                >
-                  <AppIcon name="rotateCcw" className="h-3.5 w-3.5" />
-                  <span>Auditar y Reparar Saldos con Libro Mayor</span>
-                </button>
-              </div>
-            )}
-            {Math.abs(balanceDifference) <= 0.01 && (
-              <div className="pt-2 border-t border-[var(--border)]">
-                <button
-                  type="button"
-                  onClick={handleRepairFinanceBalances}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] font-medium text-xs rounded-xl transition-all cursor-pointer"
-                >
-                  <AppIcon name="check" className="h-3.5 w-3.5 text-emerald-500" />
-                  <span>Recalcular libro mayor</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Tarjeta Gimnasio */}
-          <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <AppIcon name="dumbbell" className="h-4 w-4 text-[var(--purple)]" />
-                <h3 className="text-xs font-bold text-[var(--text)]">Consistencia de Gimnasio</h3>
-              </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[var(--surface-muted)] text-[var(--text-soft)] border border-[var(--border)]">
-                {sortedGymSessions.length} sesiones
-              </span>
-            </div>
-
-            <div className="text-xs space-y-2">
-              <div className="p-2.5 rounded-lg bg-[var(--surface-muted)]">
-                <span className="block text-[10px] font-semibold text-[var(--text-faint)] uppercase">Última rutina registrada</span>
-                <span className="font-semibold text-[var(--text)]">
-                  {latestCompletedGym ? (
-                    <>
-                      {fmtDate(latestCompletedGym.date)} · <span className="text-[var(--text-soft)]">{latestCompletedGym.routineName}</span>
-                    </>
-                  ) : (
-                    'Sin sesiones aún'
-                  )}
-                </span>
-              </div>
-            </div>
-
-            <div className="text-[11px] text-[var(--text-soft)] space-y-1">
-              <div className="flex justify-between">
-                <span>Sesiones completadas:</span>
-                <strong className="text-[var(--text)]">{sortedGymSessions.filter((s) => s.status === 'completed').length}</strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Sesión activa de hoy:</span>
-                <strong className="text-[var(--text)]">
-                  {sortedGymSessions.some((s) => s.date === todayISO() && s.status === 'active') ? 'Sí (en curso)' : 'Ninguna'}
-                </strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Sesiones huérfanas de días anteriores:</span>
-                <strong className={staleGymCount > 0 ? 'text-amber-500 font-bold' : 'text-[var(--text)]'}>
-                  {staleGymCount}
-                </strong>
-              </div>
-            </div>
-
-            {staleGymCount > 0 && (
-              <div className="pt-2 border-t border-[var(--border)] text-[11px] text-amber-600 dark:text-amber-400">
-                Las sesiones incompletas de días previos están aisladas y no bloquean los entrenamientos de hoy.
-              </div>
-            )}
-          </div>
-        </div>
+          );
+        })()}
       </div>
 
       <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-3">
@@ -584,6 +722,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
         <div className="flex flex-wrap gap-3">
           <button
+            type="button"
             onClick={onExportJSON}
             className="flex items-center gap-1.5 px-4 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs"
           >
@@ -597,15 +736,39 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
             <input
               type="file"
               accept=".json"
-              onChange={onImportJSON}
+              onChange={handleFileChange}
               className="hidden"
             />
           </label>
         </div>
 
+        {/* Slot de recuperación disponible */}
+        {recoveryInfo && (
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <AppIcon name="shield" className="h-4 w-4 text-emerald-500" />
+                <h3 className="text-xs font-bold text-[var(--text)]">Copia de Seguridad de Emergencia Disponible</h3>
+              </div>
+              <p className="text-[11px] text-[var(--text-soft)]">
+                Guardada: {recoveryInfo.meta?.savedAt ? new Date(recoveryInfo.meta.savedAt).toLocaleString('es-UY') : 'Reciente'} · Motivo: {recoveryInfo.meta?.description || recoveryInfo.meta?.action || 'Snapshot preventivo'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsRestoreModalOpen(true)}
+              className="shrink-0 flex items-center justify-center gap-1.5 px-3.5 py-2 bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-xs font-bold rounded-xl text-[var(--text)] cursor-pointer transition-colors shadow-2xs"
+            >
+              <AppIcon name="rotateCcw" className="h-3.5 w-3.5 text-[var(--blue)]" />
+              <span>Restaurar Copia de Recuperación</span>
+            </button>
+          </div>
+        )}
+
         <div className="pt-4 border-t border-[var(--border)]">
           <button
-            onClick={handleResetData}
+            type="button"
+            onClick={() => setIsResetModalOpen(true)}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-bold rounded-xl hover:bg-red-500/20 cursor-pointer transition-colors shadow-2xs"
           >
             <AppIcon name="shield" className="h-3.5 w-3.5" />
@@ -613,6 +776,296 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Modal 1: Vista Previa de Importación */}
+      {importPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <AppIcon name="cloud" className="h-5 w-5 text-[var(--blue)]" />
+                  <h3 className="text-base font-bold text-[var(--text)]">Vista Previa de Importación</h3>
+                </div>
+                <p className="text-xs text-[var(--text-soft)]">
+                  Archivo seleccionado: <strong className="text-[var(--text)] font-mono">{importFileName}</strong>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setImportPreview(null)}
+                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-[var(--surface-muted)] rounded-xl p-3 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-[var(--text-soft)]">Perfil en backup:</span>
+                <strong className="text-[var(--text)]">{importPreview.profileName || 'No especificado'}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--text-soft)]">Versión de esquema:</span>
+                <strong className="text-[var(--text)]">v{importPreview.schemaVersion}</strong>
+              </div>
+              {importPreview.backupDate && (
+                <div className="flex justify-between">
+                  <span className="text-[var(--text-soft)]">Fecha de exportación:</span>
+                  <strong className="text-[var(--text)]">{importPreview.backupDate}</strong>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <h4 className="text-xs font-bold text-[var(--text)] uppercase tracking-wider">Entidades a importar:</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                <div className="p-2 rounded-lg bg-[var(--surface-muted)] flex justify-between">
+                  <span className="text-[var(--text-soft)]">Tareas:</span>
+                  <strong className="text-[var(--text)]">{importPreview.tasksCount}</strong>
+                </div>
+                <div className="p-2 rounded-lg bg-[var(--surface-muted)] flex justify-between">
+                  <span className="text-[var(--text-soft)]">Transacciones:</span>
+                  <strong className="text-[var(--text)]">{importPreview.transactionsCount}</strong>
+                </div>
+                <div className="p-2 rounded-lg bg-[var(--surface-muted)] flex justify-between">
+                  <span className="text-[var(--text-soft)]">Cuentas:</span>
+                  <strong className="text-[var(--text)]">{importPreview.accountsCount}</strong>
+                </div>
+                <div className="p-2 rounded-lg bg-[var(--surface-muted)] flex justify-between">
+                  <span className="text-[var(--text-soft)]">Sesiones Gym:</span>
+                  <strong className="text-[var(--text)]">{importPreview.gymSessionsCount}</strong>
+                </div>
+                <div className="p-2 rounded-lg bg-[var(--surface-muted)] flex justify-between">
+                  <span className="text-[var(--text-soft)]">Notas:</span>
+                  <strong className="text-[var(--text)]">{importPreview.notesCount}</strong>
+                </div>
+              </div>
+            </div>
+
+            {importPreview.warnings.length > 0 && (
+              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs space-y-1">
+                <div className="flex items-center gap-1.5 font-bold">
+                  <AppIcon name="shield" className="h-4 w-4" />
+                  <span>Avisos de compatibilidad</span>
+                </div>
+                <ul className="list-disc list-inside space-y-0.5 text-[11px]">
+                  {importPreview.warnings.map((w, idx) => (
+                    <li key={idx}>{w}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-[var(--text-soft)] flex items-start gap-2">
+              <AppIcon name="shield" className="h-4 w-4 text-[var(--blue)] shrink-0 mt-0.5" />
+              <span>
+                Al confirmar, tus datos actuales se guardarán automáticamente en una copia de recuperación de emergencia antes de aplicar el nuevo archivo.
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[var(--border)]">
+              <button
+                type="button"
+                onClick={() => setImportPreview(null)}
+                className="px-4 py-2 border border-[var(--border)] text-xs font-semibold rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmImport}
+                className="px-4 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl cursor-pointer shadow-2xs"
+              >
+                Confirmar y Reemplazar Datos
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 2: Confirmar Reinicio de Datos */}
+      {isResetModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400">
+                <AppIcon name="shield" className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-[var(--text)]">Reiniciar Datos por Defecto</h3>
+                <p className="text-xs text-[var(--text-soft)]">Operación destructiva</p>
+              </div>
+            </div>
+
+            <div className="text-xs text-[var(--text-soft)] space-y-2">
+              <p>
+                Esta acción reemplazará todas las tareas, finanzas, notas y registros de este dispositivo por el estado inicial en blanco de LifeOS.
+              </p>
+              <ul className="space-y-1 text-[11px] list-disc list-inside">
+                <li>Tu sesión de Google <strong>no</strong> se cerrará.</li>
+                <li>Se guardará un snapshot de emergencia previo al reinicio.</li>
+                <li>Si estás conectado a la nube, los datos limpios se propagarán a tus otros dispositivos.</li>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[var(--border)]">
+              <button
+                type="button"
+                onClick={() => setIsResetModalOpen(false)}
+                className="px-4 py-2 border border-[var(--border)] text-xs font-semibold rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmReset}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl cursor-pointer shadow-2xs"
+              >
+                Sí, Reiniciar Todo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 3: Confirmar Restauración de Copia de Recuperación */}
+      {isRestoreModalOpen && recoveryInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <AppIcon name="rotateCcw" className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-[var(--text)]">Restaurar Copia de Recuperación</h3>
+                <p className="text-xs text-[var(--text-soft)]">Recuperación de emergencia</p>
+              </div>
+            </div>
+
+            <div className="bg-[var(--surface-muted)] rounded-xl p-3 text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-[var(--text-soft)]">Fecha de captura:</span>
+                <strong className="text-[var(--text)]">
+                  {recoveryInfo.meta?.savedAt ? new Date(recoveryInfo.meta.savedAt).toLocaleString('es-UY') : 'Desconocida'}
+                </strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--text-soft)]">Motivo registrado:</span>
+                <strong className="text-[var(--text)]">
+                  {recoveryInfo.meta?.description || recoveryInfo.meta?.action || 'Manual'}
+                </strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[var(--text-soft)]">Versión de esquema:</span>
+                <strong className="text-[var(--text)]">v{recoveryInfo.meta?.schemaVersion || CURRENT_SCHEMA_VERSION}</strong>
+              </div>
+            </div>
+
+            <p className="text-xs text-[var(--text-soft)]">
+              Al restaurar, el estado actual de tus datos se respaldará primero para que siempre puedas revertir si fue un error.
+            </p>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[var(--border)]">
+              <button
+                type="button"
+                onClick={() => setIsRestoreModalOpen(false)}
+                className="px-4 py-2 border border-[var(--border)] text-xs font-semibold rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRestoreRecovery}
+                className="px-4 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl cursor-pointer shadow-2xs"
+              >
+                Restaurar Copia
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 4: Reparación de Saldos */}
+      {isRepairModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <AppIcon name="wallet" className="h-5 w-5 text-amber-500" />
+                  <h3 className="text-base font-bold text-[var(--text)]">Auditoría y Reparación de Saldos</h3>
+                </div>
+                <p className="text-xs text-[var(--text-soft)]">
+                  Se detectaron discrepancias entre el saldo de las cuentas y el libro contable cerrado.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsRepairModalOpen(false)}
+                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {accountDiffs.map((diff) => {
+                const diffAmount = Math.round((diff.computedBalance - diff.currentBalance) * 100) / 100;
+                return (
+                  <div key={diff.id} className="p-3 rounded-xl bg-[var(--surface-muted)] text-xs space-y-1">
+                    <div className="font-bold text-[var(--text)]">{diff.name}</div>
+                    <div className="grid grid-cols-3 gap-2 text-[11px]">
+                      <div>
+                        <span className="text-[var(--text-faint)] block">Saldo actual:</span>
+                        <strong className="text-[var(--text)]">
+                          <PrivacyAmount>${diff.currentBalance.toLocaleString('es-UY', { minimumFractionDigits: 2 })}</PrivacyAmount>
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[var(--text-faint)] block">Libro contable:</span>
+                        <strong className="text-emerald-600 dark:text-emerald-400">
+                          <PrivacyAmount>${diff.computedBalance.toLocaleString('es-UY', { minimumFractionDigits: 2 })}</PrivacyAmount>
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[var(--text-faint)] block">Ajuste:</span>
+                        <strong className={diffAmount >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
+                          <PrivacyAmount>{diffAmount >= 0 ? `+${diffAmount.toLocaleString('es-UY', { minimumFractionDigits: 2 })}` : diffAmount.toLocaleString('es-UY', { minimumFractionDigits: 2 })}</PrivacyAmount>
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-[var(--text-soft)] flex items-start gap-2">
+              <AppIcon name="shield" className="h-4 w-4 text-[var(--blue)] shrink-0 mt-0.5" />
+              <span>
+                Antes de aplicar la corrección de saldos, LifeOS guardará automáticamente una copia en recuperación.
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[var(--border)]">
+              <button
+                type="button"
+                onClick={() => setIsRepairModalOpen(false)}
+                className="px-4 py-2 border border-[var(--border)] text-xs font-semibold rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRepairBalances}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl cursor-pointer shadow-2xs"
+              >
+                Aplicar Reparación de Saldos
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

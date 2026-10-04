@@ -39,6 +39,58 @@ export interface ParsedQuickFinance {
   isAmbiguous?: boolean;
 }
 
+export const SPANISH_MONTHS: Record<string, number> = {
+  enero: 1,
+  febrero: 2,
+  marzo: 3,
+  abril: 4,
+  mayo: 5,
+  junio: 6,
+  julio: 7,
+  agosto: 8,
+  septiembre: 9,
+  setiembre: 9,
+  octubre: 10,
+  noviembre: 11,
+  diciembre: 12,
+  ene: 1,
+  feb: 2,
+  mar: 3,
+  abr: 4,
+  may: 5,
+  jun: 6,
+  jul: 7,
+  ago: 8,
+  sep: 9,
+  set: 9,
+  oct: 10,
+  nov: 11,
+  dic: 12,
+};
+
+export const SPANISH_MONTH_NAMES = [
+  '',
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
+];
+
+export function isValidCalendarDate(year: number, month: number, day: number): boolean {
+  if (month < 1 || month > 12) return false;
+  if (day < 1 || day > 31) return false;
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day;
+}
+
 export const DEFAULT_CATEGORY_KEYWORDS: Record<string, string[]> = {
   Comida: [
     'comida', 'almuerzo', 'cena', 'desayuno', 'merienda', 'vianda', 'delivery',
@@ -240,6 +292,29 @@ export function parseQuickFinance(
     };
   }
 
+  // Reject future obligations/debts (e.g. "Debo 5939 pesos a Jorge pagar el 25 de septiembre")
+  const isObligation =
+    /\b(?:debo|le\s+debo|deuda(?:\s+de)?|adeudo|por\s+pagar|a\s+pagar|compromiso\s+de\s+pago)\b/i.test(raw) ||
+    /\b(?:tengo\s+que|hay\s+que|deber[ií]a)\s+pagar\b/i.test(raw);
+  if (isObligation && !/^(?:gast[eé]|pagu[eé]|compr[eé]|cobr[eé])\b/i.test(raw)) {
+    return {
+      raw,
+      isValid: false,
+      amount: null,
+      type: 'gasto',
+      category: null,
+      categoryMatched: null,
+      accountId: null,
+      accountName: null,
+      date: today,
+      dateLabel: 'Hoy',
+      note: raw,
+      preview: 'Obligación o deuda pendiente (no es un gasto realizado)',
+      missing: ['amount'],
+      confidence: { amount: false, category: false, account: false },
+    };
+  }
+
   // 1. Detect Currency
   let currency = 'UYU';
   let isCurrencyIncompatible = false;
@@ -275,24 +350,43 @@ export function parseQuickFinance(
   const cuotasRegex = /\b(\d+)\s+cuotas?\b/gi;
   processed = processed.replace(cuotasRegex, ' ');
 
-  // 5. Extract Date BEFORE Amount (so slashed dates like 15/09 are not eaten as amount 15)
+  // 5. Extract Date BEFORE Amount (so explicit dates like "25 de octubre" or "15/09" are not eaten as amounts)
   let targetDate = today;
   let dateLabel = 'Hoy';
 
-  // Slashed dates: 15/09, 15/9, 15/09/2026
-  const slashedDateRegex = /\b([0-3]?\d)\/([0-1]?\d)(?:\/(\d{2,4}))?\b/;
-  const slashedMatch = processed.match(slashedDateRegex);
-  if (slashedMatch) {
-    const day = parseInt(slashedMatch[1], 10);
-    const month = parseInt(slashedMatch[2], 10);
-    const year = slashedMatch[3] ? parseInt(slashedMatch[3], 10) : new Date(today + 'T00:00:00').getFullYear();
-    const fullYear = year < 100 ? 2000 + year : year;
-    const formattedMonth = String(month).padStart(2, '0');
-    const formattedDay = String(day).padStart(2, '0');
-    targetDate = `${fullYear}-${formattedMonth}-${formattedDay}`;
-    dateLabel = `${formattedDay}/${formattedMonth}`;
-    processed = processed.replace(slashedMatch[0], ' ');
+  // Explicit month dates: "25 de octubre", "el 25 de octubre", "25 de octubre de 2026", "25 de oct"
+  const explicitMonthRegex = /(?:\b(?:el|para\s+el|del?|el\s+d[ií]a)\s+)?\b([0-3]?\d)\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|ene|feb|mar|abr|may|jun|jul|ago|sep|set|oct|nov|dic)\b(?:\s+(?:del?|de)\s+(\d{4})|\s+([2][0-9]{3}))?/i;
+  const explicitMatch = processed.match(explicitMonthRegex);
+  if (explicitMatch) {
+    const day = parseInt(explicitMatch[1], 10);
+    const monthKey = explicitMatch[2].toLowerCase();
+    const month = SPANISH_MONTHS[monthKey];
+    const rawYear = explicitMatch[3] || explicitMatch[4];
+    const refYear = new Date(today + 'T00:00:00').getFullYear();
+    const year = rawYear ? parseInt(rawYear, 10) : refYear;
+
+    if (month && isValidCalendarDate(year, month, day)) {
+      const formattedMonth = String(month).padStart(2, '0');
+      const formattedDay = String(day).padStart(2, '0');
+      targetDate = `${year}-${formattedMonth}-${formattedDay}`;
+      dateLabel = rawYear ? `${day} de ${SPANISH_MONTH_NAMES[month]} de ${year}` : `${day} de ${SPANISH_MONTH_NAMES[month]}`;
+      processed = processed.replace(explicitMatch[0], ' ');
+    }
   } else {
+    // Slashed dates: 15/09, 15/9, 15/09/2026
+    const slashedDateRegex = /\b([0-3]?\d)\/([0-1]?\d)(?:\/(\d{2,4}))?\b/;
+    const slashedMatch = processed.match(slashedDateRegex);
+    if (slashedMatch) {
+      const day = parseInt(slashedMatch[1], 10);
+      const month = parseInt(slashedMatch[2], 10);
+      const year = slashedMatch[3] ? parseInt(slashedMatch[3], 10) : new Date(today + 'T00:00:00').getFullYear();
+      const fullYear = year < 100 ? 2000 + year : year;
+      const formattedMonth = String(month).padStart(2, '0');
+      const formattedDay = String(day).padStart(2, '0');
+      targetDate = `${fullYear}-${formattedMonth}-${formattedDay}`;
+      dateLabel = `${formattedDay}/${formattedMonth}`;
+      processed = processed.replace(slashedMatch[0], ' ');
+    } else {
     const normalizedText = normalize(processed);
     if (/\b(ayer)\b/.test(normalizedText)) {
       targetDate = computeRelativeDate(today, -1);
@@ -335,6 +429,7 @@ export function parseQuickFinance(
       }
     }
   }
+}
 
   // 6. Extract Amount (with explicit policy and unit protection)
   const MEASUREMENT_UNITS_SUFFIX = /^\s*(?:horas?|hs?\b|h\b|minutos?|mins?\b|min\b|segundos?|segs?\b|s\b|d[ií]as?|semanas?|meses|a[ñn]os?|km|kms?|kil[oó]metros?|metros?|m\b|cm\b|cent[ií]metros?|mm\b|millas?|kg|kgs?|kilos?|kilogramos?|gramos?|g\b|lbs?|libras?|reps?\b|repeticiones|series?\b|sets?\b|vueltas?|flexiones|caps?\b|c[aá]psulas?|pastillas?|gotas?|dosis|gb\b|mb\b|tb\b|kb\b|fps\b|hz\b|ghz\b|mhz\b|%|por ciento|pts?\b|puntos|p[aá]ginas?|p[aá]gs?\b|cap[ií]tulos?|episodios?|canciones?|art[ií]culos?|videos?)\b/i;

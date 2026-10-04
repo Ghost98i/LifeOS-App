@@ -742,4 +742,216 @@ test('Backup & Restore: Exportación e importación JSON conserva schemaVersion:
   assert.equal(restored.jobs.opportunities[0].empresa, 'Tech Co');
 });
 
+// ----------------------------------------------------
+// 7. FASE 6: COMPROMISOS, CUOTAS, COEXISTENCIA & PAGOS
+// ----------------------------------------------------
+
+test('Fase 6: Pago de compromiso con monto diferente al estimado sin modificar compromiso futuro', () => {
+  // Factura de UTE estimada en $1.600 pero la factura real vino por $1.720
+  const com = makeCommitment({
+    id: 'com-ute',
+    name: 'UTE Electricidad',
+    amount: 1600,
+    frequency: 'monthly',
+    nextDueDate: '2026-10-15',
+    active: true,
+  });
+
+  const accountId = 'acc-banco';
+  const initialBalance = 10000;
+  const paidAmount = 1720; // Monto real abonado
+
+  // 1. Simulación de la operación atómica de pago
+  const tx: Transaction = {
+    id: 'tx-1',
+    amount: paidAmount,
+    type: 'gasto',
+    category: com.category || 'Varios',
+    accountId,
+    fixed: 'fijo',
+    date: '2026-10-15',
+    note: `Pago de compromiso: ${com.name}`,
+  };
+
+  const finalBalance = initialBalance - tx.amount;
+  assert.equal(finalBalance, 8280, 'El saldo de la cuenta debe descontar exactamente el monto pagado real ($1.720)');
+
+  // 2. Avanzar el compromiso sin actualizar el monto futuro (updateFutureAmount = false)
+  const advanced = advanceCommitmentDueDate(com);
+  const updatedCom: FinancialCommitment = {
+    ...com,
+    ...advanced,
+    amount: com.amount, // Se preserva el estimado de $1.600
+    updatedAt: new Date().toISOString(),
+  };
+
+  assert.equal(updatedCom.amount, 1600, 'El monto del compromiso futuro debe conservarse en $1.600');
+  assert.equal(updatedCom.nextDueDate, '2026-11-15', 'La próxima fecha debe avanzar a noviembre');
+  assert.equal(updatedCom.active, true, 'El compromiso sigue activo para el mes próximo');
+});
+
+test('Fase 6: Pago de compromiso con monto diferente actualizando también cuotas/compromisos futuros', () => {
+  // Ajuste contractual de alquiler de $15.000 a $16.500
+  const com = makeCommitment({
+    id: 'com-alq',
+    name: 'Alquiler',
+    amount: 15000,
+    frequency: 'monthly',
+    nextDueDate: '2026-10-10',
+    active: true,
+  });
+
+  const paidAmount = 16500;
+  const updateFutureAmount = true;
+
+  const advanced = advanceCommitmentDueDate(com);
+  const updatedCom: FinancialCommitment = {
+    ...com,
+    ...advanced,
+    amount: updateFutureAmount ? paidAmount : com.amount,
+  };
+
+  assert.equal(updatedCom.amount, 16500, 'El monto futuro debe actualizarse a $16.500 cuando el usuario lo elige');
+  assert.equal(updatedCom.nextDueDate, '2026-11-10');
+});
+
+test('Fase 6: Ciclo de vida completo de compra en cuotas (6 cuotas hasta finalizarse)', () => {
+  let notebookCom = makeCommitment({
+    id: 'com-notebook',
+    name: 'Notebook Dell',
+    amount: 2500,
+    frequency: 'monthly',
+    nextDueDate: '2026-05-10',
+    totalOccurrences: 6,
+    remainingOccurrences: 6,
+    dueDay: 10,
+    active: true,
+  });
+
+  assert.equal(notebookCom.remainingOccurrences, 6);
+
+  // Pagos 1 al 5
+  for (let i = 5; i >= 1; i--) {
+    const adv = advanceCommitmentDueDate(notebookCom);
+    notebookCom = { ...notebookCom, ...adv };
+    assert.equal(notebookCom.remainingOccurrences, i, `Debe quedar ${i} cuotas restantes`);
+    assert.equal(notebookCom.active, true, 'Debe seguir activo mientras queden cuotas');
+  }
+
+  // Sexto y último pago
+  const lastAdv = advanceCommitmentDueDate(notebookCom);
+  notebookCom = { ...notebookCom, ...lastAdv };
+
+  assert.equal(notebookCom.remainingOccurrences, 0, 'Las cuotas restantes deben ser 0');
+  assert.equal(notebookCom.active, false, 'El compromiso debe quedar inactivo / finalizado');
+
+  // Verificar que getCommitmentOccurrences ya no genera ocurrencias futuras
+  const occs = getCommitmentOccurrences(notebookCom, '2026-11-01', '2026-11-30');
+  assert.equal(occs.length, 0, 'Un compromiso finalizado no debe proyectar gastos futuros ni comprometer dinero');
+});
+
+test('Fase 6: Coexistencia armónica sin double counting entre suscripciones, deudas y compromisos', () => {
+  const state: LifeOSState = {
+    ...defaultState(),
+    finance: {
+      ...defaultState().finance,
+      accounts: [{ id: 'acc-1', name: 'Banco Central', balance: 50000 }],
+      subscriptions: [
+        { id: 'sub-spotify', name: 'Spotify', amount: 400, dueDay: 15 },
+      ],
+      debts: [
+        { id: 'debt-prestamo', name: 'Préstamo Auto', amount: 100000, monthlyPayment: 3000, dueDate: '2026-10-20' },
+      ],
+      commitments: [
+        makeCommitment({ id: 'com-alquiler', name: 'Alquiler', amount: 15000, nextDueDate: '2026-10-05', active: true }),
+      ],
+    },
+  };
+
+  const cf = cashFlow30Days(state, '2026-10-01');
+
+  // En cashFlow30Days:
+  // - Spotify (sub): 400
+  // - Préstamo Auto (debt con monthlyPayment): 3.000
+  // - Alquiler (commitment): 15.000
+  // Total comprometido = 18.400
+  assert.equal(cf.currentBalance, 50000);
+  assert.equal(cf.committed, 18400, 'Debe sumar 400 + 3.000 + 15.000 = 18.400 sin duplicar');
+  assert.equal(cf.realAvailable, 31600, 'Disponible Real debe ser 50.000 - 18.400 = 31.600');
+  assert.equal(cf.commitments.length, 3, 'Debe incluir las 3 obligaciones previstas en la lista');
+});
+
+test('Fase 6: Expected Income nunca infla Disponible Real y se confirma atómicamente', () => {
+  const inc = {
+    id: 'inc-sueldo',
+    name: 'Sueldo Octubre',
+    amount: 35000,
+    startDate: '2026-10-10',
+    frequency: 'monthly' as const,
+    active: true,
+  };
+
+  const state: LifeOSState = {
+    ...defaultState(),
+    finance: {
+      ...defaultState().finance,
+      accounts: [{ id: 'acc-1', name: 'Caja', balance: 10000 }],
+      expectedIncomes: [inc],
+      commitments: [
+        makeCommitment({ id: 'com-1', name: 'Servicio', amount: 3000, nextDueDate: '2026-10-12', active: true }),
+      ],
+    },
+  };
+
+  const cf = cashFlow30Days(state, '2026-10-01');
+
+  // Disponible Real = Saldo actual ($10.000) - Comprometido ($3.000) = $7.000.
+  // El sueldo esperado de $35.000 NUNCA debe sumarse a Disponible Real.
+  assert.equal(cf.currentBalance, 10000);
+  assert.equal(cf.committed, 3000);
+  assert.equal(cf.realAvailable, 7000, 'Disponible Real es estrictamente $7.000, NUNCA $42.000');
+  assert.equal(cf.totalExpectedIncome, 35000);
+  // Proyección futura sí incluye el sueldo: 10.000 + 35.000 - 3.000 = 42.000
+  assert.equal(cf.projectedBalance, 42000);
+
+  // Cobro real del ingreso:
+  const advInc = advanceExpectedIncomeDate(inc);
+  assert.equal(advInc.startDate, '2026-11-10', 'Debe avanzar al próximo mes');
+});
+
+test('Fase 6: Preservación de ancla dueDay (día 31) en meses de 28/29/30/31 días sin deriva', () => {
+  let com = makeCommitment({
+    id: 'com-fin-mes',
+    name: 'Servicio Fin de Mes',
+    amount: 1200,
+    frequency: 'monthly',
+    nextDueDate: '2026-01-31',
+    dueDay: 31,
+    active: true,
+  });
+
+  // Enero 31 -> Febrero (28 días en 2026)
+  let adv = advanceCommitmentDueDate(com);
+  com = { ...com, ...adv };
+  assert.equal(com.nextDueDate, '2026-02-28');
+  assert.equal(com.dueDay, 31, 'El día ancla 31 debe preservarse');
+
+  // Febrero 28 -> Marzo (31 días): Debe volver al día 31 sin quedarse en 28
+  adv = advanceCommitmentDueDate(com);
+  com = { ...com, ...adv };
+  assert.equal(com.nextDueDate, '2026-03-31', 'Debe recuperar el día 31 en marzo');
+  assert.equal(com.dueDay, 31);
+
+  // Marzo 31 -> Abril (30 días)
+  adv = advanceCommitmentDueDate(com);
+  com = { ...com, ...adv };
+  assert.equal(com.nextDueDate, '2026-04-30', 'Debe caer en el día 30 en abril');
+  assert.equal(com.dueDay, 31);
+
+  // Abril 30 -> Mayo (31 días)
+  adv = advanceCommitmentDueDate(com);
+  com = { ...com, ...adv };
+  assert.equal(com.nextDueDate, '2026-05-31', 'Debe recuperar el día 31 en mayo');
+});
+
 

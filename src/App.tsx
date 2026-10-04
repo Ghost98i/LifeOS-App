@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { ViewType, LifeOSState } from './types';
-import { defaultState, loadStoredState, parseBackupJSON, saveRecoveryState, saveStoredState, todayISO } from './lib/storage';
+import { defaultState, loadRecoveryState, loadStoredState, parseBackupJSON, saveRecoveryState, saveStoredState, todayISO } from './lib/storage';
 import {
   isModuleEnabled,
   isModuleHidden,
@@ -740,7 +740,7 @@ export default function App() {
   const handleUseLocalState = () => {
     if (!cloudUser || !cloudConflict) return;
     saveSyncRecoverySnapshot(cloudUser.uid, 'remote', cloudConflict.remoteState);
-    saveRecoveryState(cloudConflict.remoteState, cloudUser.uid);
+    saveRecoveryState(cloudConflict.remoteState, cloudUser.uid, 'cloud_conflict', 'Versión remota descartada al elegir datos locales');
     const baseRevisions = { ...revisionsRef.current, ...cloudConflict.remoteRevisions };
     persistRevisionMap(cloudUser.uid, baseRevisions);
     pendingRevisionsRef.current = {};
@@ -758,7 +758,7 @@ export default function App() {
   const handleUseCloudState = () => {
     if (!cloudUser || !cloudConflict) return;
     saveSyncRecoverySnapshot(cloudUser.uid, 'local', stateRef.current);
-    saveRecoveryState(stateRef.current, cloudUser.uid);
+    saveRecoveryState(stateRef.current, cloudUser.uid, 'cloud_conflict', 'Versión local descartada al elegir datos de la nube');
     applyRemoteState(cloudConflict.remoteState, cloudUser.uid);
     persistRevisionMap(cloudUser.uid, { ...revisionsRef.current, ...cloudConflict.remoteRevisions });
     const nextBaselines = { ...baselinesRef.current };
@@ -892,6 +892,64 @@ export default function App() {
     });
   };
 
+  const handleImportState = (imported: LifeOSState, description?: string) => {
+    saveRecoveryState(stateRef.current, storageUserIdRef.current, 'import_backup', description || 'Previo a importar backup');
+    updateState((draft) => {
+      Object.assign(draft, imported);
+    });
+    if (cloudUserRef.current) {
+      const user = cloudUserRef.current;
+      const nextBaselines = { ...baselinesRef.current };
+      SYNC_MODULES.forEach((mod) => {
+        nextBaselines[mod] = syncModuleFingerprint(imported, mod);
+      });
+      persistBaselines(user.uid, nextBaselines);
+      queueCloudSave(imported, [...SYNC_MODULES]);
+    }
+    showToast('Backup importado correctamente. Copia anterior guardada en recuperación.', 'success');
+  };
+
+  const handleResetData = () => {
+    saveRecoveryState(stateRef.current, storageUserIdRef.current, 'reset_data', 'Previo a reiniciar datos a valores de fábrica');
+    const def = defaultState();
+    updateState((draft) => {
+      Object.assign(draft, def);
+    });
+    if (cloudUserRef.current) {
+      const user = cloudUserRef.current;
+      const nextBaselines = { ...baselinesRef.current };
+      SYNC_MODULES.forEach((mod) => {
+        nextBaselines[mod] = syncModuleFingerprint(def, mod);
+      });
+      persistBaselines(user.uid, nextBaselines);
+      queueCloudSave(def, [...SYNC_MODULES]);
+    }
+    showToast('Datos reiniciados a los valores por defecto. Copia anterior guardada en recuperación.', 'info');
+  };
+
+  const handleRestoreRecovery = () => {
+    const recovery = loadRecoveryState(storageUserIdRef.current);
+    if (!recovery) {
+      showToast('No hay ninguna copia de recuperación disponible.', 'error');
+      return;
+    }
+    // Proteger el estado actual antes de sobrescribir
+    saveRecoveryState(stateRef.current, storageUserIdRef.current, 'manual_snapshot', 'Previo a restaurar copia de recuperación');
+    updateState((draft) => {
+      Object.assign(draft, recovery.state);
+    });
+    if (cloudUserRef.current) {
+      const user = cloudUserRef.current;
+      const nextBaselines = { ...baselinesRef.current };
+      SYNC_MODULES.forEach((mod) => {
+        nextBaselines[mod] = syncModuleFingerprint(recovery.state, mod);
+      });
+      persistBaselines(user.uid, nextBaselines);
+      queueCloudSave(recovery.state, [...SYNC_MODULES]);
+    }
+    showToast('Copia de recuperación restaurada con éxito.', 'success');
+  };
+
   const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -900,10 +958,7 @@ export default function App() {
     reader.onload = (event) => {
       try {
         const imported = parseBackupJSON(event.target?.result as string);
-        updateState((draft) => {
-          Object.assign(draft, imported);
-        });
-        showToast('Backup validado e importado correctamente.');
+        handleImportState(imported, `Previo a importar ${file.name}`);
       } catch (error) {
         showToast(error instanceof Error ? error.message : 'Error al leer el archivo JSON.', 'error');
       } finally {
@@ -1076,6 +1131,9 @@ export default function App() {
                   onUpdateState={updateState}
                   onExportJSON={handleExportJSON}
                   onImportJSON={handleImportJSON}
+                  onImportState={handleImportState}
+                  onResetData={handleResetData}
+                  onRestoreRecovery={handleRestoreRecovery}
                   storageUserId={storageUserId}
                   cloudConnected={Boolean(cloudUser)}
                   cloudConfigured={cloudSyncConfigured}

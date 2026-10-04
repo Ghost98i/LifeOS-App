@@ -2,7 +2,7 @@ import type { EffortLevel, LifeOSState, ViewType } from '../types';
 import { todayISO, uid, fmtDate, fmtMoney } from './storage';
 import { isModuleEnabled } from './moduleVisibility';
 import { addQuickTask, addQuickNote, addQuickTransaction, addQuickIdea, addQuickInbox } from './quickCapture';
-import { parseQuickFinance } from '../utils/quickFinanceParser';
+import { parseQuickFinance, SPANISH_MONTHS, SPANISH_MONTH_NAMES, isValidCalendarDate } from '../utils/quickFinanceParser';
 
 export type DraftKind =
   | 'finance'
@@ -23,6 +23,7 @@ export interface BaseDraft {
   isModuleEnabled: boolean;
   missingFields?: ('amount' | 'category' | 'account' | 'title')[];
   ambiguityWarning?: string;
+  originalInput?: string;
   note?: string;
   notes?: string;
 }
@@ -163,14 +164,22 @@ function findDayOfWeek(baseISO: string, targetDayIndex: number, direction: 'futu
 }
 
 export interface ParsedDateResult {
-  date: string;
+  date?: string;
   dateLabel: string;
   cleanedText: string;
+  hasExplicitDate?: boolean;
+  ambiguityWarning?: string;
 }
 
 /**
- * Normalizes and extracts relative date mentions from text.
+ * Normalizes and extracts relative or explicit date mentions from text.
  * Returns the resolved ISO date, friendly label, and text with date expression removed.
+ *
+ * Year policy:
+ * - When explicit year is given (e.g. "25 de octubre de 2026"), that exact year is used.
+ * - When only day + month is given (e.g. "25 de octubre"):
+ *   LifeOS defaults to the reference date's calendar year.
+ * - Calendar validity is strictly validated (e.g. "31 de febrero" is rejected with ambiguityWarning).
  */
 export function extractRelativeDate(
   rawText: string,
@@ -178,11 +187,149 @@ export function extractRelativeDate(
   defaultDirection: 'future' | 'past' = 'future'
 ): ParsedDateResult {
   const today = referenceDate;
+  const [refYearStr] = today.split('-');
+  const refYear = parseInt(refYearStr, 10) || new Date().getFullYear();
   let cleaned = rawText;
-  let resolvedDate = today;
+  let resolvedDate: string | undefined = today;
   let resolvedLabel = 'Hoy';
 
-  // 1. "pasado mañana"
+  // 1. Explicit calendar date: "el 25 de octubre de 2026", "25 de octubre", "el 5 de mayo"
+  const explicitMonthRegex = /\b(?:el\s+)?(\d{1,2})\s+de\s+([a-záéíóúñ]+)(?:\s+(?:de\s+|del\s+)?(\d{4}))?\b/i;
+  const monthMatch = cleaned.match(explicitMonthRegex);
+  if (monthMatch) {
+    const rawDay = parseInt(monthMatch[1], 10);
+    const rawMonthStr = monthMatch[2].toLowerCase();
+    const hasExplicitYear = Boolean(monthMatch[3]);
+
+    if (rawMonthStr in SPANISH_MONTHS) {
+      const monthNum = SPANISH_MONTHS[rawMonthStr];
+
+      // Year resolution policy:
+      // - Explicit year: authoritatively respected.
+      // - No year:
+      //   Evaluate day/month in reference year (refYear).
+      //   If candidate date is today or in the future (>= today): resolves naturally to refYear.
+      //   If candidate date is strictly in the past (< today):
+      //     * If context indicates past action/log/history (defaultDirection === 'past' or past indicators in text):
+      //       resolves to refYear (past date of the current year, e.g. "gasté el 15 de mayo").
+      //     * If context indicates a future obligation/task/payment (e.g. "pagar el 25 de septiembre", "examen el 10 de marzo", "estudiar..."):
+      //       DO NOT roll over silently to next year. Flag ambiguity for review so the user explicitly confirms whether
+      //       it is an overdue obligation or a commitment for next year.
+      const targetYear = hasExplicitYear ? parseInt(monthMatch[3]!, 10) : refYear;
+
+      if (!isValidCalendarDate(targetYear, monthNum, rawDay)) {
+        // Detected temporal expression is calendar-invalid (e.g. "31 de febrero")
+        // NEVER fall back silently to 'Hoy'. Flag uncertainty, require user review, block auto-confirmation.
+        cleaned = cleaned.replace(monthMatch[0], ' ');
+        return {
+          date: undefined,
+          dateLabel: 'Fecha inválida a revisar',
+          cleanedText: cleanPunctuation(cleaned),
+          hasExplicitDate: true,
+          ambiguityWarning: `Fecha inválida en el calendario: "${monthMatch[0]}". Por favor revisá o editá la fecha antes de confirmar.`,
+        };
+      }
+
+      const isoDateCandidate = `${targetYear}-${String(monthNum).padStart(2, '0')}-${String(rawDay).padStart(2, '0')}`;
+      const monthNameRaw = SPANISH_MONTH_NAMES[monthNum] || rawMonthStr;
+      const monthNameCap = monthNameRaw.charAt(0).toUpperCase() + monthNameRaw.slice(1).toLowerCase();
+
+      // Check for past date without explicit year in a future-intent context
+      if (!hasExplicitYear && isoDateCandidate < today && defaultDirection === 'future') {
+        const isClearlyPastContext = /\b(?:hice|fui|pas[oó]|venci[oó]|era|ayer|anteayer|pasad[oa])\b/i.test(cleaned);
+        if (!isClearlyPastContext) {
+          cleaned = cleaned.replace(monthMatch[0], ' ');
+          return {
+            date: isoDateCandidate,
+            dateLabel: `${rawDay} de ${monthNameCap} (${targetYear}) · Pasada`,
+            cleanedText: cleanPunctuation(cleaned),
+            hasExplicitDate: true,
+            ambiguityWarning: `La fecha "${rawDay} de ${monthNameCap}" ya pasó en ${targetYear}. Confirmá si corresponde a una obligación vencida o especificá el año.`,
+          };
+        }
+      }
+
+      resolvedDate = isoDateCandidate;
+      resolvedLabel = `${rawDay} de ${monthNameCap}`;
+      cleaned = cleaned.replace(monthMatch[0], ' ');
+      return {
+        date: resolvedDate,
+        dateLabel: resolvedLabel,
+        cleanedText: cleanPunctuation(cleaned),
+        hasExplicitDate: true,
+      };
+    }
+  }
+
+  // 2. Explicit numeric date: "25/10/2026", "25/10", "25-10"
+  const numericDateRegex = /\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/;
+  const numMatch = cleaned.match(numericDateRegex);
+  if (numMatch) {
+    const rawDay = parseInt(numMatch[1], 10);
+    const rawMonth = parseInt(numMatch[2], 10);
+    const hasExplicitYear = Boolean(numMatch[3]);
+    let targetYear = refYear;
+    if (numMatch[3]) {
+      const parsedY = parseInt(numMatch[3], 10);
+      targetYear = parsedY < 100 ? 2000 + parsedY : parsedY;
+    }
+
+    if (rawMonth >= 1 && rawMonth <= 12) {
+      if (!isValidCalendarDate(targetYear, rawMonth, rawDay)) {
+        cleaned = cleaned.replace(numMatch[0], ' ');
+        return {
+          date: undefined,
+          dateLabel: 'Fecha inválida a revisar',
+          cleanedText: cleanPunctuation(cleaned),
+          hasExplicitDate: true,
+          ambiguityWarning: `Fecha inválida en el calendario: "${numMatch[0]}". Por favor revisá o editá la fecha antes de confirmar.`,
+        };
+      }
+
+      const isoDateCandidate = `${targetYear}-${String(rawMonth).padStart(2, '0')}-${String(rawDay).padStart(2, '0')}`;
+      const monthNameRaw = SPANISH_MONTH_NAMES[rawMonth] || String(rawMonth);
+      const monthNameCap = monthNameRaw.charAt(0).toUpperCase() + monthNameRaw.slice(1).toLowerCase();
+
+      if (!hasExplicitYear && isoDateCandidate < today && defaultDirection === 'future') {
+        const isClearlyPastContext = /\b(?:hice|fui|pas[oó]|venci[oó]|era|ayer|anteayer|pasad[oa])\b/i.test(cleaned);
+        if (!isClearlyPastContext) {
+          cleaned = cleaned.replace(numMatch[0], ' ');
+          return {
+            date: isoDateCandidate,
+            dateLabel: `${rawDay} de ${monthNameCap} (${targetYear}) · Pasada`,
+            cleanedText: cleanPunctuation(cleaned),
+            hasExplicitDate: true,
+            ambiguityWarning: `La fecha "${numMatch[0]}" ya pasó en ${targetYear}. Confirmá si corresponde a una obligación vencida o especificá el año.`,
+          };
+        }
+      }
+
+      resolvedDate = isoDateCandidate;
+      resolvedLabel = `${rawDay} de ${monthNameCap}`;
+      cleaned = cleaned.replace(numMatch[0], ' ');
+      return {
+        date: resolvedDate,
+        dateLabel: resolvedLabel,
+        cleanedText: cleanPunctuation(cleaned),
+        hasExplicitDate: true,
+      };
+    }
+  }
+
+  // 3. Ambiguous temporal range expressions (e.g. "el 15 o 16 de octubre", "fin de semana")
+  const ambiguousRangeMatch = cleaned.match(/\b(?:el\s+)?(\d{1,2})\s+(?:o|a|al)\s+(\d{1,2})\s+de\s+([a-záéíóúñ]+)\b/i);
+  if (ambiguousRangeMatch) {
+    cleaned = cleaned.replace(ambiguousRangeMatch[0], ' ');
+    return {
+      date: undefined,
+      dateLabel: 'Fecha ambigua a definir',
+      cleanedText: cleanPunctuation(cleaned),
+      hasExplicitDate: true,
+      ambiguityWarning: `Expresión temporal ambigua ("${ambiguousRangeMatch[0]}"). Elegí una fecha exacta antes de confirmar.`,
+    };
+  }
+
+  // 4. "pasado mañana"
   if (/\bpasado\s+ma[nñ]ana\b/i.test(cleaned)) {
     resolvedDate = computeRelativeDate(today, 2);
     resolvedLabel = `Pasado mañana · ${fmtDate(resolvedDate)}`;
@@ -190,7 +337,7 @@ export function extractRelativeDate(
     return { date: resolvedDate, dateLabel: resolvedLabel, cleanedText: cleanPunctuation(cleaned) };
   }
 
-  // 2. "anteayer" / "ante ayer"
+  // 5. "anteayer" / "ante ayer"
   if (/\b(?:anteayer|ante\s+ayer)\b/i.test(cleaned)) {
     resolvedDate = computeRelativeDate(today, -2);
     resolvedLabel = `Anteayer · ${fmtDate(resolvedDate)}`;
@@ -198,7 +345,7 @@ export function extractRelativeDate(
     return { date: resolvedDate, dateLabel: resolvedLabel, cleanedText: cleanPunctuation(cleaned) };
   }
 
-  // 3. "ayer"
+  // 6. "ayer"
   if (/\bayer\b/i.test(cleaned)) {
     resolvedDate = computeRelativeDate(today, -1);
     resolvedLabel = `Ayer · ${fmtDate(resolvedDate)}`;
@@ -206,7 +353,7 @@ export function extractRelativeDate(
     return { date: resolvedDate, dateLabel: resolvedLabel, cleanedText: cleanPunctuation(cleaned) };
   }
 
-  // 4. "mañana" (avoid matching "de la mañana" time modifier)
+  // 7. "mañana" (avoid matching "de la mañana" time modifier)
   if (/\bma[nñ]ana\b/i.test(cleaned) && !/\bde\s+la\s+ma[nñ]ana\b/i.test(cleaned)) {
     resolvedDate = computeRelativeDate(today, 1);
     resolvedLabel = `Mañana · ${fmtDate(resolvedDate)}`;
@@ -214,7 +361,7 @@ export function extractRelativeDate(
     return { date: resolvedDate, dateLabel: resolvedLabel, cleanedText: cleanPunctuation(cleaned) };
   }
 
-  // 5. "dentro de N días" or "en N días"
+  // 8. "dentro de N días" or "en N días"
   const inNDaysMatch = cleaned.match(/\b(?:dentro\s+de|en)\s+(\d+)\s+d[ií]as?\b/i);
   if (inNDaysMatch) {
     const daysOffset = parseInt(inNDaysMatch[1], 10);
@@ -226,7 +373,7 @@ export function extractRelativeDate(
     }
   }
 
-  // 6. "la semana que viene" / "la próxima semana"
+  // 9. "la semana que viene" / "la próxima semana"
   if (/\bla\s+(?:semana\s+que\s+viene|pr[oó]xima\s+semana)\b/i.test(cleaned)) {
     resolvedDate = computeRelativeDate(today, 7);
     resolvedLabel = `Semana próxima · ${fmtDate(resolvedDate)}`;
@@ -234,7 +381,7 @@ export function extractRelativeDate(
     return { date: resolvedDate, dateLabel: resolvedLabel, cleanedText: cleanPunctuation(cleaned) };
   }
 
-  // 7. Days of week: "el lunes", "este viernes", "martes", etc.
+  // 10. Days of week: "el lunes", "este viernes", "martes", etc.
   for (const [dayName, dayIndex] of Object.entries(DAYS_OF_WEEK)) {
     const dayRegex = new RegExp(`\\b(?:el\\s+|este\\s+|pr[oó]ximo\\s+)?${dayName}\\b`, 'i');
     const dayMatch = cleaned.match(dayRegex);
@@ -246,7 +393,7 @@ export function extractRelativeDate(
     }
   }
 
-  // 8. "hoy"
+  // 11. "hoy"
   if (/\bhoy\b/i.test(cleaned)) {
     cleaned = cleaned.replace(/\bhoy\b/gi, ' ');
     return { date: today, dateLabel: 'Hoy', cleanedText: cleanPunctuation(cleaned) };
@@ -289,10 +436,13 @@ export function segmentCompoundClauses(rawInput: string): string[] {
     return [trimmed];
   }
 
-  // Heuristic regex to check for sentence connectors " y ", " e ", ", y " where the second clause
-  // starts with a recognizable intent verb, date, or number:
-  // e.g.: " y mañana ...", " y pagar ...", " y gasté ...", " y comprar ...", " y estudiar ..."
-  const connectorRegex = /\s+(?:y|e|,\s*y|,\s*e)\s+(?=(?:ma[nñ]ana|hoy|ayer|el\s+[a-z]+|pagu[eé]|pagar|gast[eé]|gastar|compr[eé]|comprar|vend[eé]|vender|estudiar|llamar|revisar|recordar|hacer|anotar|nota|idea|inbox|\$|\d+)\b)/i;
+  // Heuristic regex to check for sentence connectors:
+  // 1. Explicit clause sequence connectors: " y después ...", " y luego ...", ", y después ..."
+  // 2. Intent connectors: " y ", " e ", ", y " where the second clause starts with a recognizable
+  //    intent verb, date, or explicit money token ($ or number with currency).
+  // Does NOT split on simple noun conjunctions like " y 2 leches" or "comprar pan y leche".
+  const connectorRegex =
+    /\s+(?:y\s+(?:luego|despu[eé]s)\b|e\s+(?:luego|despu[eé]s)\b|,\s*y\s+(?:luego|despu[eé]s)\b|,\s*e\s+(?:luego|despu[eé]s)\b|(?:y|e|,\s*y|,\s*e)\s+(?=(?:ma[nñ]ana|hoy|ayer|el\s+[a-z]+|pagu[eé]|pagar|gast[eé]|gastar|compr[eé]|comprar|vend[eé]|vender|estudiar|repasar|llamar|revisar|recordar|hacer|anotar|nota|idea|inbox|\$(?:U)?\s*\d+|\d+\s*(?:pesos|d[oó]lares|usd|eur|uyu))\b))/i;
 
   if (connectorRegex.test(trimmed)) {
     const parts = trimmed.split(connectorRegex);
@@ -323,6 +473,7 @@ export function parseCaptureDrafts(
   for (const segment of segments) {
     const draft = parseSingleClauseDraft(segment, state, referenceDate);
     if (draft) {
+      draft.originalInput = rawInput;
       drafts.push(draft);
     }
   }
@@ -425,14 +576,14 @@ function parseSingleClauseDraft(
   }
 
   // 4. Study Tasks vs Sessions:
-  // "estudiar redes mañana", "mañana estudiar redes", "tengo que estudiar para redes el jueves"
+  // "estudiar redes mañana", "mañana estudiar redes", "tengo que estudiar para redes el jueves", "estudiar redes el 25 de octubre"
   // Future intentions are TASKS (medium priority), NOT past study logs, do NOT invent 45 mins, do NOT create subjects.
   const isStudyVerb = /\b(?:estudiar|repasar)\b/i.test(trimmed);
-  const hasFutureDateMention = /\b(?:ma[nñ]ana|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|pr[oó]xim[oa]|semana\s+que\s+viene|en\s+\d+\s+d[ií]as)\b/i.test(trimmed);
+  const dateExtractionStudy = extractRelativeDate(trimmed, referenceDate, 'future');
+  const hasFutureDateMention = /\b(?:ma[nñ]ana|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|pr[oó]xim[oa]|semana\s+que\s+viene|en\s+\d+\s+d[ií]as)\b/i.test(trimmed) || Boolean(dateExtractionStudy.hasExplicitDate);
 
-  if (isStudyVerb && hasFutureDateMention) {
-    const dateExtraction = extractRelativeDate(trimmed, referenceDate, 'future');
-    let taskText = cleanPunctuation(dateExtraction.cleanedText);
+  if (isStudyVerb && (hasFutureDateMention || dateExtractionStudy.hasExplicitDate)) {
+    let taskText = cleanPunctuation(dateExtractionStudy.cleanedText);
     taskText = taskText.replace(/^(?:recordar|tengo\s+que|hacer)\s+/i, '');
 
     const targetModule: ViewType = isModuleEnabled(state, 'estudios') ? 'estudios' : 'dashboard';
@@ -443,8 +594,9 @@ function parseSingleClauseDraft(
       kind: 'task',
       text: taskText || trimmed,
       priority: 'media',
-      dueDate: dateExtraction.date,
-      dueDateLabel: dateExtraction.dateLabel,
+      dueDate: dateExtractionStudy.date,
+      dueDateLabel: dateExtractionStudy.dateLabel,
+      ambiguityWarning: dateExtractionStudy.ambiguityWarning,
       targetModule,
       isModuleEnabled: true,
     };
@@ -501,17 +653,21 @@ function parseSingleClauseDraft(
         priority: 'media',
         dueDate: dateExtraction.date,
         dueDateLabel: dateExtraction.dateLabel,
+        ambiguityWarning: dateExtraction.ambiguityWarning,
         targetModule: 'dashboard',
         isModuleEnabled: true,
       };
     }
   }
 
-  // 5. Future payments as Tasks:
-  // e.g. "pagar 1200 internet mañana", "mañana pagar 1200 de nafta"
-  // It is a pending task, not an immediate transaction or balance deduction!
-  const hasFuturePayment = /^(?:pagar|pago\s+de)\s+/i.test(trimmed) || (/\bpagar\b/i.test(trimmed) && hasFutureDateMention);
-  if (hasFuturePayment && hasFutureDateMention) {
+  // 5. Future payments and debts/obligations as Tasks:
+  // e.g. "Debo 5939 pesos a Jorge pagar el 25 de septiembre", "pagar 1200 internet mañana", "tengo que pagar la luz"
+  // Semantics: These are pending commitments/obligations, NOT completed transactions.
+  // They must NOT mutate account balances or create immediate financial records.
+  const isDebtOrObligation = /\b(?:debo|le\s+debo|deuda|deudas|por\s+pagar|tengo\s+que\s+pagar|hay\s+que\s+pagar)\b/i.test(trimmed);
+  const hasFuturePayment = /^(?:pagar|pago\s+de)\s+/i.test(trimmed) || (/\bpagar\b/i.test(trimmed) && (hasFutureDateMention || dateExtractionStudy.hasExplicitDate));
+
+  if (isDebtOrObligation || (hasFuturePayment && (hasFutureDateMention || dateExtractionStudy.hasExplicitDate))) {
     const dateExtraction = extractRelativeDate(trimmed, referenceDate, 'future');
     let taskText = cleanPunctuation(dateExtraction.cleanedText);
     taskText = taskText.replace(/^(?:recordar|tengo\s+que|hacer)\s+/i, '');
@@ -523,6 +679,7 @@ function parseSingleClauseDraft(
       priority: 'media',
       dueDate: dateExtraction.date,
       dueDateLabel: dateExtraction.dateLabel,
+      ambiguityWarning: dateExtraction.ambiguityWarning,
       targetModule: 'dashboard',
       isModuleEnabled: true,
     };
@@ -621,55 +778,88 @@ function parseSingleClauseDraft(
 
       // If valid or if amount/currency detected
       if (parsed.amount !== null || isCurrencyIncompatible || parsed.isAmbiguous) {
-        const enabled = isModuleEnabled(state, 'finanzas');
-        const missingFields: ('amount' | 'category' | 'account' | 'title')[] = [];
-        if (!parsed.amount || parsed.isAmbiguous) missingFields.push('amount');
-        if (!parsed.category) missingFields.push('category');
+        // Contextual Guard for Ambiguity:
+        // If there is NO currency sign, NO transactional verb, NO matching user category/account,
+        // and the input is merely a name/word followed by a number (e.g. "Juan 1600"),
+        // do NOT assume it is a financial expense. Let it fall through to Inbox/free capture.
+        const hasStrongFinanceEvidence =
+          hasCurrencySign ||
+          hasTransactionalVerb ||
+          startsWithPlusOrMinusNum ||
+          matchesUserCategory ||
+          matchesUserAccount ||
+          Boolean(parsed.category) ||
+          Boolean(installments) ||
+          isCurrencyIncompatible;
 
-        let ambiguityWarning: string | undefined;
-        if (isCurrencyIncompatible) {
-          ambiguityWarning = `Moneda no soportada (${parsedCurrency}). LifeOS opera únicamente en moneda local. Podés guardarlo en tu Bandeja de Entrada.`;
-        } else if (parsed.isAmbiguous) {
-          ambiguityWarning = 'Importe con formato de separadores ambiguo. Revisá el valor antes de confirmar.';
+        if (!hasStrongFinanceEvidence) {
+          // Fall through to other intents or Inbox
+          // return not taken
+        } else {
+          const enabled = isModuleEnabled(state, 'finanzas');
+          const missingFields: ('amount' | 'category' | 'account' | 'title')[] = [];
+          if (!parsed.amount || parsed.isAmbiguous) missingFields.push('amount');
+          if (!parsed.category) missingFields.push('category');
+
+          let ambiguityWarning: string | undefined;
+          if (isCurrencyIncompatible) {
+            ambiguityWarning = `Moneda no soportada (${parsedCurrency}). LifeOS opera únicamente en moneda local. Podés guardarlo en tu Bandeja de Entrada.`;
+          } else if (parsed.isAmbiguous) {
+            ambiguityWarning = 'Importe con formato de separadores ambiguo. Revisá el valor antes de confirmar.';
+          }
+
+          return {
+            id: draftId,
+            rawText: trimmed,
+            kind: 'finance',
+            type: parsed.type,
+            amount: parsed.amount || undefined,
+            currency: parsedCurrency,
+            isCurrencyIncompatible,
+            isAccountSuggested: parsed.isAccountSuggested,
+            category: parsed.category || undefined,
+            categoryMatched: parsed.categoryMatched || undefined,
+            accountId: parsed.accountId || undefined,
+            accountName: parsed.accountName || undefined,
+            date: parsed.date,
+            dateLabel: parsed.dateLabel,
+            note: parsed.note || trimmed,
+            installments,
+            missingFields: missingFields.length > 0 ? missingFields : undefined,
+            ambiguityWarning,
+            targetModule: 'finanzas',
+            isModuleEnabled: enabled,
+          };
         }
-
-        return {
-          id: draftId,
-          rawText: trimmed,
-          kind: 'finance',
-          type: parsed.type,
-          amount: parsed.amount || undefined,
-          currency: parsedCurrency,
-          isCurrencyIncompatible,
-          isAccountSuggested: parsed.isAccountSuggested,
-          category: parsed.category || undefined,
-          categoryMatched: parsed.categoryMatched || undefined,
-          accountId: parsed.accountId || undefined,
-          accountName: parsed.accountName || undefined,
-          date: parsed.date,
-          dateLabel: parsed.dateLabel,
-          note: parsed.note || trimmed,
-          installments,
-          missingFields: missingFields.length > 0 ? missingFields : undefined,
-          ambiguityWarning,
-          targetModule: 'finanzas',
-          isModuleEnabled: enabled,
-        };
       }
     }
   }
 
-  // 7. Unstructured Reflective Notes: "hoy fue un día horrible", "ayer pensé que...", "hoy me siento cansado"
-  if (
-    /^(?:hoy\s+(?:fue\s+un\s+d[ií]a|me\s+siento)|ayer\s+pens[eé]|estoy\s+pensando\s+en|me\s+di\s+cuenta\s+que|me\s+siento\s+)(?:\s+|$)/i.test(trimmed)
-  ) {
-    const enabled = isModuleEnabled(state, 'notas');
+  // 7. Unstructured Reflective Notes and Non-actionable Facts:
+  // "hoy fue un día horrible", "ayer pensé que...", "hoy me siento cansado", "me siento cansado",
+  // "Juan está pensando mudarse", "el auto hizo un ruido raro"
+  const isReflectiveOrFactual =
+    /^(?:hoy\s+(?:fue\s+un\s+d[ií]a|me\s+siento)|ayer\s+pens[eé]|estoy\s+pensando\s+en|me\s+di\s+cuenta\s+que|me\s+siento\s+|el\s+auto\s+hizo|pensando\s+(?:en\s+)?mudarse|est[aá]\s+pensando\b)/i.test(trimmed) ||
+    /(?:est[aá]\s+pensando|pensando\s+(?:en\s+)?mudarse|hizo\s+un\s+ruido\s+raro|me\s+siento\s+(?:cansado|agotado|bien|mal|triste|feliz|motivado))/i.test(trimmed);
+
+  if (isReflectiveOrFactual) {
+    const isNotasEnabled = isModuleEnabled(state, 'notas');
+    if (isNotasEnabled) {
+      return {
+        id: draftId,
+        rawText: trimmed,
+        kind: 'note',
+        targetModule: 'notas',
+        isModuleEnabled: true,
+        text: trimmed,
+      };
+    }
     return {
       id: draftId,
       rawText: trimmed,
-      kind: 'note',
-      targetModule: 'notas',
-      isModuleEnabled: enabled,
+      kind: 'inbox',
+      targetModule: 'dashboard',
+      isModuleEnabled: true,
       text: trimmed,
     };
   }
@@ -694,21 +884,56 @@ function parseSingleClauseDraft(
     };
   }
 
-  // 9. General Task (Core LifeOS - Target 'dashboard' so it does not depend on Agenda module)
+  // 9. Fact, measurement or non-actionable statement fallback vs genuine actionable Task
   const dateExtraction = extractRelativeDate(trimmed, referenceDate, 'future');
   let taskText = dateExtraction.cleanedText;
 
   let priority: 'alta' | 'media' | 'baja' = 'media';
+  let hasExplicitPriority = false;
   if (/^(?:urgente|importante|ya|hoy\s+mismo)[:\s]*/i.test(taskText)) {
     priority = 'alta';
+    hasExplicitPriority = true;
     taskText = taskText.replace(/^(?:urgente|importante|ya|hoy\s+mismo)[:\s]*/i, '').trim();
   } else if (/^(?:baja\s+prioridad|cuando\s+pueda)[:\s]*/i.test(taskText)) {
     priority = 'baja';
+    hasExplicitPriority = true;
     taskText = taskText.replace(/^(?:baja\s+prioridad|cuando\s+pueda)[:\s]*/i, '').trim();
   }
 
   // Clean common task prefixes
+  const hasTaskPrefix = /^(?:recordar|tengo\s+que|hacer)\s+/i.test(taskText);
   taskText = taskText.replace(/^(?:recordar|tengo\s+que|hacer)\s+/i, '');
+
+  // Actionable evidence detection:
+  // A TaskDraft represents an understanding that a pending action exists.
+  // We require reasonable evidence of actionable intent:
+  // - explicit priority prefix (e.g. "urgente:", "importante:")
+  // - imperative or task prefix (e.g. "recordar ...", "tengo que ...", "hacer ...")
+  // - recognized actionable verb or commitment noun (e.g. comprar, llamar, estudiar, revisar, mandar, enviar, reunión, etc.)
+  const ACTIONABLE_KEYWORDS =
+    /\b(?:llamar|llamada|comprar|compra|pagar|pago|estudiar|estudio|repasar|repaso|revisar|revisi[oó]n|enviar|env[ií]o|mandar|pedir|pedido|escribir|buscar|terminar|arreglar|reparar|limpiar|limpieza|ir|llevar|traer|preparar|entrenar|entrenamiento|correr|cocinar|hablar|ver|visitar|visita|comer|cenar|almorzar|salir|entregar|entrega|firmar|firma|leer|lectura|hacer|examen|parcial|final|turno|m[eé]dico|dentista|veterinario|reuni[oó]n|clase|cita|viaje|vuelo|tr[aá]mite)\b/i;
+
+  const hasActionKeyword = ACTIONABLE_KEYWORDS.test(taskText) || ACTIONABLE_KEYWORDS.test(trimmed);
+
+  const isActionableIntent = hasExplicitPriority || hasTaskPrefix || hasActionKeyword;
+
+  // If there is NO actionable evidence, do NOT invent a task! Fallback safely to Inbox.
+  if (!isActionableIntent) {
+    const isTemporalMention = Boolean(dateExtraction.hasExplicitDate) || /\b(?:ma[nñ]ana|hoy|ayer|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo)\b/i.test(trimmed);
+    const ambiguityWarning = isTemporalMention
+      ? 'Mención temporal sin acción definida. Podés revisarla en tu Bandeja de Entrada.'
+      : undefined;
+
+    return {
+      id: draftId,
+      rawText: trimmed,
+      kind: 'inbox',
+      targetModule: 'dashboard',
+      isModuleEnabled: true,
+      text: trimmed,
+      ambiguityWarning,
+    };
+  }
 
   return {
     id: draftId,
@@ -718,6 +943,7 @@ function parseSingleClauseDraft(
     priority,
     dueDate: dateExtraction.date,
     dueDateLabel: dateExtraction.dateLabel,
+    ambiguityWarning: dateExtraction.ambiguityWarning,
     targetModule: 'dashboard',
     isModuleEnabled: true, // tasks are always supported in core LifeOS
   };
@@ -731,6 +957,9 @@ export function canConfirmDraft(
   state: LifeOSState,
   draft: CaptureDraft
 ): { valid: boolean; reason?: string } {
+  if (draft.ambiguityWarning) {
+    return { valid: false, reason: 'Fecha o datos ambiguos requieren revisión' };
+  }
   if (!isModuleEnabled(state, draft.targetModule)) {
     return { valid: false, reason: `Módulo ${draft.targetModule} desactivado` };
   }

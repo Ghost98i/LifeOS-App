@@ -254,8 +254,9 @@ const DraftCard: React.FC<DraftCardProps> = ({
               <span className="font-bold text-sm sm:text-base">
                 {draft.amount !== undefined ? (
                   <PrivacyAmount>
-                    {draft.currency === 'USD' ? 'USD ' : draft.currency === 'EUR' ? 'EUR ' : '$U '}
-                    {fmtMoney(draft.amount)}
+                    {draft.currency && draft.currency !== 'UYU'
+                      ? `${draft.currency} ${Math.round(draft.amount).toLocaleString('es-UY')}`
+                      : fmtMoney(draft.amount)}
                   </PrivacyAmount>
                 ) : (
                   <span className="text-rose-500 font-bold">$U ?</span>
@@ -328,7 +329,7 @@ const DraftCard: React.FC<DraftCardProps> = ({
                 <>
                   <span className="text-[var(--text-faint)]">·</span>
                   <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                    <PrivacyAmount>$U {fmtMoney(draft.price)}</PrivacyAmount>
+                    <PrivacyAmount>{fmtMoney(draft.price)}</PrivacyAmount>
                   </span>
                 </>
               )}
@@ -641,6 +642,7 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
                   ...draft,
                   dueDate: d,
                   dueDateLabel: d === todayISO() ? 'Hoy' : d,
+                  ambiguityWarning: undefined,
                 } as TaskDraft);
               }}
               className="px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium outline-none"

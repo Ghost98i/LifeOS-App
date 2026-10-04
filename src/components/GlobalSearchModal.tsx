@@ -35,6 +35,7 @@ interface PaletteItem {
   badge?: string;
   badgeTone?: 'blue' | 'green' | 'red' | 'gray';
   shortcutHint?: string;
+  isSensitive?: boolean;
   onSelect: () => void;
 }
 
@@ -355,6 +356,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           iconChar: item.icon,
           badge: item.badge,
           badgeTone: item.badge?.startsWith('+') ? 'green' : item.badge?.startsWith('-') ? 'red' : 'gray',
+          isSensitive: item.isSensitive,
           onSelect: () => {
             onNavigate(item.view, item.focusId);
             onClose();
@@ -517,7 +519,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         });
       }
       const accName = state.finance.accounts.find((a) => a.id === accountId)?.name || 'Cuenta';
-      showToast(`Gasto de ${fmtMoney(amountNum)} registrado en ${accName}`);
+      const toastAmount = state.settings.privacyMode ? '$U ••••' : fmtMoney(amountNum);
+      showToast(`Gasto de ${toastAmount} registrado en ${accName}`);
       playSound('success');
       onClose();
     } catch (err) {
@@ -700,6 +703,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                 {item.badge && (
                                   <span
                                     className={`rounded-md px-1.5 py-0.5 text-[10px] font-mono font-bold shrink-0 ${
+                                      item.isSensitive && state.settings.privacyMode ? 'privacy-sensitive ' : ''
+                                    }${
                                       item.badgeTone === 'green'
                                         ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                                         : item.badgeTone === 'red'
@@ -713,7 +718,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                   </span>
                                 )}
                               </div>
-                              <p className="text-[11px] text-[var(--text-faint)] truncate mt-0.5">
+                              <p className={`text-[11px] text-[var(--text-faint)] truncate mt-0.5 ${item.isSensitive && state.settings.privacyMode ? 'privacy-sensitive' : ''}`}>
                                 {item.subtitle}
                               </p>
                             </div>

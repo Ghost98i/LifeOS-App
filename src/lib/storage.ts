@@ -30,12 +30,53 @@ export const ESTADO_LABELS = {
 export const STORAGE_KEY = 'lifeos-state-v1';
 export const CURRENT_SCHEMA_VERSION = 2;
 
+export type RecoveryAction =
+  | 'import_backup'
+  | 'reset_data'
+  | 'cloud_conflict'
+  | 'repair_balances'
+  | 'manual_snapshot';
+
+export interface RecoveryMetadata {
+  savedAt: string;
+  action: RecoveryAction;
+  description: string;
+  transactionsCount: number;
+  notesCount: number;
+  tasksCount: number;
+  gymSessionsCount: number;
+  commitmentsCount: number;
+  schemaVersion?: number;
+}
+
+export interface RecoveryEnvelope {
+  meta: RecoveryMetadata;
+  state: LifeOSState;
+}
+
+export interface BackupPreviewSummary {
+  schemaVersion: number;
+  profileName: string | null;
+  transactionsCount: number;
+  accountsCount: number;
+  notesCount: number;
+  tasksCount: number;
+  gymSessionsCount: number;
+  studySubjectsCount: number;
+  commitmentsCount: number;
+  backupDate?: string | null;
+  lastBackupAt?: string | null;
+  warnings: string[];
+  state: LifeOSState;
+}
+
 export interface StorageDiagnostics {
   backend: string;
   schemaVersion: number;
   primaryBytes: number;
   recoveryAvailable: boolean;
   recoveryBytes: number;
+  recoveryMeta?: RecoveryMetadata | null;
 }
 
 export function getStorageKey(userId?: string | null): string {
@@ -562,6 +603,22 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
   };
 }
 
+function getDefaultRecoveryDescription(action: RecoveryAction): string {
+  switch (action) {
+    case 'import_backup':
+      return 'Copia previa a importar backup';
+    case 'reset_data':
+      return 'Copia previa a reiniciar datos a valores de fábrica';
+    case 'repair_balances':
+      return 'Copia previa a reparación de saldos con libro mayor';
+    case 'cloud_conflict':
+      return 'Copia previa a resolución de conflicto en la nube';
+    case 'manual_snapshot':
+    default:
+      return 'Punto de restauración de seguridad';
+  }
+}
+
 export function parseBackupJSON(text: string): LifeOSState {
   let parsed: any;
   try {
@@ -572,16 +629,104 @@ export function parseBackupJSON(text: string): LifeOSState {
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error('El archivo no parece pertenecer a LifeOS.');
   }
+
+  // Support envelope: { meta: ..., state: ... } or { state: ... }
+  const candidate = parsed.state && typeof parsed.state === 'object' && !Array.isArray(parsed.state)
+    ? parsed.state
+    : parsed;
+
   const knownKeys = ['profile', 'agenda', 'finance', 'gym', 'notes', 'tasksRecurring', 'study', 'streaming', 'jobs', 'resale', 'schemaVersion'];
-  const hasRecognizedKey = knownKeys.some((k) => k in parsed);
+  const hasRecognizedKey = knownKeys.some((k) => k in candidate);
   if (!hasRecognizedKey) {
     throw new Error('El archivo no parece pertenecer a LifeOS.');
   }
-  const normalized = normalizeStoredState(parsed);
-  if (parsed?.settings?.onboardingCompleted === undefined) {
+  const normalized = normalizeStoredState(candidate);
+  if (candidate?.settings?.onboardingCompleted === undefined) {
     normalized.settings.onboardingCompleted = true;
   }
   return normalized;
+}
+
+export function inspectBackupJSON(text: string): BackupPreviewSummary {
+  const normalized = parseBackupJSON(text);
+  let rawParsed: any;
+  try {
+    rawParsed = JSON.parse(text);
+  } catch {
+    rawParsed = {};
+  }
+  const rawState = rawParsed?.state && typeof rawParsed.state === 'object' ? rawParsed.state : rawParsed;
+
+  const detectedVersion = Number(rawState?.schemaVersion) || CURRENT_SCHEMA_VERSION;
+  const warnings: string[] = [];
+  if (detectedVersion < CURRENT_SCHEMA_VERSION) {
+    warnings.push(`El archivo usa el esquema v${detectedVersion}. Se normalizará automáticamente a la versión actual v${CURRENT_SCHEMA_VERSION}.`);
+  }
+  if (!rawState?.finance?.commitments && (normalized.finance?.commitments?.length || 0) === 0) {
+    warnings.push('El archivo no contiene compromisos financieros ni cuotas modernas.');
+  }
+
+  return {
+    schemaVersion: detectedVersion,
+    profileName: normalized.profile?.name || null,
+    transactionsCount: normalized.finance?.transactions?.length || 0,
+    accountsCount: normalized.finance?.accounts?.length || 0,
+    notesCount: (normalized.notes?.postits?.length || 0) + (normalized.notes?.shopping?.length || 0) + (normalized.notes?.links?.length || 0),
+    tasksCount: (normalized.todayExtras?.length || 0) + (normalized.tasksRecurring?.length || 0),
+    gymSessionsCount: normalized.gym?.sessions?.length || 0,
+    studySubjectsCount: normalized.study?.subjects?.length || 0,
+    commitmentsCount: normalized.finance?.commitments?.length || 0,
+    backupDate: rawState?.settings?.lastBackupAt || null,
+    lastBackupAt: rawState?.settings?.lastBackupAt || null,
+    warnings,
+    state: normalized,
+  };
+}
+
+export function loadRecoveryState(userId?: string | null): { state: LifeOSState; meta: RecoveryMetadata } | null {
+  try {
+    const key = getRecoveryKey(userId);
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    if (parsed.meta && parsed.state && typeof parsed.state === 'object') {
+      return {
+        state: normalizeStoredState(parsed.state),
+        meta: parsed.meta,
+      };
+    }
+
+    // Older flat LifeOSState recovery format
+    const normalized = normalizeStoredState(parsed);
+    return {
+      state: normalized,
+      meta: {
+        savedAt: new Date().toISOString(),
+        action: 'manual_snapshot',
+        description: 'Copia de recuperación previa',
+        transactionsCount: normalized.finance?.transactions?.length || 0,
+        notesCount: (normalized.notes?.postits?.length || 0) + (normalized.notes?.shopping?.length || 0),
+        tasksCount: (normalized.todayExtras?.length || 0) + (normalized.tasksRecurring?.length || 0),
+        gymSessionsCount: normalized.gym?.sessions?.length || 0,
+        commitmentsCount: normalized.finance?.commitments?.length || 0,
+        schemaVersion: CURRENT_SCHEMA_VERSION,
+      },
+    };
+  } catch (e) {
+    console.error('Error loading recovery state:', e);
+    return null;
+  }
+}
+
+export function clearRecoveryState(userId?: string | null): void {
+  try {
+    const key = getRecoveryKey(userId);
+    localStorage.removeItem(key);
+  } catch (e) {
+    console.error('Error clearing recovery state:', e);
+  }
 }
 
 export function getStorageDiagnostics(userId?: string | null): StorageDiagnostics {
@@ -589,19 +734,41 @@ export function getStorageDiagnostics(userId?: string | null): StorageDiagnostic
   const rKey = getRecoveryKey(userId);
   const pVal = localStorage.getItem(pKey) || '';
   const rVal = localStorage.getItem(rKey) || '';
+  const recoveryInfo = loadRecoveryState(userId);
   return {
     backend: 'localStorage',
     schemaVersion: CURRENT_SCHEMA_VERSION,
     primaryBytes: new Blob([pVal]).size,
     recoveryAvailable: Boolean(rVal),
     recoveryBytes: new Blob([rVal]).size,
+    recoveryMeta: recoveryInfo?.meta || null,
   };
 }
 
-export function saveRecoveryState(state: LifeOSState, userId?: string | null): boolean {
+export function saveRecoveryState(
+  state: LifeOSState,
+  userId?: string | null,
+  action: RecoveryAction = 'manual_snapshot',
+  description?: string
+): boolean {
   try {
     const key = getRecoveryKey(userId);
-    localStorage.setItem(key, JSON.stringify(state));
+    const meta: RecoveryMetadata = {
+      savedAt: new Date().toISOString(),
+      action,
+      description: description || getDefaultRecoveryDescription(action),
+      transactionsCount: state.finance?.transactions?.length || 0,
+      notesCount: (state.notes?.postits?.length || 0) + (state.notes?.shopping?.length || 0),
+      tasksCount: (state.todayExtras?.length || 0) + (state.tasksRecurring?.length || 0),
+      gymSessionsCount: state.gym?.sessions?.length || 0,
+      commitmentsCount: state.finance?.commitments?.length || 0,
+      schemaVersion: CURRENT_SCHEMA_VERSION,
+    };
+    const envelope: RecoveryEnvelope = {
+      meta,
+      state,
+    };
+    localStorage.setItem(key, JSON.stringify(envelope));
     return true;
   } catch (e) {
     console.error('Error saving recovery state:', e);

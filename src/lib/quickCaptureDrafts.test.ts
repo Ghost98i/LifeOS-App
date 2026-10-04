@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { defaultState } from './storage';
+import { defaultState, fmtMoney } from './storage';
 import {
   parseCaptureDrafts,
   confirmCaptureDraft,
@@ -771,4 +771,439 @@ test('LifeOS — Fase 4: Batch confirmation (Confirm All) retains invalid or fai
   assert.equal(draftsInTray.length, 2);
   assert.equal(draftsInTray[0].id, 'd-usd');
   assert.equal(draftsInTray[1].id, 'd-arch');
+});
+
+test('REGRESSION: "gaste 930 pesos" maintains numeric value 930 and does not duplicate currency symbol', () => {
+  const state = defaultState();
+  const drafts = parseCaptureDrafts('gaste 930 pesos', state, { defaultDate: '2026-10-04' });
+  assert.equal(drafts.length, 1);
+  const draft = drafts[0];
+  assert.equal(draft.kind, 'finance');
+  if (draft.kind === 'finance') {
+    assert.equal(draft.amount, 930);
+    assert.equal(draft.type, 'gasto');
+    assert.equal(draft.currency, 'UYU');
+    // Storage fmtMoney produces '$U 930'
+    const formatted = fmtMoney(draft.amount);
+    assert.equal(formatted, '$U 930');
+    // Ensure formatting does not produce double '$U $U'
+    assert.equal(formatted.includes('$U $U'), false);
+
+    // Persisting the draft creates transaction and updates balance
+    const initialBalance = (state.finance?.accounts || []).reduce((acc, a) => acc + (a.balance || 0), 0);
+    confirmCaptureDraft(state, draft);
+    const updatedBalance = (state.finance?.accounts || []).reduce((acc, a) => acc + (a.balance || 0), 0);
+    assert.equal(updatedBalance, initialBalance - 930);
+    const tx = state.finance?.transactions.find((t) => t.amount === 930);
+    assert.ok(tx);
+    assert.equal(tx?.type, 'gasto');
+  }
+});
+
+test('REGRESSION: "estudiar redes el 25 de octubre" resolves explicit date 2026-10-25 as Task and persists it', () => {
+  const state = defaultState();
+  const drafts = parseCaptureDrafts('estudiar redes el 25 de octubre', state, { defaultDate: '2026-10-04' });
+  assert.equal(drafts.length, 1);
+  const draft = drafts[0];
+  assert.equal(draft.kind, 'task');
+  if (draft.kind === 'task') {
+    assert.equal(draft.dueDate, '2026-10-25');
+    assert.equal(draft.dueDateLabel, '25 de Octubre');
+    assert.equal(draft.text.toLowerCase().includes('estudiar redes'), true);
+    assert.equal(draft.ambiguityWarning, undefined);
+
+    confirmCaptureDraft(state, draft);
+    const savedTask = state.todayExtras.find((t) => t.text.toLowerCase().includes('estudiar redes'));
+    assert.ok(savedTask);
+    assert.equal(savedTask?.date, '2026-10-25');
+  }
+});
+
+test('REGRESSION: "ir a comer con la familia el 25 de diciembre" resolves explicit date 2026-12-25', () => {
+  const state = defaultState();
+  const drafts = parseCaptureDrafts('ir a comer con la familia el 25 de diciembre', state, { defaultDate: '2026-10-04' });
+  assert.equal(drafts.length, 1);
+  const draft = drafts[0];
+  assert.equal(draft.kind, 'task');
+  if (draft.kind === 'task') {
+    assert.equal(draft.dueDate, '2026-12-25');
+    assert.equal(draft.dueDateLabel, '25 de Diciembre');
+    assert.equal(draft.text.toLowerCase().includes('ir a comer con la familia'), true);
+  }
+});
+
+test('REGRESSION: "examen el lunes" preserves day-of-week parsing', () => {
+  const state = defaultState();
+  // 2026-10-04 is a Sunday; next Monday is 2026-10-05
+  const drafts = parseCaptureDrafts('examen el lunes', state, { defaultDate: '2026-10-04' });
+  assert.equal(drafts.length, 1);
+  const draft = drafts[0];
+  assert.equal(draft.kind, 'task');
+  if (draft.kind === 'task') {
+    assert.equal(draft.dueDate, '2026-10-05');
+    assert.equal(draft.dueDateLabel?.startsWith('Lunes'), true);
+  }
+});
+
+test('REGRESSION: invalid calendar date ("31 de febrero") does NOT fall to Hoy; flags ambiguity and blocks confirmation', () => {
+  const state = defaultState();
+  const drafts = parseCaptureDrafts('estudiar redes el 31 de febrero', state, { defaultDate: '2026-10-04' });
+  assert.equal(drafts.length, 1);
+  const draft = drafts[0];
+  assert.equal(draft.kind, 'task');
+  if (draft.kind === 'task') {
+    assert.equal(draft.dueDate, undefined);
+    assert.notEqual(draft.dueDateLabel, 'Hoy');
+    assert.ok(draft.ambiguityWarning);
+    assert.equal(canConfirmDraft(state, draft).valid, false);
+    assert.equal(canConfirmDraft(state, draft).reason, 'Fecha o datos ambiguos requieren revisión');
+  }
+});
+
+test('REGRESSION: "Debo 5939 pesos a Jorge pagar el 25 de septiembre" flags review when date is in the past without explicit year', () => {
+  const state = defaultState();
+  const initialBalance = (state.finance?.accounts || []).reduce((acc, a) => acc + (a.balance || 0), 0);
+  const initialTxCount = state.finance?.transactions.length || 0;
+
+  // referenceDate is 2026-10-04, 25 de septiembre is in the past
+  const drafts = parseCaptureDrafts('Debo 5939 pesos a Jorge pagar el 25 de septiembre', state, { defaultDate: '2026-10-04' });
+  assert.equal(drafts.length, 1);
+  const draft = drafts[0];
+
+  // Must be a Task representing the commitment, with ambiguityWarning for review since date is past
+  assert.equal(draft.kind, 'task');
+  if (draft.kind === 'task') {
+    assert.equal(draft.dueDate, '2026-09-25');
+    assert.ok(draft.dueDateLabel?.includes('25 de Septiembre'));
+    assert.ok(draft.ambiguityWarning);
+    assert.equal(canConfirmDraft(state, draft).valid, false, 'Requiere revisión antes de confirmar');
+
+    // No finance transaction or balance change occurred
+    const finalBalance = (state.finance?.accounts || []).reduce((acc, a) => acc + (a.balance || 0), 0);
+    assert.equal(finalBalance, initialBalance);
+    assert.equal(state.finance?.transactions.length, initialTxCount);
+  }
+});
+
+test('REGRESSION: Explicit date without year: future date resolves cleanly, past date requires review, explicit year is authoritative', () => {
+  const state = defaultState();
+  const ref = '2026-10-04';
+
+  // 1. Future date in same year: 25 de octubre (posterior a 4 de octubre) resolves normally without warning
+  const dFuture = parseCaptureDrafts('estudiar redes el 25 de octubre', state, { defaultDate: ref })[0];
+  assert.equal(dFuture.kind, 'task');
+  if (dFuture.kind === 'task') {
+    assert.equal(dFuture.dueDate, '2026-10-25');
+    assert.equal(dFuture.ambiguityWarning, undefined);
+    assert.equal(canConfirmDraft(state, dFuture).valid, true);
+  }
+
+  // 2. Past date in same year without explicit year: 15 de agosto (anterior a 4 de octubre) requires review
+  const dPast = parseCaptureDrafts('pagar patente el 15 de agosto', state, { defaultDate: ref })[0];
+  assert.equal(dPast.kind, 'task');
+  if (dPast.kind === 'task') {
+    assert.equal(dPast.dueDate, '2026-08-15');
+    assert.ok(dPast.ambiguityWarning);
+    assert.equal(canConfirmDraft(state, dPast).valid, false);
+  }
+
+  // 3. Authoritative explicit year: "el 15 de agosto de 2027" resolves without ambiguity warning
+  const dAuthoritative = parseCaptureDrafts('pagar patente el 15 de agosto de 2027', state, { defaultDate: ref })[0];
+  assert.equal(dAuthoritative.kind, 'task');
+  if (dAuthoritative.kind === 'task') {
+    assert.equal(dAuthoritative.dueDate, '2027-08-15');
+    assert.equal(dAuthoritative.ambiguityWarning, undefined);
+    assert.equal(canConfirmDraft(state, dAuthoritative).valid, true);
+  }
+});
+
+test('REGRESSION: "peso 105kg" routes to safe Inbox free-capture and does NOT invent a Task or mutate gym', () => {
+  const state = defaultState();
+  const initialTaskCount = state.todayExtras.length;
+  const initialGymWeightCount = state.gym?.weight?.length || 0;
+
+  const drafts = parseCaptureDrafts('peso 105kg', state, { defaultDate: '2026-10-04' });
+  assert.equal(drafts.length, 1);
+  const draft = drafts[0];
+
+  // Must be InboxDraft, preserving exact raw text
+  assert.equal(draft.kind, 'inbox');
+  if (draft.kind === 'inbox') {
+    assert.equal(draft.text, 'peso 105kg');
+    assert.equal(draft.targetModule, 'dashboard');
+    assert.equal(draft.isModuleEnabled, true);
+
+    const confirmationResult = confirmCaptureDraft(state, draft);
+    assert.ok(confirmationResult.message.toLowerCase().includes('bandeja'));
+
+    // Confirm that no Task was created and no Gym state was mutated
+    assert.equal(state.todayExtras.length, initialTaskCount);
+    assert.equal(state.gym?.weight?.length || 0, initialGymWeightCount);
+
+    // Confirm saved to inbox
+    assert.ok(state.inbox?.some((i) => i.text === 'peso 105kg'));
+  }
+});
+
+test('REGRESSION: Genuine actionable tasks continue producing TaskDraft', () => {
+  const state = defaultState();
+  const drafts = parseCaptureDrafts('comprar leche en el súper', state);
+  assert.equal(drafts.length, 1);
+  assert.equal(drafts[0].kind, 'task');
+  if (drafts[0].kind === 'task') {
+    assert.ok(drafts[0].text.includes('comprar leche'));
+  }
+});
+
+/* =========================================================================
+   FASE 4.2: MULTI-INTENT, AMBIGÜEDAD Y CAPTURA LIBRE
+   ========================================================================= */
+
+test('FASE 4.2: Multi-intent real genera intenciones independientes (Finanzas + Tarea)', () => {
+  const state = defaultState();
+  const input = 'pagué 1600 internet y mañana estudiar redes';
+  const drafts = parseCaptureDrafts(input, state, { defaultDate: '2026-10-04' });
+
+  assert.equal(drafts.length, 2);
+
+  // Draft 1: Finance
+  const d1 = drafts[0];
+  assert.equal(d1.kind, 'finance');
+  assert.equal(d1.originalInput, input);
+  if (d1.kind === 'finance') {
+    assert.equal(d1.amount, 1600);
+    assert.equal(d1.type, 'gasto');
+    assert.ok(d1.categoryMatched?.toLowerCase().includes('hogar') || d1.categoryMatched?.toLowerCase().includes('internet'));
+  }
+
+  // Draft 2: Task
+  const d2 = drafts[1];
+  assert.equal(d2.kind, 'task');
+  assert.equal(d2.originalInput, input);
+  if (d2.kind === 'task') {
+    assert.ok(d2.text.toLowerCase().includes('estudiar redes'));
+    assert.equal(d2.dueDate, '2026-10-05');
+  }
+
+  // Independent confirmation & failure simulation
+  // Disabling Finanzas blocks only d1; d2 remains valid and confirms smoothly
+  state.settings.hiddenTabs = ['finanzas'];
+  d1.isModuleEnabled = false;
+  assert.equal(canConfirmDraft(state, d1).valid, false);
+  assert.equal(canConfirmDraft(state, d2).valid, true);
+
+  const confirmRes2 = confirmCaptureDraft(state, d2);
+  assert.ok(confirmRes2.message.toLowerCase().includes('tarea'));
+  assert.ok(state.todayExtras.some((t) => t.text.toLowerCase().includes('estudiar redes')));
+});
+
+test('FASE 4.2: Conjunción interna ("y") NO sobre-segmenta enumeraciones ni prefijos explícitos', () => {
+  const state = defaultState();
+
+  // 1. "comprar pan y leche" -> 1 sola tarea
+  const d1 = parseCaptureDrafts('comprar pan y leche', state);
+  assert.equal(d1.length, 1);
+  assert.equal(d1[0].kind, 'task');
+  if (d1[0].kind === 'task') {
+    assert.equal(d1[0].text, 'comprar pan y leche');
+  }
+
+  // 2. "nota: llamar al médico y comprar remedios" -> 1 sola nota íntegra
+  const d2 = parseCaptureDrafts('nota: llamar al médico y comprar remedios', state);
+  assert.equal(d2.length, 1);
+  assert.equal(d2[0].kind, 'note');
+  if (d2[0].kind === 'note') {
+    assert.equal(d2[0].text, 'llamar al médico y comprar remedios');
+  }
+
+  // 3. "idea: hacer clips de ATS y probar otro formato" -> 1 sola idea íntegra
+  const d3 = parseCaptureDrafts('idea: hacer clips de ATS y probar otro formato', state);
+  assert.equal(d3.length, 1);
+  assert.equal(d3[0].kind, 'idea');
+  if (d3[0].kind === 'idea') {
+    assert.equal(d3[0].text, 'hacer clips de ATS y probar otro formato');
+  }
+
+  // 4. "ir a comer con mamá y papá el domingo" -> 1 solo borrador
+  const d4 = parseCaptureDrafts('ir a comer con mamá y papá el domingo', state, { defaultDate: '2026-10-04' });
+  assert.equal(d4.length, 1);
+  assert.equal(d4[0].kind, 'task');
+  if (d4[0].kind === 'task') {
+    assert.ok(d4[0].text.toLowerCase().includes('ir a comer con mamá y papá'));
+  }
+});
+
+test('FASE 4.2: Conectores compuestos ("y después", "y luego") dividen cláusulas con acciones reales', () => {
+  const state = defaultState();
+  const drafts = parseCaptureDrafts('comprar comida y después llamar a Juan', state);
+  assert.equal(drafts.length, 2);
+  assert.equal(drafts[0].kind, 'task');
+  assert.equal(drafts[1].kind, 'task');
+  if (drafts[0].kind === 'task' && drafts[1].kind === 'task') {
+    assert.equal(drafts[0].text, 'comprar comida');
+    assert.equal(drafts[1].text, 'llamar a Juan');
+  }
+});
+
+test('FASE 4.2: Ambigüedad real ("mañana Juan") no inventa llamada, reunión ni tarea arbitraria', () => {
+  const state = defaultState();
+  const drafts = parseCaptureDrafts('mañana Juan', state, { defaultDate: '2026-10-04' });
+  assert.equal(drafts.length, 1);
+  const draft = drafts[0];
+
+  // Must NOT be a TaskDraft
+  assert.equal(draft.kind, 'inbox');
+  if (draft.kind === 'inbox') {
+    assert.equal(draft.text, 'mañana Juan');
+    assert.ok(draft.ambiguityWarning);
+    assert.ok(draft.ambiguityWarning.includes('sin acción definida'));
+  }
+});
+
+test('FASE 4.2: "Juan 1600" no inventa gasto financiero sin evidencia contextual clara', () => {
+  const state = defaultState();
+  // "Juan" is not a category, not an account, and there is no $ or transactional verb
+  const drafts = parseCaptureDrafts('Juan 1600', state);
+  assert.equal(drafts.length, 1);
+  const draft = drafts[0];
+
+  // Must NOT be finance
+  assert.notEqual(draft.kind, 'finance');
+  assert.equal(draft.kind, 'inbox');
+  if (draft.kind === 'inbox') {
+    assert.equal(draft.text, 'Juan 1600');
+  }
+});
+
+test('FASE 4.2: Captura libre para hechos, reflexiones y estados ("hoy me siento cansado", "el auto hizo un ruido raro")', () => {
+  const state = defaultState();
+
+  const inputs = [
+    'hoy me siento cansado',
+    'me siento cansado',
+    'hoy fue un día horrible',
+    'el auto hizo un ruido raro',
+    'Juan está pensando mudarse',
+  ];
+
+  for (const text of inputs) {
+    const drafts = parseCaptureDrafts(text, state);
+    assert.equal(drafts.length, 1);
+    // Must be note (if notas enabled) or inbox, never a task
+    assert.ok(drafts[0].kind === 'note' || drafts[0].kind === 'inbox');
+    assert.notEqual(drafts[0].kind, 'task');
+  }
+});
+
+test('FASE 4.2: Información financiera incompleta ("compré algo por 1200") no inventa categoría', () => {
+  const state = defaultState();
+  const drafts = parseCaptureDrafts('compré algo por 1200', state);
+  assert.equal(drafts.length, 1);
+  const draft = drafts[0];
+
+  assert.equal(draft.kind, 'finance');
+  if (draft.kind === 'finance') {
+    assert.equal(draft.amount, 1200);
+    // Category must be undefined / Sin categoría, flagged in missingFields
+    assert.equal(draft.category, undefined);
+    assert.ok(draft.missingFields?.includes('category'));
+  }
+});
+
+/* =========================================================================
+   ELIMINACIÓN DE FALLBACK AMBIGUO A TAREA (ACCIÓN VS INFORMACIÓN)
+   ========================================================================= */
+
+test('ACCION vs INFORMACION: Entradas con evidencia accionable generan TaskDraft', () => {
+  const state = defaultState();
+
+  // 1. "comprar leche"
+  const d1 = parseCaptureDrafts('comprar leche', state)[0];
+  assert.equal(d1.kind, 'task');
+  if (d1.kind === 'task') {
+    assert.equal(d1.text, 'comprar leche');
+  }
+
+  // 2. "llamar a Juan mañana"
+  const d2 = parseCaptureDrafts('llamar a Juan mañana', state, { defaultDate: '2026-10-04' })[0];
+  assert.equal(d2.kind, 'task');
+  if (d2.kind === 'task') {
+    assert.equal(d2.text, 'llamar a Juan');
+    assert.equal(d2.dueDate, '2026-10-05');
+  }
+
+  // 3. "revisar el CV"
+  const d3 = parseCaptureDrafts('revisar el CV', state)[0];
+  assert.equal(d3.kind, 'task');
+  if (d3.kind === 'task') {
+    assert.equal(d3.text, 'revisar el CV');
+  }
+
+  // 4. "tengo que mandar el trabajo"
+  const d4 = parseCaptureDrafts('tengo que mandar el trabajo', state)[0];
+  assert.equal(d4.kind, 'task');
+  if (d4.kind === 'task') {
+    assert.equal(d4.text, 'mandar el trabajo');
+  }
+
+  // 5. "urgente: pagar Antel"
+  const d5 = parseCaptureDrafts('urgente: pagar Antel', state)[0];
+  assert.equal(d5.kind, 'task');
+  if (d5.kind === 'task') {
+    assert.equal(d5.priority, 'alta');
+    assert.ok(d5.text.includes('pagar Antel'));
+  }
+});
+
+test('ACCION vs INFORMACION: Frases meramente informativas, factuales o ambiguas NO inventan tarea', () => {
+  const state = defaultState();
+
+  const nonActionableInputs = [
+    'Juan está raro últimamente',
+    'la computadora hace un ruido',
+    'tengo 3 gatos',
+    'el alquiler subió',
+    'mañana algo con Jorge',
+  ];
+
+  for (const text of nonActionableInputs) {
+    const drafts = parseCaptureDrafts(text, state, { defaultDate: '2026-10-04' });
+    assert.equal(drafts.length, 1);
+    const d = drafts[0];
+    assert.notEqual(d.kind, 'task', `"${text}" NO debe convertirse en TaskDraft`);
+    assert.equal(d.kind, 'inbox', `"${text}" debe preservarse en InboxDraft`);
+    if (d.kind === 'inbox') {
+      assert.equal(d.text, text, `"${text}" debe conservar el texto original íntegro`);
+      assert.equal(d.targetModule, 'dashboard');
+      assert.equal(d.isModuleEnabled, true);
+    }
+  }
+});
+
+test('ACCION vs INFORMACION: Multi-intent mixto preserva tarea y captura ambigua por separado', () => {
+  const state = defaultState();
+  const input = 'comprar comida y después Juan está raro';
+  const drafts = parseCaptureDrafts(input, state);
+
+  assert.equal(drafts.length, 2, 'Debe segmentar en exactamente 2 intenciones');
+
+  // Clause 1: Task
+  assert.equal(drafts[0].kind, 'task');
+  if (drafts[0].kind === 'task') {
+    assert.equal(drafts[0].text, 'comprar comida');
+  }
+
+  // Clause 2: Inbox (ambiguous / non-actionable)
+  assert.equal(drafts[1].kind, 'inbox');
+  if (drafts[1].kind === 'inbox') {
+    assert.equal(drafts[1].text, 'Juan está raro');
+  }
+
+  // Confirming Inbox does not depend on optional modules and mutates only state.inbox
+  const initialTaskCount = state.todayExtras.length;
+  const initialInboxCount = (state.inbox || []).length;
+
+  confirmCaptureDraft(state, drafts[1]);
+  assert.equal(state.todayExtras.length, initialTaskCount, 'No debe crear tareas en el estado');
+  assert.equal(state.inbox?.length, initialInboxCount + 1, 'Debe guardar exactamente en inbox');
 });
