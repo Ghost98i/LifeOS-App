@@ -27,7 +27,7 @@ import {
   assertSucceeds,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 
 const PROJECT_ID = 'lifeos-rules-testing';
 let testEnv: RulesTestEnvironment;
@@ -528,4 +528,70 @@ test('Rules Runtime: 14. Capability inválida es rechazada', async () => {
   };
 
   await assertSucceeds(setDoc(capRef, goodCap));
+});
+
+test('Rules Runtime: 15. REPRODUCCIÓN: Cuenta legacy pre-Fase-8 existente actualiza módulo localmente con Batch Write real', async () => {
+  // 1. Simular que en Firestore YA EXISTÍA un documento de módulo antes del deploy de Fase 8
+  // (Formato v1 legacy: sin isEncrypted ni syncProtocolVersion, y sin documento de capability)
+  await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+    const adminDb = adminContext.firestore();
+    await setDoc(doc(adminDb, 'users', 'alice', 'lifeosModules', 'finance'), {
+      schemaVersion: 2,
+      module: 'finance',
+      data: { accounts: [{ id: 'acc-1', name: 'Banco', balance: 5000 }], transactions: [] },
+      revision: 'old-rev-legacy-1',
+      parentRevision: null,
+      deviceId: 'legacy-device',
+      clientUpdatedAt: 1728000000000,
+      updatedAt: new Date().toISOString(),
+    });
+  });
+
+  const aliceDb = testEnv.authenticatedContext('alice').firestore();
+  const financeRef = doc(aliceDb, 'users', 'alice', 'lifeosModules', 'finance');
+  const revisionRef = doc(aliceDb, 'users', 'alice', 'lifeosRevisions', 'new-rev-2');
+
+  // 2. El cliente moderno ejecuta EXACTAMENTE el batch de producción (writeCloudModules / writeCloudModulesGuarded)
+  const payload = {
+    schemaVersion: 2,
+    syncProtocolVersion: 1,
+    isEncrypted: false,
+    module: 'finance',
+    data: { accounts: [{ id: 'acc-1', name: 'Banco', balance: 4000 }], transactions: [] },
+    revision: 'new-rev-2',
+    parentRevision: 'old-rev-legacy-1',
+    deviceId: 'modern-device',
+    clientUpdatedAt: Date.now(),
+    updatedAt: serverTimestamp(),
+  };
+
+  const batch = writeBatch(aliceDb);
+  batch.set(financeRef, payload);
+  batch.set(revisionRef, payload);
+
+  await assertSucceeds(batch.commit());
+});
+
+test('Rules Runtime: 16. Cuenta legacy: cliente antiguo pre-Fase-8 (sin isEncrypted ni syncProtocolVersion) puede sincronizar', async () => {
+  const aliceDb = testEnv.authenticatedContext('alice').firestore();
+  const notesRef = doc(aliceDb, 'users', 'alice', 'lifeosModules', 'notes');
+  const notesRevRef = doc(aliceDb, 'users', 'alice', 'lifeosRevisions', 'rev-notes-legacy-1');
+
+  // Payload generado por un cliente legacy previo a Fase 8
+  const legacyPayload = {
+    schemaVersion: 2,
+    module: 'notes',
+    data: { postits: [{ id: 'n-1', text: 'Nota' }], shopping: [] },
+    revision: 'rev-notes-legacy-1',
+    parentRevision: null,
+    deviceId: 'legacy-device',
+    clientUpdatedAt: Date.now(),
+    updatedAt: serverTimestamp(),
+  };
+
+  const batch = writeBatch(aliceDb);
+  batch.set(notesRef, legacyPayload);
+  batch.set(notesRevRef, legacyPayload);
+
+  await assertSucceeds(batch.commit());
 });

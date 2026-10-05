@@ -818,7 +818,7 @@ test('Fase 8.2c: Firestore Rules Test Suite — Validación estática exhaustiva
   ): boolean => {
     if (capability && capability.encryptionState === 'encrypted') return true;
     if (capability && capability.encryptionState === 'mixed' && capability.encryptedModules?.includes(module)) return true;
-    if (remoteDoc && remoteDoc.isEncrypted === true) return true;
+    if (remoteDoc && ('isEncrypted' in remoteDoc) && remoteDoc.isEncrypted === true) return true;
     return false;
   };
 
@@ -832,7 +832,8 @@ test('Fase 8.2c: Firestore Rules Test Suite — Validación estática exhaustiva
     module: string,
     payload: any
   ): boolean => {
-    const isReqEncrypted = moduleRequiresEncryption(capability, remoteDoc, module);
+    const isMustEncrypt = moduleRequiresEncryption(capability, remoteDoc, module);
+    const isReqEncrypted = ('isEncrypted' in payload) && payload.isEncrypted === true;
 
     if (typeof payload.schemaVersion !== 'number') return false;
     if (payload.module !== module) return false;
@@ -840,9 +841,10 @@ test('Fase 8.2c: Firestore Rules Test Suite — Validación estática exhaustiva
     if (typeof payload.deviceId !== 'string') return false;
     if (typeof payload.clientUpdatedAt !== 'number') return false;
 
+    if (isMustEncrypt && !isReqEncrypted) return false;
+
     if (isReqEncrypted) {
       if (typeof payload.syncProtocolVersion !== 'number' || payload.syncProtocolVersion < 2) return false;
-      if (payload.isEncrypted !== true) return false;
       if (!isValidCryptoEnvelopeRule(payload.data)) return false;
     } else {
       if (!legacyWritesPermitted(capability)) return false;
@@ -881,6 +883,18 @@ test('Fase 8.2c: Firestore Rules Test Suite — Validación estática exhaustiva
   assert.ok(isAccountSyncCapability(plaintextCap));
   assert.equal(
     evaluateSyncPayload(plaintextCap, null, 'finance', {
+      ...baseValidPayload,
+      module: 'finance',
+      syncProtocolVersion: 1,
+      isEncrypted: false,
+      data: { accounts: [] },
+    }),
+    true
+  );
+
+  // 1b. Plaintext account con documento remoto legacy existente (sin isEncrypted ni capability): write plaintext PERMITIDO
+  assert.equal(
+    evaluateSyncPayload(null, { accounts: [] } as any, 'finance', {
       ...baseValidPayload,
       module: 'finance',
       syncProtocolVersion: 1,

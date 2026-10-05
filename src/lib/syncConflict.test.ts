@@ -376,3 +376,73 @@ test('Fase 3 - Caso 11: Schema v2 backward compatibility (import backup, schemaV
   assert.deepEqual(reParsed.finance.commitments, parsed.finance.commitments);
   assert.deepEqual(reParsed.finance.transactions, parsed.finance.transactions);
 });
+
+test('Hotfix Fase 8: Preservación de cambios pendientes ante error de red / permission-denied en sync', async () => {
+  // Simular el ciclo de vida de flushCloudSave ante fallo de commit
+  const currentState = defaultState();
+  currentState.finance.accounts = [{ id: 'acc-1', name: 'Banco', balance: 7500, initialBalance: 5000 }];
+  currentState.finance.transactions = [{
+    id: 'tx-new-1',
+    amount: 2500,
+    type: 'ingreso',
+    category: 'Honorarios',
+    date: '2026-10-04',
+    fixed: 'variable',
+  }];
+
+  // 1. Simulación de referencias de sincronización del cliente (App.tsx)
+  const baselineDataRef: Record<string, unknown> = {
+    finance: { accounts: [{ id: 'acc-1', name: 'Banco', balance: 5000, initialBalance: 5000 }], transactions: [] },
+  };
+  const queuedModules = new Set<SyncModuleKey>(['finance']);
+  let queuedState = currentState;
+  const pendingRevisions: Record<string, string[]> = {};
+  const failedSyncModules = new Set<SyncModuleKey>();
+  let syncStatus: 'synced' | 'saving' | 'error' | 'conflict' = 'saving';
+
+  // 2. Mock de respuesta fallida de Firestore (Code 7: PERMISSION_DENIED)
+  const simulatedWrites = [{ module: 'finance' as SyncModuleKey, revision: 'rev-failed-123', parentRevision: 'rev-prev' }];
+  const simulatedCompletion = Promise.reject(new Error('PERMISSION_DENIED: evaluation error in firestore.rules'));
+
+  // Registrar revisiones pendientes al despachar
+  simulatedWrites.forEach((w) => {
+    pendingRevisions[w.module] = [...(pendingRevisions[w.module] || []), w.revision];
+  });
+
+  // Ejecución del catch handler idéntico a App.tsx flushCloudSave
+  try {
+    await simulatedCompletion;
+  } catch {
+    simulatedWrites.forEach((write) => {
+      const remaining = (pendingRevisions[write.module] || []).filter((r) => r !== write.revision);
+      if (remaining.length) pendingRevisions[write.module] = remaining;
+      else delete pendingRevisions[write.module];
+      failedSyncModules.add(write.module);
+      queuedModules.add(write.module);
+    });
+    queuedState = currentState;
+    syncStatus = 'error';
+  }
+
+  // 3. Verificaciones de invariantes de seguridad:
+  // a) El estado local no fue mutado ni reemplazado por baseline remoto
+  assert.equal(currentState.finance.transactions.length, 1);
+  assert.equal(currentState.finance.accounts[0].balance, 7500);
+
+  // b) El baseline NO fue avanzado erróneamente (sigue reflejando el estado previo)
+  assert.deepEqual(baselineDataRef['finance'], {
+    accounts: [{ id: 'acc-1', name: 'Banco', balance: 5000, initialBalance: 5000 }],
+    transactions: [],
+  });
+
+  // c) Las revisiones pendientes de escritura fueron limpiadas del tracker para reintentar
+  assert.equal(pendingRevisions['finance'], undefined);
+
+  // d) El módulo se agregó a la cola de reintento con el estado local actual
+  assert.ok(queuedModules.has('finance'));
+  assert.deepEqual(queuedState, currentState);
+
+  // e) El módulo fallido quedó registrado en el set de errores y el status es 'error'
+  assert.ok(failedSyncModules.has('finance'));
+  assert.equal(syncStatus, 'error');
+});

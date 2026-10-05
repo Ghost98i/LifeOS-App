@@ -66,20 +66,25 @@ service cloud.firestore {
     function moduleRequiresEncryption(userId, module) {
       let cap = hasCapability(userId) ? getCapability(userId) : null;
       let hasEncryptedList = cap != null && ('encryptedModules' in cap) && (cap.encryptedModules is list);
-      return (cap != null && cap.encryptionState == 'encrypted')
-        || (cap != null && cap.encryptionState == 'mixed' && hasEncryptedList && module in cap.encryptedModules)
-        || (exists(/databases/$(database)/documents/users/$(userId)/lifeosModules/$(module))
-            && get(/databases/$(database)/documents/users/$(userId)/lifeosModules/$(module)).data.isEncrypted == true);
+      let isCapEncrypted = cap != null && ('encryptionState' in cap) && cap.encryptionState == 'encrypted';
+      let isCapMixed = cap != null && ('encryptionState' in cap) && cap.encryptionState == 'mixed' && hasEncryptedList && module in cap.encryptedModules;
+      let moduleDocPath = /databases/$(database)/documents/users/$(userId)/lifeosModules/$(module);
+      let existingModuleDoc = exists(moduleDocPath) ? get(moduleDocPath).data : null;
+      let existingIsEncrypted = existingModuleDoc != null && ('isEncrypted' in existingModuleDoc) && existingModuleDoc.isEncrypted == true;
+
+      return isCapEncrypted || isCapMixed || existingIsEncrypted;
     }
 
     // Determines if legacy write (v1, plaintext) is permitted for the account:
     // Permitted ONLY if capability does not exist, or capability encryptionState is 'plaintext'
     function legacyWritesPermitted(userId) {
-      return !hasCapability(userId) || getCapability(userId).encryptionState == 'plaintext';
+      return !hasCapability(userId)
+        || ('encryptionState' in getCapability(userId) && getCapability(userId).encryptionState == 'plaintext');
     }
 
     function validSyncPayload(userId, module) {
-      let isReqEncrypted = moduleRequiresEncryption(userId, module);
+      let isMustEncrypt = moduleRequiresEncryption(userId, module);
+      let isReqEncrypted = ('isEncrypted' in request.resource.data) && request.resource.data.isEncrypted == true;
 
       return request.resource.data.keys().hasOnly([
           'schemaVersion', 'syncProtocolVersion', 'isEncrypted', 'module', 'data',
@@ -90,14 +95,15 @@ service cloud.firestore {
         && request.resource.data.revision is string
         && request.resource.data.deviceId is string
         && request.resource.data.clientUpdatedAt is int
-        && request.resource.data.isEncrypted is bool
+        && (!('isEncrypted' in request.resource.data) || request.resource.data.isEncrypted is bool)
+        && (!('syncProtocolVersion' in request.resource.data) || request.resource.data.syncProtocolVersion is int)
         // If module requires encryption, request MUST be encrypted
-        && (!isReqEncrypted || request.resource.data.isEncrypted == true)
+        && (!isMustEncrypt || isReqEncrypted)
         // If unencrypted, legacy writes must be permitted
-        && (request.resource.data.isEncrypted == true || legacyWritesPermitted(userId))
+        && (isReqEncrypted || legacyWritesPermitted(userId))
         // If encrypted, payload must be a valid CryptoEnvelope with protocol version >= 2
-        && (request.resource.data.isEncrypted == false || (
-          request.resource.data.syncProtocolVersion is int
+        && (!isReqEncrypted || (
+          ('syncProtocolVersion' in request.resource.data)
           && request.resource.data.syncProtocolVersion >= 2
           && isValidCryptoEnvelope(request.resource.data.data)
         ));
@@ -162,8 +168,9 @@ service cloud.firestore {
       // y la revisión existente no estaba cifrada (evita purgar revisiones cifradas legítimas)
       allow delete: if isOwner(userId)
         && hasCapability(userId)
+        && ('encryptionState' in getCapability(userId))
         && getCapability(userId).encryptionState == 'encrypted'
-        && (resource.data.isEncrypted != true || resource.data.syncProtocolVersion < 2);
+        && (!('isEncrypted' in resource.data) || resource.data.isEncrypted != true || !('syncProtocolVersion' in resource.data) || resource.data.syncProtocolVersion < 2);
     }
   }
 }
