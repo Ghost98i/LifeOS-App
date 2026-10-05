@@ -49,6 +49,10 @@ import {
   type SyncRevisionMap,
 } from './lib/syncModel';
 import {
+  decodeCloudModuleData,
+  cryptoSession,
+} from './lib/cryptoCore';
+import {
   detectDeletedEntityIds,
   loadTombstones,
   saveTombstones,
@@ -190,6 +194,14 @@ export default function App() {
 
     void writeCloudModulesGuarded(user.uid, currentState, modules, deviceIdRef.current, optimisticRevisionMap(), tombstonesRef.current)
       .then((res) => {
+        if (res.incompatibleProtocol) {
+          // Protocolo remoto superior detectado: cliente incompatible, abortar de forma fail-closed
+          setSyncStatus('locked');
+          res.incompatibleModules?.forEach((mod) => failedSyncModulesRef.current.add(mod));
+          setFailedSyncModules([...failedSyncModulesRef.current]);
+          return;
+        }
+
         if (res.diverged) {
           // Divergencia de versión remota detectada: abortar escritura para no sobreescribir silenciosamente
           setSyncStatus('conflict');
@@ -517,154 +529,225 @@ export default function App() {
       }
     };
 
+    let snapshotSeq = 0;
+
     return subscribeCloudModules(cloudUser.uid, {
       onSnapshot: (snapshot) => {
-        const nextStatus: CloudSyncStatus = snapshot.pendingWrites
-          ? navigator.onLine ? 'saving' : 'offline'
-          : navigator.onLine ? 'synced' : 'offline';
+        snapshotSeq += 1;
+        const currentSeq = snapshotSeq;
 
-        if (initializedUserRef.current !== cloudUser.uid) {
-          if (snapshot.fromCache && navigator.onLine) {
-            setSyncStatus('connecting');
+        void (async () => {
+          const nextStatus: CloudSyncStatus = snapshot.pendingWrites
+            ? navigator.onLine ? 'saving' : 'offline'
+            : navigator.onLine ? 'synced' : 'offline';
+
+          const sessionKey = cryptoSession.getKey(cloudUser.uid);
+
+          // 1. Decodificar todos los módulos con el adapter dual
+          type DecodedHead = {
+            module: SyncModuleKey;
+            data: unknown;
+            revision: string;
+            parentRevision: string | null;
+            deviceId: string;
+            clientUpdatedAt: number;
+            fromCache: boolean;
+            pendingWrites: boolean;
+          };
+
+          const decodedHeads: DecodedHead[] = [];
+          let hasLockedModule = false;
+          let hasCorruptedModule = false;
+
+          for (const head of snapshot.heads) {
+            const decodeRes = await decodeCloudModuleData(head.data, head.module, cloudUser.uid, sessionKey);
+
+            if (decodeRes.mode === 'locked') {
+              hasLockedModule = true;
+              failedSyncModulesRef.current.add(head.module);
+              continue;
+            }
+
+            if (decodeRes.mode === 'corrupted') {
+              // Sanitized logging: log generic reason without leaking ciphertext, keys or plaintexts
+              console.error(`[CryptoSync] Error de integridad al decodificar módulo “${head.module}”: ${decodeRes.reasonCode || 'DECRYPT_FAILED'}`);
+              hasCorruptedModule = true;
+              failedSyncModulesRef.current.add(head.module);
+              continue;
+            }
+
+            decodedHeads.push({
+              module: head.module,
+              data: decodeRes.data,
+              revision: head.revision,
+              parentRevision: head.parentRevision,
+              deviceId: head.deviceId,
+              clientUpdatedAt: head.clientUpdatedAt,
+              fromCache: head.fromCache,
+              pendingWrites: head.pendingWrites,
+            });
+          }
+
+          // Anti-stale / concurrency guard: if a newer snapshot arrived while async decrypt was executing, ignore this stale result
+          if (currentSeq !== snapshotSeq) {
             return;
           }
 
-          if (snapshot.heads.length === 0) {
-            if (legacyReadUserRef.current === cloudUser.uid) return;
-            legacyReadUserRef.current = cloudUser.uid;
-            void readLegacyCloudState(cloudUser.uid)
-              .then((legacyState) => {
-                if (cloudUserRef.current?.uid !== cloudUser.uid) return;
-                if (legacyState) reconcileInitialState(legacyState, {}, true);
-                else reconcileInitialState(defaultState(), {});
-              })
-              .catch(() => setSyncStatus(navigator.onLine ? 'error' : 'offline'));
+          if (hasLockedModule) {
+            setFailedSyncModules([...failedSyncModulesRef.current]);
+            setSyncStatus('locked');
             return;
           }
 
-          const moduleData = Object.fromEntries(snapshot.heads.map((head) => [head.module, extractPureModuleData(head.data)]));
-          const remoteRevisions = Object.fromEntries(snapshot.heads.map((head) => [head.module, head.revision])) as SyncRevisionMap;
-          reconcileInitialState(buildStateFromModules(moduleData), remoteRevisions);
-          return;
-        }
+          if (hasCorruptedModule && decodedHeads.length === 0) {
+            setFailedSyncModules([...failedSyncModulesRef.current]);
+            setSyncStatus('error');
+            return;
+          }
 
-        let nextState = stateRef.current;
-        const nextRevisions = { ...revisionsRef.current };
-        const nextBaselines = { ...baselinesRef.current };
-        const modulesToUpload: SyncModuleKey[] = [];
-        let appliedRemote = false;
+          if (initializedUserRef.current !== cloudUser.uid) {
+            if (snapshot.fromCache && navigator.onLine) {
+              setSyncStatus('connecting');
+              return;
+            }
 
-        for (const head of snapshot.heads) {
-          if (head.data && typeof head.data === 'object' && '_tombstones' in head.data) {
-            const remoteTombstones = (head.data as any)._tombstones as Record<string, number>;
-            if (remoteTombstones && typeof remoteTombstones === 'object') {
-              let tombChanged = false;
-              for (const [id, ts] of Object.entries(remoteTombstones)) {
-                if (typeof ts === 'number' && (!tombstonesRef.current[id] || tombstonesRef.current[id] < ts)) {
-                  tombstonesRef.current[id] = ts;
-                  tombChanged = true;
+            if (decodedHeads.length === 0) {
+              if (legacyReadUserRef.current === cloudUser.uid) return;
+              legacyReadUserRef.current = cloudUser.uid;
+              void readLegacyCloudState(cloudUser.uid)
+                .then((legacyState) => {
+                  if (cloudUserRef.current?.uid !== cloudUser.uid) return;
+                  if (legacyState) reconcileInitialState(legacyState, {}, true);
+                  else reconcileInitialState(defaultState(), {});
+                })
+                .catch(() => setSyncStatus(navigator.onLine ? 'error' : 'offline'));
+              return;
+            }
+
+            const moduleData = Object.fromEntries(decodedHeads.map((head) => [head.module, extractPureModuleData(head.data)]));
+            const remoteRevisions = Object.fromEntries(decodedHeads.map((head) => [head.module, head.revision])) as SyncRevisionMap;
+            reconcileInitialState(buildStateFromModules(moduleData), remoteRevisions);
+            return;
+          }
+
+          let nextState = stateRef.current;
+          const nextRevisions = { ...revisionsRef.current };
+          const nextBaselines = { ...baselinesRef.current };
+          const modulesToUpload: SyncModuleKey[] = [];
+          let appliedRemote = false;
+
+          for (const head of decodedHeads) {
+            if (head.data && typeof head.data === 'object' && '_tombstones' in head.data) {
+              const remoteTombstones = (head.data as any)._tombstones as Record<string, number>;
+              if (remoteTombstones && typeof remoteTombstones === 'object') {
+                let tombChanged = false;
+                for (const [id, ts] of Object.entries(remoteTombstones)) {
+                  if (typeof ts === 'number' && (!tombstonesRef.current[id] || tombstonesRef.current[id] < ts)) {
+                    tombstonesRef.current[id] = ts;
+                    tombChanged = true;
+                  }
+                }
+                if (tombChanged && cloudUserRef.current) {
+                  saveTombstones(cloudUserRef.current.uid, tombstonesRef.current);
                 }
               }
-              if (tombChanged && cloudUserRef.current) {
-                saveTombstones(cloudUserRef.current.uid, tombstonesRef.current);
-              }
             }
-          }
 
-          const pureHeadData = extractPureModuleData(head.data);
-          const pendingRevisions = pendingRevisionsRef.current[head.module] || [];
-          const knownRevision = nextRevisions[head.module] || null;
+            const pureHeadData = extractPureModuleData(head.data);
+            const pendingRevisions = pendingRevisionsRef.current[head.module] || [];
+            const knownRevision = nextRevisions[head.module] || null;
 
-          const pendingIndex = pendingRevisions.indexOf(head.revision);
-          if (pendingIndex >= 0) {
-            if (!head.pendingWrites) {
-              const remaining = pendingRevisions.slice(pendingIndex + 1);
-              if (remaining.length) pendingRevisionsRef.current[head.module] = remaining;
-              else delete pendingRevisionsRef.current[head.module];
+            const pendingIndex = pendingRevisions.indexOf(head.revision);
+            if (pendingIndex >= 0) {
+              if (!head.pendingWrites) {
+                const remaining = pendingRevisions.slice(pendingIndex + 1);
+                if (remaining.length) pendingRevisionsRef.current[head.module] = remaining;
+                else delete pendingRevisionsRef.current[head.module];
+                nextRevisions[head.module] = head.revision;
+                nextBaselines[head.module] = syncDataFingerprint(pureHeadData);
+                baselineDataRef.current[head.module] = pureHeadData;
+                failedSyncModulesRef.current.delete(head.module);
+                setFailedSyncModules([...failedSyncModulesRef.current]);
+              }
+              continue;
+            }
+
+            if (knownRevision === head.revision) {
+              if (!nextBaselines[head.module]) {
+                nextBaselines[head.module] = syncDataFingerprint(pureHeadData);
+                baselineDataRef.current[head.module] = pureHeadData;
+              }
+              continue;
+            }
+            if (head.fromCache && !knownRevision) continue;
+
+            const localDirty = nextBaselines[head.module]
+              ? syncModuleFingerprint(nextState, head.module) !== nextBaselines[head.module]
+              : false;
+
+            if (pendingRevisions.length === 0 && !localDirty) {
+              nextState = applySyncModule(nextState, head.module, pureHeadData);
               nextRevisions[head.module] = head.revision;
               nextBaselines[head.module] = syncDataFingerprint(pureHeadData);
               baselineDataRef.current[head.module] = pureHeadData;
-              failedSyncModulesRef.current.delete(head.module);
-              setFailedSyncModules([...failedSyncModulesRef.current]);
+              appliedRemote = true;
+              continue;
             }
-            continue;
-          }
 
-          if (knownRevision === head.revision) {
-            if (!nextBaselines[head.module]) {
-              nextBaselines[head.module] = syncDataFingerprint(pureHeadData);
-              baselineDataRef.current[head.module] = pureHeadData;
+            // Concurrent modification: perform 3-way merge with conflict detection!
+            const { state: mergedWithModule, conflicts: moduleConflicts } = mergeSyncModuleWithConflicts(
+              nextState,
+              head.module,
+              pureHeadData,
+              baselineDataRef.current[head.module],
+              tombstonesRef.current
+            );
+
+            if (moduleConflicts.length > 0) {
+              // Conflicto real detectado: no sobreescribir silenciosamente
+              const remoteStateBuilt = buildStateFromModules({ [head.module]: pureHeadData });
+              const baseStateBuilt = baselineDataRef.current[head.module]
+                ? buildStateFromModules({ [head.module]: baselineDataRef.current[head.module] })
+                : undefined;
+
+              saveSyncRecoverySnapshot(cloudUser.uid, 'local', stateRef.current);
+              saveSyncRecoverySnapshot(cloudUser.uid, 'remote', remoteStateBuilt);
+              if (baseStateBuilt) saveSyncRecoverySnapshot(cloudUser.uid, 'base', baseStateBuilt);
+
+              setCloudConflict({
+                remoteState: remoteStateBuilt,
+                modules: [head.module],
+                remoteRevisions: { [head.module]: head.revision },
+                conflicts: moduleConflicts,
+              });
+              setSyncStatus('conflict');
+              return;
             }
-            continue;
-          }
-          if (head.fromCache && !knownRevision) continue;
 
-          const localDirty = nextBaselines[head.module]
-            ? syncModuleFingerprint(nextState, head.module) !== nextBaselines[head.module]
-            : false;
-
-          if (pendingRevisions.length === 0 && !localDirty) {
-            nextState = applySyncModule(nextState, head.module, pureHeadData);
+            nextState = mergedWithModule;
             nextRevisions[head.module] = head.revision;
             nextBaselines[head.module] = syncDataFingerprint(pureHeadData);
-            baselineDataRef.current[head.module] = pureHeadData;
+            baselineDataRef.current[head.module] = syncModuleData(nextState, head.module);
             appliedRemote = true;
-            continue;
+            modulesToUpload.push(head.module);
           }
 
-          // Concurrent modification: perform 3-way merge with conflict detection!
-          const { state: mergedWithModule, conflicts: moduleConflicts } = mergeSyncModuleWithConflicts(
-            nextState,
-            head.module,
-            pureHeadData,
-            baselineDataRef.current[head.module],
-            tombstonesRef.current
-          );
+          storeRevisions(nextRevisions);
+          persistBaselines(cloudUser.uid, nextBaselines);
+          saveCloudBaselineData(cloudUser.uid, baselineDataRef.current);
+          if (appliedRemote) applyRemoteState(nextState, cloudUser.uid);
+          markCloudPaired(cloudUser.uid);
 
-          if (moduleConflicts.length > 0) {
-            // Conflicto real detectado: no sobreescribir silenciosamente
-            const remoteStateBuilt = buildStateFromModules({ [head.module]: pureHeadData });
-            const baseStateBuilt = baselineDataRef.current[head.module]
-              ? buildStateFromModules({ [head.module]: baselineDataRef.current[head.module] })
-              : undefined;
-
-            saveSyncRecoverySnapshot(cloudUser.uid, 'local', stateRef.current);
-            saveSyncRecoverySnapshot(cloudUser.uid, 'remote', remoteStateBuilt);
-            if (baseStateBuilt) saveSyncRecoverySnapshot(cloudUser.uid, 'base', baseStateBuilt);
-
-            setCloudConflict({
-              remoteState: remoteStateBuilt,
-              modules: [head.module],
-              remoteRevisions: { [head.module]: head.revision },
-              conflicts: moduleConflicts,
-            });
-            setSyncStatus('conflict');
-            return;
+          if (modulesToUpload.length > 0) {
+            queueCloudSave(nextState, modulesToUpload);
           }
 
-          nextState = mergedWithModule;
-          nextRevisions[head.module] = head.revision;
-          nextBaselines[head.module] = syncDataFingerprint(pureHeadData);
-          baselineDataRef.current[head.module] = syncModuleData(nextState, head.module);
-          appliedRemote = true;
-          modulesToUpload.push(head.module);
-        }
-
-        storeRevisions(nextRevisions);
-        persistBaselines(cloudUser.uid, nextBaselines);
-        saveCloudBaselineData(cloudUser.uid, baselineDataRef.current);
-        if (appliedRemote) applyRemoteState(nextState, cloudUser.uid);
-        markCloudPaired(cloudUser.uid);
-
-        if (modulesToUpload.length > 0) {
-          queueCloudSave(nextState, modulesToUpload);
-        }
-
-        const statusAfterFailures = failedSyncModulesRef.current.size > 0 && nextStatus === 'synced' ? 'error' : nextStatus;
-        setSyncStatus(statusAfterFailures);
-        if (statusAfterFailures === 'synced') {
-          setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-        }
+          const statusAfterFailures = failedSyncModulesRef.current.size > 0 && nextStatus === 'synced' ? 'error' : nextStatus;
+          setSyncStatus(statusAfterFailures);
+          if (statusAfterFailures === 'synced') {
+            setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+          }
+        })();
       },
       onError: (err) => {
         console.error('[CloudSync] Snapshot error:', err);

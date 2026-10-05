@@ -14,44 +14,139 @@ service cloud.firestore {
       ];
     }
 
-    function validSyncPayload(module) {
+    // Single Source of Truth for CryptoEnvelope in Firestore
+    function isValidCryptoEnvelope(envelope) {
+      return envelope is map
+        && envelope.keys().hasOnly(['cryptoVersion', 'algorithm', 'iv', 'ciphertext', 'aad', 'createdAt'])
+        && envelope.cryptoVersion is int
+        && envelope.cryptoVersion == 1
+        && envelope.algorithm == 'AES-GCM-256'
+        && envelope.iv is string
+        && envelope.ciphertext is string
+        && (!('aad' in envelope) || envelope.aad is string)
+        && envelope.createdAt is string;
+    }
+
+    // Validation for WrappedKeyEnvelope stored in users/{userId}/lifeosAccount/keyEnvelope
+    function isValidWrappedKeyEnvelope(envelope, userId) {
+      return envelope is map
+        && envelope.keys().hasOnly(['keyFormatVersion', 'cryptoVersion', 'algorithm', 'wrappedMdek', 'kdf', 'aad', 'createdAt'])
+        && envelope.keyFormatVersion is int
+        && envelope.keyFormatVersion == 1
+        && envelope.cryptoVersion is int
+        && envelope.cryptoVersion == 1
+        && envelope.algorithm == 'AES-GCM-256'
+        && envelope.wrappedMdek is map
+        && envelope.wrappedMdek.keys().hasOnly(['iv', 'ciphertext'])
+        && envelope.wrappedMdek.iv is string
+        && envelope.wrappedMdek.ciphertext is string
+        && envelope.kdf is map
+        && envelope.kdf.keys().hasOnly(['algorithm', 'salt', 'info'])
+        && envelope.kdf.algorithm == 'HKDF-SHA-256'
+        && envelope.kdf.salt is string
+        && envelope.kdf.info is string
+        && envelope.aad is string
+        // Strict context & user binding: envelope cannot be bound to a different userId
+        && envelope.aad == 'keyFormatVersion:1|userId:' + userId
+        && envelope.createdAt is string;
+    }
+
+    function hasCapability(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId)/lifeosAccount/capability);
+    }
+
+    function getCapability(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)/lifeosAccount/capability).data;
+    }
+
+    // Determines if a module must be written encrypted:
+    // - If account capability is 'encrypted'
+    // - Or if account capability is 'mixed' and module is listed in capability.encryptedModules
+    // - Or if the existing remote module document was already encrypted (prevents silent downgrade)
+    function moduleRequiresEncryption(userId, module) {
+      let cap = hasCapability(userId) ? getCapability(userId) : null;
+      let hasEncryptedList = cap != null && ('encryptedModules' in cap) && (cap.encryptedModules is list);
+      return (cap != null && cap.encryptionState == 'encrypted')
+        || (cap != null && cap.encryptionState == 'mixed' && hasEncryptedList && module in cap.encryptedModules)
+        || (exists(/databases/$(database)/documents/users/$(userId)/lifeosModules/$(module))
+            && get(/databases/$(database)/documents/users/$(userId)/lifeosModules/$(module)).data.isEncrypted == true);
+    }
+
+    // Determines if legacy write (v1, plaintext) is permitted for the account:
+    // Permitted ONLY if capability does not exist, or capability encryptionState is 'plaintext'
+    function legacyWritesPermitted(userId) {
+      return !hasCapability(userId) || getCapability(userId).encryptionState == 'plaintext';
+    }
+
+    function validSyncPayload(userId, module) {
+      let isReqEncrypted = moduleRequiresEncryption(userId, module);
+
       return request.resource.data.keys().hasOnly([
-          'schemaVersion', 'module', 'data', 'revision', 'parentRevision',
-          'deviceId', 'clientUpdatedAt', 'updatedAt'
+          'schemaVersion', 'syncProtocolVersion', 'isEncrypted', 'module', 'data',
+          'revision', 'parentRevision', 'deviceId', 'clientUpdatedAt', 'updatedAt'
         ])
         && request.resource.data.schemaVersion is int
         && request.resource.data.module == module
         && request.resource.data.revision is string
         && request.resource.data.deviceId is string
-        && request.resource.data.clientUpdatedAt is int;
+        && request.resource.data.clientUpdatedAt is int
+        && request.resource.data.isEncrypted is bool
+        // If module requires encryption, request MUST be encrypted
+        && (!isReqEncrypted || request.resource.data.isEncrypted == true)
+        // If unencrypted, legacy writes must be permitted
+        && (request.resource.data.isEncrypted == true || legacyWritesPermitted(userId))
+        // If encrypted, payload must be a valid CryptoEnvelope with protocol version >= 2
+        && (request.resource.data.isEncrypted == false || (
+          request.resource.data.syncProtocolVersion is int
+          && request.resource.data.syncProtocolVersion >= 2
+          && isValidCryptoEnvelope(request.resource.data.data)
+        ));
+    }
+
+    // Account Sync Capability & Cloud Wrapped Key Envelope
+    match /users/{userId}/lifeosAccount/{documentId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId) && (
+        (documentId == 'capability'
+          && request.resource.data.keys().hasOnly([
+            'version', 'minimumSyncProtocolVersion', 'encryptionState', 'encryptedModules', 'updatedAt'
+          ])
+          && request.resource.data.version is int
+          && request.resource.data.minimumSyncProtocolVersion is int
+          && request.resource.data.encryptionState in ['plaintext', 'mixed', 'encrypted']
+          && (!('encryptedModules' in request.resource.data) || request.resource.data.encryptedModules is list)
+          && request.resource.data.updatedAt is string)
+        ||
+        (documentId == 'keyEnvelope'
+          && isValidWrappedKeyEnvelope(request.resource.data, userId))
+      );
+      allow delete: if false;
     }
 
     // Lectura temporal para migrar instalaciones que usaban el documento único v1.
+    // Una vez activado E2EE (mixed o encrypted), no se permiten escrituras al estado global v1.
+    // Purga permitida únicamente cuando la cuenta ha culminado la migración E2EE ('encrypted').
     match /users/{userId}/lifeos/{documentId} {
       allow read: if isOwner(userId) && documentId == 'state';
       allow create, update: if isOwner(userId)
         && documentId == 'state'
+        && legacyWritesPermitted(userId)
         && request.resource.data.keys().hasOnly(['schemaVersion', 'state', 'deviceId', 'updatedAt'])
         && request.resource.data.schemaVersion is int
         && request.resource.data.state is map
         && request.resource.data.deviceId is string;
-      allow delete: if false;
+      allow delete: if isOwner(userId)
+        && documentId == 'state'
+        && hasCapability(userId)
+        && getCapability(userId).encryptionState == 'encrypted';
     }
 
     match /users/{userId}/lifeosModules/{module} {
-      // Firestore rules are not filters. A collection listener must be able to
-      // prove that every possible result is readable, so validate ownership for
-      // list queries and keep the module allowlist for direct document reads.
       allow list: if isOwner(userId);
       allow get: if isOwner(userId) && validModule(module);
-      allow create: if isOwner(userId)
+      allow create, update: if isOwner(userId)
         && validModule(module)
-        && validSyncPayload(module);
-      // Multi-device sync: authenticated owner writes with valid sync payload.
-      // Concurrency is resolved via 3-way merge on the client without rejecting concurrent writes.
-      allow update: if isOwner(userId)
-        && validModule(module)
-        && validSyncPayload(module);
+        && validSyncPayload(userId, module);
       allow delete: if false;
     }
 
@@ -59,11 +154,16 @@ service cloud.firestore {
       allow read: if isOwner(userId);
       allow create: if isOwner(userId)
         && validModule(request.resource.data.module)
-        && validSyncPayload(request.resource.data.module)
+        && validSyncPayload(userId, request.resource.data.module)
         && request.resource.data.revision == revisionId;
       allow update: if isOwner(userId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt']);
-      allow delete: if false;
+      // Permite purga de revisiones heredadas en texto plano únicamente cuando la cuenta está 'encrypted'
+      // y la revisión existente no estaba cifrada (evita purgar revisiones cifradas legítimas)
+      allow delete: if isOwner(userId)
+        && hasCapability(userId)
+        && getCapability(userId).encryptionState == 'encrypted'
+        && (resource.data.isEncrypted != true || resource.data.syncProtocolVersion < 2);
     }
   }
 }

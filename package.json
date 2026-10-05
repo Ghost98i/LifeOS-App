@@ -12,7 +12,8 @@
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0 && npm run typecheck",
-    "test": "node --import tsx --test src/lib/*.test.ts"
+    "test": "node --import tsx --test src/lib/!(firestoreRules.emulator).test.ts",
+    "test:rules": "firebase emulators:exec --only firestore \"node --import tsx --test src/lib/firestoreRules.emulator.test.ts\""
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "eslint": "^9.39.5",

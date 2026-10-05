@@ -34,6 +34,11 @@ import {
   type SyncBaselineMap,
   type SyncRevisionMap,
 } from './syncModel';
+import {
+  cryptoSession,
+  encodeCloudModuleData,
+  CURRENT_SYNC_PROTOCOL_VERSION,
+} from './cryptoCore';
 import appletConfig from '../../firebase-applet-config.json';
 
 export type CloudSyncStatus =
@@ -43,6 +48,7 @@ export type CloudSyncStatus =
   | 'saving'
   | 'synced'
   | 'offline'
+  | 'locked'
   | 'conflict'
   | 'error';
 
@@ -62,6 +68,8 @@ export interface CloudModuleHead {
   clientUpdatedAt: number;
   fromCache: boolean;
   pendingWrites: boolean;
+  syncProtocolVersion?: number;
+  isEncrypted?: boolean;
 }
 
 export interface CloudModulesSnapshot {
@@ -139,6 +147,10 @@ function services() {
   }
 
   return { auth, db: firestore };
+}
+
+export function getFirestoreDb(): Firestore {
+  return services().db;
 }
 
 function toCloudUser(user: User | null): CloudUser | null {
@@ -338,6 +350,8 @@ export function subscribeCloudModules(
           clientUpdatedAt: Number(data.clientUpdatedAt || 0),
           fromCache: moduleDoc.metadata.fromCache,
           pendingWrites: moduleDoc.metadata.hasPendingWrites,
+          syncProtocolVersion: typeof data.syncProtocolVersion === 'number' ? data.syncProtocolVersion : 1,
+          isEncrypted: Boolean(data.isEncrypted),
         });
       }
       handlers.onSnapshot({
@@ -358,6 +372,61 @@ function cleanForFirestore<T>(data: T): T {
   }
 }
 
+export async function writeCloudModulesAsync(
+  userId: string,
+  state: LifeOSState,
+  modules: SyncModuleKey[],
+  deviceId: string,
+  baseRevisions: SyncRevisionMap,
+  tombstones: Record<string, number> = {},
+  mdekOverride?: CryptoKey | null
+): Promise<CloudWriteBatch> {
+  const { db } = services();
+  const batch = writeBatch(db);
+  const clientUpdatedAt = Date.now();
+  const sessionKey = mdekOverride !== undefined ? mdekOverride : cryptoSession.getKey(userId);
+
+  const preparedWrites: PreparedCloudWrite[] = [];
+
+  for (let index = 0; index < modules.length; index++) {
+    const module = modules[index];
+    const revision = `${clientUpdatedAt + index}-${deviceId}-${uid()}`;
+    const parentRevision = baseRevisions[module] || null;
+    const rawData = syncModuleData(state, module) as Record<string, unknown>;
+    const withTombstones = Object.keys(tombstones).length > 0
+      ? { ...rawData, _tombstones: tombstones }
+      : rawData;
+    const cleanData = cleanForFirestore(withTombstones);
+
+    // Encode data: if sessionKey is active, encrypts module into CryptoEnvelope
+    const { data: cloudData, isEncrypted } = await encodeCloudModuleData(
+      cleanData,
+      module,
+      userId,
+      sessionKey
+    );
+
+    const payload = {
+      schemaVersion: Math.round(Number(state.schemaVersion || CURRENT_SCHEMA_VERSION)),
+      syncProtocolVersion: isEncrypted ? CURRENT_SYNC_PROTOCOL_VERSION : 1,
+      isEncrypted,
+      module,
+      data: cloudData,
+      revision,
+      parentRevision,
+      deviceId,
+      clientUpdatedAt: clientUpdatedAt + index,
+      updatedAt: serverTimestamp(),
+    };
+
+    batch.set(doc(modulesCollection(userId), module), payload);
+    batch.set(doc(revisionsCollection(userId), revision), payload);
+    preparedWrites.push({ module, revision, parentRevision });
+  }
+
+  return { writes: preparedWrites, completion: batch.commit() };
+}
+
 export function writeCloudModules(
   userId: string,
   state: LifeOSState,
@@ -366,6 +435,33 @@ export function writeCloudModules(
   baseRevisions: SyncRevisionMap,
   tombstones: Record<string, number> = {}
 ): CloudWriteBatch {
+  // Sync wrapper for legacy callers: handles sync write or returns promise-based completion
+  const sessionKey = cryptoSession.getKey(userId);
+  if (sessionKey) {
+    // When sessionKey is active, execute async encryption flow
+    let resolveCompletion: () => void;
+    let rejectCompletion: (err: any) => void;
+    const completionPromise = new Promise<void>((resolve, reject) => {
+      resolveCompletion = resolve;
+      rejectCompletion = reject;
+    });
+
+    const clientUpdatedAt = Date.now();
+    const writes = modules.map((module, index) => ({
+      module,
+      revision: `${clientUpdatedAt + index}-${deviceId}-${uid()}`,
+      parentRevision: baseRevisions[module] || null,
+    }));
+
+    void writeCloudModulesAsync(userId, state, modules, deviceId, baseRevisions, tombstones, sessionKey)
+      .then((res) => res.completion)
+      .then(() => resolveCompletion())
+      .catch(rejectCompletion);
+
+    return { writes, completion: completionPromise };
+  }
+
+  // Plaintext fast-path
   const { db } = services();
   const batch = writeBatch(db);
   const clientUpdatedAt = Date.now();
@@ -380,6 +476,8 @@ export function writeCloudModules(
 
     const payload = {
       schemaVersion: Math.round(Number(state.schemaVersion || CURRENT_SCHEMA_VERSION)),
+      syncProtocolVersion: 1,
+      isEncrypted: false,
       module,
       data: cleanData,
       revision,
@@ -409,22 +507,34 @@ export async function verifyRemoteRevisions(
   userId: string,
   modules: SyncModuleKey[],
   baseRevisions: SyncRevisionMap
-): Promise<{ matches: boolean; divergedModules: SyncModuleKey[]; remoteRevisions: SyncRevisionMap }> {
-  if (!cloudSyncConfigured) return { matches: true, divergedModules: [], remoteRevisions: {} };
+): Promise<{
+  matches: boolean;
+  divergedModules: SyncModuleKey[];
+  remoteRevisions: SyncRevisionMap;
+  incompatibleProtocolModules: SyncModuleKey[];
+}> {
+  if (!cloudSyncConfigured) return { matches: true, divergedModules: [], remoteRevisions: {}, incompatibleProtocolModules: [] };
   const { db } = services();
   const divergedModules: SyncModuleKey[] = [];
+  const incompatibleProtocolModules: SyncModuleKey[] = [];
   const remoteRevisions: SyncRevisionMap = {};
 
   for (const module of modules) {
     const expectedRev = baseRevisions[module];
-    if (!expectedRev) continue;
     try {
       const snap = await getDoc(doc(db, 'users', userId, 'lifeosModules', module));
       if (snap.exists()) {
         const data = snap.data();
         const currentRev = typeof data?.revision === 'string' ? data.revision : '';
         remoteRevisions[module] = currentRev;
-        if (currentRev && currentRev !== expectedRev) {
+
+        // Protocol guard: if remote doc requires a higher sync protocol than client supports
+        const remoteProtocol = typeof data?.syncProtocolVersion === 'number' ? data.syncProtocolVersion : 1;
+        if (remoteProtocol > CURRENT_SYNC_PROTOCOL_VERSION) {
+          incompatibleProtocolModules.push(module);
+        }
+
+        if (expectedRev && currentRev && currentRev !== expectedRev) {
           divergedModules.push(module);
         }
       }
@@ -434,9 +544,10 @@ export async function verifyRemoteRevisions(
   }
 
   return {
-    matches: divergedModules.length === 0,
+    matches: divergedModules.length === 0 && incompatibleProtocolModules.length === 0,
     divergedModules,
     remoteRevisions,
+    incompatibleProtocolModules,
   };
 }
 
@@ -447,10 +558,39 @@ export async function writeCloudModulesGuarded(
   deviceId: string,
   baseRevisions: SyncRevisionMap,
   tombstones: Record<string, number> = {},
-  customVerifier?: (userId: string, modules: SyncModuleKey[], baseRevisions: SyncRevisionMap) => Promise<{ matches: boolean; divergedModules: SyncModuleKey[]; remoteRevisions: SyncRevisionMap }>
-): Promise<{ writes: PreparedCloudWrite[]; diverged: boolean; divergedModules?: SyncModuleKey[]; completion: Promise<void> }> {
+  customVerifier?: (userId: string, modules: SyncModuleKey[], baseRevisions: SyncRevisionMap) => Promise<{
+    matches: boolean;
+    divergedModules: SyncModuleKey[];
+    remoteRevisions: SyncRevisionMap;
+    incompatibleProtocolModules?: SyncModuleKey[];
+  }>
+): Promise<{
+  writes: PreparedCloudWrite[];
+  diverged: boolean;
+  divergedModules?: SyncModuleKey[];
+  incompatibleProtocol?: boolean;
+  incompatibleModules?: SyncModuleKey[];
+  completion: Promise<void>;
+}> {
   const verifier = customVerifier || verifyRemoteRevisions;
   const check = await verifier(userId, modules, baseRevisions);
+
+  if (check.incompatibleProtocolModules && check.incompatibleProtocolModules.length > 0) {
+    return {
+      writes: [],
+      diverged: false,
+      incompatibleProtocol: true,
+      incompatibleModules: check.incompatibleProtocolModules,
+      completion: Promise.reject(
+        new Error(
+          `Protocolo remoto superior detectado en: ${check.incompatibleProtocolModules.join(
+            ', '
+          )}. Se aborta la escritura para no sobrescribir datos incompatibles.`
+        )
+      ),
+    };
+  }
+
   if (!check.matches) {
     return {
       writes: [],

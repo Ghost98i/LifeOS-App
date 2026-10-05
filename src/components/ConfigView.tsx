@@ -20,6 +20,7 @@ import { showToast } from '../lib/toast';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 import { PrivacyAmount } from './PrivacyAmount';
+import { PrivacySecuritySection } from './PrivacySecuritySection';
 
 interface ConfigViewProps {
   state: LifeOSState;
@@ -400,6 +401,14 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Privacidad y Cifrado de Extremo a Extremo (Fase 8.3 / Stage D) */}
+      <PrivacySecuritySection
+        state={state}
+        storageUserId={storageUserId || (cloudUser ? cloudUser.uid : null)}
+        cloudConnected={Boolean(cloudUser)}
+        onForceSync={onForceSync}
+      />
 
       {/* Auditoría Multi-Dispositivo y Consistencia */}
       <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-4 shadow-2xs">

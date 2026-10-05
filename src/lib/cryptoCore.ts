@@ -65,6 +65,40 @@ export class CryptoKeyError extends Error {
   }
 }
 
+/**
+ * Strict type guard for WrappedKeyEnvelope:
+ * Validates version, algorithm, wrappedMdek, kdf parameters and aad.
+ */
+export function isWrappedKeyEnvelope(data: unknown): data is WrappedKeyEnvelope {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+  const cand = data as Partial<WrappedKeyEnvelope>;
+  return (
+    cand.keyFormatVersion === CURRENT_KEY_FORMAT_VERSION &&
+    cand.cryptoVersion === CURRENT_CRYPTO_VERSION &&
+    cand.algorithm === CRYPTO_ALGORITHM &&
+    typeof cand.wrappedMdek === 'object' &&
+    cand.wrappedMdek !== null &&
+    typeof cand.wrappedMdek.iv === 'string' &&
+    typeof cand.wrappedMdek.ciphertext === 'string' &&
+    typeof cand.kdf === 'object' &&
+    cand.kdf !== null &&
+    cand.kdf.algorithm === 'HKDF-SHA-256' &&
+    typeof cand.kdf.salt === 'string' &&
+    typeof cand.kdf.info === 'string' &&
+    typeof cand.aad === 'string' &&
+    typeof cand.createdAt === 'string'
+  );
+}
+
+/**
+ * Validates that an envelope is bound to the specified userId.
+ * Prevents user A's envelope from being injected or used for user B.
+ */
+export function validateEnvelopeUserBinding(envelope: WrappedKeyEnvelope, userId: string): boolean {
+  const expectedAad = `keyFormatVersion:${CURRENT_KEY_FORMAT_VERSION}|userId:${userId.trim()}`;
+  return envelope.aad === expectedAad;
+}
+
 // ---------------------------------------------------------------------------
 // Native Web Crypto API & Base64 Helpers
 // ---------------------------------------------------------------------------
@@ -685,15 +719,26 @@ export async function unlockMdekWithRecoveryKey(
  * Regenerates the Recovery Key (Rewrap MDEK):
  * The user authenticates with their current Recovery Key, LifeOS unwraps the MDEK,
  * generates a brand new Recovery Key + fresh salt, rewraps the existing MDEK under the new KEK,
- * and updates `WrappedKeyEnvelope`.
+ * and produces a new `WrappedKeyEnvelope`.
  *
- * The old Recovery Key is immediately invalidated for future unlocks.
- * Existing encrypted data in the cloud is NOT modified or invalidated because MDEK remains the same.
+ * Security semantics:
+ * - The new WrappedKeyEnvelope can only be unlocked with the new Recovery Key.
+ * - The old Recovery Key cannot unlock the new WrappedKeyEnvelope.
+ * - Existing encrypted data in the cloud is NOT modified because the MDEK remains the same.
+ * - Crucial nuance: If an adversary possesses both the old Recovery Key and an old copy
+ *   of the previous WrappedKeyEnvelope, that old envelope can still unwrap the same MDEK.
+ *   Complete cryptographic revocation in compromise scenarios requires rotating the MDEK
+ *   and re-encrypting all 15 cloud modules.
+ * - LifeOS explicitly clears memory buffers controlled by application code (.fill(0)).
+ *   While the JavaScript runtime / Garbage Collector does not guarantee absolute physical
+ *   erasure of all transient copies in memory, LifeOS does not deliberately persist Recovery Key,
+ *   KEK nor plaintext MDEK in any of its own stores.
  */
 export async function rewrapMdekWithNewRecoveryKey(
   currentRecoveryKeyFormatted: string,
   envelope: WrappedKeyEnvelope,
-  userId?: string | null
+  userId?: string | null,
+  options?: { persistLocally?: boolean }
 ): Promise<{
   newRecoveryKeyFormatted: string;
   newEnvelope: WrappedKeyEnvelope;
@@ -731,7 +776,9 @@ export async function rewrapMdekWithNewRecoveryKey(
       createdAt: new Date().toISOString(),
     };
 
-    saveWrappedKeyEnvelope(newEnvelope, userId);
+    if (options?.persistLocally !== false) {
+      saveWrappedKeyEnvelope(newEnvelope, userId);
+    }
 
     const sessionMdek = await importSessionKey(rawMdek);
     const newRecoveryKeyFormatted = await formatRecoveryKey(newRecoveryKey);
@@ -751,8 +798,38 @@ export async function rewrapMdekWithNewRecoveryKey(
 }
 
 // ---------------------------------------------------------------------------
-// Module-level Synchronization Simulation Primitives (Prototype)
+// Module-level Synchronization Primitives (Dual-Mode Sync Foundation)
 // ---------------------------------------------------------------------------
+
+export const CURRENT_SYNC_PROTOCOL_VERSION = 2;
+
+/**
+ * Strict type-guard for CryptoEnvelope:
+ * Checks cryptoVersion, algorithm ('AES-GCM-256'), iv, and ciphertext.
+ * Rejects arbitrary plain JSON objects, null, arrays, and malformed envelopes.
+ */
+export function isCryptoEnvelope(data: unknown): data is CryptoEnvelope {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+  const cand = data as Partial<CryptoEnvelope>;
+  return (
+    typeof cand.cryptoVersion === 'number' &&
+    cand.cryptoVersion > 0 &&
+    cand.algorithm === CRYPTO_ALGORITHM &&
+    typeof cand.iv === 'string' &&
+    cand.iv.length > 0 &&
+    typeof cand.ciphertext === 'string' &&
+    cand.ciphertext.length > 0
+  );
+}
+
+export function buildModuleAad(
+  module: string,
+  userId?: string | null,
+  cryptoVersion: number = CURRENT_CRYPTO_VERSION
+): string {
+  const userTag = userId ? userId.trim() : 'local';
+  return `module:${module}|user:${userTag}|cryptoVersion:${cryptoVersion}`;
+}
 
 export async function encryptSyncModule(
   data: unknown,
@@ -760,7 +837,7 @@ export async function encryptSyncModule(
   module: string,
   userId?: string | null
 ): Promise<CryptoEnvelope> {
-  const aad = `module:${module}|user:${userId || 'local'}|cryptoVersion:${CURRENT_CRYPTO_VERSION}`;
+  const aad = buildModuleAad(module, userId, CURRENT_CRYPTO_VERSION);
   return encryptPayload(data, sessionMdek, aad);
 }
 
@@ -770,6 +847,157 @@ export async function decryptSyncModule(
   module: string,
   userId?: string | null
 ): Promise<unknown> {
-  const expectedAad = `module:${module}|user:${userId || 'local'}|cryptoVersion:${CURRENT_CRYPTO_VERSION}`;
+  const expectedAad = buildModuleAad(module, userId, envelope.cryptoVersion);
   return decryptPayload(envelope, sessionMdek, expectedAad);
+}
+
+// ---------------------------------------------------------------------------
+// In-Memory Crypto Session Management
+// ---------------------------------------------------------------------------
+
+export type CryptoSessionState = 'locked' | 'unlocked' | 'unconfigured';
+
+class CryptoSessionManager {
+  private activeMdek: CryptoKey | null = null;
+  private currentUserId: string | null = null;
+
+  getState(userId?: string | null): CryptoSessionState {
+    const targetUser = userId || null;
+    const isProvisioned = isZeroKnowledgeProvisioned(targetUser);
+    if (!isProvisioned) return 'unconfigured';
+    if (this.activeMdek && this.currentUserId === targetUser) return 'unlocked';
+    return 'locked';
+  }
+
+  isUnlocked(userId?: string | null): boolean {
+    const targetUser = userId || null;
+    return Boolean(this.activeMdek && this.currentUserId === targetUser);
+  }
+
+  getKey(userId?: string | null): CryptoKey | null {
+    const targetUser = userId || null;
+    if (this.activeMdek && this.currentUserId === targetUser) {
+      return this.activeMdek;
+    }
+    return null;
+  }
+
+  setUnlocked(key: CryptoKey, userId?: string | null): void {
+    this.activeMdek = key;
+    this.currentUserId = userId || null;
+  }
+
+  lock(): void {
+    this.activeMdek = null;
+    this.currentUserId = null;
+  }
+}
+
+export const cryptoSession = new CryptoSessionManager();
+
+// ---------------------------------------------------------------------------
+// Cloud Module Data Dual-Mode Adapter
+// ---------------------------------------------------------------------------
+
+export type CloudModuleDataDecodeResult =
+  | { mode: 'plaintext'; data: unknown }
+  | { mode: 'decrypted'; data: unknown; envelope: CryptoEnvelope }
+  | { mode: 'locked'; envelope: CryptoEnvelope; reason?: 'mdek_unavailable' | 'session_locked' }
+  | { mode: 'corrupted'; envelope: CryptoEnvelope; error: Error; reasonCode?: string };
+
+export interface AccountSyncCapability {
+  version: number;
+  minimumSyncProtocolVersion: number;
+  encryptionState: 'plaintext' | 'mixed' | 'encrypted';
+  encryptedModules?: string[];
+  updatedAt: string;
+}
+
+export function isAccountSyncCapability(data: unknown): data is AccountSyncCapability {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+  const cand = data as Partial<AccountSyncCapability>;
+  return (
+    typeof cand.version === 'number' &&
+    typeof cand.minimumSyncProtocolVersion === 'number' &&
+    ['plaintext', 'mixed', 'encrypted'].includes(String(cand.encryptionState)) &&
+    (cand.encryptedModules === undefined ||
+      (Array.isArray(cand.encryptedModules) && cand.encryptedModules.every((m) => typeof m === 'string'))) &&
+    typeof cand.updatedAt === 'string'
+  );
+}
+
+export function assertProtocolWritePermitted(
+  module: string,
+  remoteProtocolVersion: number = 1,
+  clientProtocolVersion: number = CURRENT_SYNC_PROTOCOL_VERSION
+): void {
+  if (remoteProtocolVersion > clientProtocolVersion) {
+    throw new Error(
+      `[ProtocolGuard] Operación de escritura rechazada para el módulo “${module}”: el servidor remoto requiere protocolo sync v${remoteProtocolVersion}, pero este cliente sólo soporta v${clientProtocolVersion}. Actualizá LifeOS.`
+    );
+  }
+}
+
+/**
+ * Decodes cloud module data:
+ * - If plaintext, returns directly with mode: 'plaintext'.
+ * - If CryptoEnvelope:
+ *   - If key provided, decrypts with authenticated AAD: returns mode: 'decrypted'.
+ *   - If no key provided, returns mode: 'locked'.
+ *   - If decryption fails (tampering/bad tag/bad AAD), returns mode: 'corrupted' with sanitized error.
+ *   - If session was locked during async decrypt, aborts decryption result with mode: 'locked'.
+ */
+export async function decodeCloudModuleData(
+  rawCloudData: unknown,
+  module: string,
+  userId?: string | null,
+  sessionMdek?: CryptoKey | null
+): Promise<CloudModuleDataDecodeResult> {
+  if (!isCryptoEnvelope(rawCloudData)) {
+    return { mode: 'plaintext', data: rawCloudData };
+  }
+
+  if (!sessionMdek) {
+    return { mode: 'locked', envelope: rawCloudData, reason: 'mdek_unavailable' };
+  }
+
+  const hadActiveSession = Boolean(sessionMdek && cryptoSession.isUnlocked(userId));
+
+  try {
+    const decrypted = await decryptSyncModule(rawCloudData, sessionMdek, module, userId);
+
+    // Fail-closed guard against session lock race:
+    // If the session was active and subsequently locked during in-flight decrypt, refuse to return decrypted plaintext
+    if (hadActiveSession && !cryptoSession.isUnlocked(userId)) {
+      return { mode: 'locked', envelope: rawCloudData, reason: 'session_locked' };
+    }
+
+    return { mode: 'decrypted', data: decrypted, envelope: rawCloudData };
+  } catch {
+    // Sanitized error: never leak raw ciphertext, plaintexts, or keys into error object/message
+    return {
+      mode: 'corrupted',
+      envelope: rawCloudData,
+      error: new CryptoDecryptionError('Fallo de integridad criptográfica o AAD en módulo remoto.'),
+      reasonCode: 'INTEGRITY_OR_AUTH_FAILURE',
+    };
+  }
+}
+
+/**
+ * Encodes module data for Cloud:
+ * - If sessionMdek is active and encryption enabled, encrypts data into CryptoEnvelope.
+ * - Otherwise returns clean plaintext.
+ */
+export async function encodeCloudModuleData(
+  data: unknown,
+  module: string,
+  userId?: string | null,
+  sessionMdek?: CryptoKey | null
+): Promise<{ data: unknown; isEncrypted: boolean }> {
+  if (sessionMdek) {
+    const envelope = await encryptSyncModule(data, sessionMdek, module, userId);
+    return { data: envelope, isEncrypted: true };
+  }
+  return { data, isEncrypted: false };
 }
