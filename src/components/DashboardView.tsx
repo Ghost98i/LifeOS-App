@@ -1,18 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { LifeOSState, ViewType } from '../types';
 import { playSound } from '../lib/audio';
-import { WeatherWidget } from './WeatherWidget';
 import { TodayFocus } from './TodayFocus';
 import { PersonalContextCard } from './PersonalContextCard';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
 import { AppIcon } from './AppIcon';
 import { BentoCommandBar } from './BentoCommandBar';
 import { PrivacyAmount } from './PrivacyAmount';
+import { TodayAtmosphereBackdrop, GymStreakMark, FinanceFlowMark } from './visual';
 import {
   todayISO,
   daysBetween,
   fmtMoney,
-  stars,
   uid,
 } from '../lib/storage';
 import {
@@ -141,13 +140,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       .slice(0, 6);
   }, [state]);
 
-  const { activeNotes, recentNotesSlice } = useMemo(() => {
+  const recentNotesSlice = useMemo(() => {
     if (!isModuleEnabled(state, 'notas')) {
-      return { activeNotes: [], recentNotesSlice: [] };
+      return [];
     }
     const active = (state.notes?.postits || []).filter((n) => !n.archived);
-    const slice = getSortedNotes(active, { includeArchived: false }).slice(0, 3);
-    return { activeNotes: active, recentNotesSlice: slice };
+    return getSortedNotes(active, { includeArchived: false }).slice(0, 3);
   }, [state]);
 
   const handleActivityNavigate = (module: string) => {
@@ -335,49 +333,46 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   });
 
   return (
-    <div className="space-y-6">
-      {/* Top Header Hero */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="page-heading">{greeting()}</h1>
-          <p className="page-subtitle text-[var(--text-faint)]">
-            {formattedDate}
-          </p>
-        </div>
+    <div className="relative space-y-6">
+      {/* Ambient Canvas Layer (Atmospheric depth & geometry) */}
+      <TodayAtmosphereBackdrop />
 
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {onOpenCapture && (
+      {/* Top Header Hero (Atmospheric & Purposeful) */}
+      <div className="relative overflow-hidden rounded-2xl p-4 sm:p-5 border border-[var(--border)] bg-gradient-to-r from-[var(--card)] via-[var(--card-subtle)] to-[var(--card)] shadow-xs">
+        <div className="absolute top-0 right-0 w-64 h-32 bg-radial from-indigo-500/10 via-purple-500/5 to-transparent pointer-events-none rounded-full blur-2xl -mr-10 -mt-10" />
+        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black text-[var(--text)] tracking-tight">
+              {greeting()}
+            </h1>
+            <p className="text-xs sm:text-sm font-medium text-[var(--text-soft)] mt-0.5">
+              {formattedDate}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 self-start sm:self-auto">
             <button
               type="button"
-              onClick={onOpenCapture}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-[0.98]"
+              onClick={() => onNavigate('checkout')}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--card)] hover:border-violet-500/40 hover:bg-violet-500/5 text-xs font-bold text-[var(--text)] transition-all cursor-pointer shadow-2xs group"
+              title="Cerrar el día en 30 segundos"
             >
-              <AppIcon name="plus" className="h-3.5 w-3.5 text-white" />
-              <span>Captura rápida</span>
+              <span className="flex h-5 w-5 items-center justify-center rounded-lg bg-violet-500/15 text-violet-600 dark:text-violet-400 group-hover:scale-105 transition-transform">
+                <AppIcon name="moon" className="h-3 w-3" />
+              </span>
+              <span>Check-out del Día</span>
             </button>
-          )}
-
-          <button
-            type="button"
-            onClick={() => onNavigate('checkout')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--surface-muted)] text-xs font-bold text-[var(--text)] transition-all cursor-pointer shadow-2xs"
-            title="Cerrar el día en 30 segundos"
-          >
-            <AppIcon name="moon" className="h-3.5 w-3.5 text-violet-500" />
-            <span>Check-out del Día</span>
-          </button>
-
-          <div className="w-full sm:w-auto">
-            <WeatherWidget />
           </div>
         </div>
       </div>
 
-      {/* Urgent Backup Alert (Compact & Dismissible) */}
+      {/* Urgent Backup Alert (High-Contrast & Dismissible) */}
       {backupUrgent && !backupDismissed && (
-        <div className="bg-amber-500/10 border border-amber-500/25 rounded-2xl p-3 sm:px-4 flex items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200 min-w-0">
-            <AppIcon name="shield" className="h-4 w-4 shrink-0 text-amber-600" />
+        <div className="banner-warning rounded-2xl p-3 sm:px-4 flex items-center justify-between gap-3 text-xs shadow-2xs">
+          <div className="flex items-center gap-2.5 min-w-0 font-medium text-[var(--warning-text-emphasis)]">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-500/20 text-[var(--warning-icon)]">
+              <AppIcon name="shield" className="h-3.5 w-3.5" />
+            </span>
             <span className="truncate">
               {daysSinceBackup === null
                 ? 'Todavía no exportaste un backup de tus datos locales.'
@@ -388,14 +383,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             <button
               type="button"
               onClick={onExportJSON}
-              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer shadow-2xs active:scale-95"
             >
               Exportar backup
             </button>
             <button
               type="button"
               onClick={() => setBackupDismissed(true)}
-              className="text-amber-700 dark:text-amber-300 hover:text-amber-900 p-1 text-sm font-bold cursor-pointer transition-colors"
+              className="text-[var(--warning-text)] hover:text-[var(--warning-text-emphasis)] p-1 text-sm font-bold cursor-pointer transition-colors"
               title="Descartar aviso"
             >
               ✕
@@ -410,35 +405,41 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         onUpdateState={onUpdateState}
         onNavigate={onNavigate}
         onOpenSearch={onOpenSearch}
+        onOpenCapture={onOpenCapture}
         onQuickAction={onQuickAction}
       />
 
-      {/* Timeline Now & Next Minimal Bar with Schedule Preview */}
+      {/* Timeline Now & Next Editorial Strip with Schedule Preview */}
       {layout.showTimelineBar && (
-        <div className="rounded-2xl p-3.5 sm:px-5 bg-[var(--card)] border border-[var(--border)] shadow-2xs space-y-3">
+        <div className="rounded-2xl p-3.5 sm:px-5 bg-gradient-to-r from-[var(--card)] via-[var(--card-subtle)] to-[var(--card)] border border-[var(--border)] shadow-xs space-y-3">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center gap-3.5 min-w-0">
               <div className="relative flex-shrink-0">
-                <div className={`w-2.5 h-2.5 rounded-full ${current ? 'bg-emerald-500' : 'bg-slate-400'} relative`}>
-                  {current && <div className="absolute -inset-1 rounded-full border border-emerald-500 animate-ping opacity-75" />}
-                </div>
+                <div className={`w-2.5 h-2.5 rounded-full ${current ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]' : 'bg-slate-400'}`} />
               </div>
               <div className="min-w-0">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block">
-                  {current ? 'Actividad en curso' : 'Ahora'}
-                </span>
-                <span className="text-xs sm:text-sm font-bold text-[var(--text)] truncate block">
-                  {current ? `${current.activity} (${current.time})` : 'Tiempo libre / Sin bloque agendado'}
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 block">
+                    {current ? 'En curso' : 'Ahora'}
+                  </span>
+                  {current && (
+                    <span className="font-mono text-[10px] font-bold text-[var(--text-faint)] px-1.5 py-0.2 rounded bg-[var(--surface-muted)]">
+                      {current.time}
+                    </span>
+                  )}
+                </div>
+                <span className="text-sm font-bold text-[var(--text)] truncate block mt-0.5">
+                  {current ? current.activity : 'Tiempo libre / Sin bloque agendado'}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 border-t sm:border-t-0 sm:border-l border-[var(--border)] pt-2 sm:pt-0 sm:pl-4 sm:text-right shrink-0 w-full sm:w-auto justify-between sm:justify-end">
+            <div className="flex items-center gap-3.5 border-t sm:border-t-0 sm:border-l border-[var(--border)] pt-2 sm:pt-0 sm:pl-5 sm:text-right shrink-0 w-full sm:w-auto justify-between sm:justify-end">
               <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block">
-                  Próximo bloque
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-[var(--text-faint)] block">
+                  Siguiente
                 </span>
-                <span className="text-xs font-bold text-[var(--text-soft)] block">
+                <span className="text-xs sm:text-sm font-semibold text-[var(--text-soft)] block mt-0.5">
                   {next ? `${next.time} · ${next.activity}` : 'Jornada completada'}
                 </span>
               </div>
@@ -446,7 +447,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowFullSchedule(!showFullSchedule)}
-                  className="px-2.5 py-1 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] text-[10px] font-bold text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer"
+                  className="px-2.5 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] hover:border-indigo-500/30 text-[10px] font-bold text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer"
                   title="Ver bloques de agenda de hoy"
                 >
                   {showFullSchedule ? 'Ocultar' : `Agenda (${todayOverview.schedule.blocks.length})`}
@@ -504,120 +505,179 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             onSmartSuggest={handleSmartSuggestPriorities}
           />
 
-          {/* 2. Radar de Alertas y Decisiones (Priority 2: Lo que requiere atención hoy) */}
-          {layout.showRadarCard && (
-            <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 shadow-xs space-y-2.5">
-              <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600">
-                  <AppIcon name="zap" className="h-3.5 w-3.5" />
-                </span>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text)]">
-                  Radar de Decisiones
-                </h3>
-              </div>
+          {/* 2. Radar de Decisiones (Contextual Review by Exception) */}
+          {layout.showRadarCard && (() => {
+            const radarItems: { id: string; view: ViewType; text: string; icon: string; tone: string }[] = [];
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                {isModuleEnabled(state, 'trabajo') && jstats && jstats.seguimientosPendientes > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => onNavigate('trabajo')}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 hover:bg-amber-500/15 transition-all text-left cursor-pointer"
-                  >
-                    <span className="font-medium text-[11px]">
-                      💼 {jstats.seguimientosPendientes} seguimiento(s) de empleo vencido(s)
+            if (isModuleEnabled(state, 'trabajo') && jstats && jstats.seguimientosPendientes > 0) {
+              radarItems.push({
+                id: 'job-radar',
+                view: 'trabajo',
+                text: `${jstats.seguimientosPendientes} seguimiento(s) de empleo vencido(s)`,
+                icon: '💼',
+                tone: 'border-amber-500/25 bg-amber-500/10 text-amber-900 dark:text-amber-200 hover:bg-amber-500/15',
+              });
+            }
+
+            if (isModuleEnabled(state, 'estudios') && exam && daysBetween(todayIso, exam.date) <= 7) {
+              const subj = (state.study?.subjects || []).find((s) => s.id === exam.subjectId)?.name || 'materia';
+              radarItems.push({
+                id: 'study-radar',
+                view: 'estudios',
+                text: `Examen de ${subj} en ${daysBetween(todayIso, exam.date)}d`,
+                icon: '📚',
+                tone: 'border-purple-500/25 bg-purple-500/10 text-purple-900 dark:text-purple-200 hover:bg-purple-500/15',
+              });
+            }
+
+            if (isModuleEnabled(state, 'reventa') && rstats && rstats.oportunidadesNuevas > 0) {
+              radarItems.push({
+                id: 'resale-radar',
+                view: 'reventa',
+                text: `${rstats.oportunidadesNuevas} oportunidad(es) de reventa sin revisar`,
+                icon: '🔁',
+                tone: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 hover:bg-emerald-500/15',
+              });
+            }
+
+            if (radarItems.length === 0) return null;
+
+            return (
+              <div className="rounded-2xl border-l-4 border-l-amber-500 border-y border-r border-[var(--border)] bg-gradient-to-r from-amber-500/10 via-[var(--card)] to-[var(--card)] p-3 sm:px-4 shadow-xs space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 font-bold text-[var(--text)]">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 text-xs shadow-2xs">
+                      ⚡
                     </span>
-                    <AppIcon name="arrowRight" className="h-3.5 w-3.5 shrink-0 ml-2" />
-                  </button>
-                )}
-
-                {isModuleEnabled(state, 'estudios') && exam && daysBetween(todayIso, exam.date) <= 7 && (
-                  <button
-                    type="button"
-                    onClick={() => onNavigate('estudios')}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-900 dark:text-purple-200 hover:bg-purple-500/15 transition-all text-left cursor-pointer"
-                  >
-                    <span className="font-medium text-[11px]">
-                      📚 Examen de {(state.study?.subjects || []).find((s) => s.id === exam.subjectId)?.name || 'materia'} en {daysBetween(todayIso, exam.date)} día(s)
+                    <span className="text-[11px] font-black uppercase tracking-wider text-[var(--text)]">
+                      Señal de Atención
                     </span>
-                    <AppIcon name="arrowRight" className="h-3.5 w-3.5 shrink-0 ml-2" />
-                  </button>
-                )}
-
-                {isModuleEnabled(state, 'reventa') && rstats && rstats.oportunidadesNuevas > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => onNavigate('reventa')}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-200 hover:bg-emerald-500/15 transition-all text-left cursor-pointer"
-                  >
-                    <span className="font-medium text-[11px]">
-                      🔁 {rstats.oportunidadesNuevas} oportunidad(es) de reventa sin revisar
-                    </span>
-                    <AppIcon name="arrowRight" className="h-3.5 w-3.5 shrink-0 ml-2" />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* 3. Gym Action Card */}
-          {layout.showGymCard && (
-            <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                    Entrenamiento
+                  </div>
+                  <span className="font-mono text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/30">
+                    {radarItems.length} {radarItems.length === 1 ? 'pendiente' : 'pendientes'}
                   </span>
-                  <h3 className="text-sm sm:text-base font-bold text-[var(--text)]">
-                    {gymStatus.status === 'trained_today'
-                      ? 'Sesión de hoy completada'
-                      : gymStatus.status === 'rest_today'
-                      ? 'Día de descanso activo'
-                      : todayOverview.workout.scheduledTemplateName
-                      ? todayOverview.workout.scheduledTemplateName
-                      : 'Sesión libre'}
-                  </h3>
-                  <p className="text-xs text-[var(--text-soft)] mt-0.5">
-                    {gymStatus.status === 'trained_today'
-                      ? `${gymStatus.completedSetsCount} series · ${gymStatus.totalVolume.toLocaleString()} kg levantados`
-                      : gymStatus.status === 'rest_today'
-                      ? 'Recuperación activa'
-                      : todayOverview.workout.scheduledTemplateName
-                      ? 'Rutina programada para hoy'
-                      : weight != null
-                      ? `Peso corporal: ${weight} kg`
-                      : 'Sin registrar sesión hoy'}
-                  </p>
                 </div>
 
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold bg-[var(--surface-muted)] text-[var(--text-soft)] border border-[var(--border)]">
-                  <AppIcon name="flame" className="h-3 w-3 text-amber-500" />
-                  <span>{gymStatus.streakDays}d</span>
+                <div className={`grid gap-2 text-xs ${radarItems.length > 1 ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1'}`}>
+                  {radarItems.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onNavigate(item.view)}
+                      className={`flex items-center justify-between p-2.5 rounded-xl border text-left cursor-pointer transition-all active:scale-[0.99] group shadow-2xs ${item.tone}`}
+                    >
+                      <span className="font-bold text-[11px] truncate mr-2">
+                        {item.icon} {item.text}
+                      </span>
+                      <AppIcon name="arrowRight" className="h-3.5 w-3.5 shrink-0 opacity-70 group-hover:translate-x-0.5 transition-transform" />
+                    </button>
+                  ))}
                 </div>
               </div>
+            );
+          })()}
 
-              <div className="pt-3 border-t border-[var(--border)] flex items-center justify-between gap-2">
-                {gymStatus.status !== 'trained_today' ? (
+          {/* 3. Gym Action Card (Adaptive Size & Motivation) */}
+          {layout.showGymCard && (() => {
+            const isRest = gymStatus.status === 'rest_today';
+            const isCompleted = gymStatus.status === 'trained_today';
+
+            // Día de descanso o sesión ya completada: Presentación compacta y elegante
+            if (isRest || isCompleted) {
+              return (
+                <div className="bg-gradient-to-r from-[var(--card)] to-[var(--card-subtle)] border border-[var(--border)] rounded-2xl p-3 sm:px-4 shadow-xs flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-orange-500/15 text-orange-600 dark:text-orange-400 shrink-0 shadow-2xs">
+                      <GymStreakMark days={gymStatus.streakDays} status={gymStatus.status} size="sm" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-mono font-extrabold text-orange-600 dark:text-orange-400">
+                          {gymStatus.streakDays}d racha
+                        </span>
+                        <span className="text-[10px] text-[var(--text-faint)]">·</span>
+                        <span className="text-xs font-bold text-[var(--text)] truncate">
+                          {isRest ? 'Descanso activo' : 'Entrenamiento completado ✓'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-[var(--text-soft)] truncate">
+                        {isCompleted
+                          ? `${gymStatus.completedSetsCount} series · ${gymStatus.totalVolume.toLocaleString()} kg`
+                          : 'Recuperación física para el próximo ciclo'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {isRest ? (
+                      <button
+                        type="button"
+                        onClick={handleToggleRestDay}
+                        className="px-2.5 py-1 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-[10px] font-bold text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onNavigate('gimnasio')}
+                        className="px-2.5 py-1 rounded-xl bg-[var(--surface-muted)] hover:bg-[var(--card)] border border-[var(--border)] text-[10px] font-bold text-[var(--text)] transition cursor-pointer"
+                      >
+                        Ver
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
+            // Día activo con sesión pendiente: Card de acción motivadora y clara
+            return (
+              <div className="relative overflow-hidden bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 shadow-xs space-y-3.5">
+                <div className="absolute top-0 right-0 w-44 h-24 bg-radial from-orange-500/10 via-orange-500/5 to-transparent pointer-events-none rounded-full blur-xl -mr-6 -mt-6" />
+                <div className="relative flex items-start justify-between gap-3">
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-[var(--text-faint)] block mb-1">
+                      Entrenamiento de hoy
+                    </span>
+                    <h3 className="text-base font-black text-[var(--text)] tracking-tight">
+                      {todayOverview.workout.scheduledTemplateName || 'Sesión del día'}
+                    </h3>
+                    <p className="text-xs text-[var(--text-soft)] mt-0.5">
+                      {todayOverview.workout.scheduledTemplateName
+                        ? 'Rutina planificada según tu split semanal'
+                        : weight != null
+                        ? `Peso corporal actual: ${weight} kg`
+                        : 'Sesión libre disponible para registrar'}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-black bg-gradient-to-r from-orange-500/15 to-amber-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30 shadow-2xs shrink-0">
+                    <GymStreakMark days={gymStatus.streakDays} status="pending" size="sm" />
+                    <span>{gymStatus.streakDays}d racha</span>
+                  </div>
+                </div>
+
+                <div className="relative pt-2.5 border-t border-[var(--border)] flex items-center justify-between gap-2">
                   <button
                     type="button"
                     onClick={handleToggleRestDay}
                     className="text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer"
                   >
-                    {gymStatus.status === 'rest_today' ? 'Cancelar descanso' : 'Descanso hoy'}
+                    Tomar descanso hoy
                   </button>
-                ) : (
-                  <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">✓ Completado</span>
-                )}
 
-                <button
-                  type="button"
-                  onClick={() => onNavigate('gimnasio')}
-                  className="px-3.5 py-1.5 rounded-xl bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 text-xs font-bold transition cursor-pointer"
-                >
-                  {gymStatus.status === 'trained_today' ? 'Ver sesión' : 'Iniciar sesión'}
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('gimnasio')}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 hover:brightness-110 text-slate-950 font-black text-xs transition-all active:scale-98 cursor-pointer shadow-xs border border-white/20"
+                  >
+                    Iniciar sesión →
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Block 2 (Upper Contextual): Finance & Personal Context */}
@@ -626,111 +686,94 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {layout.showFinanceCard && financeData && (() => {
             const { totalCuentas, cashFlow, ingresoMes, gastoMes, balanceMes } = financeData;
             return (
-              <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                    Finanzas
-                  </span>
-                  <h3 className="text-sm font-bold text-[var(--text)]">Panorama Financiero</h3>
+              <div className="relative overflow-hidden bg-[var(--card)] border border-[var(--border)] rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-3">
+                {/* Abstract Ambient Liquidity Flow Mark */}
+                <FinanceFlowMark status={cashFlow.thresholdWarning ? 'warning' : 'healthy'} />
+                <div className="absolute top-0 right-0 w-36 h-20 bg-radial from-emerald-500/10 via-emerald-500/5 to-transparent pointer-events-none rounded-full blur-xl -mr-4 -mt-4" />
+                <div className="relative flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shadow-2xs">
+                      <AppIcon name="wallet" className="h-3.5 w-3.5" />
+                    </span>
+                    <h3 className="text-xs sm:text-sm font-bold text-[var(--text)]">Liquidez y Compromisos</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('finanzas')}
+                    className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                  >
+                    Finanzas →
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onNavigate('finanzas')}
-                  className="text-xs font-medium text-[var(--text-soft)] hover:text-[var(--text)] transition-colors cursor-pointer"
-                >
-                  Detalles →
-                </button>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4 py-2 border-y border-[var(--border)]">
-                {(() => {
-                  const heroMode = state.finance.heroDisplayMode || 'actual';
-                  const accountsCol = (
-                    <div
-                      key="cuentas"
-                      onClick={() => onNavigate('finanzas')}
-                      className="cursor-pointer group"
-                    >
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] block">
-                        Saldo Real
-                      </span>
-                      <div className="text-xl font-bold tracking-tight mt-0.5 text-[var(--text)] group-hover:text-[var(--blue)] transition-colors tabular-nums">
-                        <PrivacyAmount>{fmtMoney(totalCuentas)}</PrivacyAmount>
-                      </div>
-                      <span className="text-[11px] text-[var(--text-soft)] block mt-0.5">
-                        {state.finance.accounts.length} {state.finance.accounts.length === 1 ? 'cuenta activa' : 'cuentas activas'}
-                      </span>
+                <div className="relative grid grid-cols-2 gap-3 py-2 border-y border-[var(--border)]/60">
+                  <div
+                    onClick={() => onNavigate('finanzas')}
+                    className="cursor-pointer group"
+                  >
+                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-[var(--text-faint)] block">
+                      Saldo Real
+                    </span>
+                    <div className="text-xl sm:text-2xl font-black tracking-tight text-[var(--text)] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors tabular-nums mt-0.5">
+                      <PrivacyAmount>{fmtMoney(totalCuentas)}</PrivacyAmount>
                     </div>
-                  );
+                    <span className="text-[10px] text-[var(--text-soft)] block mt-0.5 font-medium">
+                      {state.finance.accounts.length} {state.finance.accounts.length === 1 ? 'cuenta' : 'cuentas activas'}
+                    </span>
+                  </div>
 
-                  const planningCol = (
-                    <div
-                      key="planning"
-                      onClick={() => onNavigate('finanzas')}
-                      className="cursor-pointer group"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--text-faint)] block">
-                          {heroMode === 'real_available' ? 'Disponible Real' : 'Compromisos (30d)'}
+                  <div
+                    onClick={() => onNavigate('finanzas')}
+                    className="cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-[var(--text-faint)] block">
+                        Disponible (30d)
+                      </span>
+                      {cashFlow.thresholdWarning && (
+                        <span className={`text-[8px] font-black px-1.5 py-0.2 rounded ${
+                          cashFlow.isDeficit
+                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                            : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                        }`}>
+                          {cashFlow.isDeficit ? 'Déficit' : 'Alerta'}
                         </span>
-                        {cashFlow.thresholdWarning && (
-                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                            cashFlow.isDeficit
-                              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
-                              : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                          }`}>
-                            {cashFlow.isDeficit
-                              ? 'Déficit'
-                              : cashFlow.cushionStatus === 'below_current'
-                              ? 'Bajo colchón'
-                              : 'Alerta'}
-                          </span>
-                        )}
-                      </div>
-                      <div className={`text-xl font-bold tracking-tight mt-0.5 tabular-nums ${heroMode === 'real_available' ? (cashFlow.realAvailable >= 0 ? (cashFlow.thresholdWarning ? 'text-amber-500' : 'text-emerald-600 dark:text-emerald-400') : 'text-rose-600') : 'text-rose-500'}`}>
-                        <PrivacyAmount>
-                          {heroMode === 'real_available' ? fmtMoney(cashFlow.realAvailable) : `−${fmtMoney(cashFlow.committed)}`}
-                        </PrivacyAmount>
-                      </div>
-                      <span className="text-[11px] text-[var(--text-soft)] block mt-0.5 tabular-nums">
-                        {heroMode === 'real_available' ? (
-                          <>−<PrivacyAmount>{fmtMoney(cashFlow.committed)}</PrivacyAmount> en 30 días</>
-                        ) : (
-                          <>Proyección: <PrivacyAmount>{fmtMoney(cashFlow.realAvailable)}</PrivacyAmount></>
-                        )}
-                      </span>
+                      )}
                     </div>
-                  );
+                    <div className={`text-xl sm:text-2xl font-black tracking-tight tabular-nums mt-0.5 ${
+                      cashFlow.realAvailable >= 0
+                        ? cashFlow.thresholdWarning
+                          ? 'text-amber-500'
+                          : 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-rose-600'
+                    }`}>
+                      <PrivacyAmount>{fmtMoney(cashFlow.realAvailable)}</PrivacyAmount>
+                    </div>
+                    <span className="text-[10px] text-[var(--text-soft)] block mt-0.5 tabular-nums font-medium">
+                      −<PrivacyAmount>{fmtMoney(cashFlow.committed)}</PrivacyAmount> compromisos
+                    </span>
+                  </div>
+                </div>
 
-                  return heroMode === 'real_available'
-                    ? [planningCol, accountsCol]
-                    : [accountsCol, planningCol];
-                })()}
-              </div>
-
-              {/* Mes Balance Bar */}
-              <div
-                onClick={() => onNavigate('finanzas')}
-                className="flex items-center justify-between pt-0.5 cursor-pointer group text-xs"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-[var(--text-soft)]">Mes actual:</span>
-                  <span className="font-medium text-[var(--text)] tabular-nums">
-                    +<PrivacyAmount>{fmtMoney(ingresoMes)}</PrivacyAmount> / −<PrivacyAmount>{fmtMoney(gastoMes)}</PrivacyAmount>
+                {/* Mes Balance Bar */}
+                <div
+                  onClick={() => onNavigate('finanzas')}
+                  className="relative flex items-center justify-between pt-0.5 cursor-pointer group text-xs"
+                >
+                  <span className="text-[11px] text-[var(--text-soft)]">
+                    Mes: +<PrivacyAmount>{fmtMoney(ingresoMes)}</PrivacyAmount> / −<PrivacyAmount>{fmtMoney(gastoMes)}</PrivacyAmount>
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-md tabular-nums ${
+                      balanceMes >= 0
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                        : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                    }`}
+                  >
+                    <PrivacyAmount>{balanceMes >= 0 ? `+${fmtMoney(balanceMes)}` : fmtMoney(balanceMes)}</PrivacyAmount>
                   </span>
                 </div>
-                <span
-                  className={`text-[11px] font-bold font-mono px-2 py-0.5 rounded-md tabular-nums ${
-                    balanceMes >= 0
-                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                      : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-                  }`}
-                >
-                  <PrivacyAmount>{balanceMes >= 0 ? `+${fmtMoney(balanceMes)}` : fmtMoney(balanceMes)}</PrivacyAmount>
-                </span>
               </div>
-            </div>
             );
           })()}
 
@@ -741,10 +784,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Block 3 (Lower Action): Today's Checklist & Routines */}
         <div className={`${layout.leftColSpanClass}`}>
           {/* Today's Checklist & Routines Card */}
-          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4">
+          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-blue-500/10 text-[var(--blue)]">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 shadow-2xs">
                   <AppIcon name="check" className="h-4 w-4" />
                 </span>
                 <div>
@@ -764,7 +807,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   onClick={() => setTaskFilter('all')}
                   className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                     taskFilter === 'all'
-                      ? 'bg-[var(--card)] text-[var(--text)] shadow-2xs'
+                      ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
                       : 'text-[var(--text-faint)] hover:text-[var(--text)]'
                   }`}
                 >
@@ -775,7 +818,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   onClick={() => setTaskFilter('pending')}
                   className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                     taskFilter === 'pending'
-                      ? 'bg-[var(--card)] text-[var(--blue)] shadow-2xs'
+                      ? 'bg-[var(--card)] text-indigo-600 dark:text-indigo-400 shadow-xs'
                       : 'text-[var(--text-faint)] hover:text-[var(--text)]'
                   }`}
                 >
@@ -786,7 +829,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   onClick={() => setTaskFilter('done')}
                   className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
                     taskFilter === 'done'
-                      ? 'bg-[var(--card)] text-emerald-600 shadow-2xs'
+                      ? 'bg-[var(--card)] text-emerald-600 dark:text-emerald-400 shadow-xs'
                       : 'text-[var(--text-faint)] hover:text-[var(--text)]'
                   }`}
                 >
@@ -796,18 +839,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
 
             {/* Quick Add Extra Form */}
-            <form onSubmit={handleAddExtra} className="flex flex-wrap items-center gap-2 p-2 bg-[var(--surface-muted)] border border-[var(--border)] rounded-xl">
+            <form onSubmit={handleAddExtra} className="flex flex-wrap items-center gap-2 p-2 bg-[var(--surface-muted)] border border-[var(--border)] rounded-xl focus-within:border-indigo-500/40 transition-colors">
               <input
                 type="text"
                 value={extraText}
                 onChange={(e) => setExtraText(e.target.value)}
                 placeholder="＋ Tarea rápida para hoy..."
-                className="flex-1 min-w-[160px] px-3 py-1.5 text-xs rounded-lg bg-[var(--card)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)]"
+                className="flex-1 min-w-[160px] px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-indigo-500 outline-none text-[var(--text)] transition-colors"
               />
               <select
                 value={extraPriority}
                 onChange={(e) => setExtraPriority(e.target.value as 'alta' | 'media' | 'baja')}
-                className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] cursor-pointer outline-none"
+                className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] cursor-pointer outline-none font-medium"
               >
                 <option value="alta">Prioridad Alta</option>
                 <option value="media">Prioridad Media</option>
@@ -816,7 +859,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <button
                 type="submit"
                 disabled={!extraText.trim()}
-                className="px-3.5 py-1.5 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-lg transition-all cursor-pointer disabled:opacity-40 flex items-center gap-1.5 shrink-0 shadow-2xs"
+                className="px-3.5 py-1.5 bg-gradient-to-tr from-blue-600 to-indigo-600 hover:brightness-110 text-white text-xs font-bold rounded-lg transition-all cursor-pointer disabled:opacity-40 flex items-center gap-1.5 shrink-0 shadow-2xs border border-white/10"
               >
                 <AppIcon name="plus" className="h-3 w-3 text-white" />
                 <span>Agregar</span>
@@ -839,13 +882,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     key={item.id}
                     className="py-2.5 flex items-center gap-3 hover:bg-[var(--surface-muted)]/50 px-2 rounded-xl transition-colors group"
                   >
+                    {/* Task Row: Action -> State -> Secondary Context */}
                     <button
                       type="button"
                       onClick={() => handleToggleItem(item)}
-                      className={`w-5 h-5 rounded-md border flex items-center justify-center text-xs transition-all shrink-0 cursor-pointer ${
+                      className={`w-5 h-5 rounded-lg border flex items-center justify-center text-xs transition-all shrink-0 cursor-pointer ${
                         item.done
-                          ? 'bg-emerald-500 border-emerald-500 text-white'
-                          : 'border-[var(--border)] bg-[var(--bg-elevated)] text-transparent hover:border-[var(--blue)]'
+                          ? 'bg-emerald-500 border-emerald-500 text-white shadow-2xs'
+                          : 'border-[var(--border)] bg-[var(--surface-muted)] text-transparent hover:border-[var(--blue)] active:scale-95'
                       }`}
                       title={item.done ? 'Marcar pendiente' : 'Marcar completada'}
                     >
@@ -857,16 +901,24 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         onClick={() => handleToggleItem(item)}
                         className={`text-xs sm:text-sm cursor-pointer select-none truncate ${
                           item.done
-                            ? 'line-through text-[var(--text-faint)]'
+                            ? 'line-through text-[var(--text-faint)] font-normal'
                             : 'text-[var(--text)] font-semibold'
                         }`}
                       >
                         {item.text}
                       </span>
 
+                      {/* If task is an elected Daily Priority, show discrete badge instead of full duplication */}
+                      {todayPriorities.some((p) => p.text.trim().toLowerCase() === item.text.trim().toLowerCase()) && (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 shrink-0">
+                          <span>★</span>
+                          <span>Prioridad</span>
+                        </span>
+                      )}
+
                       {!item.done && item.isBlocked && (
                         <span
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 shrink-0"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md text-[9px] font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 shrink-0"
                           title={
                             item.blockingTaskNames && item.blockingTaskNames.length > 0
                               ? `Bloqueada por:\n${item.blockingTaskNames.map((n) => `• ${n}`).join('\n')}`
@@ -880,7 +932,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                       {!item.done && item.unblocksCount != null && item.unblocksCount > 0 && (
                         <span
-                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shrink-0"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md text-[9px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shrink-0"
                           title={`Completar esta tarea desbloqueará ${item.unblocksCount} tarea(s)`}
                         >
                           <AppIcon name="unlock" className="h-2.5 w-2.5" />
@@ -890,7 +942,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
                       {item.dueDate && (
                         <span
-                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold border shrink-0 ${
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md text-[9px] font-semibold border shrink-0 ${
                             item.dueDate < todayIso
                               ? 'bg-rose-500/15 text-rose-600 border-rose-500/30'
                               : item.dueDate === todayIso
@@ -905,22 +957,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       )}
                     </div>
 
-                    {!item.done && item.priority && (
-                      <span className="text-amber-500 text-[11px] font-mono tracking-wider shrink-0 hidden sm:inline">
-                        {stars(item.priority)}
+                    {!item.done && item.priority && item.priority === 'alta' && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 shrink-0 hidden sm:inline">
+                        Alta
                       </span>
                     )}
 
                     <span
-                      className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md shrink-0 border ${
-                        item.source === 'agenda'
-                          ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
-                          : item.source === 'rutina'
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-                          : item.source === 'trabajo'
-                          ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20'
-                          : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                      }`}
+                      className="text-[9px] font-medium text-[var(--text-faint)] px-1.5 py-0.5 rounded bg-[var(--surface-muted)] shrink-0 capitalize border border-transparent"
                     >
                       {item.source}
                     </span>
@@ -932,7 +976,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         className="opacity-0 group-hover:opacity-100 text-xs text-[var(--text-faint)] hover:text-rose-500 p-1 transition cursor-pointer"
                         title="Eliminar tarea extra"
                       >
-                        <AppIcon name="x" className="h-3.5 w-3.5" />
+                        <AppIcon name="x" className="h-3 w-3" />
                       </button>
                     )}
                   </div>
@@ -947,17 +991,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
           {/* 3. Notas Rápidas (only rendered when active notes exist) */}
           {layout.showNotesCard && (
-            <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3">
+            <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-3.5 sm:p-4 shadow-2xs space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                    <AppIcon name="note" className="h-4 w-4" />
+                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                    <AppIcon name="note" className="h-3.5 w-3.5" />
                   </span>
                   <div>
-                    <h3 className="text-sm font-bold text-[var(--text)]">Notas Rápidas</h3>
-                    <span className="text-[10px] text-[var(--text-faint)]">
-                      {activeNotes.length} nota(s) guardada(s)
-                    </span>
+                    <h3 className="text-xs sm:text-sm font-bold text-[var(--text)]">Notas Rápidas</h3>
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -968,7 +1009,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       else if (onOpenCapture) onOpenCapture();
                       else onNavigate('notas');
                     }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold rounded-lg bg-[var(--surface-muted)] hover:bg-[var(--card)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-lg bg-[var(--surface-muted)] hover:bg-[var(--card)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer"
                     title="Nueva nota rápida"
                   >
                     <AppIcon name="plus" className="h-3 w-3 text-amber-500" />
@@ -977,14 +1018,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <button
                     type="button"
                     onClick={() => onNavigate('notas')}
-                    className="text-xs font-medium text-[var(--text-soft)] hover:text-[var(--text)] transition-colors cursor-pointer"
+                    className="text-[11px] font-bold text-[var(--blue)] hover:underline transition-colors cursor-pointer"
                   >
                     Ver todas →
                   </button>
                 </div>
               </div>
 
-              <div className="divide-y divide-[var(--border)]">
+              <div className="divide-y divide-[var(--border)]/60">
                 {recentNotesSlice.map((note) => {
                   const displayTitle = note.title?.trim() || note.text.trim().split('\n')[0].slice(0, 48) || 'Nota sin título';
                   const isTruncated = !note.title && note.text.trim().split('\n')[0].length > 48;
@@ -995,7 +1036,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <div
                       key={note.id}
                       onClick={() => onNavigate('notas')}
-                      className="py-2.5 flex items-start justify-between gap-3 hover:bg-[var(--surface-muted)]/50 px-2 rounded-xl transition-colors cursor-pointer group"
+                      className="py-2 flex items-start justify-between gap-2.5 hover:bg-[var(--surface-muted)]/50 px-1.5 rounded-xl transition-colors cursor-pointer group"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
@@ -1007,16 +1048,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           </p>
                         </div>
                         {snippet && snippet !== displayTitle && (
-                          <p className={`text-[11px] text-[var(--text-soft)] truncate mt-0.5 ${state.settings.privacyMode ? 'privacy-sensitive' : ''}`}>
+                          <p className={`text-[10px] text-[var(--text-soft)] truncate mt-0.5 ${state.settings.privacyMode ? 'privacy-sensitive' : ''}`}>
                             {snippet}
                           </p>
                         )}
                         {note.tags && note.tags.length > 0 && (
-                          <div className="flex items-center gap-1 mt-1">
+                          <div className="flex items-center gap-1 mt-0.5">
                             {note.tags.slice(0, 2).map((tag) => (
                               <span
                                 key={tag}
-                                className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20"
+                                className="text-[9px] font-medium px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20"
                               >
                                 #{tag}
                               </span>
@@ -1029,7 +1070,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                           </div>
                         )}
                       </div>
-                      <span className="text-[10px] font-mono text-[var(--text-faint)] shrink-0 ml-2 mt-0.5">
+                      <span className="text-[10px] font-mono text-[var(--text-faint)] shrink-0 ml-1.5 mt-0.5">
                         {relative}
                       </span>
                     </div>
@@ -1042,12 +1083,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* 4. Weekly Review Card */}
           <WeeklyReviewCard state={state} onUpdateState={onUpdateState} onNavigate={onNavigate} />
 
-          {/* 5. Actividad Reciente (Cross-Module Event Timeline, only rendered when there is activity) */}
+          {/* 5. Actividad Reciente (Cross-Module Event Timeline, editorial format) */}
           {layout.showActivityCard && (
-            <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3">
+            <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-purple-500/15 text-purple-600 dark:text-purple-400 shadow-2xs">
                     <AppIcon name="activity" className="h-4 w-4" />
                   </span>
                   <div>
@@ -1055,7 +1096,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     <span className="text-[10px] text-[var(--text-faint)]">Eventos entre módulos</span>
                   </div>
                 </div>
-                <span className="text-[10px] font-mono text-[var(--text-faint)] uppercase tracking-wider">
+                <span className="text-[10px] font-mono font-bold text-[var(--text-faint)] uppercase tracking-wider px-2 py-0.5 rounded-full bg-[var(--surface-muted)]">
                   {recentActivity.length} eventos
                 </span>
               </div>
@@ -1065,14 +1106,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <div
                     key={act.id}
                     onClick={() => handleActivityNavigate(act.module)}
-                    className="py-2 flex items-center justify-between gap-3 hover:bg-[var(--surface-muted)]/50 px-2 rounded-xl transition-colors cursor-pointer group"
+                    className="py-2.5 flex items-center justify-between gap-3 hover:bg-[var(--surface-muted)]/60 px-2 rounded-xl transition-all cursor-pointer group"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--text-soft)] group-hover:text-[var(--text)] shrink-0 transition-colors">
+                      <span className="flex h-6.5 w-6.5 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--text-soft)] group-hover:bg-indigo-500/10 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 shrink-0 transition-colors">
                         <AppIcon name={act.iconName} className="h-3.5 w-3.5" />
                       </span>
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-[var(--text)] truncate group-hover:text-[var(--blue)] transition-colors">
+                        <p className="text-xs font-semibold text-[var(--text)] truncate group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                           {act.title}
                         </p>
                         {act.subtitle && (

@@ -1105,7 +1105,7 @@ export default function App() {
           onCloudSignOut={handleCloudSignOut}
         />
 
-        <main className="mx-auto w-full max-w-7xl flex-1 space-y-6 p-4 pb-28 sm:p-6 sm:pb-28 lg:p-8">
+        <main className="mx-auto w-full max-w-[1536px] flex-1 space-y-6 p-4 pb-28 sm:p-6 sm:pb-28 lg:p-8">
           {cloudSyncConfigured && !cloudUser && !dismissedAnywhereBanner && (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-blue-500/25 bg-blue-500/10 p-3 sm:px-4 text-xs">
               <div className="flex items-center gap-2.5 min-w-0">

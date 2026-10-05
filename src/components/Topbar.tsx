@@ -170,16 +170,16 @@ export const Topbar: React.FC<TopbarProps> = ({
           <button
             onClick={onOpenCapture}
             title={(state.inbox || []).length > 0 ? `Capturar / Bandeja (${(state.inbox || []).length} pendientes)` : "Capturar (C)"}
-            className="flex h-9 items-center gap-1.5 rounded-xl bg-[var(--text)] px-3 text-xs font-bold text-[var(--bg-elevated)] shadow-xs hover:opacity-90 transition-all active:scale-[0.98] cursor-pointer"
+            className="flex h-9 items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 hover:brightness-110 px-3 text-xs font-bold text-white shadow-xs transition-all active:scale-[0.98] cursor-pointer border border-white/10"
           >
-            <AppIcon name="plus" className="h-3.5 w-3.5" />
+            <AppIcon name="plus" className="h-3.5 w-3.5 text-white" />
             <span>Capturar</span>
             {(state.inbox || []).length > 0 ? (
               <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-black text-slate-900 animate-pulse">
                 {(state.inbox || []).length}
               </span>
             ) : (
-              <kbd className="ml-0.5 rounded bg-white/20 dark:bg-black/20 px-1 py-0.5 text-[9px] font-mono">C</kbd>
+              <kbd className="ml-0.5 rounded bg-black/25 px-1 py-0.5 text-[9px] font-mono text-white/90">C</kbd>
             )}
           </button>
 

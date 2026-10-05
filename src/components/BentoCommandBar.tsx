@@ -21,6 +21,7 @@ interface BentoCommandBarProps {
   onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
   onNavigate: (view: ViewType) => void;
   onOpenSearch?: () => void;
+  onOpenCapture?: () => void;
   onQuickAction?: (view: ViewType, focusId: string, txType?: 'gasto' | 'ingreso') => void;
 }
 
@@ -29,9 +30,11 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
   onUpdateState,
   onNavigate,
   onOpenSearch,
+  onOpenCapture,
   onQuickAction,
 }) => {
   const [input, setInput] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
   const [detectedDrafts, setDetectedDrafts] = useState<CaptureDraft[]>([]);
   const [confirmingDraftIds, setConfirmingDraftIds] = useState<Set<string>>(new Set());
   const [isConfirmingAll, setIsConfirmingAll] = useState(false);
@@ -177,12 +180,20 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
 
   return (
     <div className="w-full flex flex-col gap-3">
-      <div className="w-full rounded-2xl p-3 sm:p-4 bg-[var(--card)] border border-[var(--border)] shadow-xs transition-all">
-        <form onSubmit={handleSubmit} className="flex flex-col gap-2.5">
-          <div className="flex items-center gap-2">
-            {/* Leading Icon / Mode */}
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--surface-muted)] text-[var(--text-soft)] shrink-0">
-              <AppIcon name="sparkles" className="h-4 w-4" />
+      <div className={`w-full rounded-2xl bg-[var(--card)] border transition-all duration-200 ${
+        isFocused || input.trim()
+          ? 'p-3 sm:p-4 border-indigo-500/60 shadow-[0_0_0_1px_rgba(99,102,241,0.25),0_8px_24px_-4px_rgba(99,102,241,0.18)]'
+          : 'p-2 sm:p-2.5 border-[var(--border)] hover:border-[var(--border-hover)] shadow-2xs hover:shadow-xs'
+      }`}>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-2">
+          <div className="flex items-center gap-2.5">
+            {/* Leading Icon / Custom Signature Capture Spark */}
+            <div className={`relative flex items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-500/15 to-blue-500/10 text-indigo-600 dark:text-indigo-400 shrink-0 transition-all ${
+              isFocused || input.trim() ? 'h-8 w-8 ring-2 ring-indigo-500/30 shadow-2xs' : 'h-7 w-7'
+            }`}>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" className="transition-transform duration-200" aria-hidden="true">
+                <path d="M8 1.5L9.6 6.4L14.5 8L9.6 9.6L8 14.5L6.4 9.6L1.5 8L6.4 6.4L8 1.5Z" fill="currentColor" fillOpacity={isFocused ? '1' : '0.85'} />
+              </svg>
             </div>
 
             {/* Central Input */}
@@ -190,34 +201,51 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
               onKeyDown={handleKeyDown}
-              placeholder="Captura rápida: ej. 1200 nafta, estudiar redes mañana..."
-              className={`flex-1 min-w-0 bg-transparent text-sm sm:text-base font-medium text-[var(--text)] placeholder:text-[var(--text-faint)] outline-none ${
-                state.settings.privacyMode ? 'privacy-sensitive' : ''
-              }`}
+              placeholder={isFocused ? 'Ej. 1200 nafta, repasar física mañana, idea nueva...' : '✦ Capturá algo: gasto, tarea, examen, nota rápida...'}
+              className={`flex-1 min-w-0 bg-transparent font-medium text-[var(--text)] placeholder:text-[var(--text-faint)] outline-none transition-all ${
+                isFocused || input.trim() ? 'text-sm sm:text-base' : 'text-xs sm:text-sm'
+              } ${state.settings.privacyMode ? 'privacy-sensitive' : ''}`}
             />
 
-            {/* Shortcut Command / Search Trigger */}
-            {onOpenSearch && (
-              <button
-                type="button"
-                onClick={onOpenSearch}
-                className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] text-[10px] font-mono font-bold text-[var(--text-faint)] hover:text-[var(--text)] transition cursor-pointer"
-                title="Abrir paleta de comandos (⌘K)"
-              >
-                <span>⌘K</span>
-              </button>
-            )}
+            {/* Desktop Quick Shortcuts (Search & Universal Modal) */}
+            <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+              {onOpenSearch && (
+                <button
+                  type="button"
+                  onClick={onOpenSearch}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] text-[10px] font-mono font-bold text-[var(--text-faint)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition cursor-pointer"
+                  title="Abrir paleta de comandos (⌘K)"
+                >
+                  <span>⌘K</span>
+                </button>
+              )}
+              {onOpenCapture && (
+                <button
+                  type="button"
+                  onClick={onOpenCapture}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-indigo-500/25 bg-indigo-500/10 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/15 transition cursor-pointer"
+                  title="Abrir ventana de captura universal (C)"
+                >
+                  <AppIcon name="plus" className="h-3 w-3 text-indigo-500" />
+                  <kbd className="font-mono text-[9px] text-indigo-600 dark:text-indigo-400">C</kbd>
+                </button>
+              )}
+            </div>
 
             {/* Submit Circular Button */}
             <button
               type="submit"
               disabled={!input.trim()}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 active:scale-95 disabled:opacity-30 transition-all cursor-pointer shrink-0 shadow-2xs"
+              className={`flex items-center justify-center rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 hover:brightness-110 active:scale-95 disabled:opacity-25 disabled:pointer-events-none text-white transition-all cursor-pointer shrink-0 shadow-2xs border border-white/10 ${
+                isFocused || input.trim() ? 'h-8 w-8' : 'h-7 w-7'
+              }`}
               aria-label="Capturar"
               title="Capturar y revisar borrador (Enter)"
             >
-              <AppIcon name="arrowUp" className="h-4 w-4" />
+              <AppIcon name="arrowUp" className={`${isFocused || input.trim() ? 'h-4 w-4' : 'h-3.5 w-3.5'} text-white`} />
             </button>
           </div>
 

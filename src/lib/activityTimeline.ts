@@ -1,5 +1,6 @@
 import { LifeOSState } from '../types';
 import { AppIconName } from '../components/AppIcon';
+import { getCategoryName } from './financeCategories';
 
 export type ActivityModule = 'finance' | 'gym' | 'study' | 'task' | 'resale' | 'inbox' | 'checkout';
 
@@ -58,10 +59,16 @@ export function getActivityTimeline(state: LifeOSState, limit: number = 8): Acti
       if (!tx.date) continue;
       const isIncome = tx.type === 'ingreso';
       const formattedAmount = `$${Math.abs(tx.amount).toLocaleString('es-UY')}`;
+      const resolvedCategory = getCategoryName(state.finance?.categories, tx.category);
+      // Guard against dangling raw IDs like 'cat_xyz' or empty category
+      const displayCategory = resolvedCategory && !resolvedCategory.startsWith('cat_')
+        ? resolvedCategory
+        : 'Sin categoría';
+
       items.push({
         id: `fin-${tx.id}`,
         module: 'finance',
-        title: `${isIncome ? '+' : '-'}${formattedAmount} · ${tx.category}`,
+        title: `${isIncome ? '+' : '-'}${formattedAmount} · ${displayCategory}`,
         subtitle: tx.note || (isIncome ? 'Ingreso registrado' : 'Gasto registrado'),
         timestamp: tx.date,
         badgeText: isIncome ? 'Ingreso' : 'Gasto',

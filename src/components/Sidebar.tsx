@@ -54,10 +54,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         <div className="flex items-center justify-between px-2 pb-5 pt-1">
           <div className="flex items-center gap-2.5 min-w-0">
-            <img src={lifeOSIcon} alt="" className="h-8 w-8 shrink-0 rounded-xl shadow-xs" />
+            <div className="relative p-0.5 rounded-xl bg-gradient-to-tr from-indigo-500/30 via-blue-500/20 to-transparent shrink-0 shadow-2xs">
+              <img src={lifeOSIcon} alt="" className="h-7 w-7 rounded-[10px] object-cover" />
+            </div>
             <div className="flex flex-col min-w-0">
-              <span className="text-base font-bold leading-none tracking-tight text-[var(--text)] truncate">LifeOS</span>
-              <span className="mt-1 text-[11px] font-medium text-[var(--text-faint)] truncate">Personal Workspace</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-base font-black leading-none tracking-tight text-[var(--text)] truncate">LifeOS</span>
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.8)]" />
+              </div>
+              <span className="mt-1 text-[10px] font-semibold text-[var(--text-faint)] truncate tracking-wide">Workspace Personal</span>
             </div>
           </div>
         </div>
@@ -94,14 +99,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   aria-current={isActive ? 'page' : undefined}
                   className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-[var(--card)] font-bold text-[var(--text)] shadow-xs border border-[var(--border)]'
+                      ? 'bg-[var(--card)] font-bold text-[var(--text)] shadow-xs border border-[var(--border)] glow-subtle'
                       : 'text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] border border-transparent'
                   }`}
                 >
+                  {/* Subtle active left pill indicator */}
+                  {isActive && (
+                    <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-gradient-to-b from-indigo-500 to-blue-500" />
+                  )}
                   <AppIcon
                     name={item.icon}
                     className={`h-[18px] w-[18px] shrink-0 transition-colors ${
-                      isActive ? 'text-[var(--text)]' : 'text-[var(--text-faint)] group-hover:text-[var(--text)]'
+                      isActive ? 'text-indigo-500 dark:text-indigo-400' : 'text-[var(--text-faint)] group-hover:text-[var(--text)]'
                     }`}
                   />
                   <span className="truncate">{item.label}</span>
@@ -114,14 +123,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="pt-3 border-t border-[var(--border)] mt-2">
           <button
             onClick={onToggleTheme}
-            className="flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition-all cursor-pointer shadow-2xs"
+            className="flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition-all cursor-pointer shadow-2xs group"
             title={state.settings.darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           >
             <div className="flex items-center gap-2">
-              <AppIcon name={state.settings.darkMode ? 'sun' : 'moon'} className="h-4 w-4 text-[var(--text)]" />
+              <span className="flex h-5 w-5 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--text)] group-hover:bg-indigo-500/10 group-hover:text-indigo-500 transition-colors">
+                <AppIcon name={state.settings.darkMode ? 'sun' : 'moon'} className="h-3.5 w-3.5" />
+              </span>
               <span>Modo {state.settings.darkMode ? 'Oscuro' : 'Claro'}</span>
             </div>
-            <span className="text-[10px] font-bold text-[var(--text-faint)] uppercase font-mono">
+            <span className="text-[10px] font-bold text-[var(--text-faint)] uppercase font-mono px-1.5 py-0.5 rounded bg-[var(--surface-muted)]">
               {state.settings.darkMode ? 'ON' : 'OFF'}
             </span>
           </button>

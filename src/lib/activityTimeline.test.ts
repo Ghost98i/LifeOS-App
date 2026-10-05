@@ -127,3 +127,47 @@ test('formatRelativeTime: formats relative dates accurately without throwing', (
   assert.equal(formatRelativeTime(''), '');
   assert.equal(formatRelativeTime('invalid-date'), 'invalid-date');
 });
+
+test('getActivityTimeline: resolves category ID to human name and never exposes raw cat_* IDs', () => {
+  const state: LifeOSState = {
+    ...defaultState(),
+    finance: {
+      ...defaultState().finance,
+      categories: [
+        { id: 'cat_d4im18kxm5xy', name: 'Alimentación', active: true },
+      ],
+      transactions: [
+        {
+          id: 'tx-1',
+          date: '2026-10-04T12:00:00Z',
+          amount: 2000,
+          type: 'ingreso',
+          category: 'cat_d4im18kxm5xy',
+          note: 'Cobro',
+          fixed: 'variable',
+        },
+        {
+          id: 'tx-2',
+          date: '2026-10-04T11:00:00Z',
+          amount: -500,
+          type: 'gasto',
+          category: 'cat_deleted_or_orphan',
+          note: 'Gasto antiguo',
+          fixed: 'variable',
+        },
+      ],
+    },
+  };
+
+  const timeline = getActivityTimeline(state);
+  const item1 = timeline.find((i) => i.id === 'fin-tx-1');
+  const item2 = timeline.find((i) => i.id === 'fin-tx-2');
+
+  assert.ok(item1);
+  assert.equal(item1.title, '+$2.000 · Alimentación');
+  assert.ok(!item1.title.includes('cat_d4im18kxm5xy'));
+
+  assert.ok(item2);
+  assert.equal(item2.title, '-$500 · Sin categoría');
+  assert.ok(!item2.title.includes('cat_deleted_or_orphan'));
+});

@@ -149,10 +149,10 @@ export const MobileNav: React.FC<MobileNavProps> = ({
         )}
         <button
           onClick={onOpenCapture}
-          className="relative mx-2 -mt-5 flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-[var(--text)] text-[var(--bg-elevated)] shadow-lg shadow-black/15 active:scale-95 transition-transform cursor-pointer border border-[var(--border)]"
+          className="relative mx-2 -mt-5 flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/25 active:scale-95 transition-transform cursor-pointer border border-white/20"
           aria-label="Captura rápida"
         >
-          <AppIcon name="plus" className="h-6 w-6" />
+          <AppIcon name="plus" className="h-6 w-6 text-white" />
           {inboxCount > 0 && (
             <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-black text-slate-900 border-2 border-[var(--card)] animate-pulse">
               {inboxCount}
