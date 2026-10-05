@@ -52,23 +52,25 @@ export const FinanceOperationsCard: React.FC<FinanceOperationsCardProps> = ({ st
   return (
     <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xs">
       <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <button type="button" onClick={() => setExpanded((value) => !value)} className="min-w-0 flex-1 text-left">
+        <button type="button" onClick={() => setExpanded((value) => !value)} className="min-w-0 flex-1 text-left cursor-pointer">
           <span className="flex items-center gap-2">
-            <h2 className="text-sm font-extrabold text-[var(--text)]">Mover y comprobar dinero</h2>
+            <h2 className="text-sm font-extrabold text-[var(--text)]">Operaciones de cuenta</h2>
             <span className="text-xs text-[var(--text-faint)]">{expanded ? '▴' : '▾'}</span>
           </span>
-          <p className="mt-0.5 text-xs text-[var(--text-soft)]">{accounts.length} cuenta(s) · {state.finance.transfers.length} transferencia(s) · {state.finance.reconciliations.length} conciliación(es)</p>
+          <p className="mt-0.5 text-xs text-[var(--text-soft)]">
+            Transferí dinero entre tus cuentas o conciliá el saldo real. ({accounts.length} cuenta(s) · {state.finance.transfers.length} transferencia(s) · {state.finance.reconciliations.length} conciliación(es))
+          </p>
         </button>
         <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => { setExpanded(true); setMode('transfer'); setMessage(''); }} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs font-bold text-[var(--blue)]">⇄ Transferir</button>
-          <button onClick={() => { setExpanded(true); setMode('reconcile'); setMessage(''); }} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs font-bold text-[var(--blue)]">✓ Conciliar</button>
+          <button type="button" onClick={() => { setExpanded(true); setMode('transfer'); setMessage(''); }} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs font-bold text-[var(--blue)] hover:bg-[var(--surface-muted)] cursor-pointer">⇄ Transferir</button>
+          <button type="button" onClick={() => { setExpanded(true); setMode('reconcile'); setMessage(''); }} className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-xs font-bold text-[var(--blue)] hover:bg-[var(--surface-muted)] cursor-pointer">✓ <span className="hidden sm:inline">Conciliar saldo</span><span className="sm:hidden">Conciliar</span></button>
         </div>
       </div>
 
       {expanded && <div className="border-t border-[var(--border)] p-4">
       <div className="mb-4 grid grid-cols-2 rounded-xl bg-[var(--bg)] p-1">
-        <button onClick={() => { setMode('transfer'); setMessage(''); }} className={`rounded-lg px-3 py-2 text-xs font-bold ${mode === 'transfer' ? 'bg-[var(--card)] text-[var(--blue)] shadow-sm' : 'text-[var(--text-soft)]'}`}>⇄ Transferir</button>
-        <button onClick={() => { setMode('reconcile'); setMessage(''); }} className={`rounded-lg px-3 py-2 text-xs font-bold ${mode === 'reconcile' ? 'bg-[var(--card)] text-[var(--blue)] shadow-sm' : 'text-[var(--text-soft)]'}`}>✓ Conciliar</button>
+        <button type="button" onClick={() => { setMode('transfer'); setMessage(''); }} className={`rounded-lg px-3 py-2 text-xs font-bold cursor-pointer ${mode === 'transfer' ? 'bg-[var(--card)] text-[var(--blue)] shadow-sm' : 'text-[var(--text-soft)]'}`}>⇄ Transferir</button>
+        <button type="button" onClick={() => { setMode('reconcile'); setMessage(''); }} className={`rounded-lg px-3 py-2 text-xs font-bold cursor-pointer ${mode === 'reconcile' ? 'bg-[var(--card)] text-[var(--blue)] shadow-sm' : 'text-[var(--text-soft)]'}`}>✓ Conciliar saldo</button>
       </div>
       {mode === 'transfer' ? (
         <form onSubmit={submitTransfer} className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-6">

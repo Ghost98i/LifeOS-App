@@ -99,7 +99,7 @@ export default function App() {
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [quickTransactionType, setQuickTransactionType] = useState<'gasto' | 'ingreso'>('gasto');
+  const [quickTransactionType, setQuickTransactionType] = useState<'gasto' | 'ingreso' | null>(null);
   const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false);
   const [quickCaptureKind, setQuickCaptureKind] = useState<CaptureKind>('tarea');
   const [cloudUser, setCloudUser] = useState<CloudUser | null>(null);
