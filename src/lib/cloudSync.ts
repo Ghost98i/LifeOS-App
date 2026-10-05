@@ -379,7 +379,8 @@ export async function writeCloudModulesAsync(
   deviceId: string,
   baseRevisions: SyncRevisionMap,
   tombstones: Record<string, number> = {},
-  mdekOverride?: CryptoKey | null
+  mdekOverride?: CryptoKey | null,
+  existingWrites?: PreparedCloudWrite[]
 ): Promise<CloudWriteBatch> {
   const { db } = services();
   const batch = writeBatch(db);
@@ -390,8 +391,13 @@ export async function writeCloudModulesAsync(
 
   for (let index = 0; index < modules.length; index++) {
     const module = modules[index];
-    const revision = `${clientUpdatedAt + index}-${deviceId}-${uid()}`;
-    const parentRevision = baseRevisions[module] || null;
+    const existing = existingWrites?.[index];
+    const revision = existing && existing.module === module
+      ? existing.revision
+      : `${clientUpdatedAt + index}-${deviceId}-${uid()}`;
+    const parentRevision = existing && existing.module === module
+      ? existing.parentRevision
+      : (baseRevisions[module] || null);
     const rawData = syncModuleData(state, module) as Record<string, unknown>;
     const withTombstones = Object.keys(tombstones).length > 0
       ? { ...rawData, _tombstones: tombstones }
@@ -453,7 +459,7 @@ export function writeCloudModules(
       parentRevision: baseRevisions[module] || null,
     }));
 
-    void writeCloudModulesAsync(userId, state, modules, deviceId, baseRevisions, tombstones, sessionKey)
+    void writeCloudModulesAsync(userId, state, modules, deviceId, baseRevisions, tombstones, sessionKey, writes)
       .then((res) => res.completion)
       .then(() => resolveCompletion())
       .catch(rejectCompletion);

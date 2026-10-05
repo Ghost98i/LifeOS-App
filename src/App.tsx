@@ -134,6 +134,7 @@ export default function App() {
   const initializedUserRef = useRef<string | null>(null);
   const legacyReadUserRef = useRef<string | null>(null);
   const conflictPendingRef = useRef(false);
+  const consecutiveDivergenceCountRef = useRef<number>(0);
   const deviceIdRef = useRef(getOrCreateDeviceId());
 
   useEffect(() => {
@@ -204,10 +205,22 @@ export default function App() {
 
         if (res.diverged) {
           // Divergencia de versión remota detectada: abortar escritura para no sobreescribir silenciosamente
+          (res.divergedModules || modules).forEach((mod) => {
+            delete pendingRevisionsRef.current[mod];
+          });
+          consecutiveDivergenceCountRef.current += 1;
           setSyncStatus('conflict');
-          modules.forEach((mod) => queuedModulesRef.current.add(mod));
+          // Fail-safe: si se detectan divergencias repetidas (>= 3), NO reencolar indefinidamente.
+          // Esperar a que onSnapshot entregue el estado remoto o el usuario tome una acción.
+          if (consecutiveDivergenceCountRef.current < 3) {
+            modules.forEach((mod) => queuedModulesRef.current.add(mod));
+          } else {
+            console.warn('[CloudSync] Divergencia repetida (>=3). Pausando reintentos automáticos de guardado.');
+          }
           return;
         }
+
+        consecutiveDivergenceCountRef.current = 0;
 
         res.writes.forEach((write) => {
           pendingRevisionsRef.current[write.module] = [...(pendingRevisionsRef.current[write.module] || []), write.revision];
@@ -216,6 +229,7 @@ export default function App() {
         void res.completion
           .then(() => {
             retryAttemptRef.current = 0;
+            consecutiveDivergenceCountRef.current = 0;
             if (retryTimeoutRef.current !== null) {
               window.clearTimeout(retryTimeoutRef.current);
               retryTimeoutRef.current = null;
@@ -259,8 +273,14 @@ export default function App() {
       .catch((err) => {
         console.error('[CloudSync] Guarded write failed:', err);
         if (err && String(err.message).includes('Divergencia')) {
+          modules.forEach((mod) => {
+            delete pendingRevisionsRef.current[mod];
+          });
+          consecutiveDivergenceCountRef.current += 1;
           setSyncStatus('conflict');
-          modules.forEach((mod) => queuedModulesRef.current.add(mod));
+          if (consecutiveDivergenceCountRef.current < 3) {
+            modules.forEach((mod) => queuedModulesRef.current.add(mod));
+          }
           return;
         }
         modules.forEach((mod) => {
@@ -729,7 +749,12 @@ export default function App() {
             nextBaselines[head.module] = syncDataFingerprint(pureHeadData);
             baselineDataRef.current[head.module] = syncModuleData(nextState, head.module);
             appliedRemote = true;
-            modulesToUpload.push(head.module);
+
+            const mergedFingerprint = syncModuleFingerprint(nextState, head.module);
+            const remoteFingerprint = syncDataFingerprint(pureHeadData);
+            if (mergedFingerprint !== remoteFingerprint) {
+              modulesToUpload.push(head.module);
+            }
           }
 
           storeRevisions(nextRevisions);
@@ -982,6 +1007,10 @@ export default function App() {
     });
     if (cloudUserRef.current) {
       const user = cloudUserRef.current;
+      pendingRevisionsRef.current = {};
+      failedSyncModulesRef.current.clear();
+      setFailedSyncModules([]);
+      consecutiveDivergenceCountRef.current = 0;
       const nextBaselines = { ...baselinesRef.current };
       SYNC_MODULES.forEach((mod) => {
         nextBaselines[mod] = syncModuleFingerprint(imported, mod);
@@ -1000,6 +1029,10 @@ export default function App() {
     });
     if (cloudUserRef.current) {
       const user = cloudUserRef.current;
+      pendingRevisionsRef.current = {};
+      failedSyncModulesRef.current.clear();
+      setFailedSyncModules([]);
+      consecutiveDivergenceCountRef.current = 0;
       const nextBaselines = { ...baselinesRef.current };
       SYNC_MODULES.forEach((mod) => {
         nextBaselines[mod] = syncModuleFingerprint(def, mod);

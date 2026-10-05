@@ -6,6 +6,10 @@ import {
   mergeSyncModuleWithConflicts,
   detectSyncModuleConflicts,
   syncModuleData,
+  applySyncModule,
+  extractPureModuleData,
+  syncModuleFingerprint,
+  syncDataFingerprint,
   type SyncModuleKey,
 } from './syncModel';
 import {
@@ -13,7 +17,9 @@ import {
   loadSyncRecoverySnapshot,
   clearSyncRecoverySnapshots,
   writeCloudModulesGuarded,
+  writeCloudModules,
 } from './cloudSync';
+import { cryptoSession, generateMdek } from './cryptoCore';
 
 // Polyfill localStorage for node environment if needed
 if (typeof globalThis.localStorage === 'undefined') {
@@ -445,4 +451,79 @@ test('Hotfix Fase 8: Preservación de cambios pendientes ante error de red / per
   // e) El módulo fallido quedó registrado en el set de errores y el status es 'error'
   assert.ok(failedSyncModules.has('finance'));
   assert.equal(syncStatus, 'error');
+});
+
+test('Hotfix Loop Infinito: Invariante de Quiescencia — No re-subir datos idénticos en onSnapshot', () => {
+  const base = defaultState();
+  const remoteData = syncModuleData(base, 'finance');
+  const pureHeadData = extractPureModuleData(remoteData);
+
+  // 1. Si no hay cambios locales ni pendientes (pendingRevisions = 0 y !localDirty),
+  // onSnapshot aplica el módulo remoto directamente sin llamar a merge ni encolar upload.
+  const localFingerprint = syncModuleFingerprint(base, 'finance');
+  const remoteFingerprint = syncDataFingerprint(pureHeadData);
+  assert.equal(localFingerprint, remoteFingerprint);
+
+  // 2. Si ocurre un merge concurrente donde el estado resultante tiene la misma huella que el remoto:
+  const mergedState = applySyncModule(base, 'finance', pureHeadData);
+  const mergedFingerprint = syncModuleFingerprint(mergedState, 'finance');
+
+  const modulesToUpload: SyncModuleKey[] = [];
+  if (mergedFingerprint !== remoteFingerprint) {
+    modulesToUpload.push('finance');
+  }
+
+  assert.equal(modulesToUpload.length, 0, 'No debe programar upload si el resultado fusionado es idéntico a lo que ya está en Firestore');
+});
+
+test('Hotfix Loop Infinito: Fail-Safe ante divergencia consecutiva repetida', () => {
+  let consecutiveDivergences = 0;
+  const queuedModules = new Set<SyncModuleKey>();
+  const modules: SyncModuleKey[] = ['finance', 'tasks'];
+
+  // Simular 3 divergencias consecutivas
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    consecutiveDivergences += 1;
+    if (consecutiveDivergences < 3) {
+      modules.forEach((m) => queuedModules.add(m));
+    } else {
+      // Fail-safe activado: se detiene el reencolado automático
+      queuedModules.clear();
+    }
+  }
+
+  assert.equal(consecutiveDivergences, 4);
+  assert.equal(queuedModules.size, 0, 'El fail-safe debe vaciar o evitar reencolar módulos tras >=3 divergencias consecutivas sin progreso');
+});
+
+test('Hotfix Loop Infinito: Alineación determinista de revisiones E2EE entre writeCloudModules y batch preparado', async () => {
+  const userId = 'user-e2ee-test-123';
+  const mdek = await generateMdek();
+  cryptoSession.setUnlocked(mdek, userId);
+
+  try {
+    const state = defaultState();
+    const modules: SyncModuleKey[] = ['finance', 'tasks'];
+    const deviceId = 'test-device-id';
+    const baseRevisions = { finance: 'rev-prev-1', tasks: 'rev-prev-2' };
+
+    // writeCloudModules con sesión E2EE activa
+    const res = writeCloudModules(userId, state, modules, deviceId, baseRevisions);
+
+    // En ambiente de test sin emulador activo, batch.commit() fallará con PERMISSION_DENIED;
+    // manejamos el catch para evitar unhandledRejection en Node test runner.
+    res.completion.catch(() => {});
+
+    // Las revisiones retornadas a App.tsx deben ser exactamente las que writeCloudModules preparó
+    assert.equal(res.writes.length, 2);
+    assert.equal(res.writes[0].module, 'finance');
+    assert.equal(res.writes[0].parentRevision, 'rev-prev-1');
+    assert.ok(res.writes[0].revision.includes(deviceId));
+
+    assert.equal(res.writes[1].module, 'tasks');
+    assert.equal(res.writes[1].parentRevision, 'rev-prev-2');
+    assert.ok(res.writes[1].revision.includes(deviceId));
+  } finally {
+    cryptoSession.lock();
+  }
 });

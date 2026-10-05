@@ -75,3 +75,20 @@ test('los datos del módulo con propiedades undefined se limpian sin perder inte
   assert.equal((cleaned as any).goals[0].name, 'Goal 1');
 });
 
+test('stableStringify y syncDataFingerprint: campos undefined producen huella idéntica a campos ausentes', () => {
+  const withUndefined = { a: 1, b: undefined };
+  const withoutUndefined = { a: 1 };
+  assert.equal(
+    syncDataFingerprint(withUndefined),
+    syncDataFingerprint(withoutUndefined),
+    'El filtrado de undefined debe asegurar equivalencia estricta con JSON.stringify y Firestore'
+  );
+
+  const nestedWithUndef = { user: { name: 'Christian', role: undefined }, count: 5 };
+  const nestedWithoutUndef = { user: { name: 'Christian' }, count: 5 };
+  assert.equal(
+    syncDataFingerprint(nestedWithUndef),
+    syncDataFingerprint(nestedWithoutUndef),
+    'Objetos anidados con undefined deben generar la misma huella que sin la propiedad'
+  );
+});
