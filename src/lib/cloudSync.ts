@@ -15,6 +15,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   getFirestore,
   initializeFirestore,
   onSnapshot,
@@ -30,6 +31,7 @@ import {
   SYNC_MODULES,
   isSyncModuleKey,
   syncModuleData,
+  extractPureModuleData,
   type SyncModuleKey,
   type SyncBaselineMap,
   type SyncRevisionMap,
@@ -37,6 +39,7 @@ import {
 import {
   cryptoSession,
   encodeCloudModuleData,
+  decodeCloudModuleData,
   CURRENT_SYNC_PROTOCOL_VERSION,
 } from './cryptoCore';
 import appletConfig from '../../firebase-applet-config.json';
@@ -625,4 +628,45 @@ export async function readLegacyCloudState(userId: string): Promise<LifeOSState 
     console.warn('[CloudSync] Could not read legacy state:', error);
     return null;
   }
+}
+
+export async function fetchFreshCloudModules(
+  userId: string,
+  sessionKey?: CryptoKey | null
+): Promise<{
+  moduleData: Partial<Record<SyncModuleKey, unknown>>;
+  remoteRevisions: SyncRevisionMap;
+  lockedModules: SyncModuleKey[];
+  corruptedModules: SyncModuleKey[];
+}> {
+  if (!cloudSyncConfigured) {
+    return { moduleData: {}, remoteRevisions: {}, lockedModules: [], corruptedModules: [] };
+  }
+
+  const snapshot = await getDocs(modulesCollection(userId));
+  const activeKey = sessionKey !== undefined ? sessionKey : cryptoSession.getKey(userId);
+  const moduleData: Partial<Record<SyncModuleKey, unknown>> = {};
+  const remoteRevisions: SyncRevisionMap = {};
+  const lockedModules: SyncModuleKey[] = [];
+  const corruptedModules: SyncModuleKey[] = [];
+
+  for (const moduleDoc of snapshot.docs) {
+    if (!isSyncModuleKey(moduleDoc.id)) continue;
+    const module = moduleDoc.id;
+    const docData = moduleDoc.data();
+    if (typeof docData.revision !== 'string' || !('data' in docData)) continue;
+
+    remoteRevisions[module] = docData.revision;
+
+    const decodeRes = await decodeCloudModuleData(docData.data, module, userId, activeKey);
+    if (decodeRes.mode === 'locked') {
+      lockedModules.push(module);
+    } else if (decodeRes.mode === 'corrupted') {
+      corruptedModules.push(module);
+    } else {
+      moduleData[module] = extractPureModuleData(decodeRes.data);
+    }
+  }
+
+  return { moduleData, remoteRevisions, lockedModules, corruptedModules };
 }

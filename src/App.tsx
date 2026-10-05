@@ -12,6 +12,7 @@ import {
   getLastCloudUserId,
   getOrCreateDeviceId,
   hasMeaningfulData,
+  fetchFreshCloudModules,
   isCloudPaired,
   loadCloudBaselineData,
   loadCloudBaselines,
@@ -699,16 +700,27 @@ export default function App() {
               }
               continue;
             }
-            if (head.fromCache && !knownRevision) continue;
+            // Caso A: Si el contenido local y remoto es semánticamente idéntico,
+            // adoptar la revisión remota de inmediato. No hay conflicto real, evita
+            // 3-way merges espurios y repara revisiones desfasadas (quiescencia garantizada).
+            const localFingerprint = syncModuleFingerprint(nextState, head.module);
+            const remoteFingerprint = syncDataFingerprint(pureHeadData);
+            if (localFingerprint === remoteFingerprint) {
+              nextRevisions[head.module] = head.revision;
+              nextBaselines[head.module] = remoteFingerprint;
+              baselineDataRef.current[head.module] = pureHeadData;
+              failedSyncModulesRef.current.delete(head.module);
+              continue;
+            }
 
             const localDirty = nextBaselines[head.module]
-              ? syncModuleFingerprint(nextState, head.module) !== nextBaselines[head.module]
+              ? localFingerprint !== nextBaselines[head.module]
               : false;
 
             if (pendingRevisions.length === 0 && !localDirty) {
               nextState = applySyncModule(nextState, head.module, pureHeadData);
               nextRevisions[head.module] = head.revision;
-              nextBaselines[head.module] = syncDataFingerprint(pureHeadData);
+              nextBaselines[head.module] = remoteFingerprint;
               baselineDataRef.current[head.module] = pureHeadData;
               appliedRemote = true;
               continue;
@@ -746,12 +758,11 @@ export default function App() {
 
             nextState = mergedWithModule;
             nextRevisions[head.module] = head.revision;
-            nextBaselines[head.module] = syncDataFingerprint(pureHeadData);
+            nextBaselines[head.module] = remoteFingerprint;
             baselineDataRef.current[head.module] = syncModuleData(nextState, head.module);
             appliedRemote = true;
 
             const mergedFingerprint = syncModuleFingerprint(nextState, head.module);
-            const remoteFingerprint = syncDataFingerprint(pureHeadData);
             if (mergedFingerprint !== remoteFingerprint) {
               modulesToUpload.push(head.module);
             }
@@ -830,13 +841,88 @@ export default function App() {
     }
   };
 
-  const handleForceSync = () => {
+  const handleForceSync = async () => {
     if (!cloudUser) {
       void handleCloudSignIn();
       return;
     }
-    showToast('Sincronizando con la nube...', 'info');
-    queueCloudSave(stateRef.current, [...SYNC_MODULES]);
+    showToast('Consultando estado remoto fresco...', 'info');
+    try {
+      setSyncStatus('connecting');
+      const fresh = await fetchFreshCloudModules(cloudUser.uid);
+      const localState = stateRef.current;
+      const remoteState = buildStateFromModules(fresh.moduleData);
+
+      if (fresh.lockedModules.length > 0) {
+        fresh.lockedModules.forEach((m) => failedSyncModulesRef.current.add(m));
+        setFailedSyncModules([...failedSyncModulesRef.current]);
+        setSyncStatus('locked');
+        showToast('Hay módulos protegidos por una versión o clave no disponible.', 'error');
+        return;
+      }
+
+      // Detectar qué módulos difieren realmente en contenido entre local y Firestore
+      const contentDivergences: SyncModuleKey[] = [];
+      const remoteModulesPresent = Object.keys(fresh.moduleData) as SyncModuleKey[];
+
+      for (const mod of remoteModulesPresent) {
+        const localFp = syncModuleFingerprint(localState, mod);
+        const remoteData = fresh.moduleData[mod];
+        const remoteFp = syncDataFingerprint(remoteData);
+        if (localFp !== remoteFp) {
+          contentDivergences.push(mod);
+        }
+      }
+
+      if (contentDivergences.length === 0) {
+        // CASO A: Contenido semánticamente idéntico.
+        // Adoptar la revisión remota actual como baseline, limpiar trackers y volver a 'synced'.
+        const nextRevisions = { ...revisionsRef.current, ...fresh.remoteRevisions };
+        const nextBaselines = { ...baselinesRef.current };
+        for (const mod of remoteModulesPresent) {
+          nextBaselines[mod] = syncDataFingerprint(fresh.moduleData[mod]);
+          baselineDataRef.current[mod] = fresh.moduleData[mod];
+          failedSyncModulesRef.current.delete(mod);
+        }
+        persistRevisionMap(cloudUser.uid, nextRevisions);
+        persistBaselines(cloudUser.uid, nextBaselines);
+        saveCloudBaselineData(cloudUser.uid, baselineDataRef.current);
+        pendingRevisionsRef.current = {};
+        consecutiveDivergenceCountRef.current = 0;
+        conflictPendingRef.current = false;
+        setCloudConflict(null);
+        setFailedSyncModules([...failedSyncModulesRef.current]);
+        markCloudPaired(cloudUser.uid);
+        initializedUserRef.current = cloudUser.uid;
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        showToast('Sincronización reconciliada con éxito (contenido ya coincide).', 'success');
+      } else {
+        // CASO B: Contenido realmente diferente.
+        // Preservar snapshots y presentar resolución explícita sin sobrescribir.
+        saveSyncRecoverySnapshot(cloudUser.uid, 'local', localState);
+        saveSyncRecoverySnapshot(cloudUser.uid, 'remote', remoteState);
+        const baseBuilt = Object.keys(baselineDataRef.current).length > 0
+          ? buildStateFromModules(baselineDataRef.current)
+          : undefined;
+        if (baseBuilt) {
+          saveSyncRecoverySnapshot(cloudUser.uid, 'base', baseBuilt);
+        }
+
+        conflictPendingRef.current = true;
+        setCloudConflict({
+          remoteState,
+          modules: contentDivergences,
+          remoteRevisions: fresh.remoteRevisions,
+        });
+        setSyncStatus('conflict');
+        showToast('Se detectaron diferencias reales. Elige qué versión conservar.', 'info');
+      }
+    } catch (err) {
+      console.error('[CloudSync] Error durante reconciliación forzada:', err);
+      setSyncStatus(navigator.onLine ? 'error' : 'offline');
+      showToast('Error al conectar con la nube.', 'error');
+    }
   };
 
   const handleRetrySync = () => {

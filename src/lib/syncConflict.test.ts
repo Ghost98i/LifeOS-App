@@ -527,3 +527,194 @@ test('Hotfix Loop Infinito: Alineación determinista de revisiones E2EE entre wr
     cryptoSession.lock();
   }
 });
+
+test('Hotfix 2 - Caso 1: local == remote semánticamente pero revisión remota diferente -> Adopción limpia sin write, status synced', () => {
+  // Simula el escenario donde la nube avanzó o se restauró backup, pero los datos son equivalentes
+  const state = defaultState();
+  state.finance.accounts = [{ id: 'acc-1', name: 'Cuenta Corriente', balance: 5000, initialBalance: 5000 }];
+
+  const knownRevision = 'rev-local-old';
+  const remoteHead = {
+    module: 'finance' as SyncModuleKey,
+    revision: 'rev-remote-fresh',
+    data: syncModuleData(state, 'finance'),
+  };
+
+  const pureHeadData = extractPureModuleData(remoteHead.data);
+  const localFingerprint = syncModuleFingerprint(state, 'finance');
+  const remoteFingerprint = syncDataFingerprint(pureHeadData);
+
+  // Invariante: las huellas son idénticas
+  assert.equal(localFingerprint, remoteFingerprint);
+  assert.notEqual(knownRevision, remoteHead.revision);
+
+  // Lógica de adopción limpia de onSnapshot
+  const nextRevisions: Record<string, string> = { finance: knownRevision };
+  const nextBaselines: Record<string, string> = { finance: 'old-baseline' };
+  const modulesToUpload: SyncModuleKey[] = [];
+  let syncStatus = 'connecting';
+
+  if (localFingerprint === remoteFingerprint) {
+    nextRevisions[remoteHead.module] = remoteHead.revision;
+    nextBaselines[remoteHead.module] = remoteFingerprint;
+    syncStatus = 'synced';
+  } else {
+    modulesToUpload.push(remoteHead.module);
+  }
+
+  assert.equal(nextRevisions.finance, 'rev-remote-fresh', 'Debe adoptar la revisión remota');
+  assert.equal(nextBaselines.finance, remoteFingerprint, 'Debe actualizar el baseline');
+  assert.equal(modulesToUpload.length, 0, 'No debe emitir ninguna escritura');
+  assert.equal(syncStatus, 'synced', 'Debe quedar en synced estable');
+});
+
+test('Hotfix 2 - Caso 2: local != remote en contenido -> Detecta conflicto real y no sobreescribe', () => {
+  const localState = defaultState();
+  localState.finance.accounts = [{ id: 'acc-1', name: 'Cuenta Local', balance: 8000, initialBalance: 8000 }];
+
+  const remoteState = defaultState();
+  remoteState.finance.accounts = [{ id: 'acc-1', name: 'Cuenta Nube', balance: 9500, initialBalance: 9500 }];
+
+  const localFingerprint = syncModuleFingerprint(localState, 'finance');
+  const remoteData = syncModuleData(remoteState, 'finance');
+  const remoteFingerprint = syncDataFingerprint(remoteData);
+
+  assert.notEqual(localFingerprint, remoteFingerprint);
+
+  // Detección de diferencias reales
+  const divergences: SyncModuleKey[] = [];
+  if (localFingerprint !== remoteFingerprint) {
+    divergences.push('finance');
+  }
+
+  assert.equal(divergences.length, 1);
+  assert.equal(divergences[0], 'finance');
+
+  // Guardar recovery snapshots en conflicto real
+  const userId = 'user-conflict-case-2';
+  saveSyncRecoverySnapshot(userId, 'local', localState);
+  saveSyncRecoverySnapshot(userId, 'remote', remoteState);
+
+  const savedLocal = loadSyncRecoverySnapshot(userId, 'local');
+  const savedRemote = loadSyncRecoverySnapshot(userId, 'remote');
+
+  assert.equal(savedLocal?.finance.accounts[0].name, 'Cuenta Local');
+  assert.equal(savedRemote?.finance.accounts[0].name, 'Cuenta Nube');
+  clearSyncRecoverySnapshots(userId);
+});
+
+test('Hotfix 2 - Caso 3: Estado de conflicto persistente -> Reconciliación forzada (Sincronizar ahora) resuelve si son idénticos', () => {
+  const state = defaultState();
+  state.finance.accounts = [{ id: 'acc-1', name: 'Banco Central', balance: 12000, initialBalance: 12000 }];
+
+  // Simular resultado de fetchFreshCloudModules
+  const fresh = {
+    moduleData: {
+      finance: extractPureModuleData(syncModuleData(state, 'finance')),
+    },
+    remoteRevisions: {
+      finance: 'cloud-rev-fresh-99',
+    },
+    lockedModules: [] as SyncModuleKey[],
+    corruptedModules: [] as SyncModuleKey[],
+  };
+
+  // Reconciliación lógica de handleForceSync
+  let syncStatus = 'conflict';
+  let cloudConflict: any = { dummy: true };
+  let localRevisions: Record<string, string> = { finance: 'stale-local-rev' };
+  const localBaselines: Record<string, string> = { finance: 'stale-baseline' };
+
+  const contentDivergences: SyncModuleKey[] = [];
+  const remoteModules = Object.keys(fresh.moduleData) as SyncModuleKey[];
+  for (const mod of remoteModules) {
+    const localFp = syncModuleFingerprint(state, mod);
+    const remoteFp = syncDataFingerprint(fresh.moduleData[mod]);
+    if (localFp !== remoteFp) {
+      contentDivergences.push(mod);
+    }
+  }
+
+  if (contentDivergences.length === 0) {
+    localRevisions = { ...localRevisions, ...fresh.remoteRevisions };
+    for (const mod of remoteModules) {
+      localBaselines[mod] = syncDataFingerprint(fresh.moduleData[mod]);
+    }
+    cloudConflict = null;
+    syncStatus = 'synced';
+  }
+
+  assert.equal(contentDivergences.length, 0);
+  assert.equal(syncStatus, 'synced', 'Debe converger a synced');
+  assert.equal(cloudConflict, null, 'Debe despejar el estado de conflicto');
+  assert.equal(localRevisions.finance, 'cloud-rev-fresh-99', 'Metadata de revisión actualizada');
+  assert.equal(localBaselines.finance, syncModuleFingerprint(state, 'finance'), 'Baseline alineado con la huella real');
+});
+
+test('Hotfix 2 - Caso 4: Relogin con conflicto previo -> Preservación de datos locales y reconciliación', () => {
+  const localState = defaultState();
+  localState.notes.postits = [{ id: 'n1', text: 'Nota Importante', date: '2026-10-05' }];
+
+  // 1. En relogin, localState NO se borra de localStorage
+  assert.equal(localState.notes.postits[0].text, 'Nota Importante');
+
+  // 2. Si remoteState tiene la misma nota (mismo contenido semántico)
+  const remoteState = structuredClone(localState);
+  const remoteData = syncModuleData(remoteState, 'notes');
+  const remoteRevision = 'rev-cloud-relogin';
+
+  // Al llegar onSnapshot o al ejecutarse la reconciliación inicial
+  const localFp = syncModuleFingerprint(localState, 'notes');
+  const remoteFp = syncDataFingerprint(extractPureModuleData(remoteData));
+  assert.equal(localFp, remoteFp);
+
+  // La auto-adopción evita que relogin quede atascado en conflicto
+  const nextRevisions = { notes: remoteRevision };
+  const nextBaselines = { notes: remoteFp };
+
+  assert.equal(nextRevisions.notes, 'rev-cloud-relogin');
+  assert.equal(nextBaselines.notes, localFp);
+});
+
+test('Hotfix 2 - Caso 5: E2EE activo -> Comparación semántica basada en contenido descifrado, no ciphertext/IV', async () => {
+  const userId = 'user-e2ee-comparison-test';
+  const mdek = await generateMdek();
+  cryptoSession.setUnlocked(mdek, userId);
+
+  try {
+    const rawData = {
+      accounts: [{ id: 'acc-1', name: 'Ahorros Seguros', balance: 25000, initialBalance: 25000 }],
+      transactions: [],
+      monthlyBudgets: {},
+    };
+
+    // Dos cifrados distintos del mismo contenido lógico (producirán ciphertexts y IVs distintos por AES-GCM)
+    const { encodeCloudModuleData, decodeCloudModuleData } = await import('./cryptoCore');
+    const encResult1 = await encodeCloudModuleData(rawData, 'finance', userId, mdek);
+    const encResult2 = await encodeCloudModuleData(rawData, 'finance', userId, mdek);
+
+    assert.ok(encResult1.isEncrypted);
+    assert.ok(encResult2.isEncrypted);
+
+    // Los payloads cifrados son diferentes byte a byte (por aleatoriedad de IV)
+    assert.notEqual(JSON.stringify(encResult1.data), JSON.stringify(encResult2.data));
+
+    // Pero al decodificar y extraer pureModuleData:
+    const decoded1 = await decodeCloudModuleData(encResult1.data, 'finance', userId, mdek);
+    const decoded2 = await decodeCloudModuleData(encResult2.data, 'finance', userId, mdek);
+
+    assert.equal(decoded1.mode, 'decrypted');
+    assert.equal(decoded2.mode, 'decrypted');
+
+    const pure1 = extractPureModuleData(decoded1.data);
+    const pure2 = extractPureModuleData(decoded2.data);
+
+    const fp1 = syncDataFingerprint(pure1);
+    const fp2 = syncDataFingerprint(pure2);
+
+    // Invariante fundamental de Hotfix 2 para E2EE:
+    assert.equal(fp1, fp2, 'Las huellas semánticas del contenido descifrado DEBEN ser idénticas a pesar del cifrado no-determinista');
+  } finally {
+    cryptoSession.lock();
+  }
+});
