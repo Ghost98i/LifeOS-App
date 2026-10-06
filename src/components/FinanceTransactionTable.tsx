@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Transaction, Account, FinanceCategoryInput } from '../types';
 import { fmtDate, fmtMoney } from '../lib/storage';
 import { getCategoryName, getAllCategories } from '../lib/financeCategories';
+import { identifyMerchant } from '../lib/merchantIdentity';
 import { AppIcon } from './AppIcon';
 import { PrivacyAmount } from './PrivacyAmount';
 
@@ -23,27 +24,34 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
   categories,
   onEdit,
   onDelete,
-  totalGastadoAnio,
+  totalGastadoAnio: _totalGastadoAnio,
 }) => {
   const [selectedAccount, setSelectedAccount] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedType, setSelectedType] = useState<TypeFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('date_desc');
-  const [pageSize, setPageSize] = useState<number>(30);
+  const [pageSize] = useState<number>(30);
   const [page, setPage] = useState<number>(1);
-
-  // Quick account counts
-  const accountCounts = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const t of transactions) {
-      const accId = t.accountId || 'unknown';
-      map[accId] = (map[accId] || 0) + 1;
-    }
-    return map;
-  }, [transactions]);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
 
   const allCats = useMemo(() => getAllCategories(categories), [categories]);
+
+  // Active filter count
+  const activeFiltersCount =
+    (selectedAccount !== 'all' ? 1 : 0) +
+    (selectedCategory !== 'all' ? 1 : 0) +
+    (selectedType !== 'all' ? 1 : 0);
+
+  const hasActiveFilters = activeFiltersCount > 0 || searchQuery.trim() !== '';
+
+  const clearFilters = () => {
+    setSelectedAccount('all');
+    setSelectedCategory('all');
+    setSelectedType('all');
+    setSearchQuery('');
+    setPage(1);
+  };
 
   // Filter logic
   const filteredTransactions = useMemo(() => {
@@ -52,14 +60,11 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
       if (selectedAccount !== 'all' && t.accountId !== selectedAccount) {
         return false;
       }
-      // Category filter (matches by category ID or historical name)
+      // Category filter
       if (selectedCategory !== 'all') {
         const selName = getCategoryName(categories, selectedCategory).toLowerCase();
         const txCatName = getCategoryName(categories, t.category).toLowerCase();
-        if (
-          t.category !== selectedCategory &&
-          txCatName !== selName
-        ) {
+        if (t.category !== selectedCategory && txCatName !== selName) {
           return false;
         }
       }
@@ -119,359 +124,352 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
     return { gastos, ingresos, balance: ingresos - gastos };
   }, [filteredTransactions]);
 
-  const hasActiveFilters =
-    selectedAccount !== 'all' ||
-    selectedCategory !== 'all' ||
-    selectedType !== 'all' ||
-    searchQuery.trim() !== '';
-
-  const clearFilters = () => {
-    setSelectedAccount('all');
-    setSelectedCategory('all');
-    setSelectedType('all');
-    setSearchQuery('');
-    setPage(1);
-  };
+  const selectedAccountObj = accounts.find((a) => a.id === selectedAccount);
+  const selectedCategoryName = selectedCategory !== 'all' ? getCategoryName(categories, selectedCategory) : null;
 
   return (
-    <div className="space-y-4">
-      {/* Header & Search */}
+    <div className="space-y-3">
+      {/* Monarch-Style Clean Action Header: Search + On-Demand Filter Popover */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-base sm:text-lg font-bold tracking-tight text-[var(--text)]">
-              Tabla de Movimientos
-            </h2>
-            <span className="rounded-full bg-[var(--surface-muted)] border border-[var(--border)] px-2.5 py-0.5 text-xs font-semibold font-mono text-[var(--text-soft)]">
-              {filteredTransactions.length} {filteredTransactions.length === 1 ? 'movimiento' : 'movimientos'}
-            </span>
-          </div>
-          {typeof totalGastadoAnio === 'number' && (
-            <p className="mt-0.5 text-xs text-[var(--text-soft)]">
-              Gastado este año: <strong className="font-mono text-[var(--text)]">{fmtMoney(totalGastadoAnio)}</strong>
-            </p>
+        {/* Search bar */}
+        <div className="relative min-w-[220px] flex-1 sm:max-w-md">
+          <AppIcon
+            name="search"
+            className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none"
+          />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Buscar por comercio, categoría, cuenta..."
+            className="w-full rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/50 py-2 pl-9 pr-8 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 outline-none focus:border-indigo-500 transition-colors shadow-2xs"
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-2 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+            >
+              ✕
+            </button>
           )}
         </div>
 
-        {/* Search bar & Sorting */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[200px] flex-1 sm:w-64">
-            <AppIcon
-              name="search"
-              className="absolute left-2.5 top-2.5 h-4 w-4 text-[var(--text-faint)] pointer-events-none"
-            />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Buscar en movimientos..."
-              className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1.5 pl-8 pr-3 text-xs text-[var(--text)] placeholder-[var(--text-faint)] outline-hidden focus:border-[var(--blue)] transition-colors"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-2 text-xs text-[var(--text-faint)] hover:text-[var(--text)]"
-              >
-                ✕
-              </button>
+        {/* Filter Toggle Button & Sort Selector */}
+        <div className="flex items-center gap-2 relative">
+          <button
+            type="button"
+            onClick={() => setIsFiltersOpen((prev) => !prev)}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+              activeFiltersCount > 0 || isFiltersOpen
+                ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500/40 text-indigo-700 dark:text-indigo-300 font-bold shadow-2xs'
+                : 'bg-white/70 dark:bg-slate-900/50 border-slate-200/80 dark:border-slate-800/80 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+            }`}
+          >
+            <AppIcon name="settings" className="h-3.5 w-3.5 opacity-80" />
+            <span>Filtros</span>
+            {activeFiltersCount > 0 && (
+              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-indigo-600 text-white font-bold">
+                {activeFiltersCount}
+              </span>
             )}
-          </div>
+          </button>
 
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortOption)}
-            className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs font-medium text-[var(--text)] outline-hidden focus:border-[var(--blue)] cursor-pointer"
+            className="rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/50 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
           >
-            <option value="date_desc">Más recientes primero</option>
-            <option value="date_asc">Más antiguos primero</option>
+            <option value="date_desc">Más recientes</option>
+            <option value="date_asc">Más antiguos</option>
             <option value="amount_desc">Mayor monto</option>
             <option value="amount_asc">Menor monto</option>
           </select>
+
+          {/* On-demand Filter Dropdown / Popover */}
+          {isFiltersOpen && (
+            <div className="absolute right-0 top-12 z-30 w-80 sm:w-96 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-3.5 animate-in fade-in slide-in-from-top-2">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                <span className="text-xs font-bold text-slate-900 dark:text-white">Filtros de Movimientos</span>
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
+                  >
+                    Restablecer
+                  </button>
+                )}
+              </div>
+
+              {/* Cuenta */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Cuenta
+                </label>
+                <select
+                  value={selectedAccount}
+                  onChange={(e) => {
+                    setSelectedAccount(e.target.value);
+                    setPage(1);
+                  }}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none"
+                >
+                  <option value="all">Todas las cuentas ({transactions.length})</option>
+                  {accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Categoría */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Categoría
+                </label>
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => {
+                    setSelectedCategory(e.target.value);
+                    setPage(1);
+                  }}
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none"
+                >
+                  <option value="all">Todas las categorías</option>
+                  {allCats.map((cat) => (
+                    <option key={cat.id} value={cat.id}>
+                      {cat.name} {!cat.active ? '(archivada)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Tipo */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  Tipo
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedType('all');
+                      setPage(1);
+                    }}
+                    className={`flex-1 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
+                      selectedType === 'all'
+                        ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950 font-bold'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    Todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedType('gasto');
+                      setPage(1);
+                    }}
+                    className={`flex-1 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
+                      selectedType === 'gasto'
+                        ? 'bg-rose-500 text-white font-bold'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    Gastos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedType('ingreso');
+                      setPage(1);
+                    }}
+                    className={`flex-1 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
+                      selectedType === 'ingreso'
+                        ? 'bg-emerald-600 text-white font-bold'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    Ingresos
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsFiltersOpen(false)}
+                  className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold cursor-pointer hover:bg-indigo-500"
+                >
+                  Cerrar
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Notion-style Filter Controls: 1-Click Filters */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3.5 sm:p-4 space-y-3 shadow-xs">
-        {/* Row 1: Account 1-Click Filter */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-              Filtrar por Cuenta
-            </span>
-            {selectedAccount !== 'all' && (
+      {/* Active Filter Chips Rail (Only appears when active filters exist) */}
+      {hasActiveFilters && (
+        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+          <span className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500">
+            Filtros activos:
+          </span>
+
+          {selectedAccount !== 'all' && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50 text-[11px] font-medium">
+              <span>Cuenta: {selectedAccountObj?.name || selectedAccount}</span>
               <button
                 type="button"
                 onClick={() => {
                   setSelectedAccount('all');
                   setPage(1);
                 }}
-                className="text-[10px] font-semibold text-[var(--blue)] hover:underline"
+                className="hover:text-rose-500 cursor-pointer font-bold"
               >
-                Restablecer cuenta
+                ✕
               </button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedAccount('all');
-                setPage(1);
-              }}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
-                selectedAccount === 'all'
-                  ? 'bg-[var(--text)] text-[var(--bg)] font-bold shadow-xs'
-                  : 'border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--bg)]'
-              }`}
-            >
-              <span>Todas las cuentas</span>
-              <span className="text-[10px] opacity-70">({transactions.length})</span>
-            </button>
-            {accounts.map((acc) => {
-              const count = accountCounts[acc.id] || 0;
-              const isSelected = selectedAccount === acc.id;
-              return (
-                <button
-                  key={acc.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedAccount(acc.id);
-                    setPage(1);
-                  }}
-                  className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
-                    isSelected
-                      ? 'bg-[var(--text)] text-[var(--bg)] font-bold shadow-xs'
-                      : 'border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--bg)]'
-                  }`}
-                >
-                  <span>{acc.name}</span>
-                  <span className="text-[10px] opacity-70">({count})</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Row 2: Category 1-Click Filter */}
-        <div className="space-y-1.5 border-t border-[var(--border)]/60 pt-3">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-              Filtrar por Categoría
             </span>
-            {selectedCategory !== 'all' && (
+          )}
+
+          {selectedCategory !== 'all' && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50 text-[11px] font-medium">
+              <span>Categoría: {selectedCategoryName}</span>
               <button
                 type="button"
                 onClick={() => {
                   setSelectedCategory('all');
                   setPage(1);
                 }}
-                className="text-[10px] font-semibold text-[var(--blue)] hover:underline"
+                className="hover:text-rose-500 cursor-pointer font-bold"
               >
-                Restablecer categoría
+                ✕
               </button>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedCategory('all');
-                setPage(1);
-              }}
-              className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
-                selectedCategory === 'all'
-                  ? 'bg-[var(--blue)] text-white font-bold shadow-xs'
-                  : 'border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--bg)]'
-              }`}
-            >
-              Todas las categorías
-            </button>
-            {allCats.map((cat) => {
-              const isSelected = selectedCategory === cat.id;
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => {
-                    setSelectedCategory(cat.id);
-                    setPage(1);
-                  }}
-                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition-all ${
-                    isSelected
-                      ? 'bg-[var(--blue)] text-white font-bold shadow-xs'
-                      : 'border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--bg)]'
-                  }`}
-                >
-                  <span>{cat.name}</span>
-                  {!cat.active && (
-                    <span className="text-[9px] opacity-75 font-normal">(archivada)</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Row 3: Type Filter & Active Reset */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--border)]/60 pt-3">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-bold text-[var(--text-faint)] mr-1">Tipo:</span>
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedType('all');
-                setPage(1);
-              }}
-              className={`rounded-md px-2.5 py-0.5 text-xs font-semibold ${
-                selectedType === 'all'
-                  ? 'bg-[var(--text)] text-[var(--bg)]'
-                  : 'text-[var(--text-soft)] hover:text-[var(--text)]'
-              }`}
-            >
-              Todos
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedType('gasto');
-                setPage(1);
-              }}
-              className={`rounded-md px-2.5 py-0.5 text-xs font-semibold ${
-                selectedType === 'gasto'
-                  ? 'bg-red-500/15 text-red-600 dark:text-red-400 font-bold'
-                  : 'text-[var(--text-soft)] hover:text-red-500'
-              }`}
-            >
-              Gastos
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedType('ingreso');
-                setPage(1);
-              }}
-              className={`rounded-md px-2.5 py-0.5 text-xs font-semibold ${
-                selectedType === 'ingreso'
-                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-bold'
-                  : 'text-[var(--text-soft)] hover:text-emerald-500'
-              }`}
-            >
-              Ingresos
-            </button>
-          </div>
-
-          {hasActiveFilters && (
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-rose-500 hover:underline"
-            >
-              <span>✕ Limpiar todos los filtros</span>
-            </button>
+            </span>
           )}
-        </div>
-      </div>
 
-      {/* Filtered Balance Summary Bar */}
-      <div className="grid grid-cols-3 gap-2 sm:gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-center">
-        <div>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-            Total Gastos
-          </span>
-          <p className="font-mono text-xs sm:text-sm font-bold text-red-500 mt-0.5">
-            − <PrivacyAmount>{fmtMoney(totals.gastos)}</PrivacyAmount>
-          </p>
-        </div>
-        <div>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-            Total Ingresos
-          </span>
-          <p className="font-mono text-xs sm:text-sm font-bold text-emerald-500 mt-0.5">
-            + <PrivacyAmount>{fmtMoney(totals.ingresos)}</PrivacyAmount>
-          </p>
-        </div>
-        <div>
-          <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-            Neto Filtrado
-          </span>
-          <p
-            className={`font-mono text-xs sm:text-sm font-bold mt-0.5 ${
-              totals.balance >= 0 ? 'text-emerald-500' : 'text-red-500'
-            }`}
+          {selectedType !== 'all' && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50 text-[11px] font-medium">
+              <span>Tipo: {selectedType === 'gasto' ? 'Gastos' : 'Ingresos'}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedType('all');
+                  setPage(1);
+                }}
+                className="hover:text-rose-500 cursor-pointer font-bold"
+              >
+                ✕
+              </button>
+            </span>
+          )}
+
+          {searchQuery.trim() !== '' && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[11px] font-medium">
+              <span>Búsqueda: &ldquo;{searchQuery}&rdquo;</span>
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="hover:text-rose-500 cursor-pointer font-bold"
+              >
+                ✕
+              </button>
+            </span>
+          )}
+
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer ml-1"
           >
-            {totals.balance >= 0 ? '+' : ''}
-            <PrivacyAmount>{fmtMoney(totals.balance)}</PrivacyAmount>
-          </p>
+            Limpiar todo
+          </button>
         </div>
-      </div>
+      )}
 
-      {/* Transactions Clean Table */}
+      {/* Main Transactions Surface: Open, Clean Monarch-Inspired Table */}
       {sortedTransactions.length === 0 ? (
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 text-center">
-          <p className="text-sm font-semibold text-[var(--text)]">No se encontraron movimientos</p>
-          <p className="mt-1 text-xs text-[var(--text-soft)]">
+        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/50 p-8 text-center backdrop-blur-md">
+          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">No se encontraron movimientos</p>
+          <p className="mt-1 text-xs text-slate-400">
             {hasActiveFilters
               ? 'Probá ajustando o limpiando los filtros seleccionados.'
-              : 'Todavía no cargaste ningún movimiento.'}
+              : 'Todavía no registraste ningún movimiento financiero.'}
           </p>
           {hasActiveFilters && (
             <button
               type="button"
               onClick={clearFilters}
-              className="mt-3 rounded-lg bg-[var(--blue-soft)] text-[var(--blue)] px-3 py-1.5 text-xs font-semibold hover:bg-[var(--blue)] hover:text-white transition-colors"
+              className="mt-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 px-3 py-1.5 text-xs font-semibold hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer"
             >
               Restablecer filtros
             </button>
           )}
         </div>
       ) : (
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] overflow-hidden shadow-xs">
+        <div className="rounded-2xl border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/50 backdrop-blur-md overflow-hidden shadow-xs">
           {/* Mobile Card List */}
-          <div className="divide-y divide-[var(--border)] md:hidden">
+          <div className="divide-y divide-slate-100 dark:divide-slate-800/60 md:hidden">
             {paginatedTransactions.map((t) => {
               const account = accounts.find((a) => a.id === t.accountId);
               const isExpense = t.type === 'gasto';
+              const merchant = identifyMerchant(t.note);
               return (
-                <article key={t.id} className="p-3.5 space-y-2 hover:bg-[var(--surface-muted)]/40 transition-colors">
+                <article key={t.id} className="p-3.5 space-y-2 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            isExpense
-                              ? 'bg-red-500/10 text-red-600 dark:text-red-400'
-                              : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                          }`}
-                        >
-                          {isExpense ? 'Gasto' : 'Ingreso'}
-                        </span>
-                        <span className="rounded-md bg-[var(--surface-muted)] border border-[var(--border)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-soft)]">
+                        {merchant ? (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold border shrink-0"
+                            style={{
+                              backgroundColor: merchant.badgeBg,
+                              color: merchant.badgeColor,
+                              borderColor: merchant.badgeBorder,
+                            }}
+                          >
+                            <span>{merchant.icon}</span>
+                            <span>{merchant.name}</span>
+                          </span>
+                        ) : (
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              isExpense
+                                ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                                : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                            }`}
+                          >
+                            {isExpense ? 'Gasto' : 'Ingreso'}
+                          </span>
+                        )}
+                        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
                           {getCategoryName(categories, t.category)}
                         </span>
                         {account && (
-                          <span className="text-[10px] text-[var(--text-faint)]">
+                          <span className="text-[10px] text-slate-400">
                             · {account.name}
                           </span>
                         )}
                       </div>
-                      <p className="mt-1 text-sm font-semibold text-[var(--text)] truncate">
+                      <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white truncate">
                         {t.note || getCategoryName(categories, t.category)}
                       </p>
-                      <p className="text-[11px] text-[var(--text-faint)] font-mono">
+                      <p className="text-[11px] text-slate-400 font-mono">
                         {fmtDate(t.date)}
                         {t.fixed && ` · ${t.fixed}`}
-                        {t.origin === 'adjustment' && ' · Conciliación'}
                       </p>
                     </div>
+
                     <div className="text-right shrink-0">
                       <PrivacyAmount
                         as="strong"
                         className={`font-mono text-sm font-extrabold block ${
-                          isExpense ? 'text-red-500' : 'text-emerald-500'
+                          isExpense ? 'text-slate-900 dark:text-white' : 'text-emerald-600 dark:text-emerald-400'
                         }`}
                       >
                         {isExpense ? '−' : '+'} {fmtMoney(t.amount)}
@@ -480,7 +478,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                         <button
                           type="button"
                           onClick={() => onEdit(t)}
-                          className="rounded-md px-2 py-1 text-[11px] font-bold text-[var(--blue)] hover:bg-[var(--blue-soft)]"
+                          className="rounded-md px-2 py-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 cursor-pointer"
                         >
                           Editar
                         </button>
@@ -491,7 +489,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                               onDelete(t.id);
                             }
                           }}
-                          className="rounded-md px-1.5 py-1 text-[11px] text-[var(--text-faint)] hover:text-red-500"
+                          className="rounded-md px-1.5 py-0.5 text-[11px] text-slate-400 hover:text-rose-500 cursor-pointer"
                         >
                           ✕
                         </button>
@@ -503,88 +501,108 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
             })}
           </div>
 
-          {/* Desktop Clean Notion-style Table */}
+          {/* Desktop Clean Monarch Table */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-xs text-left border-collapse">
               <thead>
-                <tr className="border-b border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-faint)] uppercase text-[10px] font-bold tracking-wider">
-                  <th className="py-2.5 px-3.5">Fecha</th>
-                  <th className="py-2.5 px-3">Tipo</th>
-                  <th className="py-2.5 px-3.5">Categoría</th>
-                  <th className="py-2.5 px-3.5">Cuenta</th>
-                  <th className="py-2.5 px-3.5">Nota / Detalle</th>
-                  <th className="py-2.5 px-3">Marca</th>
-                  <th className="py-2.5 px-4 text-right">Monto</th>
-                  <th className="py-2.5 px-3 text-right">Acciones</th>
+                <tr className="border-b border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 dark:text-slate-500 uppercase text-[10px] font-bold tracking-wider">
+                  <th className="py-3 px-4">Comercio / Descripción</th>
+                  <th className="py-3 px-3.5">Categoría</th>
+                  <th className="py-3 px-3.5">Cuenta</th>
+                  <th className="py-3 px-3">Fecha</th>
+                  <th className="py-3 px-3">Tipo</th>
+                  <th className="py-3 px-4 text-right">Monto</th>
+                  <th className="py-3 px-3 text-right">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[var(--border)]">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                 {paginatedTransactions.map((t) => {
                   const account = accounts.find((a) => a.id === t.accountId);
                   const isExpense = t.type === 'gasto';
+                  const merchant = identifyMerchant(t.note);
                   return (
                     <tr
                       key={t.id}
-                      className="hover:bg-[var(--surface-muted)]/50 transition-colors group"
+                      className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors group"
                     >
-                      <td className="py-2.5 px-3.5 font-mono text-[var(--text-soft)] whitespace-nowrap">
+                      {/* Column 1: Merchant / Description */}
+                      <td className="py-3 px-4 max-w-[280px]">
+                        <div className="flex items-center gap-2">
+                          {merchant && (
+                            <span
+                              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold border shrink-0"
+                              style={{
+                                backgroundColor: merchant.badgeBg,
+                                color: merchant.badgeColor,
+                                borderColor: merchant.badgeBorder,
+                              }}
+                            >
+                              <span>{merchant.icon}</span>
+                              <span>{merchant.name}</span>
+                            </span>
+                          )}
+                          <span className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+                            {t.note || getCategoryName(categories, t.category)}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Column 2: Categoría */}
+                      <td className="py-3 px-3.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                        <span className="inline-block px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                          {getCategoryName(categories, t.category)}
+                        </span>
+                      </td>
+
+                      {/* Column 3: Cuenta */}
+                      <td className="py-3 px-3.5 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        {account?.name ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                            <span>{account.name}</span>
+                          </span>
+                        ) : (
+                          <span>—</span>
+                        )}
+                      </td>
+
+                      {/* Column 4: Fecha */}
+                      <td className="py-3 px-3 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">
                         {fmtDate(t.date)}
                       </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
+
+                      {/* Column 5: Tipo */}
+                      <td className="py-3 px-3 whitespace-nowrap">
                         <span
                           className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
                             isExpense
-                              ? 'bg-red-500/10 text-red-600 dark:text-red-400'
+                              ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
                               : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                           }`}
                         >
                           {isExpense ? 'Gasto' : 'Ingreso'}
                         </span>
                       </td>
-                      <td className="py-2.5 px-3.5 font-medium text-[var(--text)] whitespace-nowrap">
-                        <span className="inline-block rounded-md bg-[var(--surface-muted)] border border-[var(--border)] px-2 py-0.5 text-xs text-[var(--text)]">
-                          {getCategoryName(categories, t.category)}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3.5 text-[var(--text-soft)] whitespace-nowrap">
-                        {account?.name ? (
-                          <span className="inline-flex items-center gap-1 font-medium text-[var(--text-soft)]">
-                            <span className="h-1.5 w-1.5 rounded-full bg-[var(--blue)]" />
-                            {account.name}
-                          </span>
-                        ) : (
-                          <span className="text-[var(--text-faint)]">—</span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3.5 text-[var(--text)] max-w-[220px]">
-                        <div className="flex items-center gap-1.5">
-                          <span className="truncate font-medium">
-                            {t.note || <span className="text-[var(--text-faint)] italic">Sin nota</span>}
-                          </span>
-                          {t.origin === 'adjustment' && (
-                            <span className="shrink-0 rounded-sm bg-blue-500/10 px-1.5 py-0.2 text-[9px] font-bold text-blue-500">
-                              conciliación
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        <span className="rounded-full bg-[var(--surface-muted)] border border-[var(--border)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-faint)]">
-                          {t.fixed || 'variable'}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-4 font-mono font-bold text-right whitespace-nowrap">
-                        <PrivacyAmount className={isExpense ? 'text-red-500' : 'text-emerald-500'}>
+
+                      {/* Column 6: Monto */}
+                      <td className="py-3 px-4 text-right font-mono tabular-nums whitespace-nowrap">
+                        <PrivacyAmount
+                          as="span"
+                          className={`font-black text-xs sm:text-sm ${
+                            isExpense ? 'text-slate-900 dark:text-white' : 'text-emerald-600 dark:text-emerald-400'
+                          }`}
+                        >
                           {isExpense ? '−' : '+'} {fmtMoney(t.amount)}
                         </PrivacyAmount>
                       </td>
-                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+
+                      {/* Column 7: Acciones */}
+                      <td className="py-3 px-3 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
                           <button
                             type="button"
                             onClick={() => onEdit(t)}
-                            className="rounded-md px-2 py-1 text-[11px] font-bold text-[var(--blue)] hover:bg-[var(--blue-soft)]"
-                            title="Editar movimiento"
+                            className="rounded-lg px-2 py-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition cursor-pointer"
                           >
                             Editar
                           </button>
@@ -595,10 +613,10 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                                 onDelete(t.id);
                               }
                             }}
-                            className="rounded-md p-1 text-[var(--text-faint)] hover:text-red-500 hover:bg-red-500/10"
+                            className="rounded-lg px-1.5 py-1 text-[11px] text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer"
                             title="Eliminar movimiento"
                           >
-                            <AppIcon name="trash" className="h-3.5 w-3.5" />
+                            ✕
                           </button>
                         </div>
                       </td>
@@ -609,47 +627,38 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
             </table>
           </div>
 
-          {/* Pagination & Footer */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-[var(--border)] bg-[var(--surface-muted)] px-4 py-3 text-xs text-[var(--text-soft)]">
-            <div className="flex items-center gap-2">
+          {/* Clean Footer with Filtered Totals & Pagination */}
+          <div className="p-3 sm:px-4 bg-slate-50/60 dark:bg-slate-800/30 border-t border-slate-200/70 dark:border-slate-800/70 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400">
               <span>
-                Mostrando {(currentPage - 1) * pageSize + 1}–
-                {Math.min(currentPage * pageSize, sortedTransactions.length)} de{' '}
-                {sortedTransactions.length}
+                {filteredTransactions.length} {filteredTransactions.length === 1 ? 'movimiento' : 'movimientos'}
               </span>
-              <select
-                value={pageSize}
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setPage(1);
-                }}
-                className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-xs text-[var(--text)] outline-hidden"
-              >
-                <option value={15}>15 por pág.</option>
-                <option value={30}>30 por pág.</option>
-                <option value={50}>50 por pág.</option>
-                <option value={100}>100 por pág.</option>
-              </select>
+              <span>·</span>
+              <span>
+                Neto: <strong className={totals.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400 font-mono' : 'text-rose-500 font-mono'}>
+                  {totals.balance >= 0 ? '+' : ''}{fmtMoney(totals.balance)}
+                </strong>
+              </span>
             </div>
 
             {totalPages > 1 && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  disabled={currentPage === 1}
+                  disabled={currentPage <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs font-semibold disabled:opacity-40 hover:bg-[var(--bg)]"
+                  className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none cursor-pointer text-xs"
                 >
                   Anterior
                 </button>
-                <span className="px-2 font-mono text-xs">
+                <span className="font-mono text-slate-500">
                   {currentPage} / {totalPages}
                 </span>
                 <button
                   type="button"
-                  disabled={currentPage === totalPages}
+                  disabled={currentPage >= totalPages}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs font-semibold disabled:opacity-40 hover:bg-[var(--bg)]"
+                  className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none cursor-pointer text-xs"
                 >
                   Siguiente
                 </button>

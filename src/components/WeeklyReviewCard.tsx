@@ -62,7 +62,7 @@ export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ state, onUpd
 
   return (
     <>
-      <section className={`rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xs transition-all ${
+      <section className={`signature-panel transition-all ${
         expanded ? 'p-3.5 sm:p-4' : 'px-3.5 py-2.5'
       }`}>
         <button
@@ -75,10 +75,18 @@ export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ state, onUpd
             <AppIcon name="rotateCcw" className="h-3.5 w-3.5" />
           </span>
           <div className="flex-1 min-w-0">
-            <strong className="block text-xs sm:text-sm font-bold text-[var(--text)]">Revisión Semanal</strong>
+            <div className="flex items-center gap-2">
+              <strong className="block text-xs sm:text-sm font-bold text-[var(--text)]">Revisión Semanal</strong>
+              {exceptions.length > 0 && (
+                <span className="signature-pill signature-pill-warning">
+                  <span className="signature-pulse-dot signature-pulse-dot-warning" />
+                  <span>Pendiente</span>
+                </span>
+              )}
+            </div>
             <span className="text-[10px] sm:text-[11px] text-[var(--text-soft)]">
               {exceptions.length === 0
-                ? 'Semana sin revisar'
+                ? 'Semana al día'
                 : `${exceptions.length} excepción(es) requieren revisión`}
             </span>
           </div>

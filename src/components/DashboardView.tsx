@@ -7,7 +7,11 @@ import { WeeklyReviewCard } from './WeeklyReviewCard';
 import { AppIcon } from './AppIcon';
 import { BentoCommandBar } from './BentoCommandBar';
 import { PrivacyAmount } from './PrivacyAmount';
-import { TodayAtmosphereBackdrop, GymStreakMark, FinanceFlowMark } from './visual';
+import { GymStreakMark, FinanceFlowMark } from './visual';
+import { AlpineDayCycleBackdrop } from './visual/AlpineDayCycleBackdrop';
+import { getDayCyclePeriod, getDayCycleConfig } from '../lib/alpineDayCycle';
+import { loadTodayCustomization, saveTodayCustomization, TodayViewCustomization } from '../lib/viewCustomization';
+import { CustomizeTodayModal } from './CustomizeTodayModal';
 import {
   todayISO,
   daysBetween,
@@ -75,19 +79,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const [backupDismissed, setBackupDismissed] = useState(false);
   const [showFullSchedule, setShowFullSchedule] = useState(false);
 
+  // View Customization State (Monarch-inspired modular layout)
+  const [todayCustomization, setTodayCustomization] = useState<TodayViewCustomization>(loadTodayCustomization);
+  const [isCustomizeTodayOpen, setIsCustomizeTodayOpen] = useState(false);
+
+  // Alpine Day-Cycle Signature (Dawn, Day, Sunset, Night)
+  const dayPeriod = useMemo(() => getDayCyclePeriod(), []);
+  const dayConfig = useMemo(() => getDayCycleConfig(dayPeriod), [dayPeriod]);
+
   const todayIso = todayISO();
   const todayOverview = useMemo(() => {
     return getTodayUnifiedOverview(state, todayIso);
   }, [state, todayIso]);
-
-  const greeting = () => {
-    const h = new Date().getHours();
-    let g = 'Buenas noches';
-    if (h >= 5 && h < 12) g = 'Buenos días';
-    else if (h >= 12 && h < 19) g = 'Buenas tardes';
-    const name = state.profile.name ? `, ${state.profile.name}` : '';
-    return g + name;
-  };
 
   const formattedDate = (() => {
     const raw = new Date().toLocaleDateString('es-UY', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -334,37 +337,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="relative space-y-6">
-      {/* Ambient Canvas Layer (Atmospheric depth & geometry) */}
-      <TodayAtmosphereBackdrop />
+      {/* Ambient Alpine Day-Cycle Backdrop (Relief layers & organic time-of-day light) */}
+      <AlpineDayCycleBackdrop period={dayPeriod} />
 
-      {/* Top Header Hero (Atmospheric & Purposeful) */}
-      <div className="relative overflow-hidden rounded-2xl p-4 sm:p-5 border border-[var(--border)] bg-gradient-to-r from-[var(--card)] via-[var(--card-subtle)] to-[var(--card)] shadow-xs">
-        <div className="absolute top-0 right-0 w-64 h-32 bg-radial from-indigo-500/10 via-purple-500/5 to-transparent pointer-events-none rounded-full blur-2xl -mr-10 -mt-10" />
-        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black text-[var(--text)] tracking-tight">
-              {greeting()}
-            </h1>
-            <p className="text-xs sm:text-sm font-medium text-[var(--text-soft)] mt-0.5">
-              {formattedDate}
-            </p>
-          </div>
+      {/* Header: saludo natural y fecha */}
+      <header className="relative pt-3 sm:pt-5 pb-1 sm:pb-2 flex flex-col sm:flex-row sm:items-end justify-between gap-4 z-10">
+        <div className="space-y-1">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-slate-900 dark:text-white drop-shadow-xs">
+            {dayConfig.greeting(state.profile?.name || state.settings?.userName || '')}
+          </h1>
 
-          <div className="flex items-center gap-2 self-start sm:self-auto">
-            <button
-              type="button"
-              onClick={() => onNavigate('checkout')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--card)] hover:border-violet-500/40 hover:bg-violet-500/5 text-xs font-bold text-[var(--text)] transition-all cursor-pointer shadow-2xs group"
-              title="Cerrar el día en 30 segundos"
-            >
-              <span className="flex h-5 w-5 items-center justify-center rounded-lg bg-violet-500/15 text-violet-600 dark:text-violet-400 group-hover:scale-105 transition-transform">
-                <AppIcon name="moon" className="h-3 w-3" />
-              </span>
-              <span>Check-out del Día</span>
-            </button>
-          </div>
+          <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400">
+            {formattedDate}
+          </p>
         </div>
-      </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-end">
+          <button
+            type="button"
+            onClick={() => setIsCustomizeTodayOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/70 dark:bg-slate-900/60 hover:bg-white dark:hover:bg-slate-800/80 backdrop-blur-md border border-slate-200/60 dark:border-slate-800/60 text-xs font-semibold text-slate-700 dark:text-slate-300 transition-all cursor-pointer shadow-2xs hover:shadow-xs"
+            title="Personalizar bloques de Hoy"
+          >
+            <AppIcon name="sliders" className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Personalizar</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onNavigate('checkout')}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+            title="Cerrar el día en 30 segundos"
+          >
+            <AppIcon name="moon" className="h-3.5 w-3.5" />
+            <span>Check-out del Día</span>
+          </button>
+        </div>
+      </header>
 
       {/* Urgent Backup Alert (High-Contrast & Dismissible) */}
       {backupUrgent && !backupDismissed && (
@@ -400,46 +409,46 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       )}
 
       {/* Bento Quick Command Bar */}
-      <BentoCommandBar
-        state={state}
-        onUpdateState={onUpdateState}
-        onNavigate={onNavigate}
-        onOpenSearch={onOpenSearch}
-        onOpenCapture={onOpenCapture}
-        onQuickAction={onQuickAction}
-      />
+      {todayCustomization.visibleWidgets.quickBar !== false && (
+        <BentoCommandBar
+          state={state}
+          onUpdateState={onUpdateState}
+          onNavigate={onNavigate}
+          onOpenSearch={onOpenSearch}
+          onOpenCapture={onOpenCapture}
+          onQuickAction={onQuickAction}
+        />
+      )}
 
-      {/* Timeline Now & Next Editorial Strip with Schedule Preview */}
-      {layout.showTimelineBar && (
-        <div className="rounded-2xl p-3.5 sm:px-5 bg-gradient-to-r from-[var(--card)] via-[var(--card-subtle)] to-[var(--card)] border border-[var(--border)] shadow-xs space-y-3">
+      {/* Timeline Now & Next: Continuous Functional Rail */}
+      {layout.showTimelineBar && todayCustomization.visibleWidgets.nowNext !== false && (
+        <div className="rounded-2xl px-4 py-2.5 bg-white/60 dark:bg-slate-900/40 backdrop-blur-md border border-slate-200/60 dark:border-slate-800/60 shadow-2xs space-y-2.5">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3.5 min-w-0">
-              <div className="relative flex-shrink-0">
-                <div className={`w-2.5 h-2.5 rounded-full ${current ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]' : 'bg-slate-400'}`} />
-              </div>
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={`w-2 h-2 rounded-full shrink-0 ${current ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]' : 'bg-slate-400'}`} />
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 block">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
                     {current ? 'En curso' : 'Ahora'}
                   </span>
                   {current && (
-                    <span className="font-mono text-[10px] font-bold text-[var(--text-faint)] px-1.5 py-0.2 rounded bg-[var(--surface-muted)]">
+                    <span className="font-mono text-[10px] font-bold text-slate-500 px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800">
                       {current.time}
                     </span>
                   )}
                 </div>
-                <span className="text-sm font-bold text-[var(--text)] truncate block mt-0.5">
+                <span className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 truncate block mt-0.5">
                   {current ? current.activity : 'Tiempo libre / Sin bloque agendado'}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-3.5 border-t sm:border-t-0 sm:border-l border-[var(--border)] pt-2 sm:pt-0 sm:pl-5 sm:text-right shrink-0 w-full sm:w-auto justify-between sm:justify-end">
+            <div className="flex items-center gap-3.5 border-t sm:border-t-0 sm:border-l border-slate-200/60 dark:border-slate-800/60 pt-2 sm:pt-0 sm:pl-4 sm:text-right shrink-0 w-full sm:w-auto justify-between sm:justify-end">
               <div>
-                <span className="text-[10px] font-extrabold uppercase tracking-widest text-[var(--text-faint)] block">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 block">
                   Siguiente
                 </span>
-                <span className="text-xs sm:text-sm font-semibold text-[var(--text-soft)] block mt-0.5">
+                <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 block mt-0.5">
                   {next ? `${next.time} · ${next.activity}` : 'Jornada completada'}
                 </span>
               </div>
@@ -447,7 +456,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowFullSchedule(!showFullSchedule)}
-                  className="px-2.5 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] hover:border-indigo-500/30 text-[10px] font-bold text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer"
+                  className="px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800 text-[10px] font-bold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
                   title="Ver bloques de agenda de hoy"
                 >
                   {showFullSchedule ? 'Ocultar' : `Agenda (${todayOverview.schedule.blocks.length})`}
@@ -497,16 +506,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Block 1 (Upper Primary): Focus, Radar & Action */}
         <div className={`${layout.leftColSpanClass} space-y-6`}>
           {/* 1. The 3 Daily Priorities (Star component - Priority 1: Qué tengo que hacer hoy) */}
-          <TodayFocus
-            priorities={todayPriorities}
-            onAdd={handleAddPriority}
-            onToggle={handleTogglePriority}
-            onRemove={handleRemovePriority}
-            onSmartSuggest={handleSmartSuggestPriorities}
-          />
+          {todayCustomization.visibleWidgets.priorities !== false && (
+            <TodayFocus
+              priorities={todayPriorities}
+              onAdd={handleAddPriority}
+              onToggle={handleTogglePriority}
+              onRemove={handleRemovePriority}
+              onSmartSuggest={handleSmartSuggestPriorities}
+            />
+          )}
 
           {/* 2. Radar de Decisiones (Contextual Review by Exception) */}
-          {layout.showRadarCard && (() => {
+          {layout.showRadarCard && todayCustomization.visibleWidgets.radar !== false && (() => {
             const radarItems: { id: string; view: ViewType; text: string; icon: string; tone: string }[] = [];
 
             if (isModuleEnabled(state, 'trabajo') && jstats && jstats.seguimientosPendientes > 0) {
@@ -578,7 +589,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           })()}
 
           {/* 3. Gym Action Card (Adaptive Size & Motivation) */}
-          {layout.showGymCard && (() => {
+          {layout.showGymCard && todayCustomization.visibleWidgets.gymStatus !== false && (() => {
             const isRest = gymStatus.status === 'rest_today';
             const isCompleted = gymStatus.status === 'trained_today';
 
@@ -683,10 +694,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Block 2 (Upper Contextual): Finance & Personal Context */}
         <div className={`${layout.rightColSpanClass} space-y-6`}>
           {/* 1. Compact Intelligent Financial Overview */}
-          {layout.showFinanceCard && financeData && (() => {
+          {layout.showFinanceCard && financeData && todayCustomization.visibleWidgets.financeClarity !== false && (() => {
             const { totalCuentas, cashFlow, ingresoMes, gastoMes, balanceMes } = financeData;
             return (
-              <div className="relative overflow-hidden bg-[var(--card)] border border-[var(--border)] rounded-2xl p-3.5 sm:p-4 shadow-xs space-y-3">
+              <div className="relative overflow-hidden rounded-3xl border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/50 backdrop-blur-md p-5 shadow-2xs space-y-3.5">
                 {/* Abstract Ambient Liquidity Flow Mark */}
                 <FinanceFlowMark status={cashFlow.thresholdWarning ? 'warning' : 'healthy'} />
                 <div className="absolute top-0 right-0 w-36 h-20 bg-radial from-emerald-500/10 via-emerald-500/5 to-transparent pointer-events-none rounded-full blur-xl -mr-4 -mt-4" />
@@ -782,9 +793,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* Block 3 (Lower Action): Today's Checklist & Routines */}
-        <div className={`${layout.leftColSpanClass}`}>
-          {/* Today's Checklist & Routines Card */}
-          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 shadow-xs space-y-4">
+        {todayCustomization.visibleWidgets.pendingTasks !== false && (
+          <div className={`${layout.leftColSpanClass}`}>
+            {/* Today's Checklist & Routines Card */}
+            <div className="rounded-3xl border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/50 backdrop-blur-md p-5 sm:p-6 shadow-2xs space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2.5">
               <div className="flex items-center gap-2.5">
                 <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 shadow-2xs">
@@ -985,12 +997,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             </div>
           </div>
         </div>
+        )}
 
         {/* Block 4 (Lower Secondary): Notes, Weekly Review & Activity */}
         <div className={`${layout.rightColSpanClass} space-y-6`}>
 
           {/* 3. Notas Rápidas (only rendered when active notes exist) */}
-          {layout.showNotesCard && (
+          {layout.showNotesCard && todayCustomization.visibleWidgets.recentNotes !== false && (
             <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-3.5 sm:p-4 shadow-2xs space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -1084,7 +1097,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <WeeklyReviewCard state={state} onUpdateState={onUpdateState} onNavigate={onNavigate} />
 
           {/* 5. Actividad Reciente (Cross-Module Event Timeline, editorial format) */}
-          {layout.showActivityCard && (
+          {layout.showActivityCard && todayCustomization.visibleWidgets.recentActivity !== false && (
             <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -1136,6 +1149,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* Modal: Personalizar Hoy (Monarch-style) */}
+      <CustomizeTodayModal
+        isOpen={isCustomizeTodayOpen}
+        onClose={() => setIsCustomizeTodayOpen(false)}
+        config={todayCustomization}
+        onSave={(newCfg) => {
+          saveTodayCustomization(newCfg);
+          setTodayCustomization(newCfg);
+        }}
+      />
     </div>
   );
 };

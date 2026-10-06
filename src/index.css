@@ -699,28 +699,123 @@ button:active {
   box-shadow: 0 10px 28px -10px rgba(0, 0, 0, 0.45);
 }
 
-@keyframes toast-enter {
-  from { opacity: 0; transform: translateY(10px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+/* ==========================================================================
+   LifeOS Signature System v1: Editorial Layers + Living Pulse
+   ========================================================================== */
+
+/* --- 1. Signature Surfaces --- */
+
+/* Editorial Panel: Open-top or nested stratified container with fine left grain */
+.signature-panel {
+  position: relative;
+  border-radius: 1.25rem;
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: var(--card-shadow);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@media (max-width: 767px) {
-  input:not([type="checkbox"]):not([type="radio"]), select, textarea {
-    font-size: 16px !important;
-  }
+/* Stratified Strip: Secondary item row with fine editorial separator */
+.signature-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.875rem;
+  border: 1px solid transparent;
+  background: var(--card-subtle);
+  transition: background-color 0.14s ease, border-color 0.14s ease, transform 0.14s ease;
 }
 
-@media (pointer: coarse) {
-  button, summary, input, select {
-    min-height: 44px;
-  }
+.signature-strip:hover {
+  border-color: var(--border-hover);
+  background: var(--surface-muted);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
+/* --- 3. Living Pulse Badges & Micro-Ornaments --- */
+
+.signature-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  border: 1px solid var(--border);
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  transition: all 0.15s ease;
+}
+
+.signature-pill-focus {
+  border-color: rgba(99, 102, 241, 0.3);
+  background: rgba(99, 102, 241, 0.1);
+  color: #4f46e5;
+}
+.dark .signature-pill-focus {
+  color: #a5b4fc;
+  background: rgba(99, 102, 241, 0.18);
+}
+
+.signature-pill-success {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+}
+.dark .signature-pill-success {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.18);
+}
+
+.signature-pill-warning {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+}
+.dark .signature-pill-warning {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.18);
+}
+
+.signature-pill-risk {
+  border-color: rgba(244, 63, 94, 0.35);
+  background: rgba(244, 63, 94, 0.12);
+  color: #e11d48;
+}
+.dark .signature-pill-risk {
+  color: #fda4af;
+  background: rgba(244, 63, 94, 0.18);
+}
+
+/* Static Living Pulse dot: crisp energy with ambient static ring (no infinite loop) */
+.signature-pulse-dot {
+  position: relative;
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.signature-pulse-dot-focus {
+  background-color: var(--indigo);
+  box-shadow: 0 0 6px rgba(99, 102, 241, 0.7);
+}
+
+.signature-pulse-dot-success {
+  background-color: var(--emerald);
+  box-shadow: 0 0 6px rgba(16, 185, 129, 0.7);
+}
+
+.signature-pulse-dot-warning {
+  background-color: var(--amber);
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.7);
+}
+
+.signature-pulse-dot-risk {
+  background-color: var(--rose);
+  box-shadow: 0 0 8px rgba(244, 63, 94, 0.75);
 }

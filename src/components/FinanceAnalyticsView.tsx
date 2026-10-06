@@ -4,6 +4,7 @@ import { LifeOSState } from '../types';
 import { fmtMoney } from '../lib/storage';
 import { getCategoryName } from '../lib/financeCategories';
 import { PrivacyAmount } from './PrivacyAmount';
+import { SignatureEmptyState } from './SignatureEmptyState';
 
 interface FinanceAnalyticsViewProps {
   state: LifeOSState;
@@ -202,10 +203,12 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
             </ResponsiveContainer>
           </div>
         ) : (
-          <div className="p-6 text-center rounded-xl bg-[var(--surface-muted)]/40 border border-dashed border-[var(--border)] text-xs text-[var(--text-soft)] space-y-1">
-            <p className="font-semibold text-[var(--text)]">Aún no hay suficientes meses registrados</p>
-            <p>A medida que registres movimientos en los próximos meses, verás el gráfico comparativo de barras.</p>
-          </div>
+          <SignatureEmptyState
+            title="Aún no hay suficientes meses registrados"
+            description="A medida que registres movimientos a través del tiempo, verás aquí la comparativa histórica de ingresos versus gastos."
+            iconName="chart"
+            motif="finance"
+          />
         )}
       </div>
 
@@ -225,9 +228,12 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
 
         {/* Adaptive Policy */}
         {distinctMonthCategoriesCount === 0 ? (
-          <div className="py-8 text-center rounded-xl bg-[var(--surface-muted)]/40 border border-dashed border-[var(--border)] text-xs text-[var(--text-soft)]">
-            Sin gastos registrados este mes.
-          </div>
+          <SignatureEmptyState
+            title="Sin gastos registrados este mes"
+            description="Tus consumos clasificados por categoría aparecerán aquí conforme agregues movimientos en tu libro diario."
+            iconName="wallet"
+            motif="finance"
+          />
         ) : distinctMonthCategoriesCount <= 2 ? (
           /* Compact Textual Breakdown for 1-2 categories (No giant donut) */
           <div className="p-4 rounded-xl bg-[var(--surface-muted)]/60 border border-[var(--border)] space-y-3">

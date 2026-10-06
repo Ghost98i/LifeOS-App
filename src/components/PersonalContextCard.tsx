@@ -135,7 +135,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({ state,
   }
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-gradient-to-r from-[var(--card)] to-[var(--card-subtle)] p-3.5 sm:p-4 shadow-xs transition-all space-y-3">
+    <section className="relative overflow-hidden signature-panel p-3.5 sm:p-4 space-y-3">
       <ContextWave expanded={true} />
       {/* Header / Summary row */}
       <div className="relative flex items-center justify-between gap-2.5">
@@ -147,6 +147,10 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({ state,
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-extrabold uppercase tracking-widest text-[var(--text-faint)]">
                 Contexto
+              </span>
+              <span className="signature-pill signature-pill-warning">
+                <span className="signature-pulse-dot signature-pulse-dot-warning" />
+                <span>Energía & Ritmo</span>
               </span>
               {saved && <span className="text-[10px] font-bold text-emerald-500 animate-in fade-in">✓ Guardado</span>}
             </div>

@@ -54,33 +54,34 @@ export const FinanceBalanceAtmosphere: React.FC<FinanceBalanceAtmosphereProps> =
           </filter>
         </defs>
 
-        {/* Ambient Area Curve */}
+        {/* Layered Alpine Foothills Fill */}
         <path
-          d="M 0 160 C 60 150 110 135 160 100 C 210 65 260 80 320 40 L 320 180 L 0 180 Z"
+          d="M 0 165 C 50 150 90 145 140 120 C 190 95 240 110 320 45 L 320 180 L 0 180 Z"
           fill="url(#fin-hero-fill)"
         />
 
-        {/* Primary Equilibrium Flow Spline */}
+        {/* Narrative Flow Traverse: Saldo Actual -> -Compromisos -> +Ingresos -> Proyectado */}
         <path
-          d="M 0 160 C 60 150 110 135 160 100 C 210 65 260 80 320 40"
+          d="M 0 155 C 50 145 90 150 140 125 C 190 100 240 115 320 45"
           stroke="url(#fin-hero-spline)"
-          strokeWidth="2.2"
+          strokeWidth="2.5"
           strokeLinecap="round"
         />
 
-        {/* Dynamic Horizon Guides */}
+        {/* Alpine Contour Ridge (Horizon Guide) */}
         <path
-          d="M 20 140 C 90 120 170 105 240 75 C 280 58 305 48 320 45"
+          d="M 10 135 C 70 125 150 110 230 75 C 275 55 300 48 320 40"
           stroke={secondaryColor}
-          strokeOpacity="0.25"
-          strokeWidth="1"
+          strokeOpacity="0.3"
+          strokeWidth="1.2"
           strokeDasharray="4 4"
         />
 
-        {/* Soft Reserve Anchor Node */}
-        <circle cx="160" cy="100" r="4" fill={strokeColor} fillOpacity="0.8" filter="url(#fin-node-glow)" />
-        <circle cx="260" cy="80" r="2.5" fill={secondaryColor} fillOpacity="0.7" />
-        <circle cx="320" cy="40" r="5" fill={glowColor} fillOpacity="0.85" />
+        {/* Flow Milestones: Anchor Nodes (Saldo -> Compromisos -> Ingresos -> Cumbre Proyectada) */}
+        <circle cx="40" cy="148" r="3" fill={strokeColor} fillOpacity="0.6" />
+        <circle cx="140" cy="125" r="3.5" fill={isDeficit ? '#f43f5e' : '#f59e0b'} fillOpacity="0.75" />
+        <circle cx="230" cy="98" r="3.5" fill="#10b981" fillOpacity="0.8" />
+        <circle cx="320" cy="45" r="5" fill={glowColor} fillOpacity="0.9" filter="url(#fin-node-glow)" />
       </svg>
     </div>
   );

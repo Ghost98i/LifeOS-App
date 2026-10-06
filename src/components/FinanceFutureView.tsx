@@ -3,8 +3,10 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 import { FinancialCommitment, ExpectedIncome, LifeOSState } from '../types';
 import { CashFlowProjectionResult } from '../lib/calculations';
 import { fmtDate, fmtMoney } from '../lib/storage';
+import { identifyMerchant } from '../lib/merchantIdentity';
 import { AppIcon } from './AppIcon';
 import { PrivacyAmount } from './PrivacyAmount';
+import { SignatureEmptyState } from './SignatureEmptyState';
 
 interface FinanceFutureViewProps {
   state: LifeOSState;
@@ -64,7 +66,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
   return (
     <div className="space-y-6 animate-in fade-in">
       {/* SECTION 1: Horizon Selector & Core Liquidity Trajectory */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xs space-y-4">
+      <div className="rounded-3xl border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/50 backdrop-blur-md p-6 shadow-xs space-y-5">
         {/* Header with 30/60/90 Horizon Tabs */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
@@ -106,36 +108,36 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
 
         {/* 4-Bento Summary Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="p-3.5 rounded-xl bg-[var(--surface-muted)]/50 border border-[var(--border)]">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block">Saldo Inicial</span>
-            <PrivacyAmount as="span" className="font-mono font-black text-xl text-[var(--text)] block mt-1">
+          <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800/50">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">Saldo Inicial</span>
+            <PrivacyAmount as="span" className="font-mono font-black text-xl text-slate-900 dark:text-white block mt-1">
               {fmtMoney(projection.currentBalance)}
             </PrivacyAmount>
-            <span className="text-[10px] text-[var(--text-soft)] block mt-0.5">en cuentas hoy</span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">en cuentas hoy</span>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-[var(--surface-muted)]/50 border border-[var(--border)]">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block">Ingresos Esperados</span>
+          <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800/50">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">Ingresos Esperados</span>
             <PrivacyAmount as="span" className="font-mono font-black text-xl text-emerald-600 dark:text-emerald-400 block mt-1">
               +{fmtMoney(projection.totalExpectedIncome)}
             </PrivacyAmount>
-            <span className="text-[10px] text-[var(--text-soft)] block mt-0.5">{projection.forecastItems.filter((f) => f.type === 'income').length} cobros</span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">{projection.forecastItems.filter((f) => f.type === 'income').length} cobros</span>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-[var(--surface-muted)]/50 border border-[var(--border)]">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block">Compromisos Fijos</span>
+          <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800/50">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">Compromisos Fijos</span>
             <PrivacyAmount as="span" className="font-mono font-black text-xl text-rose-500 block mt-1">
               −{fmtMoney(projection.committed)}
             </PrivacyAmount>
-            <span className="text-[10px] text-[var(--text-soft)] block mt-0.5">{projection.commitments.length} pagos</span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">{projection.commitments.length} pagos</span>
           </div>
 
-          <div className="p-3.5 rounded-xl bg-[var(--surface-muted)]/50 border border-[var(--border)]">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block">Saldo Proyectado</span>
-            <PrivacyAmount as="span" className={`font-mono font-black text-xl block mt-1 ${projection.projectedBalance < 0 ? 'text-rose-600' : 'text-[var(--text)]'}`}>
+          <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800/50">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">Saldo Proyectado</span>
+            <PrivacyAmount as="span" className={`font-mono font-black text-xl block mt-1 ${projection.projectedBalance < 0 ? 'text-rose-600' : 'text-slate-900 dark:text-white'}`}>
               {fmtMoney(projection.projectedBalance)}
             </PrivacyAmount>
-            <span className="text-[10px] text-[var(--text-soft)] block mt-0.5">al {fmtDate(projection.horizonIso)}</span>
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">al {fmtDate(projection.horizonIso)}</span>
           </div>
         </div>
 
@@ -173,22 +175,21 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
 
           if (!hasFutureSignal) {
             return (
-              <div className="py-8 px-4 text-center rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)]/30 space-y-2.5 animate-in fade-in">
-                <p className="text-2xl">📈</p>
-                <div className="max-w-md mx-auto space-y-1">
-                  <h3 className="text-xs font-bold text-[var(--text)]">
-                    Todavía no hay movimientos futuros para proyectar
-                  </h3>
-                  <p className="text-[11px] text-[var(--text-soft)]">
-                    Agregá un compromiso, una cuota o un ingreso previsto para visualizar cómo evolucionará tu liquidez día por día.
-                  </p>
-                </div>
-              </div>
+              <SignatureEmptyState
+                title="Todavía no hay movimientos futuros para proyectar"
+                description="Agregá un compromiso, una cuota o un ingreso previsto para visualizar cómo evolucionará tu liquidez día por día."
+                iconName="trendingUp"
+                actionLabel="+ Compromiso"
+                onAction={onOpenCommitmentModal}
+                secondaryActionLabel="+ Ingreso previsto"
+                onSecondaryAction={onOpenIncomeModal}
+                motif="finance"
+              />
             );
           }
 
           return (
-            <div className="h-60 sm:h-64 w-full pt-2">
+            <div className="h-72 sm:h-80 w-full pt-2">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={projection.dailyTrajectory} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
                   <defs>
@@ -218,16 +219,45 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
                         const pt = payload[0].payload;
+                        const dayEvents = projection.forecastItems.filter((f) => f.date === pt.date);
                         return (
-                          <div className="bg-[var(--card)] border border-[var(--border)] p-2.5 rounded-xl shadow-xl text-xs space-y-1">
-                            <p className="font-bold text-[var(--text)]">{fmtDate(pt.date)}</p>
-                            <p className="font-mono text-[var(--blue)] font-bold">
+                          <div className="bg-[var(--card)] border border-[var(--border)] p-3 rounded-xl shadow-xl text-xs space-y-1.5 min-w-[200px]">
+                            <div className="flex items-center justify-between gap-2 border-b border-[var(--border)]/60 pb-1">
+                              <p className="font-bold text-[var(--text)]">{fmtDate(pt.date)}</p>
+                              {dayEvents.length > 0 && (
+                                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-bold">
+                                  {dayEvents.length} {dayEvents.length === 1 ? 'hito' : 'hitos'}
+                                </span>
+                              )}
+                            </div>
+                            <p className="font-mono text-[var(--blue)] font-extrabold text-sm">
                               Saldo estimado: {fmtMoney(pt.endingBalance)}
                             </p>
                             {pt.netDayChange !== 0 && (
-                              <p className={`font-mono text-[10px] ${pt.netDayChange > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                                Flujo: {pt.netDayChange > 0 ? '+' : ''}{fmtMoney(pt.netDayChange)}
+                              <p className={`font-mono text-[11px] font-bold ${pt.netDayChange > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                Flujo neto: {pt.netDayChange > 0 ? '+' : ''}{fmtMoney(pt.netDayChange)}
                               </p>
+                            )}
+                            {dayEvents.length > 0 && (
+                              <div className="pt-1.5 border-t border-[var(--border)]/50 space-y-1">
+                                <p className="text-[10px] uppercase font-bold tracking-wider text-[var(--text-faint)]">
+                                  Hitos del día:
+                                </p>
+                                {dayEvents.map((ev) => {
+                                  const m = identifyMerchant(ev.label);
+                                  return (
+                                    <div key={ev.id} className="flex items-center justify-between gap-2 text-[11px]">
+                                      <span className="truncate flex items-center gap-1 text-[var(--text-soft)]">
+                                        {m ? <span>{m.icon}</span> : <span>•</span>}
+                                        <span className="truncate">{ev.label}</span>
+                                      </span>
+                                      <span className={`font-mono font-bold shrink-0 ${ev.type === 'income' ? 'text-emerald-500' : 'text-[var(--text)]'}`}>
+                                        {ev.type === 'income' ? '+' : '−'}{fmtMoney(ev.amount)}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             )}
                           </div>
                         );
@@ -247,6 +277,60 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
             </div>
           );
         })()}
+
+        {/* Milestones Strip: Top Upcoming Events along Trajectory */}
+        {projection.forecastItems.length > 0 && (
+          <div className="pt-3 border-t border-[var(--border)] space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--text-faint)] flex items-center gap-1.5">
+                <span>▲ Hitos del Período ({projHorizon}d)</span>
+              </span>
+              <span className="text-[10px] text-[var(--text-soft)]">
+                {projection.forecastItems.length} eventos planificados
+              </span>
+            </div>
+            <div className="flex items-center gap-2 overflow-x-auto pb-1.5 no-scrollbar">
+              {projection.forecastItems.slice(0, 8).map((item) => {
+                const merchant = identifyMerchant(item.label);
+                const isIncome = item.type === 'income';
+                return (
+                  <div
+                    key={item.id}
+                    className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/60 text-xs"
+                  >
+                    <span className="font-mono text-[10px] font-bold text-[var(--text-faint)]">
+                      {fmtDate(item.date)}
+                    </span>
+                    {merchant ? (
+                      <span
+                        className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold border"
+                        style={{
+                          backgroundColor: merchant.badgeBg,
+                          color: merchant.badgeColor,
+                          borderColor: merchant.badgeBorder,
+                        }}
+                      >
+                        <span>{merchant.icon}</span>
+                        <span className="truncate max-w-[70px]">{merchant.name}</span>
+                      </span>
+                    ) : (
+                      <span className="truncate max-w-[80px] font-medium text-[var(--text)]">
+                        {item.label}
+                      </span>
+                    )}
+                    <span
+                      className={`font-mono font-bold text-[11px] ${
+                        isIncome ? 'text-emerald-500' : 'text-[var(--text)]'
+                      }`}
+                    >
+                      {isIncome ? '+' : '−'}{fmtMoney(item.amount)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* SECTION 2: Grid de Compromisos Fijos & Ingresos Programados */}

@@ -4,6 +4,7 @@ import { fmtDate, fmtMoney } from '../lib/storage';
 import { AppIcon } from './AppIcon';
 import { PrivacyAmount } from './PrivacyAmount';
 import { FinanceOperationsCard } from './FinanceOperationsCard';
+import { SignatureEmptyState } from './SignatureEmptyState';
 import { calcDebtsTotal, calcInvestmentsTotal, calcSubscriptionsTotal } from '../lib/calculations';
 
 interface FinanceAccountsViewProps {
@@ -112,10 +113,16 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
       <FinanceOperationsCard state={state} onUpdateState={onUpdateState} />
 
       {/* SECTION 2: Cuentas y Billeteras Líquidas */}
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xs space-y-4">
+      <div className="signature-panel p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-extrabold text-[var(--text)]">Cuentas Bancarias & Billeteras</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-extrabold text-[var(--text)]">Cuentas Bancarias & Billeteras</h2>
+              <span className="signature-pill signature-pill-success">
+                <span className="signature-pulse-dot signature-pulse-dot-success" />
+                <span>{state.finance.accounts.length} Activas</span>
+              </span>
+            </div>
             <p className="text-xs text-[var(--text-soft)]">
               Depósitos líquidos donde reside tu dinero físico o digital
             </p>
@@ -136,39 +143,50 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
           </div>
         </div>
 
-        {/* Account Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {(state.finance.accounts || []).map((account) => {
-            const hasRecentRecon = Boolean(account.lastReconciledAt);
-            return (
-              <div
-                key={account.id}
-                className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/50 p-3.5 flex flex-col justify-between space-y-2"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <span className="font-bold text-xs text-[var(--text)] truncate">{account.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => onDeleteAccount(account.id)}
-                    className="text-[var(--text-faint)] hover:text-rose-500 text-xs px-1 cursor-pointer"
-                    title="Eliminar cuenta (sólo si no tiene movimientos)"
-                  >
-                    ✕
-                  </button>
-                </div>
+        {/* Account Cards Grid or Empty State */}
+        {(state.finance.accounts || []).length === 0 ? (
+          <SignatureEmptyState
+            title="Sin cuentas bancarias ni billeteras"
+            description="Creá tu primera cuenta (Efectivo, Banco o Billetera digital) para comenzar a conciliar y registrar movimientos."
+            iconName="wallet"
+            actionLabel="+ Crear Cuenta"
+            onAction={() => setIsAddAccountOpen(true)}
+            motif="finance"
+          />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {state.finance.accounts.map((account) => {
+              const hasRecentRecon = Boolean(account.lastReconciledAt);
+              return (
+                <div
+                  key={account.id}
+                  className="signature-strip p-3.5 flex flex-col justify-between space-y-2 border border-[var(--border)]"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-bold text-xs text-[var(--text)] truncate">{account.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteAccount(account.id)}
+                      className="text-[var(--text-faint)] hover:text-rose-500 text-xs px-1 cursor-pointer"
+                      title="Eliminar cuenta (sólo si no tiene movimientos)"
+                    >
+                      ✕
+                    </button>
+                  </div>
 
-                <div>
-                  <PrivacyAmount as="div" className="font-mono font-black text-lg text-[var(--text)]">
-                    {fmtMoney(account.balance)}
-                  </PrivacyAmount>
-                  <span className="text-[10px] text-[var(--text-soft)] block mt-0.5">
-                    {hasRecentRecon ? `Conciliada ${fmtDate(account.lastReconciledAt!)}` : 'Sin conciliación registrada'}
-                  </span>
+                  <div>
+                    <PrivacyAmount as="div" className="font-mono font-black text-lg text-[var(--text)]">
+                      {fmtMoney(account.balance)}
+                    </PrivacyAmount>
+                    <span className="text-[10px] text-[var(--text-soft)] block mt-0.5">
+                      {hasRecentRecon ? `Conciliada ${fmtDate(account.lastReconciledAt!)}` : 'Sin conciliación registrada'}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* SECTION 3: Obligaciones Recurrentes (Suscripciones tratadas como compromisos periódicos) */}

@@ -41,6 +41,8 @@ import { FinanceFutureView } from './FinanceFutureView';
 import { FinanceCategoryModal } from './FinanceCategoryModal';
 import { getActiveCategories, getAllCategories } from '../lib/financeCategories';
 import { addAccount, addTransaction, deleteAccount, deleteTransaction, updateTransaction } from '../lib/financeFlows';
+import { loadFinanceCustomization, saveFinanceCustomization, FinanceViewCustomization } from '../lib/viewCustomization';
+import { CustomizeFinanceModal } from './CustomizeFinanceModal';
 import { showToast } from '../lib/toast';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
@@ -58,6 +60,10 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
 }) => {
   // Main Tab State
   const [activeTab, setActiveTab] = useState<'movimientos' | 'cuentas' | 'analisis' | 'proyeccion'>('movimientos');
+
+  // View Customization State (Monarch-inspired modular personalization)
+  const [financeCustomization, setFinanceCustomization] = useState<FinanceViewCustomization>(loadFinanceCustomization);
+  const [isCustomizeModalOpen, setIsCustomizeModalOpen] = useState(false);
 
   // Modals & Entity Forms
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
@@ -689,6 +695,8 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         state={state}
         cashFlow={cashFlow}
         variant={activeTab === 'analisis' || activeTab === 'proyeccion' ? 'compact' : 'full'}
+        displayMode={financeCustomization.heroDisplayMode}
+        showCommitmentsStrip={financeCustomization.showCommitmentsStrip && financeCustomization.visibleSections.commitments !== false}
         onOpenNewTx={() => handleOpenNewTx('gasto')}
         onOpenTransfer={() => setActiveTab('cuentas')}
         onOpenCommitmentModal={() => {
@@ -702,17 +710,18 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         }}
         onPayCommitment={openPayCommitment}
         onEditCommitment={beginEditCommitment}
+        onOpenCustomize={() => setIsCustomizeModalOpen(true)}
       />
 
       {/* 3. Segmented Navigation Bar (4 Conceptual Areas) */}
-      <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-[var(--surface-muted)] border border-[var(--border)] shadow-2xs">
+      <div className="flex items-center gap-1 p-1 rounded-2xl bg-slate-100/70 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800/60 shadow-2xs">
         <button
           type="button"
           onClick={() => setActiveTab('movimientos')}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === 'movimientos'
-              ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
-              : 'text-[var(--text-soft)] hover:text-[var(--text)]'
+              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+              : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
           <AppIcon name="wallet" className="h-4 w-4" />
@@ -722,15 +731,15 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('cuentas')}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === 'cuentas'
-              ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
-              : 'text-[var(--text-soft)] hover:text-[var(--text)]'
+              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+              : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
           <AppIcon name="repeat" className="h-4 w-4" />
           <span>Cuentas</span>
-          <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--surface-muted)] border border-[var(--border)] text-[var(--text-soft)]">
+          <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.2 rounded-full bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
             {state.finance.accounts.length}
           </span>
         </button>
@@ -738,10 +747,10 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('analisis')}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === 'analisis'
-              ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
-              : 'text-[var(--text-soft)] hover:text-[var(--text)]'
+              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+              : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
           <AppIcon name="activity" className="h-4 w-4" />
@@ -751,16 +760,16 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('proyeccion')}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === 'proyeccion'
-              ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
-              : 'text-[var(--text-soft)] hover:text-[var(--text)]'
+              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
+              : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
           }`}
         >
           <AppIcon name="trendingUp" className="h-4 w-4" />
           <span>Futuro</span>
           {(state.finance.expectedIncomes?.length || 0) + (state.finance.commitments?.length || 0) > 0 && (
-            <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--surface-muted)] border border-[var(--border)] text-[var(--text-soft)]">
+            <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.2 rounded-full bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
               {(state.finance.expectedIncomes?.length || 0) + (state.finance.commitments?.length || 0)}
             </span>
           )}
@@ -785,11 +794,15 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
           )}
 
           {/* Quick Action Bar above table */}
-          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             <div>
-              <h2 className="text-sm font-extrabold text-[var(--text)]">Libro Diario de Movimientos</h2>
-              <p className="text-xs text-[var(--text-soft)]">
-                Registro histórico con filtros instantáneos y conciliación de presupuesto
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white">
+                  Libro Diario de Movimientos
+                </h2>
+              </div>
+              <p className="text-xs text-slate-400">
+                Registro histórico con filtros bajo demanda y conciliación instantánea
               </p>
             </div>
 
@@ -797,7 +810,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsCategoryModalOpen(true)}
-                className="secondary-button py-1.5 px-2.5 text-xs font-semibold flex items-center gap-1.5 cursor-pointer text-[var(--text-soft)] hover:text-[var(--text)]"
+                className="px-2.5 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50 hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs"
                 title="Administrar categorías"
               >
                 <AppIcon name="settings" className="h-3.5 w-3.5" />
@@ -807,7 +820,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
               <button
                 type="button"
                 onClick={() => handleOpenNewTx('ingreso')}
-                className="secondary-button py-1.5 px-2.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 bg-emerald-500/5 hover:bg-emerald-500/10 flex items-center gap-1 cursor-pointer transition-colors"
+                className="px-3 py-1.5 text-xs font-bold rounded-xl text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 bg-emerald-500/5 hover:bg-emerald-500/10 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
                 title="Registrar ingreso directo"
               >
                 <AppIcon name="plus" className="h-3.5 w-3.5" />
@@ -817,7 +830,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
               <button
                 type="button"
                 onClick={() => handleOpenNewTx('gasto')}
-                className="secondary-button py-1.5 px-2.5 text-xs font-semibold text-rose-600 dark:text-rose-400 border border-rose-500/25 bg-rose-500/5 hover:bg-rose-500/10 flex items-center gap-1 cursor-pointer transition-colors"
+                className="px-3 py-1.5 text-xs font-bold rounded-xl text-rose-600 dark:text-rose-400 border border-rose-500/25 bg-rose-500/5 hover:bg-rose-500/10 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
                 title="Registrar gasto directo"
               >
                 <AppIcon name="plus" className="h-3.5 w-3.5" />
@@ -827,23 +840,27 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
           </div>
 
           {/* Monthly Budgets Progress */}
-          <FinanceBudgetProgress
-            categories={state.finance.categories}
-            catSpent={catSpent}
-            budgets={state.finance.budgets}
-            onSetBudget={handleSetBudget}
-            onOpenCategoryManager={() => setIsCategoryModalOpen(true)}
-          />
+          {financeCustomization.visibleSections.budgets !== false && (
+            <FinanceBudgetProgress
+              categories={state.finance.categories}
+              catSpent={catSpent}
+              budgets={state.finance.budgets}
+              onSetBudget={handleSetBudget}
+              onOpenCategoryManager={() => setIsCategoryModalOpen(true)}
+            />
+          )}
 
           {/* Transaction History Clean Table with 1-Click Filters */}
-          <FinanceTransactionTable
-            transactions={state.finance.transactions}
-            accounts={state.finance.accounts}
-            categories={state.finance.categories}
-            onEdit={handleEditTx}
-            onDelete={handleDeleteTx}
-            totalGastadoAnio={totalGastadoAnio}
-          />
+          {financeCustomization.visibleSections.transactions !== false && (
+            <FinanceTransactionTable
+              transactions={state.finance.transactions}
+              accounts={state.finance.accounts}
+              categories={state.finance.categories}
+              onEdit={handleEditTx}
+              onDelete={handleDeleteTx}
+              totalGastadoAnio={totalGastadoAnio}
+            />
+          )}
         </div>
       )}
 
@@ -1556,6 +1573,17 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         state={state}
         onUpdateState={onUpdateState}
         showToast={showToast}
+      />
+
+      {/* MODAL 7: Customize Finance View Modal (Monarch-style) */}
+      <CustomizeFinanceModal
+        isOpen={isCustomizeModalOpen}
+        onClose={() => setIsCustomizeModalOpen(false)}
+        config={financeCustomization}
+        onSave={(newCfg) => {
+          saveFinanceCustomization(newCfg);
+          setFinanceCustomization(newCfg);
+        }}
       />
     </div>
   );

@@ -179,16 +179,16 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
   };
 
   return (
-    <div className="w-full flex flex-col gap-3">
-      <div className={`w-full rounded-2xl bg-[var(--card)] border transition-all duration-200 ${
+    <div className="w-full flex flex-col gap-2.5">
+      <div className={`w-full rounded-2xl backdrop-blur-md transition-all duration-200 ${
         isFocused || input.trim()
-          ? 'p-3 sm:p-4 border-indigo-500/60 shadow-[0_0_0_1px_rgba(99,102,241,0.25),0_8px_24px_-4px_rgba(99,102,241,0.18)]'
-          : 'p-2 sm:p-2.5 border-[var(--border)] hover:border-[var(--border-hover)] shadow-2xs hover:shadow-xs'
+          ? 'p-3 sm:px-4 border border-indigo-500/50 shadow-[0_0_0_2px_rgba(99,102,241,0.2)] bg-white/90 dark:bg-slate-900/80'
+          : 'p-2.5 sm:px-4 border border-slate-200/70 dark:border-slate-800/70 bg-white/60 dark:bg-slate-900/40 hover:border-slate-300 dark:hover:border-slate-700 shadow-2xs'
       }`}>
         <form onSubmit={handleSubmit} className="flex flex-col gap-2">
           <div className="flex items-center gap-2.5">
             {/* Leading Icon / Custom Signature Capture Spark */}
-            <div className={`relative flex items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-500/15 to-blue-500/10 text-indigo-600 dark:text-indigo-400 shrink-0 transition-all ${
+            <div className={`relative flex items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-500/15 via-blue-500/10 to-transparent text-indigo-600 dark:text-indigo-400 shrink-0 transition-all ${
               isFocused || input.trim() ? 'h-8 w-8 ring-2 ring-indigo-500/30 shadow-2xs' : 'h-7 w-7'
             }`}>
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" className="transition-transform duration-200" aria-hidden="true">

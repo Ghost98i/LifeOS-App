@@ -10,33 +10,39 @@ interface FinanceHeroProps {
   state: LifeOSState;
   cashFlow: CashFlowProjectionResult;
   variant?: 'full' | 'compact';
+  displayMode?: 'actual_balance' | 'real_available' | 'both';
+  showCommitmentsStrip?: boolean;
   onOpenNewTx: () => void;
   onOpenTransfer: () => void;
   onOpenCommitmentModal: () => void;
   onOpenCushionModal: () => void;
   onPayCommitment: (com: FinancialCommitment) => void;
   onEditCommitment: (com: FinancialCommitment) => void;
+  onOpenCustomize?: () => void;
 }
 
 export const FinanceHero: React.FC<FinanceHeroProps> = ({
   state,
   cashFlow,
   variant = 'full',
+  displayMode = 'actual_balance',
+  showCommitmentsStrip = true,
   onOpenNewTx,
   onOpenTransfer,
   onOpenCommitmentModal,
   onOpenCushionModal,
   onPayCommitment,
   onEditCommitment,
+  onOpenCustomize,
 }) => {
   const disponible = cashFlow.currentBalance;
   const realAvailable = cashFlow.realAvailable;
   const committed = cashFlow.committed;
   const projectedBalance = cashFlow.projectedBalance;
+  const totalExpectedIncome = cashFlow.totalExpectedIncome;
   const cushionStatus = cashFlow.cushionStatus;
   const isDeficit = cashFlow.isDeficit;
 
-  // Determine overall atmosphere status
   const atmosphereStatus: 'healthy' | 'attention' | 'warning' | 'deficit' = isDeficit
     ? 'deficit'
     : cushionStatus === 'below_current' || cushionStatus === 'projected_below'
@@ -45,72 +51,82 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
 
   if (variant === 'compact') {
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 shadow-xs">
+      <section className="relative overflow-hidden rounded-2xl bg-white/70 dark:bg-slate-900/60 backdrop-blur-md border border-slate-200/70 dark:border-slate-800/70 p-4 sm:p-5 shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          {/* Main KPI: Disponible Real */}
+          {/* Main KPI: Saldo Actual Protagonista */}
           <div className="flex items-center gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-soft)]">
-                  Disponible Real
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  Saldo Actual
                 </span>
-                <span className={`inline-block h-2 w-2 rounded-full transition-colors motion-reduce:transition-none ${
+                <span className={`w-2 h-2 rounded-full ${
                   isDeficit
-                    ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)] ring-2 ring-rose-500/30'
+                    ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]'
                     : cushionStatus === 'below_current' || cushionStatus === 'projected_below'
-                    ? 'bg-amber-500'
-                    : 'bg-emerald-500'
+                    ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]'
+                    : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]'
                 }`} />
               </div>
               <PrivacyAmount
                 as="div"
-                className={`text-2xl sm:text-3xl font-black tracking-tight tabular-nums font-mono mt-0.5 ${
-                  realAvailable < 0
-                    ? 'text-rose-600 dark:text-rose-400'
-                    : 'text-[var(--text)]'
-                }`}
+                className="text-2xl sm:text-3xl font-black tracking-tight tabular-nums font-mono mt-0.5 text-slate-900 dark:text-white"
               >
-                {fmtMoney(realAvailable)}
+                {fmtMoney(disponible)}
               </PrivacyAmount>
             </div>
           </div>
 
-          {/* Subordinate Contextual Pills */}
-          <div className="flex flex-wrap items-center gap-3 text-xs">
-            <div className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)] flex items-center gap-1.5">
-              <span className="text-[10px] uppercase font-bold text-[var(--text-faint)]">En cuentas:</span>
-              <PrivacyAmount as="span" className="font-mono font-bold text-[var(--text)]">
-                {fmtMoney(disponible)}
+          {/* Subordinate Contextual Indicators (Clean, borderless typography) */}
+          <div className="flex flex-wrap items-center gap-4 text-xs">
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 block">Disponible (30d)</span>
+              <PrivacyAmount as="span" className={`font-mono font-bold text-sm ${realAvailable < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                {fmtMoney(realAvailable)}
               </PrivacyAmount>
             </div>
 
-            <div className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)] flex items-center gap-1.5">
-              <span className="text-[10px] uppercase font-bold text-[var(--text-faint)]">Proyectado (30d):</span>
-              <PrivacyAmount as="span" className={`font-mono font-bold ${projectedBalance < 0 ? 'text-rose-500' : 'text-[var(--text)]'}`}>
+            <div className="hidden sm:block w-px h-7 bg-slate-200 dark:bg-slate-800" />
+
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 block">Proyectado (30d)</span>
+              <PrivacyAmount as="span" className={`font-mono font-bold text-sm ${projectedBalance < 0 ? 'text-rose-500' : 'text-slate-800 dark:text-slate-200'}`}>
                 {fmtMoney(projectedBalance)}
               </PrivacyAmount>
             </div>
 
-            <div className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)] flex items-center gap-1.5">
-              <span className="text-[10px] uppercase font-bold text-[var(--text-faint)]">Colchón:</span>
-              <span className={`font-bold ${
+            <div className="hidden sm:block w-px h-7 bg-slate-200 dark:bg-slate-800" />
+
+            <div>
+              <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 block">Colchón</span>
+              <span className={`font-bold text-sm ${
                 cushionStatus === 'below_current' || cushionStatus === 'projected_below'
                   ? 'text-amber-600 dark:text-amber-400'
-                  : cushionStatus === 'disabled'
-                  ? 'text-[var(--text-faint)]'
+                  : isDeficit
+                  ? 'text-rose-600 dark:text-rose-400'
                   : 'text-emerald-600 dark:text-emerald-400'
               }`}>
-                {cushionStatus === 'below_current' ? 'Por debajo' : cushionStatus === 'projected_below' ? 'Atención' : cushionStatus === 'disabled' ? 'Inactivo' : 'Saludable'}
+                {isDeficit ? 'Riesgo' : cushionStatus === 'below_current' || cushionStatus === 'projected_below' ? 'Atención' : 'Saludable'}
               </span>
             </div>
           </div>
 
-          {/* Action Shortcut */}
+          {/* Compact Actions */}
           <div className="flex items-center gap-2">
+            {onOpenCustomize && (
+              <button
+                type="button"
+                onClick={onOpenCustomize}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                title="Personalizar Finanzas"
+              >
+                <AppIcon name="settings" className="h-4 w-4" />
+              </button>
+            )}
             <button
               type="button"
               onClick={onOpenNewTx}
-              className="primary-button py-1.5 px-3 text-xs font-bold flex items-center gap-1 cursor-pointer shadow-xs"
+              className="py-1.5 px-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
             >
               <AppIcon name="plus" className="h-3.5 w-3.5" />
               <span>+ Movimiento</span>
@@ -122,45 +138,57 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
   }
 
   return (
-    <section className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-7 shadow-xs">
-      {/* Ambient Visual Atmosphere */}
+    <section className="relative overflow-hidden rounded-3xl bg-white/70 dark:bg-slate-900/60 backdrop-blur-md border border-slate-200/70 dark:border-slate-800/70 p-6 sm:p-8 shadow-xs">
+      {/* Ambient Visual Atmosphere (Alpine Narrative Flow behind) */}
       <FinanceBalanceAtmosphere status={atmosphereStatus} />
 
       {/* Top Bar: Eyebrow status & Fast Actions */}
       <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 mb-6">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="eyebrow flex items-center gap-1.5 text-xs text-[var(--text-faint)]">
-            <span className={`inline-block h-2 w-2 rounded-full transition-colors motion-reduce:transition-none ${
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+            <span className={`w-2 h-2 rounded-full ${
               isDeficit
-                ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)] ring-2 ring-rose-500/30'
+                ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]'
                 : cushionStatus === 'below_current' || cushionStatus === 'projected_below'
-                ? 'bg-amber-500'
-                : 'bg-emerald-500'
+                ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]'
+                : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]'
             }`} />
-            <span>Liquidez & Flujo Diario</span>
+            <span>Liquidez y flujo diario</span>
           </span>
 
-          {isDeficit ? (
-            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25">
-              Riesgo de Déficit a 30d
-            </span>
-          ) : cushionStatus === 'below_current' || cushionStatus === 'projected_below' ? (
-            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25">
-              Por debajo del Colchón
-            </span>
-          ) : (
-            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-              Liquidez Saludable
-            </span>
-          )}
+          <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+            isDeficit
+              ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/25'
+              : cushionStatus === 'below_current' || cushionStatus === 'projected_below'
+              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25'
+              : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25'
+          }`}>
+            {isDeficit
+              ? 'Riesgo de déficit a 30d'
+              : cushionStatus === 'below_current' || cushionStatus === 'projected_below'
+              ? 'Por debajo del colchón'
+              : 'Liquidez saludable'}
+          </span>
         </div>
 
         {/* Global Action CTAs */}
         <div className="flex items-center gap-2">
+          {onOpenCustomize && (
+            <button
+              type="button"
+              onClick={onOpenCustomize}
+              className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer flex items-center gap-1.5 transition-all shadow-2xs"
+              title="Personalizar Finanzas"
+            >
+              <AppIcon name="settings" className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Personalizar</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={onOpenTransfer}
-            className="secondary-button py-2 px-3 text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+            className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs"
             title="Mover dinero entre cuentas propias"
           >
             <AppIcon name="repeat" className="h-3.5 w-3.5" />
@@ -170,7 +198,7 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
           <button
             type="button"
             onClick={onOpenNewTx}
-            className="primary-button py-2 px-3.5 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+            className="py-1.5 px-4 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all"
           >
             <AppIcon name="plus" className="h-4 w-4" />
             <span>+ Movimiento</span>
@@ -178,57 +206,53 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
         </div>
       </div>
 
-      {/* Main Hierarchy Grid: Editorial Asymmetric Layout */}
-      <div className="relative z-10 grid gap-6 lg:grid-cols-[1.4fr_1fr] items-start">
-        {/* Left Column: Protagonist KPI (Disponible Real) */}
-        <div className="space-y-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-soft)]">
-                Disponible Real
-              </span>
-              <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-[var(--surface-muted)] text-[var(--text-faint)]">
-                Libre tras 30d
-              </span>
-            </div>
-
-            {/* Giant Metric Value */}
-            <div className="mt-1 flex items-baseline gap-3 flex-wrap">
-              <PrivacyAmount
-                as="h1"
-                className={`text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight tabular-nums font-mono ${
-                  realAvailable < 0
-                    ? 'text-rose-600 dark:text-rose-400'
-                    : 'text-[var(--text)]'
-                }`}
-              >
-                {fmtMoney(realAvailable)}
-              </PrivacyAmount>
-
-              {realAvailable < 0 && (
-                <span className="text-xs font-extrabold px-2 py-1 rounded-lg bg-rose-500/15 text-rose-600 dark:text-rose-400">
-                  Déficit de liquidez
-                </span>
-              )}
-            </div>
-
-            <p className="text-xs text-[var(--text-soft)] mt-1.5 max-w-md">
-              Lo que podés gastar hoy con seguridad sin comprometer tus pagos fijos y deudas de los próximos 30 días.
-            </p>
+      {/* Main Hierarchy: Open Editorial Canvas (Protagonist = Saldo Actual, Right = Alpine Flow Bridge) */}
+      <div className="relative z-10 grid gap-8 lg:grid-cols-12 items-center">
+        {/* Left Column: Protagonist Saldo Actual (Cols 1-5) */}
+        <div className="lg:col-span-5 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              {displayMode === 'real_available' ? 'Disponible Real' : 'Saldo Actual'}
+            </span>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+              {displayMode === 'real_available' ? 'Libre tras 30d' : 'En cuentas hoy'}
+            </span>
           </div>
 
-          {/* Subordinated Reality: Saldo Actual en Cuentas */}
-          <div className="pt-2 flex flex-wrap items-center gap-3 text-xs text-[var(--text-faint)]">
+          {/* Giant Metric Value */}
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <PrivacyAmount
+              as="h1"
+              className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight tabular-nums font-mono text-slate-900 dark:text-white"
+            >
+              {fmtMoney(displayMode === 'real_available' ? realAvailable : disponible)}
+            </PrivacyAmount>
+
+            {isDeficit && (
+              <span className="text-xs font-extrabold px-2 py-0.5 rounded-md bg-rose-500/15 text-rose-600 dark:text-rose-400">
+                Déficit proyectado
+              </span>
+            )}
+          </div>
+
+          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm">
+            {displayMode === 'real_available'
+              ? 'Monto libre utilizable tras reservar compromisos inminentes.'
+              : 'Capital total consolidado en cuentas bancarias y efectivo.'}
+          </p>
+
+          {/* Subordinate Contextual Metrics (Direct typography, no mini-cards) */}
+          <div className="pt-2 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
             <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-[var(--text-soft)]">En cuentas hoy:</span>
-              <PrivacyAmount as="span" className="font-mono font-bold text-[var(--text)]">
-                {fmtMoney(disponible)}
+              <span>Disponible (30d):</span>
+              <PrivacyAmount as="span" className={`font-mono font-bold ${realAvailable < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                {fmtMoney(realAvailable)}
               </PrivacyAmount>
             </div>
             <span>·</span>
             <div className="flex items-center gap-1.5">
-              <span>Comprometido 30d:</span>
-              <PrivacyAmount as="span" className="font-mono font-bold text-rose-500">
+              <span>Compromisos:</span>
+              <PrivacyAmount as="span" className="font-mono font-semibold text-slate-800 dark:text-slate-200">
                 −{fmtMoney(committed)}
               </PrivacyAmount>
             </div>
@@ -237,179 +261,157 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
               <span>{state.finance.accounts.length} {state.finance.accounts.length === 1 ? 'cuenta' : 'cuentas'}</span>
             </div>
           </div>
+        </div>
 
-          {/* Contextual Warning Banner for Cushion */}
-          {cushionStatus !== 'disabled' && cushionStatus !== 'ok' && (
-            <div className="mt-3 flex items-center justify-between gap-3 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-800 dark:text-amber-300 font-medium">
-              <div className="flex items-center gap-2">
-                <span className="text-sm">⚠️</span>
-                <span>{cashFlow.cushionMessage}</span>
-              </div>
+        {/* Right Column: Alpine Financial Flow Bridge (Cols 6-12) */}
+        {/* Answers: ¿Cómo paso de mi saldo actual al saldo proyectado? */}
+        <div className="lg:col-span-7">
+          <div className="p-4 sm:p-5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-xs">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                Flujo de liquidez a 30 días
+              </span>
               <button
                 type="button"
                 onClick={onOpenCushionModal}
-                className="text-[11px] underline font-bold cursor-pointer hover:opacity-80 shrink-0"
+                className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
               >
-                Ajustar colchón
+                Colchón: {fmtMoney(state.finance?.minCushion ?? 5000)}
               </button>
             </div>
-          )}
-        </div>
 
-        {/* Right Column: Key Forward Projections Bento */}
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)]/60 p-4 sm:p-5 space-y-3.5 shadow-2xs">
-          <div className="grid grid-cols-2 gap-3.5">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block">
-                Compromisos Fijos
-              </span>
-              <PrivacyAmount as="span" className="text-lg font-black font-mono text-rose-500 block mt-0.5 tabular-nums">
-                −{fmtMoney(committed)}
-              </PrivacyAmount>
-              <span className="text-[10px] text-[var(--text-soft)] block mt-0.5">
-                {cashFlow.commitments.length} {cashFlow.commitments.length === 1 ? 'pago' : 'pagos'} en 30d
-              </span>
-            </div>
-
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block">
-                Próximos Ingresos
-              </span>
-              <PrivacyAmount as="span" className="text-lg font-black font-mono text-emerald-600 dark:text-emerald-400 block mt-0.5 tabular-nums">
-                +{fmtMoney(cashFlow.totalExpectedIncome)}
-              </PrivacyAmount>
-              <span className="text-[10px] text-[var(--text-soft)] block mt-0.5">
-                previstos en 30d
-              </span>
-            </div>
-          </div>
-
-          <div className="pt-3 border-t border-[var(--border)] flex items-center justify-between">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block">
-                Saldo Proyectado (30d)
-              </span>
-              <PrivacyAmount as="span" className={`text-base font-black font-mono block mt-0.5 tabular-nums ${projectedBalance < 0 ? 'text-rose-500' : 'text-[var(--text)]'}`}>
-                {fmtMoney(projectedBalance)}
-              </PrivacyAmount>
-            </div>
-
-            <div className="text-right">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block">
-                Colchón Mínimo
-              </span>
-              <div className="flex items-center gap-1.5 justify-end mt-0.5">
-                <span className="text-xs font-mono font-bold text-[var(--text-soft)]">
-                  {state.finance.cushionEnabled !== false && state.finance.minCushion ? fmtMoney(state.finance.minCushion) : 'Inactivo'}
+            {/* Arithmetic Flow Rail: Saldo -> Compromisos -> Ingresos -> Proyección */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center sm:text-left">
+              {/* Step 1: Saldo actual */}
+              <div className="space-y-0.5">
+                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                  Saldo actual
                 </span>
-                <button
-                  type="button"
-                  onClick={onOpenCushionModal}
-                  className="text-[11px] font-bold text-[var(--blue)] hover:underline cursor-pointer"
-                  title="Configurar Colchón"
-                >
-                  ⚙
-                </button>
+                <PrivacyAmount as="div" className="text-base sm:text-lg font-black font-mono text-slate-900 dark:text-white tabular-nums">
+                  {fmtMoney(disponible)}
+                </PrivacyAmount>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
+                  Base en cuentas
+                </span>
+              </div>
+
+              {/* Step 2: Compromisos (-) */}
+              <div className="space-y-0.5">
+                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                  − Compromisos
+                </span>
+                <PrivacyAmount as="div" className="text-base sm:text-lg font-black font-mono text-slate-700 dark:text-slate-300 tabular-nums">
+                  −{fmtMoney(committed)}
+                </PrivacyAmount>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
+                  {cashFlow.commitments.length} {cashFlow.commitments.length === 1 ? 'pago' : 'pagos'} fijos
+                </span>
+              </div>
+
+              {/* Step 3: Ingresos Previstos (+) */}
+              <div className="space-y-0.5">
+                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                  + Ingresos
+                </span>
+                <PrivacyAmount as="div" className="text-base sm:text-lg font-black font-mono text-emerald-600 dark:text-emerald-400 tabular-nums">
+                  +{fmtMoney(totalExpectedIncome)}
+                </PrivacyAmount>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
+                  previstos a 30d
+                </span>
+              </div>
+
+              {/* Step 4: Saldo Proyectado (=) */}
+              <div className="space-y-0.5">
+                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                  = Proyectado
+                </span>
+                <PrivacyAmount as="div" className={`text-base sm:text-lg font-black font-mono tabular-nums ${projectedBalance < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'}`}>
+                  {fmtMoney(projectedBalance)}
+                </PrivacyAmount>
+                <span className={`text-[10px] font-bold block ${
+                  projectedBalance < (state.finance?.minCushion ?? 5000)
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : 'text-emerald-600 dark:text-emerald-400'
+                }`}>
+                  {projectedBalance < 0 ? 'Déficit previsto' : 'Saldo al cierre'}
+                </span>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Immediate Upcoming Commitments Strip (Curated Strip) */}
-      <div className="relative z-10 mt-6 pt-5 border-t border-[var(--border)]">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-xs font-extrabold uppercase tracking-wider text-[var(--text-faint)]">
-              Próximos Vencimientos Inmediatos
-            </h2>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--surface-muted)] text-[var(--text-soft)] font-bold">
-              {cashFlow.commitments.length}
+      {/* Immediate Commitments Strip (if enabled) */}
+      {showCommitmentsStrip && cashFlow.commitments.length > 0 && (
+        <div className="relative z-10 mt-6 pt-5 border-t border-slate-200/70 dark:border-slate-800/70 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+              <span>Próximos Vencimientos Inmediatos</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                {cashFlow.commitments.length}
+              </span>
             </span>
+
+            <button
+              type="button"
+              onClick={onOpenCommitmentModal}
+              className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+            >
+              + Compromiso
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={onOpenCommitmentModal}
-            className="text-xs font-bold text-[var(--blue)] hover:underline cursor-pointer flex items-center gap-1"
-          >
-            <AppIcon name="plus" className="h-3.5 w-3.5" />
-            <span>+ Compromiso</span>
-          </button>
-        </div>
-
-        {cashFlow.commitments.length === 0 ? (
-          <p className="text-xs text-[var(--text-soft)] py-2">
-            No tenés pagos fijados ni cuotas comprometidas en los próximos 30 días. Todo tu saldo en cuentas está libre.
-          </p>
-        ) : (
-          <div className="flex gap-3 overflow-x-auto pb-2 pt-0.5 scrollbar-thin">
-            {cashFlow.commitments.slice(0, 6).map((item) => {
-              const comEntity = state.finance?.commitments?.find(
-                (c) => c.id === item.id.replace('com-', '').replace(/-\d{4}-\d{2}-\d{2}$/, '')
-              );
-              const isOverdue = item.dueDate && item.dueDate < new Date().toISOString().slice(0, 10);
-
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {cashFlow.commitments.slice(0, 3).map((com) => {
+              const isOverdue = com.nextDueDate < new Date().toISOString().slice(0, 10);
               return (
                 <div
-                  key={item.id}
-                  className={`min-w-[210px] sm:min-w-[230px] rounded-2xl border p-3.5 shadow-2xs flex flex-col justify-between transition-all ${
+                  key={com.id}
+                  className={`p-3.5 rounded-2xl transition-all border ${
                     isOverdue
-                      ? 'border-rose-500/30 bg-rose-500/5'
-                      : 'border-[var(--border)] bg-[var(--card)] hover:border-[var(--border-hover)]'
+                      ? 'border-rose-500/30 bg-rose-50/50 dark:bg-rose-950/20'
+                      : 'border-slate-200/80 dark:border-slate-800/80 bg-white/60 dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700'
                   }`}
                 >
-                  <div>
-                    <div className="flex items-center justify-between gap-1.5">
-                      <span className="block truncate text-xs font-bold text-[var(--text)]">
-                        {item.label}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                        {com.name}
+                      </h4>
+                      <span className={`text-[10px] font-semibold mt-0.5 block ${isOverdue ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-slate-400 dark:text-slate-500'}`}>
+                        {isOverdue ? `Venció ${fmtDate(com.nextDueDate)}` : `Vence ${fmtDate(com.nextDueDate)}`}
                       </span>
-                      {comEntity?.remainingOccurrences != null && (
-                        <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-md bg-[var(--surface-muted)] text-[var(--text-soft)] shrink-0 font-bold">
-                          {comEntity.remainingOccurrences} cuota{comEntity.remainingOccurrences === 1 ? '' : 's'}
-                        </span>
-                      )}
                     </div>
 
-                    <PrivacyAmount as="span" className="mt-1 block text-sm font-black font-mono text-rose-500">
-                      −{fmtMoney(item.amount)}
+                    <PrivacyAmount as="span" className="font-mono text-xs font-black text-slate-900 dark:text-white tabular-nums shrink-0">
+                      {fmtMoney(com.amount)}
                     </PrivacyAmount>
-
-                    <div className="mt-1 flex items-center gap-1 text-[10px] text-[var(--text-faint)]">
-                      {isOverdue ? (
-                        <span className="text-rose-600 dark:text-rose-400 font-bold">Venció {fmtDate(item.dueDate || '')}</span>
-                      ) : (
-                        <span>Vence {item.dueDate ? fmtDate(item.dueDate) : 'pendiente'}</span>
-                      )}
-                    </div>
                   </div>
 
-                  {comEntity && (
-                    <div className="mt-3 pt-2.5 border-t border-[var(--border)]/60 flex items-center justify-between">
-                      <button
-                        type="button"
-                        onClick={() => onPayCommitment(comEntity)}
-                        className="text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer flex items-center gap-1"
-                      >
-                        <AppIcon name="check" className="h-3 w-3" />
-                        <span>Pagar</span>
-                      </button>
+                  <div className="mt-3 pt-2 border-t border-slate-200/50 dark:border-slate-800/50 flex items-center justify-between text-xs">
+                    <button
+                      type="button"
+                      onClick={() => onPayCommitment(com)}
+                      className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer flex items-center gap-1 text-[11px]"
+                    >
+                      <span>✓ Pagar</span>
+                    </button>
 
-                      <button
-                        type="button"
-                        onClick={() => onEditCommitment(comEntity)}
-                        className="text-[11px] text-[var(--text-faint)] hover:text-[var(--text)] cursor-pointer"
-                      >
-                        Editar
-                      </button>
-                    </div>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => onEditCommitment(com)}
+                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-[11px]"
+                    >
+                      Editar
+                    </button>
+                  </div>
                 </div>
               );
             })}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </section>
   );
 };
