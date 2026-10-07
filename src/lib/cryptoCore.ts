@@ -25,6 +25,8 @@ export const CRYPTO_ALGORITHM = 'AES-GCM-256' as const;
 export const PBKDF2_RECOMMENDED_ITERATIONS = 600_000;
 export const WRAPPED_MDEK_STORAGE_PREFIX = 'lifeos-wrapped-mdek-v1';
 
+import { enrollDevice } from './deviceTrust';
+
 export interface CryptoEnvelope {
   cryptoVersion: number;
   algorithm: typeof CRYPTO_ALGORITHM;
@@ -669,6 +671,13 @@ export async function provisionZeroKnowledgeKeys(userId?: string | null): Promis
 
     saveWrappedKeyEnvelope(envelope, userId);
 
+    // Enroll this device/browser automatically so reloads won't require entering the Recovery Key
+    try {
+      await enrollDevice(userId || 'local', rawMdek);
+    } catch (enrollErr) {
+      console.warn('[DeviceTrust] No se pudo enrolar automáticamente el dispositivo durante aprovisionamiento:', enrollErr);
+    }
+
     const sessionMdek = await importSessionKey(rawMdek);
     const recoveryKeyFormatted = await formatRecoveryKey(rawRecoveryKey);
 
@@ -692,7 +701,8 @@ export async function provisionZeroKnowledgeKeys(userId?: string | null): Promis
  */
 export async function unlockMdekWithRecoveryKey(
   recoveryKeyFormatted: string,
-  envelope: WrappedKeyEnvelope
+  envelope: WrappedKeyEnvelope,
+  userId?: string | null
 ): Promise<CryptoKey> {
   if (!envelope || envelope.keyFormatVersion !== CURRENT_KEY_FORMAT_VERSION) {
     throw new CryptoKeyError('El envelope de claves no es válido o tiene una versión no soportada.');
@@ -706,6 +716,13 @@ export async function unlockMdekWithRecoveryKey(
     const rawMdek = await unwrapMdekWithKek(envelope.wrappedMdek, kek, envelope.aad);
 
     try {
+      if (userId) {
+        try {
+          await enrollDevice(userId, rawMdek);
+        } catch (enrollErr) {
+          console.warn('[DeviceTrust] No se pudo enrolar el dispositivo al desbloquear con Recovery Key:', enrollErr);
+        }
+      }
       return await importSessionKey(rawMdek);
     } finally {
       rawMdek.fill(0);
@@ -778,6 +795,11 @@ export async function rewrapMdekWithNewRecoveryKey(
 
     if (options?.persistLocally !== false) {
       saveWrappedKeyEnvelope(newEnvelope, userId);
+      try {
+        await enrollDevice(userId || 'local', rawMdek);
+      } catch (enrollErr) {
+        console.warn('[DeviceTrust] No se pudo re-enrolar el dispositivo durante rewrap:', enrollErr);
+      }
     }
 
     const sessionMdek = await importSessionKey(rawMdek);

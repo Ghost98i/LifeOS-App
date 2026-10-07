@@ -54,6 +54,9 @@ import {
   cryptoSession,
 } from './lib/cryptoCore';
 import {
+  tryUnlockWithDeviceTrust,
+} from './lib/deviceTrust';
+import {
   detectDeletedEntityIds,
   loadTombstones,
   saveTombstones,
@@ -410,6 +413,19 @@ export default function App() {
         setStorageUserId(user.uid);
         setCloudUser(user);
         setSyncStatus(navigator.onLine ? 'connecting' : 'offline');
+
+        // Pre-warm cryptoSession from device trust if enrolled
+        if (!cryptoSession.isUnlocked(user.uid)) {
+          void tryUnlockWithDeviceTrust(user.uid)
+            .then((trustedMdek) => {
+              if (trustedMdek && user) {
+                cryptoSession.setUnlocked(trustedMdek, user.uid);
+              }
+            })
+            .catch((err) => {
+              console.warn('[DeviceTrust] Pre-warm failed:', err);
+            });
+        }
         return;
       }
 
@@ -562,7 +578,18 @@ export default function App() {
             ? navigator.onLine ? 'saving' : 'offline'
             : navigator.onLine ? 'synced' : 'offline';
 
-          const sessionKey = cryptoSession.getKey(cloudUser.uid);
+          let sessionKey = cryptoSession.getKey(cloudUser.uid);
+          if (!sessionKey) {
+            try {
+              const trustedMdek = await tryUnlockWithDeviceTrust(cloudUser.uid);
+              if (trustedMdek) {
+                cryptoSession.setUnlocked(trustedMdek, cloudUser.uid);
+                sessionKey = trustedMdek;
+              }
+            } catch (trustErr) {
+              console.warn('[DeviceTrust] Error al auto-desbloquear con credencial de dispositivo:', trustErr);
+            }
+          }
 
           // 1. Decodificar todos los módulos con el adapter dual
           type DecodedHead = {

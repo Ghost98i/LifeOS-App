@@ -29,6 +29,10 @@ import {
   executeCloudPlaintextPurge,
   type CloudPlaintextInventory,
 } from '../lib/cryptoPurge';
+import {
+  forgetDeviceTrust,
+  isDeviceEnrolled,
+} from '../lib/deviceTrust';
 
 interface PrivacySecuritySectionProps {
   state: LifeOSState;
@@ -49,6 +53,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
   const [localEnvelope, setLocalEnvelope] = useState<WrappedKeyEnvelope | null>(() =>
     loadWrappedKeyEnvelope(storageUserId)
   );
+  const [isEnrolled, setIsEnrolled] = useState<boolean>(false);
   const isSessionUnlocked = cryptoSession.isUnlocked(storageUserId);
 
   // Wizard state: 0 = Closed, 1 = Intro/Explanation, 2 = Key Generation & Backup, 3 = Verification, 4 = Progress
@@ -116,6 +121,13 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       setPendingRotation(null);
     }
     setLocalEnvelope(loadWrappedKeyEnvelope(storageUserId));
+    if (storageUserId) {
+      isDeviceEnrolled(storageUserId).then((enrolled) => {
+        if (active) setIsEnrolled(enrolled);
+      });
+    } else {
+      setIsEnrolled(false);
+    }
     return () => {
       active = false;
     };
@@ -182,7 +194,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       await parseRecoveryKey(verifyKeyInput);
 
       // 2. Cryptographic unwrap test: prove the input actually unlocks the envelope!
-      const unlockedMdek = await unlockMdekWithRecoveryKey(verifyKeyInput, provisionedEnvelope);
+      const unlockedMdek = await unlockMdekWithRecoveryKey(verifyKeyInput, provisionedEnvelope, storageUserId);
 
       // 3. Persist wrapped key envelope to Cloud Firestore BEFORE starting migration
       await setCloudKeyEnvelope(storageUserId, provisionedEnvelope);
@@ -325,6 +337,20 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
     }
   };
 
+  const handleForgetDevice = async () => {
+    if (!storageUserId) return;
+    const confirmed = window.confirm(
+      '¿Olvidar este dispositivo?\n\nSe eliminarán las credenciales locales de confianza en este navegador. Para volver a desbloquearlo o sincronizar en el futuro, necesitarás tu Clave de Recuperación.'
+    );
+    if (!confirmed) return;
+
+    await forgetDeviceTrust(storageUserId);
+    cryptoSession.lock();
+    setIsEnrolled(false);
+    showToast('Dispositivo desvinculado. La sesión fue bloqueada en este navegador.');
+    if (onForceSync) onForceSync();
+  };
+
   return (
     <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-4 shadow-2xs">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -460,6 +486,17 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                   <AppIcon name="rotateCcw" className="h-3.5 w-3.5" />
                   <span>Renovar Clave de Recuperación</span>
                 </button>
+                {(isEnrolled || isSessionUnlocked) && (
+                  <button
+                    type="button"
+                    onClick={handleForgetDevice}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-xs font-semibold rounded-xl text-rose-600 dark:text-rose-400 cursor-pointer"
+                    title="Eliminar confianza de este navegador y bloquear sesión"
+                  >
+                    <AppIcon name="trash" className="h-3.5 w-3.5" />
+                    <span>Olvidar este dispositivo</span>
+                  </button>
+                )}
               </div>
             </div>
 

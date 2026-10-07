@@ -421,7 +421,8 @@ export async function unlockDeviceWithRecoveryKey(
   }
 
   // 3. Cryptographic unwrap test (throws CryptoDecryptionError on wrong key)
-  const sessionMdek = await unlockMdekWithRecoveryKey(recoveryKeyFormatted, envelope);
+  // Also automatically enrolls this device/browser in device trust so future reloads won't require the key
+  const sessionMdek = await unlockMdekWithRecoveryKey(recoveryKeyFormatted, envelope, userId);
 
   // 4. If test module envelope is provided, verify roundtrip decrypt
   if (testModuleEnvelope) {
