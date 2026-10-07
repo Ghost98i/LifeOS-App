@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultState } from './storage';
-import { cashFlowProjection } from './calculations';
+import { cashFlowProjection, resolveFinancialCommitment } from './calculations';
 
 test('cashFlowProjection projects across 30, 60, and 90 days combining income, subscriptions, and debts', () => {
   const state = defaultState();
@@ -66,6 +66,83 @@ test('cashFlowProjection projects across 30, 60, and 90 days combining income, s
   assert.equal(proj90.committed, 45000); // 3 months
   assert.equal(proj90.projectedBalance, 125000);
   assert.equal(proj90.horizonDays, 90);
+});
+
+test('cashFlowProjection preserves source identity and only resolves persisted financial commitments', () => {
+  const state = defaultState();
+  state.finance.accounts = [{ id: 'acc1', name: 'Banco', balance: 50000 }];
+  state.finance.subscriptions = [{ id: 'sub-1', name: 'Streaming', amount: 500, dueDay: 10 }];
+  state.finance.debts = [{ id: 'debt-1', name: 'Préstamo', amount: 10000, monthlyPayment: 1000, dueDate: '2026-10-12' }];
+  state.finance.commitments = [{
+    id: 'commitment-1',
+    name: 'Alquiler',
+    amount: 15000,
+    category: 'Admin/Hogar',
+    frequency: 'monthly',
+    nextDueDate: '2026-10-15',
+    active: true,
+    accountId: 'acc1',
+    dueDay: 15,
+  }];
+
+  const projection = cashFlowProjection(state, 30, '2026-10-01');
+  const subscription = projection.commitments.find((item) => item.kind === 'subscription');
+  const debt = projection.commitments.find((item) => item.kind === 'debt');
+  const commitment = projection.commitments.find((item) => item.kind === 'commitment');
+
+  assert.equal(subscription?.sourceId, 'sub-1');
+  assert.equal(debt?.sourceId, 'debt-1');
+  assert.equal(commitment?.sourceId, 'commitment-1');
+  assert.equal(resolveFinancialCommitment(state, subscription!), null);
+  assert.equal(resolveFinancialCommitment(state, debt!), null);
+  assert.equal(resolveFinancialCommitment(state, commitment!), state.finance.commitments[0]);
+});
+
+test('cashFlowProjection includes the next debt payment when the current-month due day already passed', () => {
+  const state = defaultState();
+  state.finance.debts = [{
+    id: 'debt-mobile-window',
+    name: 'Préstamo',
+    amount: 10000,
+    monthlyPayment: 1000,
+    dueDate: '2026-10-20',
+  }];
+
+  const projection = cashFlowProjection(state, 30, '2026-10-25');
+  const debtDates = projection.forecastItems
+    .filter((item) => item.type === 'debt')
+    .map((item) => item.date);
+
+  assert.deepEqual(debtDates, ['2026-11-20']);
+});
+
+test('cashFlowProjection generates debt payments by real dates across 30, 60, and 90 day horizons', () => {
+  const state = defaultState();
+  state.finance.debts = [{
+    id: 'debt-real-dates',
+    name: 'Cuota',
+    amount: 10000,
+    monthlyPayment: 1000,
+    dueDate: '2026-01-31',
+  }];
+
+  const beforeDue = cashFlowProjection(state, 30, '2026-01-20').forecastItems
+    .filter((item) => item.type === 'debt')
+    .map((item) => item.date);
+  const afterDue30 = cashFlowProjection(state, 30, '2026-02-01').forecastItems
+    .filter((item) => item.type === 'debt')
+    .map((item) => item.date);
+  const afterDue60 = cashFlowProjection(state, 60, '2026-02-01').forecastItems
+    .filter((item) => item.type === 'debt')
+    .map((item) => item.date);
+  const afterDue90 = cashFlowProjection(state, 90, '2026-02-01').forecastItems
+    .filter((item) => item.type === 'debt')
+    .map((item) => item.date);
+
+  assert.deepEqual(beforeDue, ['2026-01-31']);
+  assert.deepEqual(afterDue30, ['2026-02-28']);
+  assert.deepEqual(afterDue60, ['2026-02-28', '2026-03-31']);
+  assert.deepEqual(afterDue90, ['2026-02-28', '2026-03-31', '2026-04-30']);
 });
 
 test('cashFlowProjection maintains trajectory continuity day by day', () => {

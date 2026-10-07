@@ -1,5 +1,55 @@
 @import "tailwindcss";
 
+@keyframes note-carousel-enter-next {
+  from {
+    opacity: 0.15;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes note-carousel-exit-next {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0.15; transform: translateX(-100%); }
+}
+
+@keyframes note-carousel-enter-previous {
+  from { opacity: 0.15; transform: translateX(-100%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes note-carousel-exit-previous {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0.15; transform: translateX(100%); }
+}
+
+.note-carousel-enter-next,
+.note-carousel-exit-next,
+.note-carousel-enter-previous,
+.note-carousel-exit-previous {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  animation-fill-mode: both;
+  will-change: transform, opacity;
+}
+
+.note-carousel-enter-next { animation-name: note-carousel-enter-next; }
+.note-carousel-exit-next { animation-name: note-carousel-exit-next; }
+.note-carousel-enter-previous { animation-name: note-carousel-enter-previous; }
+.note-carousel-exit-previous { animation-name: note-carousel-exit-previous; }
+
+@media (prefers-reduced-motion: reduce) {
+  .note-carousel-enter-next,
+  .note-carousel-exit-next,
+  .note-carousel-enter-previous,
+  .note-carousel-exit-previous {
+    animation: none;
+  }
+}
+
 :root {
   color-scheme: light;
 

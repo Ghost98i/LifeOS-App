@@ -1,4 +1,4 @@
-import { LifeOSState, DayKey, ResaleItem, Transaction } from '../types';
+import { LifeOSState, DayKey } from '../types';
 import { migrateGym } from './gymMigration';
 import { DEFAULT_FINANCE_CATEGORIES, normalizeCategories } from './financeCategories';
 
@@ -773,51 +773,6 @@ export function saveRecoveryState(
   } catch (e) {
     console.error('Error saving recovery state:', e);
     return false;
-  }
-}
-
-export function syncResaleSaleToFinance(state: LifeOSState, item: ResaleItem): void {
-  const isVendido = Boolean(item.sellPrice && item.sellDate);
-  if (isVendido) {
-    const tx = item.financeTxId ? state.finance.transactions.find((t) => t.id === item.financeTxId) : null;
-    if (tx) {
-      const oldAmount = Number(tx.amount) || 0;
-      const newAmount = Number(item.sellPrice) || 0;
-      const delta = newAmount - oldAmount;
-      if (tx.accountId) {
-        const acc = state.finance.accounts.find((a) => a.id === tx.accountId);
-        if (acc) acc.balance = Number(acc.balance || 0) + delta;
-      }
-      tx.amount = newAmount;
-      tx.date = item.sellDate!;
-      tx.note = 'Venta: ' + item.item;
-    } else {
-      const accountId = state.finance.accounts.length ? state.finance.accounts[0].id : null;
-      const newTx: Transaction = {
-        id: uid(),
-        type: 'ingreso',
-        amount: Number(item.sellPrice) || 0,
-        category: 'Reventa',
-        fixed: 'variable',
-        date: item.sellDate!,
-        note: 'Venta: ' + item.item,
-        accountId,
-      };
-      state.finance.transactions.push(newTx);
-      if (accountId) {
-        const acc = state.finance.accounts.find((a) => a.id === accountId);
-        if (acc) acc.balance = Number(acc.balance || 0) + newTx.amount;
-      }
-      item.financeTxId = newTx.id;
-    }
-  } else if (item.financeTxId) {
-    const tx = state.finance.transactions.find((t) => t.id === item.financeTxId);
-    if (tx && tx.accountId) {
-      const acc = state.finance.accounts.find((a) => a.id === tx.accountId);
-      if (acc) acc.balance = Number(acc.balance || 0) - Number(tx.amount || 0);
-    }
-    state.finance.transactions = state.finance.transactions.filter((t) => t.id !== item.financeTxId);
-    item.financeTxId = null;
   }
 }
 

@@ -1,5 +1,13 @@
 import type { Account, AccountReconciliation, FinanceTransfer, LifeOSState, Transaction } from '../types';
-import { adjustAccountBalance } from './calculations';
+import { advanceCommitmentDueDate, advanceExpectedIncomeDate } from './financialCommitments';
+import {
+  compareLedgerEvents,
+  compareMaterializedBalanceShadow,
+  nextFinanceEffectiveOrder,
+  reconstructAccountBalance,
+  reconstructAccountBalanceBeforeEvent,
+} from './financeLedger';
+import { createFinanceRevisionOrder, createFinanceRevisionOrderAfter } from './financeRevision';
 import { todayISO, uid } from './storage';
 
 export interface TransferInput {
@@ -21,15 +29,48 @@ export interface TransactionInput {
   origin?: Transaction['origin'];
 }
 
-function balanceIsFixedAfter(state: LifeOSState, accountId: string | null | undefined, date: string): boolean {
-  if (!accountId) return false;
-  return state.finance.reconciliations.some((item) => item.accountId === accountId && item.date >= date);
+function affectedAccountIds(accountIds: Array<string | null | undefined>): string[] {
+  return [...new Set(accountIds.filter((id): id is string => Boolean(id)))];
 }
 
-function applyTransactionBalance(state: LifeOSState, transaction: Pick<Transaction, 'accountId' | 'date' | 'type' | 'amount'>, direction = 1): void {
-  if (balanceIsFixedAfter(state, transaction.accountId, transaction.date)) return;
-  const signed = transaction.type === 'ingreso' ? Number(transaction.amount) : -Number(transaction.amount);
-  adjustAccountBalance(state, transaction.accountId, signed * direction);
+function assertAccountsCanMaterialize(
+  state: LifeOSState,
+  accountIds: string[],
+  allowAmbiguousReconciliationChange = false,
+): void {
+  for (const accountId of accountIds) {
+    const account = state.finance.accounts.find((item) => item.id === accountId);
+    if (!account) throw new Error('La cuenta ya no existe.');
+    if (!Number.isFinite(account.initialBalance)) {
+      throw new Error('La cuenta necesita un saldo inicial conocido antes de reconstruir su saldo.');
+    }
+    const shadow = compareMaterializedBalanceShadow(
+      account,
+      state.finance.transactions,
+      state.finance.transfers,
+      state.finance.reconciliations,
+    );
+    if (!allowAmbiguousReconciliationChange && shadow.ambiguities.length > 0 && !shadow.matches) {
+      throw new Error('La cuenta tiene conciliaciones legacy ambiguas; revisalas antes de materializar un movimiento nuevo.');
+    }
+  }
+}
+
+function materializeAccounts(state: LifeOSState, accountIds: string[]): void {
+  for (const accountId of accountIds) {
+    const account = state.finance.accounts.find((item) => item.id === accountId);
+    if (!account) continue;
+    const reconstruction = reconstructAccountBalance(
+      account,
+      state.finance.transactions,
+      state.finance.transfers,
+      state.finance.reconciliations,
+    );
+    if (reconstruction.balance === null) {
+      throw new Error('La cuenta necesita un saldo inicial conocido antes de reconstruir su saldo.');
+    }
+    account.balance = reconstruction.balance;
+  }
 }
 
 export function addTransaction(state: LifeOSState, input: TransactionInput): Transaction {
@@ -40,19 +81,87 @@ export function addTransaction(state: LifeOSState, input: TransactionInput): Tra
   }
   if (!input.category.trim()) throw new Error('Elegí una categoría.');
 
+  const date = input.date || todayISO();
+  assertAccountsCanMaterialize(state, [input.accountId]);
   const transaction: Transaction = {
     id: uid(),
+    effectiveOrder: nextFinanceEffectiveOrder(state, date),
+    revisionOrder: createFinanceRevisionOrder(),
     type: input.type,
     amount,
     category: input.category.trim(),
     fixed: input.fixed,
-    date: input.date || todayISO(),
+    date,
     note: input.note?.trim() || '',
     accountId: input.accountId,
     origin: input.origin || 'manual',
   };
   state.finance.transactions.push(transaction);
-  applyTransactionBalance(state, transaction);
+  materializeAccounts(state, [input.accountId]);
+  return transaction;
+}
+
+export interface ConfirmFinancialCommitmentInput {
+  commitmentId: string;
+  amount?: number;
+  accountId?: string | null;
+  date?: string;
+  updateFutureAmount?: boolean;
+}
+
+export function confirmFinancialCommitment(
+  state: LifeOSState,
+  input: ConfirmFinancialCommitmentInput,
+): Transaction {
+  const commitment = (state.finance.commitments || []).find((item) => item.id === input.commitmentId);
+  if (!commitment) throw new Error('El compromiso ya no existe.');
+
+  const amount = input.amount ?? Number(commitment.amount);
+  const accountId = input.accountId || commitment.accountId || state.finance.accounts[0]?.id || null;
+  const advanced = advanceCommitmentDueDate(commitment);
+  const transaction = addTransaction(state, {
+    type: 'gasto',
+    amount,
+    category: commitment.category || 'Varios',
+    fixed: 'fijo',
+    accountId,
+    date: input.date || todayISO(),
+    note: `Pago de compromiso: ${commitment.name}`,
+  });
+
+  Object.assign(commitment, advanced, {
+    ...(input.updateFutureAmount ? { amount: Number(amount) } : {}),
+    updatedAt: new Date().toISOString(),
+  });
+  return transaction;
+}
+
+export interface ConfirmExpectedIncomeInput {
+  expectedIncomeId: string;
+  accountId?: string | null;
+  date?: string;
+}
+
+export function confirmExpectedIncome(
+  state: LifeOSState,
+  input: ConfirmExpectedIncomeInput,
+): Transaction {
+  const income = (state.finance.expectedIncomes || []).find((item) => item.id === input.expectedIncomeId);
+  if (!income) throw new Error('El ingreso previsto ya no existe.');
+
+  const accountId = input.accountId || income.accountId || state.finance.accounts[0]?.id || null;
+  const advanced = advanceExpectedIncomeDate(income);
+  const transaction = addTransaction(state, {
+    type: 'ingreso',
+    amount: Number(income.amount),
+    category: income.category || 'Varios',
+    fixed: 'variable',
+    accountId,
+    date: input.date || todayISO(),
+    note: `Previsión confirmada: ${income.name}`,
+  });
+
+  Object.assign(income, advanced, { updatedAt: new Date().toISOString() });
   return transaction;
 }
 
@@ -71,8 +180,25 @@ export function deleteTransaction(state: LifeOSState, transactionId: string): vo
   if (!transaction) return;
   const dependency = transactionDependency(state, transaction);
   if (dependency) throw new Error(dependency);
-  applyTransactionBalance(state, transaction, -1);
-  state.finance.transactions = state.finance.transactions.filter((item) => item.id !== transactionId);
+  removeTransaction(state, transaction);
+}
+
+function removeTransaction(state: LifeOSState, transaction: Transaction): void {
+  const accountIds = affectedAccountIds([transaction.accountId]);
+  assertAccountsCanMaterialize(state, accountIds);
+  state.finance.transactions = state.finance.transactions.filter((item) => item.id !== transaction.id);
+  materializeAccounts(state, accountIds);
+}
+
+export function deleteLinkedTransaction(state: LifeOSState, transactionId?: string | null): void {
+  if (!transactionId) return;
+  const transaction = state.finance.transactions.find((item) => item.id === transactionId);
+  if (!transaction) return;
+  const isLinked = state.resale.inventory.some((item) => (
+    [item.purchaseTxId, item.saleTxId, item.feeTxId, item.financeTxId].includes(transaction.id)
+  ));
+  if (!isLinked) throw new Error('El movimiento no está vinculado a una operación de origen.');
+  removeTransaction(state, transaction);
 }
 
 export function updateTransaction(state: LifeOSState, transactionId: string, input: TransactionInput): Transaction {
@@ -85,17 +211,26 @@ export function updateTransaction(state: LifeOSState, transactionId: string, inp
   if (!input.accountId || !state.finance.accounts.some((account) => account.id === input.accountId)) throw new Error('Elegí una cuenta válida.');
   if (!input.category.trim()) throw new Error('Elegí una categoría.');
 
-  applyTransactionBalance(state, transaction, -1);
+  const previousAccountId = transaction.accountId;
+  const date = input.date || todayISO();
+  const accountIds = affectedAccountIds([previousAccountId, input.accountId]);
+  assertAccountsCanMaterialize(state, accountIds);
+  const effectiveOrder = date === transaction.date && transaction.effectiveOrder
+    ? transaction.effectiveOrder
+    : nextFinanceEffectiveOrder(state, date);
+  const revisionOrder = createFinanceRevisionOrderAfter(transaction.revisionOrder);
   Object.assign(transaction, {
     type: input.type,
     amount,
     category: input.category.trim(),
     fixed: input.fixed,
-    date: input.date || todayISO(),
+    date,
+    effectiveOrder,
+    revisionOrder,
     note: input.note?.trim() || '',
     accountId: input.accountId,
   });
-  applyTransactionBalance(state, transaction);
+  materializeAccounts(state, accountIds);
   return transaction;
 }
 
@@ -187,26 +322,31 @@ export function addTransfer(state: LifeOSState, input: TransferInput): FinanceTr
   if (!state.finance.accounts.some((account) => account.id === input.fromAccountId)) throw new Error('La cuenta de origen ya no existe.');
   if (!state.finance.accounts.some((account) => account.id === input.toAccountId)) throw new Error('La cuenta de destino ya no existe.');
 
+  const date = input.date || todayISO();
+  const accountIds = affectedAccountIds([input.fromAccountId, input.toAccountId]);
+  assertAccountsCanMaterialize(state, accountIds);
   const transfer: FinanceTransfer = {
     id: uid(),
+    effectiveOrder: nextFinanceEffectiveOrder(state, date),
+    revisionOrder: createFinanceRevisionOrder(),
     fromAccountId: input.fromAccountId,
     toAccountId: input.toAccountId,
     amount,
-    date: input.date || todayISO(),
+    date,
     note: input.note?.trim() || '',
   };
   state.finance.transfers.push(transfer);
-  if (!balanceIsFixedAfter(state, transfer.fromAccountId, transfer.date)) adjustAccountBalance(state, transfer.fromAccountId, -amount);
-  if (!balanceIsFixedAfter(state, transfer.toAccountId, transfer.date)) adjustAccountBalance(state, transfer.toAccountId, amount);
+  materializeAccounts(state, accountIds);
   return transfer;
 }
 
 export function deleteTransfer(state: LifeOSState, transferId: string): void {
   const transfer = state.finance.transfers.find((item) => item.id === transferId);
   if (!transfer) return;
-  if (!balanceIsFixedAfter(state, transfer.fromAccountId, transfer.date)) adjustAccountBalance(state, transfer.fromAccountId, transfer.amount);
-  if (!balanceIsFixedAfter(state, transfer.toAccountId, transfer.date)) adjustAccountBalance(state, transfer.toAccountId, -transfer.amount);
+  const accountIds = affectedAccountIds([transfer.fromAccountId, transfer.toAccountId]);
+  assertAccountsCanMaterialize(state, accountIds);
   state.finance.transfers = state.finance.transfers.filter((item) => item.id !== transferId);
+  materializeAccounts(state, accountIds);
 }
 
 export interface ReconciliationInput {
@@ -222,8 +362,6 @@ export function reconcileAccount(state: LifeOSState, input: ReconciliationInput)
   const actualBalance = Number(input.actualBalance);
   if (!Number.isFinite(actualBalance)) throw new Error('Ingresá el saldo real.');
 
-  const systemBalance = Number(account.balance || 0);
-  const difference = actualBalance - systemBalance;
   const date = input.date || todayISO();
   const normalizedNote = input.note?.trim() || '';
   const duplicate = state.finance.reconciliations.find((item) => (
@@ -233,11 +371,38 @@ export function reconcileAccount(state: LifeOSState, input: ReconciliationInput)
     && String(item.note || '') === normalizedNote
   ));
   if (duplicate) return duplicate;
-  let adjustmentTxId: string | null = null;
+  assertAccountsCanMaterialize(state, [account.id], true);
+
+  const reconciliation: AccountReconciliation = {
+    id: uid(),
+    effectiveOrder: nextFinanceEffectiveOrder(state, date),
+    revisionOrder: createFinanceRevisionOrder(),
+    accountId: account.id,
+    date,
+    systemBalance: 0,
+    actualBalance,
+    difference: 0,
+    adjustmentTxId: null,
+    note: normalizedNote,
+  };
+  state.finance.reconciliations.push(reconciliation);
+  const systemBalance = reconstructAccountBalanceBeforeEvent(
+    account,
+    reconciliation.id,
+    state.finance.transactions,
+    state.finance.transfers,
+    state.finance.reconciliations,
+  );
+  if (systemBalance === null) throw new Error('La cuenta necesita un saldo inicial conocido antes de reconstruir su saldo.');
+  const difference = actualBalance - systemBalance;
+  reconciliation.systemBalance = systemBalance;
+  reconciliation.difference = difference;
 
   if (difference !== 0) {
     const transaction: Transaction = {
       id: uid(),
+      effectiveOrder: nextFinanceEffectiveOrder(state, date),
+      revisionOrder: reconciliation.revisionOrder,
       type: difference > 0 ? 'ingreso' : 'gasto',
       amount: Math.abs(difference),
       category: 'Ajuste de saldo',
@@ -248,45 +413,35 @@ export function reconcileAccount(state: LifeOSState, input: ReconciliationInput)
       origin: 'adjustment',
     };
     state.finance.transactions.push(transaction);
-    adjustmentTxId = transaction.id;
+    reconciliation.adjustmentTxId = transaction.id;
   }
 
-  account.balance = actualBalance;
-  account.lastReconciledAt = date;
-  const reconciliation: AccountReconciliation = {
-    id: uid(),
-    accountId: account.id,
-    date,
-    systemBalance,
-    actualBalance,
-    difference,
-    adjustmentTxId,
-    note: normalizedNote,
-  };
-  state.finance.reconciliations.push(reconciliation);
+  refreshLastReconciledAt(state, account.id);
+  materializeAccounts(state, [account.id]);
   return reconciliation;
 }
 
 function refreshLastReconciledAt(state: LifeOSState, accountId: string): void {
   const account = state.finance.accounts.find((item) => item.id === accountId);
   if (!account) return;
-  account.lastReconciledAt = state.finance.reconciliations
+  const latest = state.finance.reconciliations
     .filter((item) => item.accountId === accountId)
-    .map((item) => item.date)
-    .sort()
-    .at(-1) || null;
+    .map((item) => ({ kind: 'reconciliation' as const, ...item }))
+    .sort(compareLedgerEvents)
+    .at(-1);
+  account.lastReconciledAt = latest?.date || null;
 }
 
 export function deleteReconciliation(state: LifeOSState, reconciliationId: string): void {
   const reconciliation = state.finance.reconciliations.find((item) => item.id === reconciliationId);
   if (!reconciliation) return;
-  // Conciliar declara un saldo observado. Al limpiar el registro no se debe
-  // volver a mover el dinero actual ni deshacer movimientos posteriores.
+  assertAccountsCanMaterialize(state, [reconciliation.accountId], true);
   if (reconciliation.adjustmentTxId) {
     state.finance.transactions = state.finance.transactions.filter((item) => item.id !== reconciliation.adjustmentTxId);
   }
   state.finance.reconciliations = state.finance.reconciliations.filter((item) => item.id !== reconciliationId);
   refreshLastReconciledAt(state, reconciliation.accountId);
+  materializeAccounts(state, [reconciliation.accountId]);
 }
 
 export function updateReconciliation(state: LifeOSState, reconciliationId: string, input: ReconciliationInput): AccountReconciliation {
@@ -297,46 +452,63 @@ export function updateReconciliation(state: LifeOSState, reconciliationId: strin
   if (!account) throw new Error('La cuenta ya no existe.');
   const actualBalance = Number(input.actualBalance);
   if (!Number.isFinite(actualBalance)) throw new Error('Ingresá el saldo real.');
-
-  const wasLatest = reconciliation.date === state.finance.reconciliations
-    .filter((item) => item.accountId === reconciliation.accountId)
-    .map((item) => item.date)
-    .sort()
-    .at(-1);
-  if (wasLatest && reconciliation.accountId === input.accountId) {
-    account.balance += actualBalance - Number(reconciliation.actualBalance || 0);
-  }
-
-  const difference = actualBalance - Number(reconciliation.systemBalance || 0);
+  assertAccountsCanMaterialize(state, [account.id], true);
+  const nextDate = input.date || reconciliation.date;
+  const dateChanged = nextDate !== reconciliation.date;
+  const effectiveOrder = !dateChanged && reconciliation.effectiveOrder
+    ? reconciliation.effectiveOrder
+    : nextFinanceEffectiveOrder(state, nextDate);
+  const revisionOrder = createFinanceRevisionOrderAfter(reconciliation.revisionOrder);
   let adjustment = reconciliation.adjustmentTxId
     ? state.finance.transactions.find((item) => item.id === reconciliation.adjustmentTxId)
     : undefined;
+
+  Object.assign(reconciliation, {
+    accountId: account.id,
+    actualBalance,
+    date: nextDate,
+    effectiveOrder,
+    revisionOrder,
+    note: input.note?.trim() || '',
+  });
+  const systemBalance = reconstructAccountBalanceBeforeEvent(
+    account,
+    reconciliation.id,
+    state.finance.transactions,
+    state.finance.transfers,
+    state.finance.reconciliations,
+  );
+  if (systemBalance === null) throw new Error('La cuenta necesita un saldo inicial conocido antes de reconstruir su saldo.');
+  const difference = actualBalance - systemBalance;
   if (difference === 0 && adjustment) {
     state.finance.transactions = state.finance.transactions.filter((item) => item.id !== adjustment?.id);
     adjustment = undefined;
   } else if (difference !== 0) {
     if (!adjustment) {
       adjustment = {
-        id: uid(), type: difference > 0 ? 'ingreso' : 'gasto', amount: Math.abs(difference),
-        category: 'Ajuste de saldo', fixed: 'variable', date: input.date || reconciliation.date,
+        id: uid(), effectiveOrder: nextFinanceEffectiveOrder(state, nextDate), revisionOrder, type: difference > 0 ? 'ingreso' : 'gasto', amount: Math.abs(difference),
+        category: 'Ajuste de saldo', fixed: 'variable', date: nextDate,
         note: input.note?.trim() || `Conciliación de ${account.name}`, accountId: account.id, origin: 'adjustment',
       };
       state.finance.transactions.push(adjustment);
     } else {
       Object.assign(adjustment, {
         type: difference > 0 ? 'ingreso' : 'gasto', amount: Math.abs(difference),
-        date: input.date || reconciliation.date, note: input.note?.trim() || `Conciliación de ${account.name}`,
+        date: nextDate,
+        effectiveOrder: dateChanged || !adjustment.effectiveOrder
+          ? nextFinanceEffectiveOrder(state, nextDate)
+          : adjustment.effectiveOrder,
+        revisionOrder,
+        note: input.note?.trim() || `Conciliación de ${account.name}`,
         accountId: account.id,
       });
     }
   }
 
-  reconciliation.accountId = account.id;
-  reconciliation.actualBalance = actualBalance;
+  reconciliation.systemBalance = systemBalance;
   reconciliation.difference = difference;
-  reconciliation.date = input.date || reconciliation.date;
-  reconciliation.note = input.note?.trim() || '';
   reconciliation.adjustmentTxId = adjustment?.id || null;
   refreshLastReconciledAt(state, reconciliation.accountId);
+  materializeAccounts(state, [reconciliation.accountId]);
   return reconciliation;
 }

@@ -1,7 +1,7 @@
 import React from 'react';
 import { FinancialCommitment, LifeOSState } from '../types';
-import { CashFlowProjectionResult } from '../lib/calculations';
-import { fmtDate, fmtMoney } from '../lib/storage';
+import { CashFlowProjectionResult, resolveFinancialCommitment } from '../lib/calculations';
+import { fmtDate, fmtMoney, todayISO } from '../lib/storage';
 import { AppIcon } from './AppIcon';
 import { PrivacyAmount } from './PrivacyAmount';
 import { FinanceBalanceAtmosphere } from './visual/FinanceBalanceAtmosphere';
@@ -364,7 +364,8 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {cashFlow.commitments.slice(0, 3).map((com) => {
-              const isOverdue = com.nextDueDate < new Date().toISOString().slice(0, 10);
+              const persistedCommitment = resolveFinancialCommitment(state, com);
+              const isOverdue = Boolean(com.dueDate && com.dueDate < todayISO());
               return (
                 <div
                   key={com.id}
@@ -377,10 +378,14 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                        {com.name}
+                        {com.label}
                       </h4>
                       <span className={`text-[10px] font-semibold mt-0.5 block ${isOverdue ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-slate-400 dark:text-slate-500'}`}>
-                        {isOverdue ? `Venció ${fmtDate(com.nextDueDate)}` : `Vence ${fmtDate(com.nextDueDate)}`}
+                        {com.dueDate
+                          ? isOverdue
+                            ? `Venció ${fmtDate(com.dueDate)}`
+                            : `Vence ${fmtDate(com.dueDate)}`
+                          : 'Sin fecha'}
                       </span>
                     </div>
 
@@ -389,23 +394,29 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
                     </PrivacyAmount>
                   </div>
 
-                  <div className="mt-3 pt-2 border-t border-slate-200/50 dark:border-slate-800/50 flex items-center justify-between text-xs">
-                    <button
-                      type="button"
-                      onClick={() => onPayCommitment(com)}
-                      className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer flex items-center gap-1 text-[11px]"
-                    >
-                      <span>✓ Pagar</span>
-                    </button>
+                  {persistedCommitment ? (
+                    <div className="mt-3 pt-2 border-t border-slate-200/50 dark:border-slate-800/50 flex items-center justify-between text-xs">
+                      <button
+                        type="button"
+                        onClick={() => onPayCommitment(persistedCommitment)}
+                        className="font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer flex items-center gap-1 text-[11px]"
+                      >
+                        <span>✓ Pagar</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => onEditCommitment(com)}
-                      className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-[11px]"
-                    >
-                      Editar
-                    </button>
-                  </div>
+                      <button
+                        type="button"
+                        onClick={() => onEditCommitment(persistedCommitment)}
+                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-[11px]"
+                      >
+                        Editar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-3 pt-2 border-t border-slate-200/50 dark:border-slate-800/50 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
+                      {com.kind === 'subscription' ? 'Suscripción prevista' : 'Cuota prevista'}
+                    </div>
+                  )}
                 </div>
               );
             })}

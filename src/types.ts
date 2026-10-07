@@ -65,6 +65,8 @@ export interface DailyContextEntry {
 
 export interface Transaction {
   id: string;
+  effectiveOrder?: string;
+  revisionOrder?: string;
   type: 'gasto' | 'ingreso';
   amount: number;
   category: string;
@@ -77,6 +79,8 @@ export interface Transaction {
 
 export interface FinanceTransfer {
   id: string;
+  effectiveOrder?: string;
+  revisionOrder?: string;
   fromAccountId: string;
   toAccountId: string;
   amount: number;
@@ -86,6 +90,8 @@ export interface FinanceTransfer {
 
 export interface AccountReconciliation {
   id: string;
+  effectiveOrder?: string;
+  revisionOrder?: string;
   accountId: string;
   actualBalance: number;
   systemBalance: number;
@@ -161,6 +167,7 @@ export interface FinancialCommitment {
 
 export interface CashFlowCommitment {
   id: string;
+  sourceId: string;
   label: string;
   amount: number;
   dueDate: string | null;

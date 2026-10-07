@@ -174,8 +174,8 @@ test('F5 — Fase 6: Finanzas — 10 Invariantes Matemáticas Estrictas', () => 
 
   // Invariante 1: Saldo real es exactamente la suma de cuentas líquidas
   state.finance.accounts = [
-    { id: 'a1', name: 'Banco 1', balance: 10000.5 },
-    { id: 'a2', name: 'Efectivo', balance: 350.25 },
+    { id: 'a1', name: 'Banco 1', balance: 10000.5, initialBalance: 10000.5 },
+    { id: 'a2', name: 'Efectivo', balance: 350.25, initialBalance: 350.25 },
   ];
   assert.equal(calcAccountsTotal(state), 10350.75);
 
@@ -210,6 +210,8 @@ test('F5 — Fase 6: Finanzas — 10 Invariantes Matemáticas Estrictas', () => 
   // Transferencia de 2000 de a1 a a2
   state.finance.accounts[0].balance -= 2000;
   state.finance.accounts[1].balance += 2000;
+  state.finance.accounts[0].initialBalance = state.finance.accounts[0].balance;
+  state.finance.accounts[1].initialBalance = state.finance.accounts[1].balance;
   assert.equal(calcAccountsTotal(state), initialTotal);
 
   // Invariante 6: Eliminar una transacción revierte correctamente su impacto
@@ -400,7 +402,7 @@ test('F5 — Fase 10: Gimnasio — Ciclo de Vida y Persistencia Atómica', () =>
 
 test('F5 — Fase 12: Quick Capture & Universal Intent Parsing', () => {
   const state = defaultState();
-  state.finance.accounts = [{ id: 'a1', name: 'Efectivo', balance: 1000 }];
+  state.finance.accounts = [{ id: 'a1', name: 'Efectivo', balance: 1000, initialBalance: 1000 }];
 
   // Test expense intent with finance context
   const expIntent = parseUniversalIntent('500 comida', state.finance);

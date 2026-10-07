@@ -83,7 +83,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
               </span>
             </div>
             <p className="text-xs text-[var(--text-soft)] mt-0.5">
-              Simulación de saldo día a día según cobros planificados y pagos fijos
+              Simulación de saldo día a día según cobros y salidas previstas
             </p>
           </div>
 
@@ -125,8 +125,8 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
           </div>
 
           <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800/50">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">Compromisos Fijos</span>
-            <PrivacyAmount as="span" className="font-mono font-black text-xl text-rose-500 block mt-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">Salidas previstas</span>
+            <PrivacyAmount as="span" className="font-mono font-black text-xl text-slate-900 dark:text-white block mt-1">
               −{fmtMoney(projection.committed)}
             </PrivacyAmount>
             <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">{projection.commitments.length} pagos</span>
@@ -234,7 +234,13 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                               Saldo estimado: {fmtMoney(pt.endingBalance)}
                             </p>
                             {pt.netDayChange !== 0 && (
-                              <p className={`font-mono text-[11px] font-bold ${pt.netDayChange > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                              <p className={`font-mono text-[11px] font-bold ${
+                                pt.netDayChange > 0
+                                  ? 'text-emerald-500'
+                                  : pt.endingBalance < 0
+                                    ? 'text-rose-500'
+                                    : 'text-[var(--text)]'
+                              }`}>
                                 Flujo neto: {pt.netDayChange > 0 ? '+' : ''}{fmtMoney(pt.netDayChange)}
                               </p>
                             )}
@@ -339,7 +345,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-extrabold text-[var(--text)]">Compromisos & Cuotas</h3>
+              <h3 className="text-sm font-extrabold text-[var(--text)]">Compromisos y cuotas</h3>
               <p className="text-xs text-[var(--text-soft)]">
                 {sortedCommitments.length} compromiso{sortedCommitments.length === 1 ? '' : 's'} programado{sortedCommitments.length === 1 ? '' : 's'}
               </p>
@@ -394,7 +400,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      <PrivacyAmount as="span" className="font-mono font-bold text-xs text-rose-500">
+                      <PrivacyAmount as="span" className={`font-mono font-bold text-xs ${isOverdue && com.active ? 'text-rose-500' : 'text-[var(--text)]'}`}>
                         −{fmtMoney(com.amount)}
                       </PrivacyAmount>
 
@@ -578,14 +584,22 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                       <td className="py-2 px-3 font-mono text-[var(--text)] whitespace-nowrap">{fmtDate(item.date)}</td>
                       <td className="py-2 px-3 whitespace-nowrap">
                         <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                          item.type === 'income' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-rose-500/10 text-rose-500'
+                          item.type === 'income'
+                            ? 'bg-emerald-500/10 text-emerald-600'
+                            : item.isOverdue
+                              ? 'bg-rose-500/10 text-rose-500'
+                              : 'bg-slate-500/10 text-[var(--text-soft)]'
                         }`}>
-                          {item.type === 'income' ? 'Ingreso' : 'Compromiso'}
+                          {item.type === 'income' ? 'Ingreso' : item.isOverdue ? 'Vencido' : 'Salida prevista'}
                         </span>
                       </td>
                       <td className="py-2 px-3 font-medium text-[var(--text)]">{item.label}</td>
                       <td className={`py-2 px-3 text-right font-mono font-bold whitespace-nowrap ${
-                        item.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'
+                        item.type === 'income'
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : item.isOverdue
+                            ? 'text-rose-500'
+                            : 'text-[var(--text)]'
                       }`}>
                         <PrivacyAmount>
                           {item.type === 'income' ? '+' : '−'}{fmtMoney(item.amount)}

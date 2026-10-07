@@ -61,6 +61,7 @@ import {
   loadTombstones,
   saveTombstones,
 } from './lib/syncMerge';
+import { nextFinanceDeletionTimestamp } from './lib/financeRevision';
 
 import { AppIcon } from './components/AppIcon';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
@@ -327,8 +328,9 @@ export default function App() {
     const deletedIds = detectDeletedEntityIds(previous, draft);
     if (deletedIds.length > 0 && cloudUserRef.current) {
       const currentTombstones = tombstonesRef.current;
+      const deletionTime = Date.now();
       for (const id of deletedIds) {
-        currentTombstones[id] = Date.now();
+        currentTombstones[id] = nextFinanceDeletionTimestamp(previous, id, deletionTime);
       }
       saveTombstones(cloudUserRef.current.uid, currentTombstones);
     }

@@ -12,6 +12,7 @@ import {
   normalizeCategories,
   reactivateCategory,
   renameCategory,
+  setCategoryBudget,
   validateCategoryName,
 } from './financeCategories';
 import {
@@ -44,6 +45,18 @@ function createMockTx(overrides: Partial<Transaction> = {}): Transaction {
     ...overrides,
   };
 }
+
+test('presupuesto creado por categoryId sobrevive al renombrado de la categoría', () => {
+  const finance = createMockFinance({ categories: [], budgets: {} });
+  const category = addCategory(finance, 'Cuidado personal');
+
+  setCategoryBudget(finance, category.id, 4500);
+  renameCategory(finance, category.id, 'Bienestar');
+
+  assert.equal(finance.budgets[category.id], 4500);
+  assert.equal(finance.budgets['Cuidado personal'], undefined);
+  assert.equal(getCategoryName(finance.categories, category.id), 'Bienestar');
+});
 
 test('1. Crear categoría válida: se agrega con id, name, active: true', () => {
   const finance = createMockFinance({

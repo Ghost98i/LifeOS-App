@@ -9,7 +9,7 @@ interface FinanceBudgetProgressProps {
   categories: FinanceCategoryInput[];
   catSpent: Record<string, number>;
   budgets: Record<string, number>;
-  onSetBudget: (category: string, amountStr: string) => void;
+  onSetBudget: (categoryId: string, amountStr: string) => void;
   onOpenCategoryManager?: () => void;
 }
 
@@ -57,13 +57,13 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
 
   const displayList = showAllCategories ? categoryStats : (configured.length > 0 ? configured : categoryStats.slice(0, 5));
 
-  const startEdit = (cat: string, currentBudget: number) => {
-    setEditingCategory(cat);
+  const startEdit = (categoryId: string, currentBudget: number) => {
+    setEditingCategory(categoryId);
     setTempBudget(currentBudget > 0 ? String(currentBudget) : '');
   };
 
-  const saveEdit = (cat: string) => {
-    onSetBudget(cat, tempBudget);
+  const saveEdit = (categoryId: string) => {
+    onSetBudget(categoryId, tempBudget);
     setEditingCategory(null);
   };
 
@@ -169,7 +169,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
               {displayList.map((item) => {
-                const isEditing = editingCategory === item.category;
+                const isEditing = editingCategory === item.categoryId;
                 return (
                   <tr
                     key={item.categoryId}
@@ -193,7 +193,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                             value={tempBudget}
                             onChange={(e) => setTempBudget(e.target.value)}
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') saveEdit(item.category);
+                              if (e.key === 'Enter') saveEdit(item.categoryId);
                               if (e.key === 'Escape') setEditingCategory(null);
                             }}
                             className="w-24 px-2 py-0.5 rounded border border-indigo-500 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-none"
@@ -201,7 +201,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                           />
                           <button
                             type="button"
-                            onClick={() => saveEdit(item.category)}
+                            onClick={() => saveEdit(item.categoryId)}
                             className="px-1.5 py-0.5 rounded bg-indigo-600 text-white font-bold text-[10px] cursor-pointer"
                           >
                             ✓
@@ -210,7 +210,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                       ) : (
                         <button
                           type="button"
-                          onClick={() => startEdit(item.category, item.budget)}
+                          onClick={() => startEdit(item.categoryId, item.budget)}
                           className="hover:underline text-left cursor-pointer flex items-center gap-1 group-hover:text-indigo-600 dark:group-hover:text-indigo-400"
                           title="Hacé clic para editar presupuesto"
                         >

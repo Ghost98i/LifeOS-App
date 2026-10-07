@@ -9,6 +9,53 @@ import {
   convertInboxItem,
   suggestedQuickAccountId,
 } from './quickCapture';
+import { addTransaction, reconcileAccount } from './financeFlows';
+
+test('Quick Capture respeta la misma no retroactividad que Finanzas', () => {
+  const financeState = defaultState();
+  const quickState = defaultState();
+  const financeAccount = financeState.finance.accounts[0];
+  const quickAccount = quickState.finance.accounts[0];
+  financeAccount.balance = 1000;
+  quickAccount.balance = 1000;
+
+  reconcileAccount(financeState, { accountId: financeAccount.id, actualBalance: 1000, date: '2026-09-10' });
+  reconcileAccount(quickState, { accountId: quickAccount.id, actualBalance: 1000, date: '2026-09-10' });
+
+  addTransaction(financeState, {
+    type: 'gasto', amount: 100, category: 'Comida', fixed: 'variable',
+    accountId: financeAccount.id, date: '2026-09-09',
+  });
+  addQuickTransaction(quickState, {
+    type: 'gasto', amount: 100, category: 'Comida',
+    accountId: quickAccount.id, date: '2026-09-09',
+  });
+
+  assert.equal(financeAccount.balance, 1000);
+  assert.equal(quickAccount.balance, financeAccount.balance);
+  assert.equal(quickState.finance.transactions.length, financeState.finance.transactions.length);
+
+  const laterFinanceState = defaultState();
+  const laterQuickState = defaultState();
+  const laterFinanceAccount = laterFinanceState.finance.accounts[0];
+  const laterQuickAccount = laterQuickState.finance.accounts[0];
+  laterFinanceAccount.balance = 1000;
+  laterQuickAccount.balance = 1000;
+  reconcileAccount(laterFinanceState, { accountId: laterFinanceAccount.id, actualBalance: 1000, date: '2026-09-10' });
+  reconcileAccount(laterQuickState, { accountId: laterQuickAccount.id, actualBalance: 1000, date: '2026-09-10' });
+
+  addTransaction(laterFinanceState, {
+    type: 'gasto', amount: 100, category: 'Comida', fixed: 'variable',
+    accountId: laterFinanceAccount.id, date: '2026-09-11',
+  });
+  addQuickTransaction(laterQuickState, {
+    type: 'gasto', amount: 100, category: 'Comida',
+    accountId: laterQuickAccount.id, date: '2026-09-11',
+  });
+
+  assert.equal(laterFinanceAccount.balance, 900);
+  assert.equal(laterQuickAccount.balance, laterFinanceAccount.balance);
+});
 
 test('captura un ingreso y actualiza la cuenta elegida', () => {
   const state = defaultState();

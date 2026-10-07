@@ -32,9 +32,10 @@ import { showToast } from '../lib/toast';
 import { adoptSmartDailyPriorities } from '../lib/smartPriorities';
 import { getActivityTimeline, formatRelativeTime } from '../lib/activityTimeline';
 import { getTodayUnifiedOverview } from '../lib/todayOverview';
-import { getSortedNotes } from '../lib/notesFlows';
+import { getDashboardNotes } from '../lib/notesFlows';
 import { isModuleEnabled } from '../lib/moduleVisibility';
 import { getDashboardLayout } from '../lib/dashboardLayout';
+import { TodayNotesSection } from './TodayNotesSection';
 
 /** Format an ISO date string (YYYY-MM-DD) for display in Uruguayan locale */
 const fmtDate = (iso?: string): string => {
@@ -143,12 +144,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       .slice(0, 6);
   }, [state]);
 
-  const recentNotesSlice = useMemo(() => {
+  const dashboardNotes = useMemo(() => {
     if (!isModuleEnabled(state, 'notas')) {
-      return [];
+      return { pinned: [], recent: [] };
     }
-    const active = (state.notes?.postits || []).filter((n) => !n.archived);
-    return getSortedNotes(active, { includeArchived: false }).slice(0, 3);
+    return getDashboardNotes(state.notes?.postits || []);
   }, [state]);
 
   const handleActivityNavigate = (module: string) => {
@@ -329,7 +329,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   );
 
   const layout = getDashboardLayout(state, {
-    hasActiveNotes: recentNotesSlice.length > 0,
+    hasActiveNotes: dashboardNotes.pinned.length > 0 || dashboardNotes.recent.length > 0,
     hasRecentActivity: recentActivity.length > 0,
     hasUrgentAlerts,
     hasFinanceData: Boolean(financeData),
@@ -503,8 +503,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* Adaptive Responsive Layout (4-Block semantic composition) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div className={`contents lg:block ${layout.leftColSpanClass} lg:space-y-6`}>
         {/* Block 1 (Upper Primary): Focus, Radar & Action */}
-        <div className={`${layout.leftColSpanClass} space-y-6`}>
+        <div className={`${layout.leftColSpanClass} order-1 space-y-6 lg:order-none`}>
           {/* 1. The 3 Daily Priorities (Star component - Priority 1: Qué tengo que hacer hoy) */}
           {todayCustomization.visibleWidgets.priorities !== false && (
             <TodayFocus
@@ -691,110 +692,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           })()}
         </div>
 
-        {/* Block 2 (Upper Contextual): Finance & Personal Context */}
-        <div className={`${layout.rightColSpanClass} space-y-6`}>
-          {/* 1. Compact Intelligent Financial Overview */}
-          {layout.showFinanceCard && financeData && todayCustomization.visibleWidgets.financeClarity !== false && (() => {
-            const { totalCuentas, cashFlow, ingresoMes, gastoMes, balanceMes } = financeData;
-            return (
-              <div className="relative overflow-hidden rounded-3xl border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/50 backdrop-blur-md p-5 shadow-2xs space-y-3.5">
-                {/* Abstract Ambient Liquidity Flow Mark */}
-                <FinanceFlowMark status={cashFlow.thresholdWarning ? 'warning' : 'healthy'} />
-                <div className="absolute top-0 right-0 w-36 h-20 bg-radial from-emerald-500/10 via-emerald-500/5 to-transparent pointer-events-none rounded-full blur-xl -mr-4 -mt-4" />
-                <div className="relative flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shadow-2xs">
-                      <AppIcon name="wallet" className="h-3.5 w-3.5" />
-                    </span>
-                    <h3 className="text-xs sm:text-sm font-bold text-[var(--text)]">Liquidez y Compromisos</h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onNavigate('finanzas')}
-                    className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                  >
-                    Finanzas →
-                  </button>
-                </div>
-
-                <div className="relative grid grid-cols-2 gap-3 py-2 border-y border-[var(--border)]/60">
-                  <div
-                    onClick={() => onNavigate('finanzas')}
-                    className="cursor-pointer group"
-                  >
-                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-[var(--text-faint)] block">
-                      Saldo Real
-                    </span>
-                    <div className="text-xl sm:text-2xl font-black tracking-tight text-[var(--text)] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors tabular-nums mt-0.5">
-                      <PrivacyAmount>{fmtMoney(totalCuentas)}</PrivacyAmount>
-                    </div>
-                    <span className="text-[10px] text-[var(--text-soft)] block mt-0.5 font-medium">
-                      {state.finance.accounts.length} {state.finance.accounts.length === 1 ? 'cuenta' : 'cuentas activas'}
-                    </span>
-                  </div>
-
-                  <div
-                    onClick={() => onNavigate('finanzas')}
-                    className="cursor-pointer group"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-[var(--text-faint)] block">
-                        Disponible (30d)
-                      </span>
-                      {cashFlow.thresholdWarning && (
-                        <span className={`text-[8px] font-black px-1.5 py-0.2 rounded ${
-                          cashFlow.isDeficit
-                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
-                            : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                        }`}>
-                          {cashFlow.isDeficit ? 'Déficit' : 'Alerta'}
-                        </span>
-                      )}
-                    </div>
-                    <div className={`text-xl sm:text-2xl font-black tracking-tight tabular-nums mt-0.5 ${
-                      cashFlow.realAvailable >= 0
-                        ? cashFlow.thresholdWarning
-                          ? 'text-amber-500'
-                          : 'text-emerald-600 dark:text-emerald-400'
-                        : 'text-rose-600'
-                    }`}>
-                      <PrivacyAmount>{fmtMoney(cashFlow.realAvailable)}</PrivacyAmount>
-                    </div>
-                    <span className="text-[10px] text-[var(--text-soft)] block mt-0.5 tabular-nums font-medium">
-                      −<PrivacyAmount>{fmtMoney(cashFlow.committed)}</PrivacyAmount> compromisos
-                    </span>
-                  </div>
-                </div>
-
-                {/* Mes Balance Bar */}
-                <div
-                  onClick={() => onNavigate('finanzas')}
-                  className="relative flex items-center justify-between pt-0.5 cursor-pointer group text-xs"
-                >
-                  <span className="text-[11px] text-[var(--text-soft)]">
-                    Mes: +<PrivacyAmount>{fmtMoney(ingresoMes)}</PrivacyAmount> / −<PrivacyAmount>{fmtMoney(gastoMes)}</PrivacyAmount>
-                  </span>
-                  <span
-                    className={`text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-md tabular-nums ${
-                      balanceMes >= 0
-                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                        : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-                    }`}
-                  >
-                    <PrivacyAmount>{balanceMes >= 0 ? `+${fmtMoney(balanceMes)}` : fmtMoney(balanceMes)}</PrivacyAmount>
-                  </span>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* 2. Personal Context & Sleep/Energy */}
-          <PersonalContextCard state={state} onUpdateState={onUpdateState} />
-        </div>
-
         {/* Block 3 (Lower Action): Today's Checklist & Routines */}
         {todayCustomization.visibleWidgets.pendingTasks !== false && (
-          <div className={`${layout.leftColSpanClass}`}>
+          <div className={`${layout.leftColSpanClass} order-3 lg:order-none`}>
             {/* Today's Checklist & Routines Card */}
             <div className="rounded-3xl border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/50 backdrop-blur-md p-5 sm:p-6 shadow-2xs space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2.5">
@@ -999,97 +899,127 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
         )}
 
-        {/* Block 4 (Lower Secondary): Notes, Weekly Review & Activity */}
-        <div className={`${layout.rightColSpanClass} space-y-6`}>
+        </div>
 
-          {/* 3. Notas Rápidas (only rendered when active notes exist) */}
-          {layout.showNotesCard && todayCustomization.visibleWidgets.recentNotes !== false && (
-            <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-3.5 sm:p-4 shadow-2xs space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                    <AppIcon name="note" className="h-3.5 w-3.5" />
-                  </span>
-                  <div>
-                    <h3 className="text-xs sm:text-sm font-bold text-[var(--text)]">Notas Rápidas</h3>
+        <div className={`contents lg:block ${layout.rightColSpanClass} lg:space-y-6`}>
+        {/* Block 2 (Upper Contextual): Finance & Personal Context */}
+        <div className={`${layout.rightColSpanClass} order-2 space-y-6 lg:order-none`}>
+          {/* 1. Compact Intelligent Financial Overview */}
+          {layout.showFinanceCard && financeData && todayCustomization.visibleWidgets.financeClarity !== false && (() => {
+            const { totalCuentas, cashFlow, ingresoMes, gastoMes, balanceMes } = financeData;
+            return (
+              <div className="relative overflow-hidden rounded-3xl border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/50 backdrop-blur-md p-5 shadow-2xs space-y-3.5">
+                {/* Abstract Ambient Liquidity Flow Mark */}
+                <FinanceFlowMark status={cashFlow.thresholdWarning ? 'warning' : 'healthy'} />
+                <div className="absolute top-0 right-0 w-36 h-20 bg-radial from-emerald-500/10 via-emerald-500/5 to-transparent pointer-events-none rounded-full blur-xl -mr-4 -mt-4" />
+                <div className="relative flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shadow-2xs">
+                      <AppIcon name="wallet" className="h-3.5 w-3.5" />
+                    </span>
+                    <h3 className="text-xs sm:text-sm font-bold text-[var(--text)]">Liquidez y Compromisos</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onNavigate('finanzas')}
+                    className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                  >
+                    Finanzas →
+                  </button>
+                </div>
+
+                <div className="relative grid grid-cols-2 gap-3 py-2 border-y border-[var(--border)]/60">
+                  <div
+                    onClick={() => onNavigate('finanzas')}
+                    className="cursor-pointer group"
+                  >
+                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-[var(--text-faint)] block">
+                      Saldo Real
+                    </span>
+                    <div className="text-xl sm:text-2xl font-black tracking-tight text-[var(--text)] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors tabular-nums mt-0.5">
+                      <PrivacyAmount>{fmtMoney(totalCuentas)}</PrivacyAmount>
+                    </div>
+                    <span className="text-[10px] text-[var(--text-soft)] block mt-0.5 font-medium">
+                      {state.finance.accounts.length} {state.finance.accounts.length === 1 ? 'cuenta' : 'cuentas activas'}
+                    </span>
+                  </div>
+
+                  <div
+                    onClick={() => onNavigate('finanzas')}
+                    className="cursor-pointer group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-[var(--text-faint)] block">
+                        Disponible (30d)
+                      </span>
+                      {cashFlow.thresholdWarning && (
+                        <span className={`text-[8px] font-black px-1.5 py-0.2 rounded ${
+                          cashFlow.isDeficit
+                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                            : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                        }`}>
+                          {cashFlow.isDeficit ? 'Déficit' : 'Alerta'}
+                        </span>
+                      )}
+                    </div>
+                    <div className={`text-xl sm:text-2xl font-black tracking-tight tabular-nums mt-0.5 ${
+                      cashFlow.realAvailable >= 0
+                        ? cashFlow.thresholdWarning
+                          ? 'text-amber-500'
+                          : 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-rose-600'
+                    }`}>
+                      <PrivacyAmount>{fmtMoney(cashFlow.realAvailable)}</PrivacyAmount>
+                    </div>
+                    <span className="text-[10px] text-[var(--text-soft)] block mt-0.5 tabular-nums font-medium">
+                      −<PrivacyAmount>{fmtMoney(cashFlow.committed)}</PrivacyAmount> compromisos
+                    </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onOpenQuickNote) onOpenQuickNote();
-                      else if (onOpenCapture) onOpenCapture();
-                      else onNavigate('notas');
-                    }}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-lg bg-[var(--surface-muted)] hover:bg-[var(--card)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer"
-                    title="Nueva nota rápida"
+
+                {/* Mes Balance Bar */}
+                <div
+                  onClick={() => onNavigate('finanzas')}
+                  className="relative flex items-center justify-between pt-0.5 cursor-pointer group text-xs"
+                >
+                  <span className="text-[11px] text-[var(--text-soft)]">
+                    Mes: +<PrivacyAmount>{fmtMoney(ingresoMes)}</PrivacyAmount> / −<PrivacyAmount>{fmtMoney(gastoMes)}</PrivacyAmount>
+                  </span>
+                  <span
+                    className={`text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-md tabular-nums ${
+                      balanceMes >= 0
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                        : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                    }`}
                   >
-                    <AppIcon name="plus" className="h-3 w-3 text-amber-500" />
-                    <span>Nota</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onNavigate('notas')}
-                    className="text-[11px] font-bold text-[var(--blue)] hover:underline transition-colors cursor-pointer"
-                  >
-                    Ver todas →
-                  </button>
+                    <PrivacyAmount>{balanceMes >= 0 ? `+${fmtMoney(balanceMes)}` : fmtMoney(balanceMes)}</PrivacyAmount>
+                  </span>
                 </div>
               </div>
+            );
+          })()}
 
-              <div className="divide-y divide-[var(--border)]/60">
-                {recentNotesSlice.map((note) => {
-                  const displayTitle = note.title?.trim() || note.text.trim().split('\n')[0].slice(0, 48) || 'Nota sin título';
-                  const isTruncated = !note.title && note.text.trim().split('\n')[0].length > 48;
-                  const snippet = note.title ? note.text.trim().split('\n')[0] : '';
-                  const relative = formatRelativeTime(note.updatedAt || note.date);
+          {/* 2. Personal Context & Sleep/Energy */}
+          <PersonalContextCard state={state} onUpdateState={onUpdateState} />
+        </div>
 
-                  return (
-                    <div
-                      key={note.id}
-                      onClick={() => onNavigate('notas')}
-                      className="py-2 flex items-start justify-between gap-2.5 hover:bg-[var(--surface-muted)]/50 px-1.5 rounded-xl transition-colors cursor-pointer group"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5">
-                          {note.pinned && (
-                            <span className="text-[10px] shrink-0" title="Nota fijada">📌</span>
-                          )}
-                          <p className={`text-xs font-semibold text-[var(--text)] truncate group-hover:text-[var(--blue)] transition-colors ${state.settings.privacyMode ? 'privacy-sensitive' : ''}`}>
-                            {displayTitle}{isTruncated ? '…' : ''}
-                          </p>
-                        </div>
-                        {snippet && snippet !== displayTitle && (
-                          <p className={`text-[10px] text-[var(--text-soft)] truncate mt-0.5 ${state.settings.privacyMode ? 'privacy-sensitive' : ''}`}>
-                            {snippet}
-                          </p>
-                        )}
-                        {note.tags && note.tags.length > 0 && (
-                          <div className="flex items-center gap-1 mt-0.5">
-                            {note.tags.slice(0, 2).map((tag) => (
-                              <span
-                                key={tag}
-                                className="text-[9px] font-medium px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20"
-                              >
-                                #{tag}
-                              </span>
-                            ))}
-                            {note.tags.length > 2 && (
-                              <span className="text-[9px] text-[var(--text-faint)]">
-                                +{note.tags.length - 2}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                      <span className="text-[10px] font-mono text-[var(--text-faint)] shrink-0 ml-1.5 mt-0.5">
-                        {relative}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+        {/* Block 4 (Lower Secondary): Notes, Weekly Review & Activity */}
+        <div className={`${layout.rightColSpanClass} order-4 space-y-6 lg:order-none`}>
+
+          {/* 3. Notas (only rendered when active notes exist) */}
+          {layout.showNotesCard && todayCustomization.visibleWidgets.recentNotes !== false && (
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3.5 shadow-2xs sm:p-4">
+              <TodayNotesSection
+                pinnedNotes={dashboardNotes.pinned}
+                recentNotes={dashboardNotes.recent}
+                privacyMode={state.settings.privacyMode}
+                onNavigate={() => onNavigate('notas')}
+                onAddNote={() => {
+                  if (onOpenQuickNote) onOpenQuickNote();
+                  else if (onOpenCapture) onOpenCapture();
+                  else onNavigate('notas');
+                }}
+              />
             </div>
           )}
 
@@ -1147,6 +1077,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               </div>
             </div>
           )}
+        </div>
         </div>
       </div>
 

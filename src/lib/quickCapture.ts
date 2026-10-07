@@ -1,8 +1,9 @@
 import type { EffortLevel, LifeOSState, Transaction } from '../types';
-import { adjustAccountBalance, defaultAccountId } from './calculations';
+import { defaultAccountId } from './calculations';
 import { todayISO, uid } from './storage';
 import { getAllCategories } from './financeCategories';
 import { isModuleEnabled } from './moduleVisibility';
+import { addTransaction } from './financeFlows';
 
 export interface QuickTransactionInput {
   type: 'gasto' | 'ingreso';
@@ -45,8 +46,7 @@ export function addQuickTransaction(state: LifeOSState, input: QuickTransactionI
     }
   }
 
-  const transaction: Transaction = {
-    id: uid(),
+  return addTransaction(state, {
     type: input.type,
     amount,
     category: resolvedCategory,
@@ -55,11 +55,7 @@ export function addQuickTransaction(state: LifeOSState, input: QuickTransactionI
     note: input.note?.trim() || '',
     accountId,
     origin: 'quick',
-  };
-
-  state.finance.transactions.push(transaction);
-  adjustAccountBalance(state, accountId, input.type === 'ingreso' ? amount : -amount);
-  return transaction;
+  });
 }
 
 export function addQuickTask(

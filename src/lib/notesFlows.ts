@@ -18,6 +18,39 @@ export interface UpdateNoteInput {
   archived?: boolean;
 }
 
+export interface DashboardNotes {
+  pinned: Postit[];
+  recent: Postit[];
+}
+
+function getNoteTimestamp(note: Postit): number {
+  const value = note.updatedAt || note.createdAt || note.date;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+/**
+ * Selects the two note levels shown in Hoy.
+ * Pinned notes preserve their existing array order because the model has no manual sort field.
+ * Recent notes exclude pinned notes to avoid repeating the same memory twice.
+ */
+export function getDashboardNotes(
+  notes: Postit[] = [],
+  limits: { pinned?: number; recent?: number } = {}
+): DashboardNotes {
+  const pinnedLimit = limits.pinned ?? 3;
+  const recentLimit = limits.recent ?? 3;
+  const active = notes.filter((note) => !note.archived);
+
+  return {
+    pinned: active.filter((note) => note.pinned).slice(0, pinnedLimit),
+    recent: active
+      .filter((note) => !note.pinned)
+      .sort((a, b) => getNoteTimestamp(b) - getNoteTimestamp(a))
+      .slice(0, recentLimit),
+  };
+}
+
 /**
  * Creates and appends a new note to state.notes.postits
  */
@@ -203,8 +236,8 @@ export function getSortedNotes(
       if (!a.pinned && b.pinned) return 1;
 
       // 2. UpdatedAt / Date descending
-      const timeA = a.updatedAt ? new Date(a.updatedAt).getTime() : new Date(a.date).getTime();
-      const timeB = b.updatedAt ? new Date(b.updatedAt).getTime() : new Date(b.date).getTime();
+      const timeA = getNoteTimestamp(a);
+      const timeB = getNoteTimestamp(b);
       return timeB - timeA;
     });
 }

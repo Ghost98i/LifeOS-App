@@ -8,6 +8,7 @@ import {
   toggleArchiveNote,
   convertNoteToTask,
   getSortedNotes,
+  getDashboardNotes,
   formatRelativeTime,
 } from './notesFlows';
 import { addQuickNote } from './quickCapture';
@@ -182,6 +183,42 @@ test('Notas: getSortedNotes filtra por texto, título y tags', () => {
 
   const byContent = getSortedNotes([n1, n2, n3], { searchQuery: 'leche' });
   assert.deepEqual(byContent.map((n) => n.id), ['3']);
+});
+
+test('Notas: getDashboardNotes separa fijadas estables y recientes sin duplicados', () => {
+  const notes: Postit[] = [
+    { id: 'pin-first', text: 'Primera fijada', date: '2026-09-01', pinned: true, updatedAt: '2026-09-01T10:00:00Z' },
+    { id: 'recent-created', text: 'Creada recientemente', date: '2026-08-01', createdAt: '2026-10-06T10:00:00Z' },
+    { id: 'pin-second', text: 'Segunda fijada', date: '2026-10-07', pinned: true, updatedAt: '2026-10-07T10:00:00Z' },
+    { id: 'recent-updated', text: 'Modificada más recientemente', date: '2026-08-01', updatedAt: '2026-10-07T11:00:00Z' },
+    { id: 'archived', text: 'Archivada', date: '2026-10-07', archived: true },
+  ];
+
+  const dashboard = getDashboardNotes(notes);
+
+  assert.deepEqual(dashboard.pinned.map((note) => note.id), ['pin-first', 'pin-second']);
+  assert.deepEqual(dashboard.recent.map((note) => note.id), ['recent-updated', 'recent-created']);
+  assert.equal(dashboard.recent.some((note) => note.pinned), false);
+});
+
+test('Notas: getDashboardNotes limita ambos niveles a tres notas', () => {
+  const pinned = Array.from({ length: 4 }, (_, index): Postit => ({
+    id: `pin-${index}`,
+    text: `Fijada ${index}`,
+    date: `2026-09-0${index + 1}`,
+    pinned: true,
+  }));
+  const recent = Array.from({ length: 4 }, (_, index): Postit => ({
+    id: `recent-${index}`,
+    text: `Reciente ${index}`,
+    date: `2026-10-0${index + 1}`,
+  }));
+
+  const dashboard = getDashboardNotes([...pinned, ...recent]);
+
+  assert.equal(dashboard.pinned.length, 3);
+  assert.deepEqual(dashboard.pinned.map((note) => note.id), ['pin-0', 'pin-1', 'pin-2']);
+  assert.deepEqual(dashboard.recent.map((note) => note.id), ['recent-3', 'recent-2', 'recent-1']);
 });
 
 test('Notas: formatRelativeTime formatea marcas temporales de forma legible', () => {

@@ -28,8 +28,6 @@ import {
   defaultAccountId,
   cashFlow30Days,
   cashFlowProjection,
-  advanceCommitmentDueDate,
-  advanceExpectedIncomeDate,
 } from '../lib/calculations';
 import { FinanceHero } from './FinanceHero';
 import { FinanceTransactionModal } from './FinanceTransactionModal';
@@ -39,8 +37,16 @@ import { FinanceAccountsView } from './FinanceAccountsView';
 import { FinanceAnalyticsView } from './FinanceAnalyticsView';
 import { FinanceFutureView } from './FinanceFutureView';
 import { FinanceCategoryModal } from './FinanceCategoryModal';
-import { getActiveCategories, getAllCategories } from '../lib/financeCategories';
-import { addAccount, addTransaction, deleteAccount, deleteTransaction, updateTransaction } from '../lib/financeFlows';
+import { getActiveCategories, getAllCategories, setCategoryBudget } from '../lib/financeCategories';
+import {
+  addAccount,
+  addTransaction,
+  confirmExpectedIncome,
+  confirmFinancialCommitment,
+  deleteAccount,
+  deleteTransaction,
+  updateTransaction,
+} from '../lib/financeFlows';
 import { loadFinanceCustomization, saveFinanceCustomization, FinanceViewCustomization } from '../lib/viewCustomization';
 import { CustomizeFinanceModal } from './CustomizeFinanceModal';
 import { showToast } from '../lib/toast';
@@ -217,11 +223,11 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
     }
   };
 
-  const handleSetBudget = (category: string, amountStr: string) => {
+  const handleSetBudget = (categoryId: string, amountStr: string) => {
     onUpdateState((draft) => {
       if (!draft.finance) draft.finance = { accounts: [], transactions: [], categories: [], budgets: {}, subscriptions: [], debts: [], investments: [] } as any;
       if (!draft.finance.budgets) draft.finance.budgets = {};
-      draft.finance.budgets[category] = Number(amountStr) || 0;
+      setCategoryBudget(draft.finance, categoryId, Number(amountStr) || 0);
     });
   };
 
@@ -454,34 +460,13 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
     const actualAmount = paidAmount !== undefined && !isNaN(paidAmount) ? paidAmount : Number(com.amount);
     onUpdateState((draft) => {
       if (!draft.finance) return;
-      const accId = paidAccountId || com.accountId || defaultAccountId(draft) || draft.finance.accounts[0]?.id || 'acc-1';
-      const tx: Transaction = {
-        id: uid(),
+      confirmFinancialCommitment(draft, {
+        commitmentId: com.id,
         amount: actualAmount,
-        type: 'gasto',
-        category: com.category || 'Varios',
-        accountId: accId,
-        fixed: 'fijo',
+        accountId: paidAccountId || com.accountId,
         date: todayISO(),
-        note: `Pago de compromiso: ${com.name}`,
-      };
-      draft.finance.transactions.push(tx);
-      const acc = draft.finance.accounts.find((a) => a.id === accId);
-      if (acc) {
-        acc.balance = Number(acc.balance || 0) - tx.amount;
-      }
-      const targetCom = draft.finance.commitments?.find((c) => c.id === com.id);
-      if (targetCom) {
-        const advanced = advanceCommitmentDueDate(targetCom);
-        targetCom.nextDueDate = advanced.nextDueDate;
-        targetCom.remainingOccurrences = advanced.remainingOccurrences;
-        targetCom.active = advanced.active;
-        if (advanced.dueDay) targetCom.dueDay = advanced.dueDay;
-        if (updateFutureAmount) {
-          targetCom.amount = actualAmount;
-        }
-        targetCom.updatedAt = new Date().toISOString();
-      }
+        updateFutureAmount,
+      });
     });
     playSound('coins');
     const toastMsg = state.settings?.privacyMode
@@ -608,29 +593,11 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   const handleConfirmIncomeReal = (inc: ExpectedIncome) => {
     onUpdateState((draft) => {
       if (!draft.finance) draft.finance = { accounts: [], transactions: [], categories: [], budgets: {}, subscriptions: [], debts: [], investments: [], expectedIncomes: [] } as any;
-      const accId = inc.accountId || defaultAccountId(draft) || draft.finance.accounts[0]?.id || 'acc-1';
-      const tx: Transaction = {
-        id: uid(),
-        amount: Number(inc.amount),
-        type: 'ingreso',
-        category: inc.category || 'Varios',
-        accountId: accId,
-        fixed: 'variable',
+      confirmExpectedIncome(draft, {
+        expectedIncomeId: inc.id,
+        accountId: inc.accountId,
         date: todayISO(),
-        note: `Previsión confirmada: ${inc.name}`,
-      };
-      draft.finance.transactions.push(tx);
-      const acc = draft.finance.accounts.find((a) => a.id === accId);
-      if (acc) {
-        acc.balance = Number(acc.balance || 0) + tx.amount;
-      }
-      const targetInc = draft.finance.expectedIncomes?.find((i) => i.id === inc.id);
-      if (targetInc) {
-        const advanced = advanceExpectedIncomeDate(targetInc);
-        targetInc.startDate = advanced.startDate;
-        targetInc.active = advanced.active;
-        targetInc.updatedAt = new Date().toISOString();
-      }
+      });
     });
     playSound('coins');
     const toastMsg = state.settings?.privacyMode

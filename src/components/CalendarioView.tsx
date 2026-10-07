@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LifeOSState, Transaction } from '../types';
+import { LifeOSState } from '../types';
 import {
   todayISO,
   daysBetween,
@@ -11,11 +11,9 @@ import {
   EVENT_TYPE_META,
   calendarItemsOnDate,
   upcomingEvents,
-  defaultAccountId,
   CalendarDisplayItem,
-  advanceCommitmentDueDate,
-  advanceExpectedIncomeDate,
 } from '../lib/calculations';
+import { confirmExpectedIncome, confirmFinancialCommitment } from '../lib/financeFlows';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 import { isModuleEnabled } from '../lib/moduleVisibility';
@@ -100,28 +98,11 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
         if (!draft.finance) return;
         const target = draft.finance.commitments?.find((c) => c.id === item.financialId);
         if (!target) return;
-        const accId = target.accountId || defaultAccountId(draft) || draft.finance.accounts[0]?.id || 'acc-1';
-        const tx: Transaction = {
-          id: uid(),
-          amount: Number(target.amount),
-          type: 'gasto',
-          category: target.category || 'Varios',
-          accountId: accId,
-          fixed: 'fijo',
+        confirmFinancialCommitment(draft, {
+          commitmentId: target.id,
+          accountId: target.accountId,
           date: item.date || todayISO(),
-          note: `Pago de compromiso: ${target.name}`,
-        };
-        draft.finance.transactions.push(tx);
-        const acc = draft.finance.accounts.find((a) => a.id === accId);
-        if (acc) {
-          acc.balance = Number(acc.balance || 0) - tx.amount;
-        }
-        const advanced = advanceCommitmentDueDate(target);
-        target.nextDueDate = advanced.nextDueDate;
-        target.remainingOccurrences = advanced.remainingOccurrences;
-        target.active = advanced.active;
-        if (advanced.dueDay) target.dueDay = advanced.dueDay;
-        target.updatedAt = new Date().toISOString();
+        });
       });
       playSound('coins');
       showToast(`Pago registrado: -$${Number(item.financialAmount || 0).toLocaleString('es-UY')}`);
@@ -131,26 +112,11 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
         if (!draft.finance) return;
         const target = draft.finance.expectedIncomes?.find((i) => i.id === item.financialId);
         if (!target) return;
-        const accId = target.accountId || defaultAccountId(draft) || draft.finance.accounts[0]?.id || 'acc-1';
-        const tx: Transaction = {
-          id: uid(),
-          amount: Number(target.amount),
-          type: 'ingreso',
-          category: target.category || 'Varios',
-          accountId: accId,
-          fixed: 'variable',
+        confirmExpectedIncome(draft, {
+          expectedIncomeId: target.id,
+          accountId: target.accountId,
           date: item.date || todayISO(),
-          note: `Previsión confirmada: ${target.name}`,
-        };
-        draft.finance.transactions.push(tx);
-        const acc = draft.finance.accounts.find((a) => a.id === accId);
-        if (acc) {
-          acc.balance = Number(acc.balance || 0) + tx.amount;
-        }
-        const advanced = advanceExpectedIncomeDate(target);
-        target.startDate = advanced.startDate;
-        target.active = advanced.active;
-        target.updatedAt = new Date().toISOString();
+        });
       });
       playSound('coins');
       showToast(`Ingreso registrado: +$${Number(item.financialAmount || 0).toLocaleString('es-UY')}`);

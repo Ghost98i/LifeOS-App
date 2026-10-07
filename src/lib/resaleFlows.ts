@@ -1,31 +1,22 @@
 import type { LifeOSState, ResaleItem, Transaction } from '../types';
-import { adjustAccountBalance, defaultAccountId } from './calculations';
+import { defaultAccountId } from './calculations';
 import { todayISO, uid } from './storage';
+import { addTransaction, deleteLinkedTransaction } from './financeFlows';
 
 function addLinkedTransaction(
   state: LifeOSState,
   input: Omit<Transaction, 'id' | 'fixed' | 'category'> & { category?: string }
 ): Transaction {
-  const transaction: Transaction = {
+  return addTransaction(state, {
     ...input,
-    id: uid(),
+    accountId: input.accountId || null,
     category: input.category || 'Reventa',
     fixed: 'variable',
-  };
-  state.finance.transactions.push(transaction);
-  const reconciledAfter = state.finance.reconciliations.some((item) => item.accountId === transaction.accountId && item.date >= transaction.date);
-  if (!reconciledAfter) adjustAccountBalance(state, transaction.accountId, transaction.type === 'ingreso' ? transaction.amount : -transaction.amount);
-  return transaction;
+  });
 }
 
 function removeLinkedTransaction(state: LifeOSState, transactionId?: string | null): void {
-  if (!transactionId) return;
-  const transaction = state.finance.transactions.find((item) => item.id === transactionId);
-  if (transaction) {
-    const reconciledAfter = state.finance.reconciliations.some((item) => item.accountId === transaction.accountId && item.date >= transaction.date);
-    if (!reconciledAfter) adjustAccountBalance(state, transaction.accountId, transaction.type === 'ingreso' ? -transaction.amount : transaction.amount);
-  }
-  state.finance.transactions = state.finance.transactions.filter((item) => item.id !== transactionId);
+  deleteLinkedTransaction(state, transactionId);
 }
 
 export interface ResalePurchaseInput {

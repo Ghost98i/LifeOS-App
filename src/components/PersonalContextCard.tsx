@@ -78,12 +78,12 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({ state,
               ⚡
             </span>
             <div className="flex items-center gap-1.5 flex-wrap font-semibold text-[11px] text-[var(--text)]">
-              <span>Energía {energy || '—'}</span>
-              <span className="text-[var(--text-faint)]">·</span>
-              <span className="font-mono">{current.sleepHours != null ? `${current.sleepHours}h sueño` : 'sin sueño'}</span>
+              {energy != null && <span>Energía {energy}</span>}
+              {energy != null && current.sleepHours != null && <span className="text-[var(--text-faint)]">·</span>}
+              {current.sleepHours != null && <span className="font-mono">{current.sleepHours} h sueño</span>}
               {connection && (
                 <>
-                  <span className="text-[var(--text-faint)]">·</span>
+                  {(energy != null || current.sleepHours != null) && <span className="text-[var(--text-faint)]">·</span>}
                   <span className="text-[var(--text-soft)]">{connection === 'solo' ? 'A solas' : connection === 'mensaje' ? 'Mensajes' : 'En persona'}</span>
                 </>
               )}

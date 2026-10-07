@@ -291,6 +291,15 @@ export function renameCategory(
   return category;
 }
 
+/** Persist a category budget against its stable identity, never its display name. */
+export function setCategoryBudget(finance: Finance, categoryId: string, amount: number): void {
+  const category = (finance.categories || []).find((item) => item.id === categoryId);
+  if (!category) throw new Error('Categoría no encontrada.');
+
+  finance.budgets ||= {};
+  finance.budgets[categoryId] = Number.isFinite(amount) ? amount : 0;
+}
+
 /**
  * Domain mutation: Archive a category.
  * The category is marked active: false. It is preserved for historical transactions,

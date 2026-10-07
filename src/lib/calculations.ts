@@ -10,6 +10,7 @@ import {
   EffortLevel,
   GymSession,
   ExpectedIncome,
+  FinancialCommitment,
   CashFlowCommitment,
   CashFlowDayPoint,
   CashFlowForecastItem,
@@ -107,6 +108,14 @@ export interface CashFlowProjectionResult {
   commitments: CashFlowCommitment[];
   forecastItems: CashFlowForecastItem[];
   dailyTrajectory: CashFlowDayPoint[];
+}
+
+export function resolveFinancialCommitment(
+  state: LifeOSState,
+  item: CashFlowCommitment,
+): FinancialCommitment | null {
+  if (item.kind !== 'commitment') return null;
+  return (state.finance?.commitments || []).find((commitment) => commitment.id === item.sourceId) || null;
 }
 
 export function getExpectedIncomeOccurrences(
@@ -268,9 +277,8 @@ export function cashFlowProjection(
 
     const start = new Date(`${startIso}T12:00:00`);
     const targetDay = start.getDate();
-    const maxMonths = days <= 30 ? 1 : days <= 60 ? 2 : 3;
 
-    for (let m = 0; m < maxMonths; m++) {
+    for (let m = 0; ; m++) {
       const y = from.getFullYear();
       const month = from.getMonth() + m;
       const lastDay = new Date(y, month + 1, 0).getDate();
@@ -303,6 +311,7 @@ export function cashFlowProjection(
     .filter((f) => f.type === 'expense' || f.type === 'debt')
     .map((f) => ({
       id: f.id,
+      sourceId: f.sourceId,
       label: f.label,
       amount: f.amount,
       dueDate: f.date,

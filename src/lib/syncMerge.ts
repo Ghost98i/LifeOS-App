@@ -1,5 +1,6 @@
 import type {
   Account,
+  AccountReconciliation,
   AgendaBlock,
   AgendaWeek,
   CalendarEvent,
@@ -47,8 +48,9 @@ import type {
   FinanceCategory,
 } from '../types';
 import type { SyncModuleKey, SyncConflictItem, ModuleMergeResult } from './syncModel';
-import { computeAccountBalance } from './financeFlows';
-import { normalizeCategories, getCategoryName } from './financeCategories';
+import { normalizeCategories } from './financeCategories';
+import { compareLedgerEvents, reconstructAccountBalance } from './financeLedger';
+import { financeRevisionMillis, parseFinanceRevisionOrder } from './financeRevision';
 
 const TOMBSTONE_PREFIX = 'lifeos-cloud-tombstones-v2:';
 const DEFAULT_MAX_TOMBSTONE_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -488,6 +490,113 @@ export function mergeDateCollection<T extends { date: string }>(
 // MODULE-SPECIFIC MERGE FUNCTIONS
 // ==========================================
 
+type VersionedFinanceEvent = Transaction | FinanceTransfer | AccountReconciliation;
+
+function canonicalStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalStringify).join(',')}]`;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).filter((key) => record[key] !== undefined).sort();
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${canonicalStringify(record[key])}`).join(',')}}`;
+}
+
+function financeVersionKey<T extends VersionedFinanceEvent>(item: T, baseline?: T): string {
+  if (parseFinanceRevisionOrder(item.revisionOrder)) return `2:${item.revisionOrder}`;
+  const changedFromBaseline = !baseline || canonicalStringify(item) !== canonicalStringify(baseline);
+  return `${changedFromBaseline ? 1 : 0}:${canonicalStringify(item)}`;
+}
+
+function chooseFinanceVersion<T extends VersionedFinanceEvent>(a: T, b: T, baseline?: T): T {
+  const aKey = financeVersionKey(a, baseline);
+  const bKey = financeVersionKey(b, baseline);
+  if (aKey !== bKey) return aKey > bKey ? a : b;
+  return canonicalStringify(a) >= canonicalStringify(b) ? a : b;
+}
+
+function tombstoneSupersedesFinanceVersion(item: VersionedFinanceEvent, tombstoneTime: number): boolean {
+  if (!(tombstoneTime > 0)) return false;
+  const revisionMillis = financeRevisionMillis(item.revisionOrder);
+  return revisionMillis === 0 || tombstoneTime >= revisionMillis;
+}
+
+function mergeFinanceEventCollection<T extends VersionedFinanceEvent>(
+  kind: 'transaction' | 'transfer' | 'reconciliation',
+  local: T[] = [],
+  remote: T[] = [],
+  baseline: T[] | undefined,
+  tombstones: Record<string, number>,
+  onConflict?: (conflict: SyncConflictItem) => void,
+  label = 'Evento financiero',
+): T[] {
+  const localMap = new Map(local.map((item) => [item.id, item]));
+  const remoteMap = new Map(remote.map((item) => [item.id, item]));
+  const baseMap = new Map((baseline || []).map((item) => [item.id, item]));
+  const ids = [...new Set([...localMap.keys(), ...remoteMap.keys(), ...baseMap.keys()])].sort();
+  const result: T[] = [];
+
+  for (const id of ids) {
+    const localItem = localMap.get(id);
+    const remoteItem = remoteMap.get(id);
+    const baseItem = baseMap.get(id);
+    const tombstoneTime = tombstones[id] || 0;
+    const candidates = [localItem, remoteItem].filter((item): item is T => (
+      Boolean(item) && !tombstoneSupersedesFinanceVersion(item as T, tombstoneTime)
+    ));
+
+    if (candidates.length === 0) continue;
+    if (candidates.length === 1) {
+      const candidate = candidates[0];
+      const otherSideDeleted = Boolean(baseItem) && (!localItem || !remoteItem);
+      if (otherSideDeleted && tombstoneTime === 0 && canonicalStringify(candidate) === canonicalStringify(baseItem)) {
+        continue;
+      }
+      if (otherSideDeleted && onConflict && canonicalStringify(candidate) !== canonicalStringify(baseItem)) {
+        onConflict({
+          id: `conflict-del-finance-${id}`,
+          module: 'finance',
+          entityType: 'delete_vs_modify',
+          entityId: id,
+          label: `${label}: ${id}`,
+          localSummary: localItem ? 'Modificado' : 'Eliminado',
+          remoteSummary: remoteItem ? 'Modificado' : 'Eliminado',
+          localValue: localItem || null,
+          remoteValue: remoteItem || null,
+          baseValue: baseItem,
+        });
+      }
+      result.push(candidate);
+      continue;
+    }
+
+    const [a, b] = candidates;
+    if (onConflict && canonicalStringify(a) !== canonicalStringify(b)) {
+      const bothChanged = !baseItem
+        || (canonicalStringify(a) !== canonicalStringify(baseItem)
+          && canonicalStringify(b) !== canonicalStringify(baseItem));
+      if (bothChanged) {
+        onConflict({
+          id: `conflict-finance-${id}`,
+          module: 'finance',
+          entityType: 'entity',
+          entityId: id,
+          label: `${label}: ${id}`,
+          localSummary: 'Versión local',
+          remoteSummary: 'Versión remota',
+          localValue: localItem,
+          remoteValue: remoteItem,
+          baseValue: baseItem,
+        });
+      }
+    }
+    result.push(chooseFinanceVersion(a, b, baseItem));
+  }
+
+  return result.sort((a, b) => compareLedgerEvents(
+    { kind, id: a.id, date: a.date, effectiveOrder: a.effectiveOrder },
+    { kind, id: b.id, date: b.date, effectiveOrder: b.effectiveOrder },
+  ));
+}
+
 export function mergeFinanceModule(
   local: Finance,
   remote: Finance,
@@ -495,36 +604,34 @@ export function mergeFinanceModule(
   tombstones: Record<string, number> = {},
   onConflict?: (conflict: SyncConflictItem) => void
 ): Finance {
-  const transactions = mergeEntityCollection(
+  const transactions = mergeFinanceEventCollection(
+    'transaction',
     local.transactions,
     remote.transactions,
     baseline?.transactions,
     tombstones,
-    undefined,
     onConflict,
-    {
-      module: 'finance',
-      entityType: 'Transacción',
-      getLabel: (t) =>
-        `${t.type === 'ingreso' ? '+' : '-'}${t.amount} ${getCategoryName(remote.categories || local.categories, t.category) || t.category || ''}`,
-    }
+    'Transacción',
   );
 
-  const transfers = mergeEntityCollection(
+  const transfers = mergeFinanceEventCollection(
+    'transfer',
     local.transfers,
     remote.transfers,
     baseline?.transfers,
     tombstones,
-    undefined,
     onConflict,
-    { module: 'finance', entityType: 'Transferencia' }
+    'Transferencia',
   );
 
-  const reconciliations = mergeEntityCollection(
+  const reconciliations = mergeFinanceEventCollection(
+    'reconciliation',
     local.reconciliations,
     remote.reconciliations,
     baseline?.reconciliations,
-    tombstones
+    tombstones,
+    onConflict,
+    'Conciliación',
   );
 
   const debts = mergeEntityCollection(
@@ -794,7 +901,7 @@ export function mergeFinanceModule(
             baseValue: bBase,
           });
         }
-        return lBase; // Preserve local on conflict
+        return bBase;
       }
 
       if (lBase !== bBase && rBase === bBase) return lBase; // Only local changed
@@ -823,7 +930,8 @@ export function mergeFinanceModule(
           remoteValue: rBase,
         });
       }
-      return Math.round((Number.isFinite(lBase) ? lBase : rBase) * 100) / 100;
+      const canonicalAccount = canonicalStringify(lAcc) >= canonicalStringify(rAcc) ? lAcc : rAcc;
+      return Math.round((canonicalAccount === lAcc ? lBase : rBase) * 100) / 100;
     }
 
     if (lAcc) {
@@ -845,16 +953,23 @@ export function mergeFinanceModule(
     tombstones,
     (lAcc, rAcc, bAcc) => {
       const initialBalance = resolveAccountInitialBalance(lAcc.id, lAcc, rAcc, bAcc);
+      const lNameChanged = !bAcc || lAcc.name !== bAcc.name;
+      const rNameChanged = !bAcc || rAcc.name !== bAcc.name;
+      const name = lAcc.name === rAcc.name
+        ? lAcc.name
+        : lNameChanged !== rNameChanged
+          ? (lNameChanged ? lAcc.name : rAcc.name)
+          : [lAcc.name, rAcc.name].sort().at(-1) || lAcc.name;
+      const canonicalAccount = canonicalStringify(lAcc) >= canonicalStringify(rAcc) ? lAcc : rAcc;
       return {
-        ...lAcc,
-        name: rAcc.name !== bAcc?.name ? rAcc.name : lAcc.name,
+        ...canonicalAccount,
+        name,
         initialBalance,
-        lastReconciledAt: rAcc.lastReconciledAt || lAcc.lastReconciledAt || undefined,
       };
     }
   );
 
-  // Deterministic ledger reconciliation guarantees identical balance on all devices
+  // Account.balance is a materialized cache derived from the merged deterministic ledger.
   const mergedAccounts = mergedAccountsRaw.map((acc) => {
     let initialBalance = acc.initialBalance;
     if (typeof initialBalance !== 'number' || !Number.isFinite(initialBalance)) {
@@ -864,9 +979,35 @@ export function mergeFinanceModule(
       initialBalance = resolveAccountInitialBalance(acc.id, lAcc, rAcc, bAcc);
     }
     const accWithInitial = { ...acc, initialBalance };
+    const reconstruction = reconstructAccountBalance(accWithInitial, transactions, transfers, reconciliations);
+    const accountReconciliations = reconciliations
+      .filter((item) => item.accountId === acc.id)
+      .map((item) => ({ kind: 'reconciliation' as const, ...item }))
+      .sort(compareLedgerEvents);
+    const lastReconciledAt = accountReconciliations.at(-1)?.date || null;
+    const sourceBalances = [
+      local.accounts.find((item) => item.id === acc.id)?.balance,
+      remote.accounts.find((item) => item.id === acc.id)?.balance,
+      baseline?.accounts.find((item) => item.id === acc.id)?.balance,
+    ].filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    let balance = reconstruction.balance;
+    if (balance === null) {
+      balance = sourceBalances.sort((a, b) => a - b).at(-1) ?? Number(acc.balance || 0);
+    } else if (reconstruction.ambiguities.length > 0) {
+      const allAgree = sourceBalances.length > 0 && sourceBalances.every((value) => value === sourceBalances[0]);
+      const alreadyMaterialized = sourceBalances.includes(balance);
+      if (!alreadyMaterialized) {
+        balance = allAgree
+          ? sourceBalances[0]
+          : baseline?.accounts.find((item) => item.id === acc.id)?.balance
+            ?? sourceBalances.sort((a, b) => a - b).at(-1)
+            ?? balance;
+      }
+    }
     return {
       ...accWithInitial,
-      balance: computeAccountBalance(accWithInitial, transactions, transfers, reconciliations),
+      balance,
+      lastReconciledAt,
     };
   });
 
