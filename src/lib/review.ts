@@ -57,8 +57,16 @@ export function weeklyReviewExceptions(state: LifeOSState): ReviewException[] {
   return exceptions.filter((item) => isModuleEnabled(state, item.view));
 }
 
-export function reviewedThisWeek(state: LifeOSState): boolean {
-  return Boolean(state.settings.lastWeeklyReviewAt && daysBetween(state.settings.lastWeeklyReviewAt, todayISO()) < 7);
+export function reviewedThisWeek(state: LifeOSState, today = todayISO()): boolean {
+  const lastReview = state.settings?.lastWeeklyReviewAt;
+  if (!lastReview || typeof lastReview !== 'string') return false;
+  const diff = daysBetween(lastReview, today);
+  if (Number.isNaN(diff)) return false;
+  return diff >= -1 && diff < 7;
+}
+
+export function isWeeklyReviewDue(state: LifeOSState, today = todayISO()): boolean {
+  return !reviewedThisWeek(state, today);
 }
 
 export interface WeeklyReviewData {

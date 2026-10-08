@@ -15,7 +15,7 @@ import { adoptSmartDailyPriorities } from '../lib/smartPriorities';
 import { formatRelativeTime, getActivityTimeline } from '../lib/activityTimeline';
 import { getDashboardNotes } from '../lib/notesFlows';
 import { isModuleEnabled } from '../lib/moduleVisibility';
-import { reviewedThisWeek, weeklyReviewExceptions } from '../lib/review';
+import { isWeeklyReviewDue } from '../lib/review';
 import { TodayNotesSection } from './TodayNotesSection';
 
 const MAX_VISIBLE_TASKS = 6;
@@ -96,7 +96,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     ? daysBetween(state.settings.lastBackupAt, todayIso)
     : null;
   const backupUrgent = daysSinceBackup === null || daysSinceBackup >= 3;
-  const weeklyReviewNeedsAttention = !reviewedThisWeek(state) || weeklyReviewExceptions(state).length > 0;
+  const weeklyReviewNeedsAttention = isWeeklyReviewDue(state, todayIso);
   const showAttention = (backupUrgent && !backupDismissed) || weeklyReviewNeedsAttention;
   const todayPriorities = (state.dailyPriorities || []).filter((priority) => priority.date === todayIso);
 

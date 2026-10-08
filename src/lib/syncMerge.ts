@@ -1731,6 +1731,14 @@ export function mergeProfileModule(
       ...baseline?.settings,
       ...local.settings,
       ...remote.settings,
+      lastWeeklyReviewAt: [
+        local.settings?.lastWeeklyReviewAt,
+        remote.settings?.lastWeeklyReviewAt,
+        baseline?.settings?.lastWeeklyReviewAt,
+      ]
+        .filter((d): d is string => typeof d === 'string' && d.length >= 10)
+        .sort()
+        .pop() || (local.settings?.lastWeeklyReviewAt ?? remote.settings?.lastWeeklyReviewAt ?? null),
       hiddenTabs: Array.from(
         new Set([...(local.settings?.hiddenTabs || []), ...(remote.settings?.hiddenTabs || [])])
       ),

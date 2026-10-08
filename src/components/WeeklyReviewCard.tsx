@@ -15,7 +15,7 @@ interface WeeklyReviewCardProps {
 export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ state, onUpdateState, onNavigate }) => {
   const exceptions = weeklyReviewExceptions(state);
   const reviewed = reviewedThisWeek(state);
-  const needsReview = !reviewed || exceptions.length > 0;
+  const needsReview = !reviewed;
   const [isGuidedReviewOpen, setIsGuidedReviewOpen] = useState(false);
 
   const handleMarkReviewed = () => {

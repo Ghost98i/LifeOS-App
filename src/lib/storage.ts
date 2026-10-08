@@ -129,8 +129,8 @@ export function clamp(n: number, min: number, max: number): number {
 }
 
 export function daysBetween(a: string, b: string): number {
-  const da = new Date(a + 'T00:00:00');
-  const db = new Date(b + 'T00:00:00');
+  const da = new Date(a.slice(0, 10) + 'T00:00:00');
+  const db = new Date(b.slice(0, 10) + 'T00:00:00');
   const ms = db.getTime() - da.getTime();
   return Math.round(ms / 86400000);
 }
@@ -276,7 +276,7 @@ export function defaultState(): LifeOSState {
     projects: [],
     inbox: [],
     notes: { postits: [], shopping: [], links: [], possessions: [] },
-    settings: { darkMode: false, lastBackupAt: null, hiddenTabs: ['ia'], onboardingCompleted: false },
+    settings: { darkMode: false, lastBackupAt: null, hiddenTabs: ['ia'], onboardingCompleted: false, lastWeeklyReviewAt: null },
     checkoutLog: {},
   };
 }
@@ -592,9 +592,14 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
       } else {
         onboardingCompleted = hasMeaningfulData(candidate as LifeOSState);
       }
+      let lastWeeklyReviewAt: string | null = null;
+      if (typeof rawSettings.lastWeeklyReviewAt === 'string') {
+        lastWeeklyReviewAt = rawSettings.lastWeeklyReviewAt.slice(0, 10);
+      }
       return {
         ...def.settings,
         ...rawSettings,
+        lastWeeklyReviewAt,
         hiddenTabs: Array.isArray(rawSettings.hiddenTabs) ? rawSettings.hiddenTabs : [...def.settings.hiddenTabs],
         onboardingCompleted,
       };

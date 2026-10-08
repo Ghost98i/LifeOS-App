@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { defaultState, uid } from './storage';
+import { defaultState, uid, normalizeStoredState } from './storage';
 import {
   weeklyReviewExceptions,
   gatherWeeklyReviewData,
   formatWeeklyReviewSummaryNote,
+  reviewedThisWeek,
+  isWeeklyReviewDue,
 } from './review';
+import { mergeProfileModule } from './syncMerge';
 
 test('la revisión semanal muestra excepciones y omite actividad normal', () => {
   const state = defaultState();
@@ -148,4 +151,98 @@ test('gatherWeeklyReviewData recopila hechos reales de los últimos 7 días con 
   assert.ok(noteText.includes('Balance neto: $' + review.finances.netBalance.toLocaleString()));
   assert.ok(noteText.includes('Falta configurar Firebase'));
   assert.ok(noteText.includes('Terminar módulo de proyectos'));
+});
+
+test('reviewedThisWeek y isWeeklyReviewDue respetan el ciclo semanal y la transición de medianoche', () => {
+  const state = defaultState();
+  state.settings.lastWeeklyReviewAt = '2026-10-07';
+
+  // 1. Mismo día en que se completó (antes de las 00:00)
+  assert.equal(reviewedThisWeek(state, '2026-10-07'), true);
+  assert.equal(isWeeklyReviewDue(state, '2026-10-07'), false);
+
+  // 2. Al pasar la medianoche (2026-10-08 00:xx, día siguiente)
+  assert.equal(reviewedThisWeek(state, '2026-10-08'), true);
+  assert.equal(isWeeklyReviewDue(state, '2026-10-08'), false);
+
+  // 3. Durante toda la semana (días 2 a 6)
+  assert.equal(reviewedThisWeek(state, '2026-10-09'), true);
+  assert.equal(reviewedThisWeek(state, '2026-10-12'), true);
+  assert.equal(reviewedThisWeek(state, '2026-10-13'), true); // 6 días después
+  assert.equal(isWeeklyReviewDue(state, '2026-10-13'), false);
+
+  // 4. A los 7 días (2026-10-14): ciclo cumplido, requiere nueva revisión
+  assert.equal(reviewedThisWeek(state, '2026-10-14'), false);
+  assert.equal(isWeeklyReviewDue(state, '2026-10-14'), true);
+
+  // 5. Tolerancia a sesgo horario / timestamps en el futuro próximo
+  assert.equal(reviewedThisWeek(state, '2026-10-06'), true); // diff = -1
+});
+
+test('excepciones diarias acumuladas a medianoche NO convierten una revisión completada en pendiente', () => {
+  const state = defaultState();
+  state.settings.lastWeeklyReviewAt = '2026-10-07';
+
+  // Tarea de ayer (2026-10-07) que quedó sin hacer
+  state.todayExtras = [
+    { id: 't-yesterday', text: 'Tarea no completada ayer', date: '2026-10-07', done: false, priority: 'media' },
+  ];
+
+  // A medianoche (2026-10-08), la tarea pasa a ser overdue (date < today)
+  const exceptionsAtMidnight = weeklyReviewExceptions(state);
+  assert.ok(exceptionsAtMidnight.some((e) => e.id === 'overdue-tasks'));
+
+  // A pesar de la excepción, la revisión semanal completada sigue satisfecha
+  assert.equal(reviewedThisWeek(state, '2026-10-08'), true);
+  assert.equal(isWeeklyReviewDue(state, '2026-10-08'), false);
+});
+
+test('settings.lastWeeklyReviewAt es la fuente canónica estricta (notas no alteran estado de revisión)', () => {
+  const state = defaultState();
+  state.settings.lastWeeklyReviewAt = null;
+  state.notes.postits = [
+    {
+      id: uid(),
+      text: '📅 REVISIÓN SEMANAL (2026-10-07)\n\n📊 HECHOS VERIFICADOS DE LOS ÚLTIMOS 7 DÍAS...',
+      date: '2026-10-07',
+    },
+  ];
+
+  // Sin metadata canónica en settings, la nota no actúa como segunda fuente de verdad
+  assert.equal(reviewedThisWeek(state, '2026-10-08'), false);
+  assert.equal(isWeeklyReviewDue(state, '2026-10-08'), true);
+
+  // Al establecer la metadata canónica explícita en settings, la revisión se considera satisfecha
+  state.settings.lastWeeklyReviewAt = '2026-10-07';
+  assert.equal(reviewedThisWeek(state, '2026-10-08'), true);
+  assert.equal(isWeeklyReviewDue(state, '2026-10-08'), false);
+
+  // Normalización del estado persistido preserva settings.lastWeeklyReviewAt canónicamente
+  const normalized = normalizeStoredState({
+    ...state,
+    settings: { darkMode: false, hiddenTabs: [], lastWeeklyReviewAt: '2026-10-07T23:30:00Z' },
+  });
+  assert.equal(normalized.settings.lastWeeklyReviewAt, '2026-10-07');
+});
+
+test('mergeProfileModule preserva la revisión completada más reciente ante sincronización remota', () => {
+  const local = {
+    profile: defaultState().profile,
+    settings: {
+      darkMode: false,
+      hiddenTabs: [],
+      lastWeeklyReviewAt: '2026-10-07',
+    },
+  };
+  const remote = {
+    profile: defaultState().profile,
+    settings: {
+      darkMode: false,
+      hiddenTabs: [],
+      lastWeeklyReviewAt: null, // Remoto desactualizado o sin revisión
+    },
+  };
+
+  const merged = mergeProfileModule(local, remote);
+  assert.equal(merged.settings.lastWeeklyReviewAt, '2026-10-07');
 });
