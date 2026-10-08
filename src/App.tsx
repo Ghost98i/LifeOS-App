@@ -1453,7 +1453,7 @@ export default function App() {
         <AppIcon name="search" className="h-4 w-4 text-[var(--blue)]" />
       </button>
       <ToastViewport />
-      {isModuleEnabled(state, 'gimnasio') && (
+      {isModuleEnabled(state, 'gimnasio') && currentView !== 'gimnasio' && (
         <GymRestOverlay state={state} onUpdateState={updateState} onOpenGym={() => handleNavigate('gimnasio')} />
       )}
       {!__LIFEOS_PORTABLE__ && <PwaUpdatePrompt />}

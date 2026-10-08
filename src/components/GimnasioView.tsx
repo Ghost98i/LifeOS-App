@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import { Exercise, ExerciseEquipment, GymSession, GymSet, LifeOSState, MuscleGroup } from '../types';
 import { GymRestTimerBar } from './GymRestTimerBar';
+import { ActiveWorkoutView } from './ActiveWorkoutView';
 import { GymPlateCalculator } from './GymPlateCalculator';
 import { PersonalRecordsCard } from './PersonalRecordsCard';
 import { BodyCompositionCard } from './BodyCompositionCard';
@@ -39,6 +40,7 @@ import {
   sortedWeight,
 } from '../lib/calculations';
 import { buildGymHistory } from '../lib/gymHistory';
+import { buildGymSessionPresentation } from '../lib/gymIdlePresentation';
 import {
   EXERCISE_EQUIPMENT_OPTIONS,
   inferExerciseEquipment,
@@ -192,6 +194,18 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   const latestSession = useMemo(() => {
     return sortedSessions.find(isPerformedGymSession) || sortedSessions[0] || null;
   }, [sortedSessions]);
+
+  const todayCompletedSession = useMemo(
+    () => sortedSessions.find((session) => session.date === todayISO() && isPerformedGymSession(session)) || null,
+    [sortedSessions]
+  );
+
+  const todayPresentation = useMemo(
+    () => todayCompletedSession
+      ? buildGymSessionPresentation(todayCompletedSession, sortedSessions)
+      : null,
+    [sortedSessions, todayCompletedSession]
+  );
 
   const isTrainedToday = (state.gym?.sessions || []).some(
     (s) => s.date === todayISO() && isPerformedGymSession(s)
@@ -690,6 +704,13 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   const liveSets = liveCurrentEx?.sets || [];
   const liveSafeSetIdx = Math.max(0, Math.min(liveSetIdx, Math.max(0, liveSets.length - 1)));
   const liveCurrentSet = liveSets[liveSafeSetIdx];
+  const liveGhost = liveCurrentEx
+    ? getExerciseGhostValues(state.gym.sessions, liveCurrentEx.name, activeWorkoutSession?.id)
+    : null;
+  const livePreviousSet = liveGhost?.sets[liveSafeSetIdx] || null;
+  const livePreviousSessionBest = activeWorkoutSession && liveCurrentEx
+    ? getPreviousExerciseStats(state.gym.sessions, activeWorkoutSession.id, liveCurrentEx.name)
+    : null;
 
   const handleLiveAdjustWeight = (delta: number) => {
     if (!activeWorkoutSession || !liveCurrentSet) return;
@@ -718,12 +739,13 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <PageHeader
-        title="Gimnasio"
-        subtitle="Modo entreno móvil, cálculo de discos, descanso guiado y progresión."
-        actions={
-          !activeWorkoutSession ? (
+      {/* La sesión activa usa su propio encabezado operativo para priorizar el primer viewport móvil. */}
+      {!(activeWorkoutSession && activeTab === 'entrenar') && (
+        <PageHeader
+          title="Gimnasio"
+          subtitle="Entrená, revisá tu historial y entendé tu progreso."
+          actions={
+            !activeWorkoutSession && activeTab !== 'entrenar' ? (
             <div className="flex items-center gap-2 flex-wrap">
               {state.gym.routineTemplates.length > 0 && (
                 <select
@@ -748,55 +770,40 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                 <span>Iniciar Entrenamiento</span>
               </button>
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => handleFinishWorkout(activeWorkoutSession.id)}
-              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer flex items-center gap-1.5"
-            >
-              <AppIcon name="check" className="h-3.5 w-3.5" />
-              <span>Finalizar Sesión</span>
-            </button>
-          )
-        }
-      />
-
-      {/* Docked Rest Timer Bar */}
-      <GymRestTimerBar
-        state={state}
-        sessionId={activeWorkoutSession?.id || (latestSession?.id ?? '')}
-        onUpdateState={onUpdateState}
-      />
+            ) : undefined
+          }
+        />
+      )}
 
       {/* Main Navigation Segmented Tabs */}
-      <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-[var(--surface-muted)] border border-[var(--border)] shadow-2xs">
+      {!(activeWorkoutSession && activeTab === 'entrenar') && (
+      <div className="flex min-w-0 items-center gap-1.5 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-1.5 shadow-2xs">
         <button
           type="button"
           onClick={() => setActiveTab('entrenar')}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-bold transition-all cursor-pointer sm:px-3 ${
             activeTab === 'entrenar'
               ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
               : 'text-[var(--text-soft)] hover:text-[var(--text)]'
           }`}
         >
           <AppIcon name="dumbbell" className="h-4 w-4" />
-          <span>{activeWorkoutSession ? 'Entrenamiento en Vivo ⚡' : 'Entrenar Hoy'}</span>
-          {activeWorkoutSession && (
-            <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-          )}
+          <span className="sm:hidden">Hoy</span>
+          <span className="hidden truncate sm:inline">{activeWorkoutSession ? 'Entrenamiento activo' : 'Entrenar hoy'}</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('historial')}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-bold transition-all cursor-pointer sm:px-3 ${
             activeTab === 'historial'
               ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
               : 'text-[var(--text-soft)] hover:text-[var(--text)]'
           }`}
         >
           <AppIcon name="calendar" className="h-4 w-4" />
-          <span>Historial de Semanas</span>
+          <span className="sm:hidden">Historial</span>
+          <span className="hidden truncate sm:inline">{activeWorkoutSession ? 'Historial' : 'Historial de semanas'}</span>
           <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--surface-muted)] border border-[var(--border)] text-[var(--text-soft)]">
             {state.gym.sessions.length}
           </span>
@@ -805,541 +812,199 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
         <button
           type="button"
           onClick={() => setActiveTab('progresion')}
-          className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-bold transition-all cursor-pointer sm:px-3 ${
             activeTab === 'progresion'
               ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
               : 'text-[var(--text-soft)] hover:text-[var(--text)]'
           }`}
         >
           <AppIcon name="activity" className="h-4 w-4" />
-          <span>Progresión & Salud</span>
+          <span className="sm:hidden">Progreso</span>
+          <span className="hidden truncate sm:inline">{activeWorkoutSession ? 'Progreso' : 'Progresión y salud'}</span>
         </button>
       </div>
+      )}
+
+      {activeWorkoutSession && state.gym.activeTimer && activeTab !== 'entrenar' && (
+        <GymRestTimerBar
+          state={state}
+          onUpdateState={onUpdateState}
+        />
+      )}
 
       {/* TAB 1: ENTRENAR (MODO EN VIVO / HOY) */}
       {activeTab === 'entrenar' && (
         <div className="space-y-6 animate-in fade-in">
           {/* ACTIVE WORKOUT LIVE CONSOLE (COCKPIT MÓVIL) */}
           {activeWorkoutSession ? (
-            <div className="bg-[var(--card)] border-2 border-blue-500/35 rounded-3xl p-4 sm:p-6 shadow-lg space-y-5">
-              {/* Header Bar */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-4">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-600 text-white font-bold text-xl shadow-md">
-                    ⚡
-                  </span>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-extrabold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                        Sesión en Vivo
-                      </span>
-                      <span className="text-xs font-mono font-bold text-[var(--text-soft)]">
-                        Iniciado {activeWorkoutSession.startedAt || 'Hoy'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-[var(--text)] mt-0.5">
-                      Volumen acumulado:{' '}
-                      <strong className="font-mono text-emerald-600 dark:text-emerald-400">
-                        {getPerformedGymVolume(activeWorkoutSession)} kg
-                      </strong>
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handleFinishWorkout(activeWorkoutSession.id)}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md transition-all active:scale-[0.98] cursor-pointer"
-                  >
-                    ✓ Terminar Sesión
-                  </button>
-                </div>
-              </div>
-
-              {/* Exercise Switcher Chips */}
-              <div className="space-y-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block">
-                  Ejercicios de la sesión ({activeWorkoutSession.exercises.length})
-                </span>
-                <div className="flex gap-2 overflow-x-auto pb-1 pt-0.5">
-                  {activeWorkoutSession.exercises.map((ex, idx) => {
-                    const isSelected = idx === liveSafeExIdx;
-                    const doneCount = (ex.sets || []).filter((s) => s.completed).length;
-                    const totalSets = (ex.sets || []).length;
-                    const allDone = totalSets > 0 && doneCount === totalSets;
-
-                    return (
-                      <button
-                        key={ex.id || idx}
-                        type="button"
-                        onClick={() => {
-                          setLiveExIdx(idx);
-                          // Select first incomplete set if available
-                          const firstInc = (ex.sets || []).findIndex((s) => !s.completed);
-                          setLiveSetIdx(firstInc >= 0 ? firstInc : 0);
-                        }}
-                        className={`px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer flex items-center gap-2 border ${
-                          isSelected
-                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                            : allDone
-                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
-                            : 'bg-[var(--surface-muted)] text-[var(--text)] border-[var(--border)] hover:border-blue-500/40'
-                        }`}
-                      >
-                        <span>{idx + 1}. {ex.name}</span>
-                        <span
-                          className={`text-[10px] font-mono px-1.5 py-0.2 rounded-md ${
-                            isSelected
-                              ? 'bg-white/20 text-white'
-                              : allDone
-                              ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
-                              : 'bg-[var(--card)] text-[var(--text-soft)]'
-                          }`}
-                        >
-                          {doneCount}/{totalSets}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Current Focused Exercise & Interactive Set Console */}
-              {liveCurrentEx ? (
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-4 sm:p-5 space-y-4">
-                  {/* Title & Stats */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setHistoryExerciseName(liveCurrentEx.name)}
-                          className="text-base font-black text-[var(--text)] tracking-tight hover:text-[var(--blue)] transition text-left cursor-pointer flex items-center gap-1.5"
-                          title="Ver historial completo y récords de este ejercicio"
-                        >
-                          <span>{liveCurrentEx.name}</span>
-                          <span className="text-xs font-normal text-[var(--blue)]">↗</span>
-                        </button>
-                        {liveCurrentEx.muscleGroup && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[var(--card)] border border-[var(--border)] text-[var(--text-soft)]">
-                            {liveCurrentEx.muscleGroup}
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setHistoryExerciseName(liveCurrentEx.name)}
-                          className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 px-2 py-0.5 rounded-md cursor-pointer transition flex items-center gap-1"
-                          title="Ver ficha e historial"
-                        >
-                          <AppIcon name="activity" className="h-3 w-3" />
-                          <span>Historial</span>
-                        </button>
-                      </div>
-                      {getPreviousExerciseStats(state.gym.sessions, activeWorkoutSession.id, liveCurrentEx.name) && (
-                        <p className="text-xs text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">
-                          🏆 Mejor anterior: {getPreviousExerciseStats(state.gym.sessions, activeWorkoutSession.id, liveCurrentEx.name)}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <select
-                        value={liveCurrentEx.equipment || (liveCurrentEx.barWeight && liveCurrentEx.barWeight > 0 ? 'barra' : 'mancuerna')}
-                        onChange={(e) => {
-                          const eq = e.target.value as ExerciseEquipment;
-                          handleUpdateExerciseEquipment(activeWorkoutSession.id, liveSafeExIdx, eq);
-                        }}
-                        className="px-2 py-1 text-xs font-semibold rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
-                        title="Tipo de equipamiento"
-                      >
-                        <option value="barra">🏋️ Barra</option>
-                        <option value="mancuerna">💪 Mancuerna</option>
-                        <option value="polea">🪢 Polea</option>
-                        <option value="maquina">⚙️ Máquina</option>
-                        <option value="corporal">🤸 Corporal</option>
-                      </select>
-
-                      {(liveCurrentEx.equipment === 'barra' || (!liveCurrentEx.equipment && (liveCurrentEx.barWeight ?? 20) > 0)) && (
-                        <select
-                          value={liveCurrentEx.barWeight ?? 20}
-                          onChange={(e) => handleUpdateExerciseBar(activeWorkoutSession.id, liveSafeExIdx, Number(e.target.value))}
-                          className="px-2 py-1 text-xs font-mono font-bold rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
-                          title="Peso de la barra"
-                        >
-                          <option value={20}>20 kg (Olímpica)</option>
-                          <option value={15}>15 kg (Mujer)</option>
-                          <option value={10}>10 kg (W / EZ)</option>
-                        </select>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handlePropagateExerciseToHistory(liveCurrentEx.name, {
-                            equipment: liveCurrentEx.equipment || 'mancuerna',
-                            barWeight: liveCurrentEx.barWeight ?? 0,
-                            muscleGroup: liveCurrentEx.muscleGroup as MuscleGroup,
-                          })
-                        }
-                        className="px-2 py-1 rounded-lg bg-[var(--card)] text-[var(--text-soft)] hover:text-blue-600 border border-[var(--border)] text-[10px] font-bold cursor-pointer"
-                        title="Aplicar este equipamiento a todas las sesiones pasadas con este ejercicio"
-                      >
-                        ⚡ Al historial
-                      </button>
-
-                      {(liveCurrentEx.equipment === 'barra' || (!liveCurrentEx.equipment && (liveCurrentEx.barWeight ?? 20) > 0)) && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setCalculatorTarget({
-                              sessionId: activeWorkoutSession.id,
-                              exerciseIndex: liveSafeExIdx,
-                              setIndex: liveSafeSetIdx,
-                              initialWeight: Number(liveCurrentSet?.weight) || 40,
-                              barWeight: liveCurrentEx.barWeight ?? 20,
-                            })
-                          }
-                          className="px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 text-xs font-bold cursor-pointer hover:bg-blue-500/20"
-                        >
-                          ⚖️ Discos
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Series Selector Pills */}
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {liveSets.map((s, sIdx) => {
-                        const isSetSelected = sIdx === liveSafeSetIdx;
-                        return (
-                          <button
-                            key={s.id || sIdx}
-                            type="button"
-                            onClick={() => setLiveSetIdx(sIdx)}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ${
-                              isSetSelected
-                                ? 'bg-[var(--text)] text-[var(--bg-elevated)] border-transparent shadow-xs'
-                                : s.completed
-                                ? 'bg-emerald-500/15 text-emerald-600 border-emerald-500/30'
-                                : 'bg-[var(--card)] text-[var(--text-soft)] border-[var(--border)]'
-                            }`}
-                          >
-                            <span>#{sIdx + 1}</span>
-                            <span className="font-mono text-[11px]">
-                              {s.weight}k × {s.reps}
-                            </span>
-                            {s.completed && <span>✓</span>}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => handleAddSet(activeWorkoutSession.id, liveSafeExIdx)}
-                      className="px-2.5 py-1 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer flex items-center gap-1"
-                    >
-                      <AppIcon name="plus" className="h-3 w-3" />
-                      <span>Agregar serie</span>
-                    </button>
-                  </div>
-
-                  {/* ACTIVE SET CONSOLE WITH GIANT TOUCH BUTTONS */}
-                  {liveCurrentSet ? (
-                    <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 space-y-4 shadow-xs">
-                      <div className="flex items-center justify-between border-b border-[var(--border)] pb-2">
-                        <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-faint)]">
-                          Serie en ajuste: #{liveSafeSetIdx + 1} de {liveSets.length}
-                        </span>
-                        {/* Plate indication */}
-                        <div className="text-right">
-                          <span className="text-xs font-mono font-bold text-[var(--blue)]">
-                            {(() => {
-                              const eq = liveCurrentEx.equipment || (liveCurrentEx.barWeight && liveCurrentEx.barWeight > 0 ? 'barra' : 'mancuerna');
-                              const bar = liveCurrentEx.barWeight ?? 0;
-                              const w = Number(liveCurrentSet.weight) || 0;
-                              if (eq === 'barra' && bar > 0) {
-                                const perSide = Math.max(0, (w - bar) / 2);
-                                return `${perSide} kg por lado (en barra de ${bar} kg)`;
-                              }
-                              if (eq === 'mancuerna') {
-                                return `Mancuerna de ${w} kg`;
-                              }
-                              if (eq === 'polea') {
-                                return `Polea: ${w} kg`;
-                              }
-                              if (eq === 'maquina') {
-                                return `Máquina: ${w} kg`;
-                              }
-                              if (eq === 'corporal') {
-                                return w > 0 ? `Corporal + ${w} kg lastre` : 'Peso corporal';
-                              }
-                              return `${w} kg`;
-                            })()}
-                          </span>
-                        </div>
-                      </div>
-                      {/* GHOST VALUE BANNER FOR ACTIVE SET */}
-                      {(() => {
-                        const ghost = liveCurrentEx ? getExerciseGhostValues(state.gym.sessions, liveCurrentEx.name, activeWorkoutSession.id) : null;
-                        const ghostSet = ghost?.sets[liveSafeSetIdx];
-                        if (!ghostSet) return null;
-                        return (
-                          <div className="flex items-center justify-between p-2.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)] text-xs">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-                                Anterior #{liveSafeSetIdx + 1}:
-                              </span>
-                              <strong className="font-mono text-xs text-[var(--text)]">
-                                {ghostSet.weight} kg × {ghostSet.reps} reps
-                              </strong>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleUpdateSet(activeWorkoutSession.id, liveSafeExIdx, liveSafeSetIdx, {
-                                  weight: ghostSet.weight,
-                                  reps: ghostSet.reps,
-                                });
-                                playSound('click');
-                                showToast(`Serie #${liveSafeSetIdx + 1}: ${ghostSet.weight} kg × ${ghostSet.reps}`);
-                              }}
-                              className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-[var(--blue-soft)] text-[var(--blue)] hover:bg-[var(--blue)] hover:text-white transition cursor-pointer shrink-0"
-                            >
-                              Usar anterior
-                            </button>
-                          </div>
-                        );
-                      })()}
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {/* Weight Adjuster */}
-                        <div className="p-3 bg-[var(--surface-muted)] rounded-xl border border-[var(--border)] space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-                              Peso Total
-                            </span>
-                            <span className="text-2xl font-black font-mono text-[var(--text)]">
-                              {liveCurrentSet.weight} <span className="text-xs font-semibold text-[var(--text-soft)]">kg</span>
-                            </span>
-                          </div>
-
-                          {/* Quick Touch Pills */}
-                          <div className="grid grid-cols-6 gap-1">
-                            <button
-                              type="button"
-                              onClick={() => handleLiveAdjustWeight(-5)}
-                              className="py-2 rounded-lg bg-[var(--card)] hover:bg-[var(--border)] border border-[var(--border)] text-xs font-mono font-bold text-[var(--text)] transition cursor-pointer text-center"
-                            >
-                              -5
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleLiveAdjustWeight(-2.5)}
-                              className="py-2 rounded-lg bg-[var(--card)] hover:bg-[var(--border)] border border-[var(--border)] text-xs font-mono font-bold text-[var(--text)] transition cursor-pointer text-center"
-                            >
-                              -2.5
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleLiveAdjustWeight(-1.25)}
-                              className="py-2 rounded-lg bg-[var(--card)] hover:bg-[var(--border)] border border-[var(--border)] text-xs font-mono font-bold text-[var(--text)] transition cursor-pointer text-center"
-                            >
-                              -1.2
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleLiveAdjustWeight(1.25)}
-                              className="py-2 rounded-lg bg-[var(--card)] hover:bg-[var(--border)] border border-[var(--border)] text-xs font-mono font-bold text-[var(--text)] transition cursor-pointer text-center"
-                            >
-                              +1.2
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleLiveAdjustWeight(2.5)}
-                              className="py-2 rounded-lg bg-[var(--card)] hover:bg-[var(--border)] border border-[var(--border)] text-xs font-mono font-bold text-[var(--text)] transition cursor-pointer text-center"
-                            >
-                              +2.5
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleLiveAdjustWeight(5)}
-                              className="py-2 rounded-lg bg-[var(--card)] hover:bg-[var(--border)] border border-[var(--border)] text-xs font-mono font-bold text-[var(--text)] transition cursor-pointer text-center"
-                            >
-                              +5
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Reps Adjuster */}
-                        <div className="p-3 bg-[var(--surface-muted)] rounded-xl border border-[var(--border)] space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-                              Repeticiones
-                            </span>
-                            <span className="text-2xl font-black font-mono text-[var(--text)]">
-                              {liveCurrentSet.reps} <span className="text-xs font-semibold text-[var(--text-soft)]">reps</span>
-                            </span>
-                          </div>
-
-                          {/* Quick Touch Pills */}
-                          <div className="grid grid-cols-4 gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => handleLiveAdjustReps(-2)}
-                              className="py-2 rounded-lg bg-[var(--card)] hover:bg-[var(--border)] border border-[var(--border)] text-xs font-mono font-bold text-[var(--text)] transition cursor-pointer text-center"
-                            >
-                              -2
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleLiveAdjustReps(-1)}
-                              className="py-2 rounded-lg bg-[var(--card)] hover:bg-[var(--border)] border border-[var(--border)] text-xs font-mono font-bold text-[var(--text)] transition cursor-pointer text-center"
-                            >
-                              -1
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleLiveAdjustReps(1)}
-                              className="py-2 rounded-lg bg-[var(--card)] hover:bg-[var(--border)] border border-[var(--border)] text-xs font-mono font-bold text-[var(--text)] transition cursor-pointer text-center"
-                            >
-                              +1
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleLiveAdjustReps(2)}
-                              className="py-2 rounded-lg bg-[var(--card)] hover:bg-[var(--border)] border border-[var(--border)] text-xs font-mono font-bold text-[var(--text)] transition cursor-pointer text-center"
-                            >
-                              +2
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* BIG SATISFYING ACTION BUTTON: COMPLETAR SERIE */}
-                      <button
-                        type="button"
-                        onClick={handleLiveCompleteCurrentSet}
-                        className={`w-full py-3.5 rounded-2xl text-sm font-black tracking-wide transition-all cursor-pointer shadow-md flex items-center justify-center gap-2 active:scale-[0.99] ${
-                          liveCurrentSet.completed
-                            ? 'bg-emerald-600/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/30'
-                            : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25'
-                        }`}
-                      >
-                        <AppIcon name="check" className="h-5 w-5" />
-                        <span>
-                          {liveCurrentSet.completed
-                            ? `✓ Serie #${liveSafeSetIdx + 1} completada (Tocar para desmarcar)`
-                            : `✓ COMPLETAR SERIE #${liveSafeSetIdx + 1} (${liveCurrentSet.weight} kg × ${liveCurrentSet.reps})`}
-                        </span>
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="py-8 text-center bg-[var(--surface-muted)] rounded-2xl border border-[var(--border)]">
-                  <p className="text-xs text-[var(--text-soft)]">
-                    Esta sesión todavía no tiene ejercicios. Agregá el primero abajo:
-                  </p>
-                </div>
-              )}
-
-              {/* Quick Add Exercise Form to Active Workout */}
-              <div className="pt-2">
-                <WorkoutSessionCard
-                  session={activeWorkoutSession}
-                  allSessions={state.gym.sessions}
-                  onFinishWorkout={() => handleFinishWorkout(activeWorkoutSession.id)}
-                  onDeleteSession={() => handleDeleteSession(activeWorkoutSession.id)}
-                  onEditSessionDate={(d) => handleEditSessionDate(activeWorkoutSession.id, d)}
-                  onEditSessionWeek={(w) => handleEditSessionWeek(activeWorkoutSession.id, w)}
-                  onSaveAsTemplate={() => handleSaveSessionAsTemplate(activeWorkoutSession)}
-                  onAddExercise={(name, muscle, equipment, barW, w, r) =>
-                    handleAddExerciseToSession(activeWorkoutSession.id, name, muscle, equipment, barW, w, r)
-                  }
-                  onDeleteExercise={(exIdx) => handleDeleteExercise(activeWorkoutSession.id, exIdx)}
-                  onAddSet={(exIdx) => handleAddSet(activeWorkoutSession.id, exIdx)}
-                  onUpdateSet={(exIdx, setIdx, updates) =>
-                    handleUpdateSet(activeWorkoutSession.id, exIdx, setIdx, updates)
-                  }
-                  onDeleteSet={(exIdx, setIdx) => handleDeleteSet(activeWorkoutSession.id, exIdx, setIdx)}
-                  onUpdateExerciseBar={(exIdx, barW) =>
-                    handleUpdateExerciseBar(activeWorkoutSession.id, exIdx, barW)
-                  }
-                  onOpenCalculator={(exIdx, setIdx, initialW, barW) =>
-                    setCalculatorTarget({
-                      sessionId: activeWorkoutSession.id,
-                      exerciseIndex: exIdx,
-                      setIndex: setIdx,
-                      initialWeight: initialW,
-                      barWeight: barW,
-                    })
-                  }
-                  onOpenHistory={setHistoryExerciseName}
-                />
-              </div>
-            </div>
+            <ActiveWorkoutView
+              session={activeWorkoutSession}
+              exerciseIndex={liveSafeExIdx}
+              setIndex={liveSafeSetIdx}
+              previousSet={livePreviousSet}
+              previousSessionBest={livePreviousSessionBest}
+              exerciseSuggestions={COMMON_EXERCISE_SUGGESTIONS}
+              restTimer={
+                state.gym.activeTimer ? (
+                  <GymRestTimerBar
+                    state={state}
+                    onUpdateState={onUpdateState}
+                  />
+                ) : undefined
+              }
+              onSelectExercise={setLiveExIdx}
+              onSelectSet={setLiveSetIdx}
+              onAdjustWeight={handleLiveAdjustWeight}
+              onAdjustReps={handleLiveAdjustReps}
+              onUpdateCurrentSet={(updates) =>
+                handleUpdateSet(activeWorkoutSession.id, liveSafeExIdx, liveSafeSetIdx, updates)
+              }
+              onToggleCurrentSet={handleLiveCompleteCurrentSet}
+              onAddSet={(exerciseIndex) => handleAddSet(activeWorkoutSession.id, exerciseIndex)}
+              onDeleteSet={(exerciseIndex, setIndex) =>
+                handleDeleteSet(activeWorkoutSession.id, exerciseIndex, setIndex)
+              }
+              onAddExercise={({ name, muscleGroup, equipment, barWeight, initialWeight, initialReps }) =>
+                handleAddExerciseToSession(
+                  activeWorkoutSession.id,
+                  name,
+                  muscleGroup,
+                  equipment,
+                  barWeight,
+                  initialWeight,
+                  initialReps
+                )
+              }
+              onDeleteExercise={(exerciseIndex) =>
+                handleDeleteExercise(activeWorkoutSession.id, exerciseIndex)
+              }
+              onUpdateEquipment={(exerciseIndex, equipment, barWeight) =>
+                handleUpdateExerciseEquipment(activeWorkoutSession.id, exerciseIndex, equipment, barWeight)
+              }
+              onUpdateBarWeight={(exerciseIndex, barWeight) =>
+                handleUpdateExerciseBar(activeWorkoutSession.id, exerciseIndex, barWeight)
+              }
+              onPropagateExercise={handlePropagateExerciseToHistory}
+              onOpenCalculator={(exerciseIndex, setIndex, initialWeight, barWeight) =>
+                setCalculatorTarget({
+                  sessionId: activeWorkoutSession.id,
+                  exerciseIndex,
+                  setIndex,
+                  initialWeight,
+                  barWeight,
+                })
+              }
+              onOpenHistory={setHistoryExerciseName}
+              onOpenHistoryTab={() => setActiveTab('historial')}
+              onOpenProgressTab={() => setActiveTab('progresion')}
+              onFinish={() => handleFinishWorkout(activeWorkoutSession.id)}
+              onDeleteSession={() => handleDeleteSession(activeWorkoutSession.id)}
+              onSaveAsTemplate={() => handleSaveSessionAsTemplate(activeWorkoutSession)}
+              onEditSessionDate={(date) => handleEditSessionDate(activeWorkoutSession.id, date)}
+              onEditSessionWeek={(weekLabel) => handleEditSessionWeek(activeWorkoutSession.id, weekLabel)}
+            />
           ) : (
             /* NO ACTIVE WORKOUT: TODAY LAUNCHER */
             <div className="space-y-6">
-              {/* Today's Gym Status Hero Card */}
-              <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 transition-all">
-                <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                    Entrenamiento
-                  </span>
-                  <h2 className="text-base sm:text-lg font-bold text-[var(--text)]">
-                    {isTrainedToday
-                      ? 'Sesión de hoy completada'
-                      : isRestDayToday
-                      ? 'Día de descanso activo'
-                      : sessionTemplate
-                      ? `Rutina: ${state.gym.routineTemplates.find((t) => t.id === sessionTemplate)?.name || 'Personalizada'}`
-                      : 'Rutina de hoy'}
-                  </h2>
-                  <p className="text-xs text-[var(--text-soft)] mt-0.5">
-                    {isTrainedToday
-                      ? 'Tus datos de series y volumen quedaron registrados.'
-                      : isRestDayToday
-                      ? 'Racha protegida. Día de recuperación muscular.'
-                      : `${state.gym.routineTemplates.length} plantilla(s) disponible(s) · Racha de ${streak}d`}
-                  </p>
-                </div>
+              {/* Today's Gym Status */}
+              <section
+                data-gym-today-status
+                className="rounded-2xl bg-[var(--card-subtle)] px-4 py-4 sm:px-5"
+              >
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      {isTrainedToday && (
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
+                          <AppIcon name="check" className="h-4 w-4" />
+                        </span>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-[var(--text)] sm:text-base">
+                          {isTrainedToday
+                            ? 'Sesión de hoy completada'
+                            : isRestDayToday
+                            ? 'Día de descanso activo'
+                            : sessionTemplate
+                            ? state.gym.routineTemplates.find((template) => template.id === sessionTemplate)?.name || 'Rutina personalizada'
+                            : 'Listo para entrenar'}
+                        </p>
+                        {!isTrainedToday && (
+                          <p className="mt-0.5 text-xs leading-5 text-[var(--text-soft)]">
+                            {isRestDayToday
+                              ? 'Racha protegida para priorizar recuperación.'
+                              : `${state.gym.routineTemplates.length} plantilla${state.gym.routineTemplates.length === 1 ? '' : 's'} · Racha de ${streak} días`}
+                          </p>
+                        )}
+                      </div>
+                    </div>
 
-                <div className="flex items-center gap-2.5 flex-wrap w-full sm:w-auto">
-                  {!isTrainedToday && (
+                    {todayPresentation && (
+                      <dl className="mt-3 grid grid-cols-2 gap-x-5 gap-y-2 pl-9 sm:flex sm:flex-wrap sm:items-center">
+                        {[
+                          ['Ejercicios', todayPresentation.exerciseCount],
+                          ['Series', todayPresentation.completedSetCount],
+                          ['Volumen', `${todayPresentation.volumeKg.toLocaleString('es-UY')} kg`],
+                          ...(todayPresentation.durationLabel
+                            ? [['Duración', todayPresentation.durationLabel] as [string, string]]
+                            : []),
+                        ].map(([label, value]) => (
+                          <div key={label} className="sm:min-w-24">
+                            <dt className="text-[11px] font-medium text-[var(--text-faint)]">{label}</dt>
+                            <dd className="mt-0.5 text-sm font-bold tabular-nums text-[var(--text)]">{value}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
+                  </div>
+
+                  <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
+                    {state.gym.routineTemplates.length > 0 && (
+                      <select
+                        aria-label="Plantilla para el próximo entrenamiento"
+                        value={sessionTemplate}
+                        onChange={(event) => setSessionTemplate(event.target.value)}
+                        className="min-h-11 min-w-48 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-medium text-[var(--text)] outline-none focus:border-[var(--blue)]"
+                      >
+                        <option value="">Entrenamiento en blanco</option>
+                        {state.gym.routineTemplates.map((template) => (
+                          <option key={template.id} value={template.id}>{template.name}</option>
+                        ))}
+                      </select>
+                    )}
+
+                    {!isTrainedToday && (
+                      <button
+                        type="button"
+                        onClick={handleToggleRestDay}
+                        className="min-h-11 rounded-xl px-3 text-sm font-semibold text-[var(--text-soft)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                      >
+                        {isRestDayToday ? 'Cancelar descanso' : 'Descanso hoy'}
+                      </button>
+                    )}
+
                     <button
                       type="button"
-                      onClick={handleToggleRestDay}
-                      className="px-3.5 py-2 rounded-xl text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] border border-[var(--border)] bg-[var(--surface-muted)] transition cursor-pointer"
+                      onClick={() => handleStartWorkout(sessionTemplate || undefined)}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--blue)] px-4 text-sm font-bold text-white shadow-xs transition-colors hover:bg-[var(--blue-hover)] active:scale-[0.98]"
                     >
-                      {isRestDayToday ? 'Cancelar descanso' : 'Descanso hoy'}
+                      <AppIcon name="dumbbell" className="h-4 w-4" />
+                      <span>{isTrainedToday ? 'Iniciar otro entrenamiento' : 'Iniciar entrenamiento'}</span>
                     </button>
-                  )}
-
-                  <button
-                    type="button"
-                    onClick={() => handleStartWorkout(sessionTemplate || undefined)}
-                    className="px-4 py-2 bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 text-xs font-bold rounded-xl shadow-2xs transition-all active:scale-[0.98] cursor-pointer flex items-center gap-2"
-                  >
-                    <AppIcon name="dumbbell" className="h-4 w-4" />
-                    <span>Iniciar Entrenamiento</span>
-                  </button>
+                  </div>
                 </div>
-              </div>
+              </section>
 
               {/* Routine Templates Manager */}
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-3 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--blue-soft)] text-[var(--blue)]">
+              <section className="border-y border-[var(--border)] py-1">
+                <div className="flex min-h-14 items-center justify-between gap-3 px-1">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="text-[var(--blue)]">
                       <AppIcon name="repeat" className="h-4 w-4" />
                     </span>
-                    <div>
-                      <h2 className="text-xs font-bold text-[var(--text)]">Plantillas de Rutina</h2>
-                      <p className="text-[11px] text-[var(--text-soft)]">
+                    <div className="min-w-0">
+                      <h2 className="text-sm font-bold text-[var(--text)]">Plantillas</h2>
+                      <p className="text-xs text-[var(--text-soft)]">
                         {state.gym.routineTemplates.length} plantilla{state.gym.routineTemplates.length === 1 ? '' : 's'} guardada{state.gym.routineTemplates.length === 1 ? '' : 's'}
                       </p>
                     </div>
@@ -1347,14 +1012,14 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                   <button
                     type="button"
                     onClick={() => setShowTemplates((v) => !v)}
-                    className="text-xs font-bold text-[var(--blue)] hover:underline cursor-pointer"
+                    className="min-h-11 shrink-0 rounded-lg px-2 text-sm font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--surface-muted)]"
                   >
-                    {showTemplates ? 'Ocultar ↑' : 'Gestionar plantillas →'}
+                    {showTemplates ? 'Cerrar' : 'Gestionar plantillas'}
                   </button>
                 </div>
 
                 {showTemplates && (
-                  <div className="space-y-4 pt-2 border-t border-[var(--border)] animate-in fade-in">
+                  <div className="space-y-4 border-t border-[var(--border)] px-1 py-4 animate-in fade-in">
                     {/* Normalization Banner */}
                     <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
                       <div>
@@ -1553,24 +1218,24 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                     </div>
                   </div>
                 )}
-              </div>
+              </section>
 
               {/* Latest Session Card (Quick Glance) */}
               {latestSession && (
-                <div className="space-y-3">
+                <section className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-faint)]">
+                    <h2 className="text-sm font-bold text-[var(--text)]">
                       Última sesión registrada
-                    </h3>
+                    </h2>
                     <button
                       type="button"
                       onClick={() => setActiveTab('historial')}
-                      className="text-xs font-bold text-[var(--blue)] hover:underline cursor-pointer"
+                      className="min-h-11 rounded-lg px-2 text-sm font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--surface-muted)]"
                     >
-                      Ver todo el historial →
+                      Ver historial
                     </button>
                   </div>
-                  <WorkoutSessionCard
+                  <LatestWorkoutSession
                     session={latestSession}
                     allSessions={sortedSessions}
                     onFinishWorkout={() => handleFinishWorkout(latestSession.id)}
@@ -1607,7 +1272,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                     }
                     onOpenHistory={setHistoryExerciseName}
                   />
-                </div>
+                </section>
               )}
             </div>
           )}
@@ -2239,6 +1904,7 @@ interface WorkoutSessionCardProps {
     barWeight: number
   ) => void;
   onOpenHistory?: (exerciseName: string) => void;
+  showSessionActions?: boolean;
 }
 
 const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
@@ -2259,6 +1925,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
   onPropagateExercise,
   onOpenCalculator,
   onOpenHistory,
+  showSessionActions = true,
 }) => {
   const [newExName, setNewExName] = useState('');
   const [newExMuscle, setNewExMuscle] = useState<MuscleGroup>('Pecho');
@@ -2292,6 +1959,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
 
   return (
     <div
+      data-workout-session-card
       className={`rounded-2xl border transition-all p-4 space-y-4 ${
         isActive
           ? 'border-blue-500/50 bg-[var(--card)] shadow-lg ring-2 ring-blue-500/20'
@@ -2374,23 +2042,27 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={onSaveAsTemplate}
-            className="text-[11px] font-semibold text-[var(--text-soft)] hover:text-[var(--blue)] cursor-pointer p-1"
-            title="Guardar esta rutina como plantilla"
-          >
-            📋 Plantilla
-          </button>
+          {showSessionActions && (
+            <>
+              <button
+                type="button"
+                onClick={onSaveAsTemplate}
+                className="text-[11px] font-semibold text-[var(--text-soft)] hover:text-[var(--blue)] cursor-pointer p-1"
+                title="Guardar esta rutina como plantilla"
+              >
+                📋 Plantilla
+              </button>
 
-          <button
-            type="button"
-            onClick={onDeleteSession}
-            className="text-[11px] text-[var(--text-faint)] hover:text-rose-500 cursor-pointer p-1"
-            title="Eliminar sesión"
-          >
-            ✕
-          </button>
+              <button
+                type="button"
+                onClick={onDeleteSession}
+                className="text-[11px] text-[var(--text-faint)] hover:text-rose-500 cursor-pointer p-1"
+                title="Eliminar sesión"
+              >
+                ✕
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -2874,5 +2546,215 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
         </button>
       </form>
     </div>
+  );
+};
+
+const EQUIPMENT_LABELS: Record<ExerciseEquipment, string> = {
+  barra: 'Barra',
+  mancuerna: 'Mancuernas',
+  polea: 'Polea',
+  maquina: 'Máquina',
+  corporal: 'Peso corporal',
+};
+
+const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
+  const { session, allSessions, onDeleteSession, onSaveAsTemplate } = props;
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const presentation = useMemo(
+    () => buildGymSessionPresentation(session, allSessions),
+    [allSessions, session]
+  );
+
+  const secondaryActions = (
+    <details className="group relative">
+      <summary
+        aria-label="Más acciones de la sesión"
+        className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-xl text-[var(--text-soft)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+      >
+        <AppIcon name="more" className="h-5 w-5" />
+      </summary>
+      <div className="absolute right-0 top-12 z-20 w-52 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-xl">
+        <button
+          type="button"
+          onClick={onSaveAsTemplate}
+          className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]"
+        >
+          <AppIcon name="repeat" className="h-4 w-4 text-[var(--text-soft)]" />
+          Guardar como plantilla
+        </button>
+        <button
+          type="button"
+          onClick={onDeleteSession}
+          className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-rose-600 hover:bg-rose-500/10 dark:text-rose-400"
+        >
+          <AppIcon name="trash" className="h-4 w-4" />
+          Eliminar sesión
+        </button>
+      </div>
+    </details>
+  );
+
+  if (isEditing) {
+    return (
+      <div data-historical-session-editor className="space-y-3">
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-[var(--surface-muted)] px-3 py-2">
+          <div>
+            <p className="text-sm font-bold text-[var(--text)]">Editando sesión</p>
+            <p className="text-xs text-[var(--text-soft)]">Los cambios se guardan en el historial.</p>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setIsEditing(false)}
+              className="min-h-11 rounded-xl px-3 text-sm font-semibold text-[var(--blue)] hover:bg-[var(--card)]"
+            >
+              Volver al detalle
+            </button>
+            {secondaryActions}
+          </div>
+        </div>
+        <WorkoutSessionCard {...props} showSessionActions={false} />
+      </div>
+    );
+  }
+
+  return (
+    <article
+      data-latest-session-summary
+      className="overflow-visible rounded-2xl border border-[var(--border)] bg-[var(--card)]"
+    >
+      <div className="p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <time className="text-sm font-medium text-[var(--text-soft)]" dateTime={session.date}>
+                {fmtDate(session.date)}
+              </time>
+              <span className="text-[var(--text-faint)]">·</span>
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                <AppIcon name="checkCircle" className="h-3.5 w-3.5" />
+                Completada
+              </span>
+            </div>
+            <h3 className="mt-1 truncate text-base font-bold text-[var(--text)] sm:text-lg">
+              {presentation.name}
+            </h3>
+          </div>
+          {secondaryActions}
+        </div>
+
+        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-5">
+          <div>
+            <dt className="text-xs text-[var(--text-faint)]">Ejercicios</dt>
+            <dd className="mt-0.5 text-sm font-bold tabular-nums text-[var(--text)]">{presentation.exerciseCount}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-[var(--text-faint)]">Series realizadas</dt>
+            <dd className="mt-0.5 text-sm font-bold tabular-nums text-[var(--text)]">{presentation.completedSetCount}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-[var(--text-faint)]">Volumen</dt>
+            <dd className="mt-0.5 text-sm font-bold tabular-nums text-[var(--text)]">
+              {presentation.volumeKg.toLocaleString('es-UY')} kg
+            </dd>
+          </div>
+          {presentation.durationLabel && (
+            <div>
+              <dt className="text-xs text-[var(--text-faint)]">Duración</dt>
+              <dd className="mt-0.5 text-sm font-bold tabular-nums text-[var(--text)]">{presentation.durationLabel}</dd>
+            </div>
+          )}
+          {presentation.prExerciseCount > 0 && (
+            <div>
+              <dt className="text-xs text-[var(--text-faint)]">Récords</dt>
+              <dd className="mt-0.5 text-sm font-bold tabular-nums text-[var(--text)]">
+                {presentation.prExerciseCount} PR{presentation.prExerciseCount === 1 ? '' : 's'}
+              </dd>
+            </div>
+          )}
+        </dl>
+
+        <div className="mt-4 flex flex-col gap-3 border-t border-[var(--border)] pt-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="min-w-0 text-sm text-[var(--text-soft)]">
+            {presentation.bestSet
+              ? <><span className="font-medium">Mejor serie:</span> {presentation.bestSet.exerciseName} · <span className="font-mono font-semibold text-[var(--text)]">{presentation.bestSet.weight} kg × {presentation.bestSet.reps}</span></>
+              : 'Sin una mejor serie registrada.'}
+          </p>
+          <button
+            type="button"
+            aria-expanded={isExpanded}
+            onClick={() => setIsExpanded((value) => !value)}
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--surface-muted)]"
+          >
+            {isExpanded ? 'Ocultar detalle' : 'Ver detalle'}
+            <AppIcon name={isExpanded ? 'chevronUp' : 'chevronDown'} className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {isExpanded && (
+        <div data-latest-session-detail className="border-t border-[var(--border)] px-4 py-4 sm:px-5">
+          <div className="divide-y divide-[var(--border)]">
+            {session.exercises.map((exercise, exerciseIndex) => {
+              const inferred = inferExerciseEquipment(exercise.name);
+              const equipment = exercise.equipment ||
+                (exercise.barWeight && exercise.barWeight > 0 ? 'barra' : inferred.equipment);
+              const previousBest = getPreviousExerciseStats(allSessions, session.id, exercise.name);
+              return (
+                <section key={exercise.id || exerciseIndex} className="py-4 first:pt-0 last:pb-0">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                    <div>
+                      <h4 className="text-sm font-bold text-[var(--text)]">{exercise.name}</h4>
+                      <p className="mt-0.5 text-xs text-[var(--text-soft)]">
+                        {[exercise.muscleGroup, EQUIPMENT_LABELS[equipment]].filter(Boolean).join(' · ')}
+                      </p>
+                    </div>
+                    {previousBest && (
+                      <p className="text-xs text-[var(--text-soft)] sm:text-right">
+                        Referencia anterior: <span className="font-mono font-semibold text-[var(--text)]">{previousBest}</span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="mt-3 space-y-1">
+                    {(exercise.sets || []).map((set, setIndex) => (
+                      <div
+                        key={set.id || setIndex}
+                        className="flex min-h-10 items-center justify-between gap-3 rounded-lg px-2 text-sm hover:bg-[var(--surface-muted)]/60"
+                      >
+                        <span className="text-xs font-medium text-[var(--text-faint)]">Serie {setIndex + 1}</span>
+                        <span className="flex-1 text-right font-mono font-semibold tabular-nums text-[var(--text)]">
+                          {Number(set.weight) || 0} kg × {Number(set.reps) || 0}
+                        </span>
+                        <span className={`inline-flex w-24 items-center justify-end gap-1.5 text-xs font-medium ${
+                          set.completed
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : 'text-[var(--text-faint)]'
+                        }`}>
+                          {set.completed && <AppIcon name="check" className="h-3.5 w-3.5" />}
+                          {set.completed ? 'Realizada' : 'No realizada'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+
+          <div className="mt-4 flex justify-end border-t border-[var(--border)] pt-4">
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold text-[var(--text)] transition-colors hover:border-[var(--blue)]"
+            >
+              <AppIcon name="edit" className="h-4 w-4 text-[var(--blue)]" />
+              Editar sesión
+            </button>
+          </div>
+        </div>
+      )}
+    </article>
   );
 };
