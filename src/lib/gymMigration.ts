@@ -1,4 +1,14 @@
-import type { DayKey, Exercise, ExerciseEquipment, Gym, GymSession, GymSet, MuscleGroup, RoutineTemplate } from '../types';
+import {
+  isRoutineIconName,
+  type DayKey,
+  type Exercise,
+  type ExerciseEquipment,
+  type Gym,
+  type GymSession,
+  type GymSet,
+  type MuscleGroup,
+  type RoutineTemplate,
+} from '../types';
 import { normalizeGymSyncMetadata } from './gymSync';
 
 interface LegacyExercise {
@@ -247,9 +257,18 @@ function migrateSession(value: unknown, index: number): GymSession {
 }
 
 function migrateTemplate(value: unknown, index: number): RoutineTemplate {
-  const legacy = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as LegacySession & { name?: unknown; days?: unknown };
+  const legacy = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as LegacySession & {
+    name?: unknown;
+    days?: unknown;
+    appearance?: unknown;
+  };
   const id = stablePart(legacy.id, `template-${index}`);
-  return {
+  const rawAppearance = legacy.appearance && typeof legacy.appearance === 'object' && !Array.isArray(legacy.appearance)
+    ? legacy.appearance as Record<string, unknown>
+    : null;
+  const rawIcon = typeof rawAppearance?.icon === 'string' ? rawAppearance.icon.trim() : undefined;
+  const icon = isRoutineIconName(rawIcon) ? rawIcon : undefined;
+  const template: RoutineTemplate = {
     id,
     name: String(legacy.name || '').trim() || `Rutina ${index + 1}`,
     days: Array.isArray(legacy.days) ? legacy.days.filter((day): day is DayKey => DAYS.includes(day as DayKey)) : [],
@@ -257,6 +276,10 @@ function migrateTemplate(value: unknown, index: number): RoutineTemplate {
       ? legacy.exercises.map((exercise, exerciseIndex) => migrateExercise(exercise, id, exerciseIndex))
       : [],
   };
+  if (icon) {
+    template.appearance = { icon };
+  }
+  return template;
 }
 
 export function migrateGym(value: unknown): Gym {

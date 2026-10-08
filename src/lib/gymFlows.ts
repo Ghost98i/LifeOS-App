@@ -6,8 +6,10 @@ import type {
   GymSession,
   GymSet,
   MuscleGroup,
+  RoutineAppearance,
   RoutineTemplate,
 } from '../types';
+import { isRoutineIconName } from '../types';
 import { uid } from './storage';
 import {
   applyHistoryToTemplateExercises,
@@ -122,7 +124,7 @@ export function deleteGymTemplate(gym: Gym, templateId: string): boolean {
 export function updateGymTemplate(
   gym: Gym,
   templateId: string,
-  updates: { name?: string; days?: DayKey[] }
+  updates: { name?: string; days?: DayKey[]; appearance?: RoutineAppearance | null }
 ): boolean {
   const template = gym.routineTemplates.find((candidate) => candidate.id === templateId);
   if (!template) return false;
@@ -132,6 +134,13 @@ export function updateGymTemplate(
     template.name = name;
   }
   if (updates.days !== undefined) template.days = [...new Set(updates.days)];
+  if (updates.appearance !== undefined) {
+    if (updates.appearance && updates.appearance.icon && isRoutineIconName(updates.appearance.icon)) {
+      template.appearance = { icon: updates.appearance.icon };
+    } else {
+      delete template.appearance;
+    }
+  }
   return true;
 }
 
@@ -147,6 +156,7 @@ export function duplicateGymTemplate(
     id: input.templateId || uid(),
     name: input.name?.trim() || `${source.name} (copia)`,
     days: source.days ? [...source.days] : undefined,
+    appearance: source.appearance ? { ...source.appearance } : undefined,
     exercises: source.exercises.map((exercise) => ({
       ...exercise,
       // Exercise IDs are logical identities shared with history; only legacy entries receive one.

@@ -10,7 +10,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts';
-import { DayKey, Exercise, ExerciseEquipment, GymSession, GymSet, LifeOSState, MuscleGroup } from '../types';
+import { DayKey, Exercise, ExerciseEquipment, GymSession, GymSet, LifeOSState, MuscleGroup, RoutineAppearance } from '../types';
 import { GymRestTimerBar } from './GymRestTimerBar';
 import { ActiveWorkoutView } from './ActiveWorkoutView';
 import { GymPlateCalculator } from './GymPlateCalculator';
@@ -19,7 +19,7 @@ import { BodyCompositionCard } from './BodyCompositionCard';
 import { WorkoutSummaryModal } from './WorkoutSummaryModal';
 import { ExerciseHistoryModal } from './ExerciseHistoryModal';
 import { PageHeader } from './PageHeader';
-import { AppIcon, type AppIconName } from './AppIcon';
+import { AppIcon } from './AppIcon';
 import {
   todayISO,
   DAYS,
@@ -79,6 +79,12 @@ import {
 } from '../lib/gymFlows';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
+import {
+  getRoutineIdentity,
+  ROUTINE_ICON_OPTIONS,
+  ROUTINE_ICON_LABELS,
+  shouldShowRoutineCategory,
+} from '../lib/gymAppearance';
 
 interface GimnasioViewProps {
   state: LifeOSState;
@@ -112,73 +118,13 @@ const COMMON_EXERCISE_SUGGESTIONS = [
   'Plancha abdominal',
 ];
 
-type RoutineIdentity = {
-  label: string;
-  icon: AppIconName;
-  surface: string;
-  accent: string;
-};
-
-function getRoutineIdentity(exercises: Exercise[], routineName = ''): RoutineIdentity {
-  const groups = exercises.reduce<Record<string, number>>((result, exercise) => {
-    const group = exercise.muscleGroup || inferMuscleGroup(exercise.name);
-    result[group] = (result[group] || 0) + 1;
-    return result;
-  }, {});
-  const nameIdentity = /pecho/i.test(routineName)
-    ? 'Pecho'
-    : /espalda|dorsal/i.test(routineName)
-      ? 'Espalda'
-      : /pierna|cuádriceps|isquio|glúteo|pantorrilla/i.test(routineName)
-        ? 'Piernas'
-        : /core|abdomen/i.test(routineName)
-          ? 'Core'
-          : null;
-  const dominant = nameIdentity || Object.entries(groups).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Entrenamiento';
-  const normalized = dominant.toLocaleLowerCase('es-UY');
-
-  if (/pierna|cuádriceps|isquio|glúteo|pantorrilla/.test(normalized)) {
-    return {
-      label: dominant,
-      icon: 'activity',
-      surface: 'from-indigo-500/20 via-blue-500/10 to-transparent',
-      accent: 'text-indigo-600 dark:text-indigo-300',
-    };
-  }
-  if (/espalda|dorsal/.test(normalized)) {
-    return {
-      label: dominant,
-      icon: 'repeat',
-      surface: 'from-sky-500/20 via-blue-500/10 to-transparent',
-      accent: 'text-sky-700 dark:text-sky-300',
-    };
-  }
-  if (/pecho/.test(normalized)) {
-    return {
-      label: dominant,
-      icon: 'target',
-      surface: 'from-blue-500/22 via-indigo-500/10 to-transparent',
-      accent: 'text-blue-700 dark:text-blue-300',
-    };
-  }
-  if (/core|abdomen/.test(normalized)) {
-    return {
-      label: dominant,
-      icon: 'shield',
-      surface: 'from-slate-500/20 via-blue-500/8 to-transparent',
-      accent: 'text-slate-700 dark:text-slate-300',
-    };
-  }
-  return {
-    label: dominant,
-    icon: 'dumbbell',
-    surface: 'from-violet-500/18 via-blue-500/8 to-transparent',
-    accent: 'text-violet-700 dark:text-violet-300',
-  };
-}
-
-const RoutineIdentityMark: React.FC<{ exercises: Exercise[]; name?: string; compact?: boolean }> = ({ exercises, name, compact = false }) => {
-  const identity = getRoutineIdentity(exercises, name);
+const RoutineIdentityMark: React.FC<{
+  exercises: Exercise[];
+  name?: string;
+  appearance?: RoutineAppearance;
+  compact?: boolean;
+}> = ({ exercises, name, appearance, compact = false }) => {
+  const identity = getRoutineIdentity(exercises, name, appearance);
   return (
     <div
       aria-hidden="true"
@@ -1158,16 +1104,19 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                   )}
                   {state.gym.routineTemplates.map((t) => {
                     const isEditing = editingTemplateId === t.id;
-                    const identity = getRoutineIdentity(t.exercises, t.name);
+                    const identity = getRoutineIdentity(t.exercises, t.name, t.appearance);
+                    const showCategory = shouldShowRoutineCategory(t.name, identity.label);
                     return (
                       <article key={t.id} className="border-b border-[var(--border)] last:border-b-0">
                         <div className="grid gap-4 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:p-5">
                           <div className="flex min-w-0 items-center gap-3 sm:contents">
-                            <RoutineIdentityMark exercises={t.exercises} name={t.name} />
+                            <RoutineIdentityMark exercises={t.exercises} name={t.name} appearance={t.appearance} />
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
                                 <h3 className="truncate text-base font-black tracking-tight text-[var(--text)]">{t.name}</h3>
-                                <span className={`text-[10px] font-semibold ${identity.accent}`}>{identity.label}</span>
+                                {showCategory && (
+                                  <span className={`text-[10px] font-semibold ${identity.accent}`}>{identity.label}</span>
+                                )}
                               </div>
                               <p className="mt-1 text-xs leading-5 text-[var(--text-soft)]">
                                 {t.exercises.length} ejercicio{t.exercises.length === 1 ? '' : 's'}
@@ -1247,6 +1196,68 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                         </button>
                                       );
                                     })}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3.5 sm:p-4">
+                              <div className="flex flex-col gap-3.5 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex items-center gap-3">
+                                  <RoutineIdentityMark exercises={t.exercises} name={t.name} appearance={t.appearance} compact />
+                                  <div>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-[var(--text-soft)]">Apariencia</p>
+                                    <p className="mt-0.5 text-xs text-[var(--text-faint)]">
+                                      {t.appearance?.icon
+                                        ? `Icono personalizado (${ROUTINE_ICON_LABELS[t.appearance.icon] || t.appearance.icon})`
+                                        : `Automático (${identity.label})`}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <button
+                                    type="button"
+                                    aria-pressed={!t.appearance?.icon}
+                                    onClick={() => onUpdateState((draft) => {
+                                      updateGymTemplate(draft.gym, t.id, { appearance: null });
+                                    })}
+                                    className={`inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold transition-colors ${
+                                      !t.appearance?.icon
+                                        ? 'bg-[var(--blue)] text-white shadow-xs'
+                                        : 'bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)]'
+                                    }`}
+                                  >
+                                    <AppIcon name="sparkles" className="h-3.5 w-3.5" />
+                                    Automático
+                                  </button>
+
+                                  <span className="hidden h-5 w-px bg-[var(--border)] sm:inline-block" aria-hidden="true" />
+
+                                  <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Icono de rutina">
+                                    {ROUTINE_ICON_OPTIONS.map((opt) => {
+                                      const isSelected = t.appearance?.icon === opt.name;
+                                      return (
+                                        <button
+                                          key={opt.name}
+                                          type="button"
+                                          role="radio"
+                                          aria-checked={isSelected}
+                                          title={opt.label}
+                                          aria-label={opt.label}
+                                          onClick={() => onUpdateState((draft) => {
+                                            updateGymTemplate(draft.gym, t.id, { appearance: { icon: opt.name } });
+                                          })}
+                                          className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
+                                            isSelected
+                                              ? 'bg-blue-500/15 text-blue-600 ring-2 ring-blue-500 dark:text-blue-400'
+                                              : 'bg-[var(--surface-muted)] text-[var(--text-soft)] hover:bg-[var(--border)] hover:text-[var(--text)]'
+                                          }`}
+                                        >
+                                          <AppIcon name={opt.name} className="h-4 w-4" />
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
                               </div>
                             </div>

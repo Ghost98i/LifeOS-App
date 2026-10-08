@@ -9,6 +9,7 @@ import type {
   RoutineTemplate,
   WeightPoint,
 } from '../types';
+import { isRoutineIconName } from '../types';
 
 const SYNC_VERSION = 2 as const;
 
@@ -189,7 +190,7 @@ function collectMutationPaths(before: Gym, after: Gym): { changed: Set<string>; 
     const path = gymSyncPath.template(id);
     const previous = beforeTemplates.get(id);
     recordFieldChanges(previous as unknown as Record<string, unknown> | undefined, template as unknown as Record<string, unknown>, path,
-      ['name', 'days'], changed);
+      ['name', 'days', 'appearance'], changed);
     if (previous && !equal(exerciseOrder(previous.exercises), exerciseOrder(template.exercises))) {
       changed.add(`${path}/exerciseOrder`);
     }
@@ -399,12 +400,17 @@ function mergeTemplate(local: RoutineTemplate, remote: RoutineTemplate, baseline
     return [exercise];
   });
   orderedExercises.push(...exercisesById.values());
-  return {
+  const appearance = resolveField(`${path}/appearance`, local.appearance, remote.appearance, baseline?.appearance, context);
+  const result: RoutineTemplate = {
     id: local.id || remote.id,
     name: resolveField(`${path}/name`, local.name, remote.name, baseline?.name, context),
     days: resolveField(`${path}/days`, local.days, remote.days, baseline?.days, context),
     exercises: orderedExercises,
   };
+  if (appearance && typeof appearance === 'object' && 'icon' in appearance && isRoutineIconName(appearance.icon)) {
+    result.appearance = { icon: appearance.icon };
+  }
+  return result;
 }
 
 function mergeRestDays(local: string[], remote: string[], baseline: string[], context: MergeContext): string[] {

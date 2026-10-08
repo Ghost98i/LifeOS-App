@@ -260,11 +260,45 @@ export interface Exercise {
   legacyReps?: string | null;
 }
 
+export type RoutineIconName =
+  | 'dumbbell'
+  | 'zap'
+  | 'flame'
+  | 'activity'
+  | 'repeat'
+  | 'sparkles'
+  | 'target'
+  | 'shield'
+  | 'trophy'
+  | 'scale';
+
+export const ROUTINE_ICON_NAMES: readonly RoutineIconName[] = [
+  'dumbbell',
+  'zap',
+  'flame',
+  'activity',
+  'repeat',
+  'sparkles',
+  'target',
+  'shield',
+  'trophy',
+  'scale',
+] as const;
+
+export function isRoutineIconName(value: unknown): value is RoutineIconName {
+  return typeof value === 'string' && (ROUTINE_ICON_NAMES as readonly string[]).includes(value);
+}
+
+export interface RoutineAppearance {
+  icon?: RoutineIconName;
+}
+
 export interface RoutineTemplate {
   id: string;
   name: string;
   exercises: Exercise[];
   days?: DayKey[];
+  appearance?: RoutineAppearance;
 }
 
 export interface GymSession {
