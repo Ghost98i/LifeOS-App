@@ -38,6 +38,7 @@ import { FinanceAnalyticsView } from './FinanceAnalyticsView';
 import { FinanceFutureView } from './FinanceFutureView';
 import { FinanceCategoryModal } from './FinanceCategoryModal';
 import { FinanceReviewInbox } from './FinanceReviewInbox';
+import { setMonthlyCategoryLimit, setMonthlyGlobalLimit } from '../lib/financeBudget';
 import { getActiveCategories, getAllCategories, setCategoryBudget } from '../lib/financeCategories';
 import {
   addAccount,
@@ -291,11 +292,22 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
     showToast('Movimiento actualizado y revisado.');
   };
 
-  const handleSetBudget = (categoryId: string, amountStr: string) => {
+  const handleSetBudget = (categoryId: string, amountStr: string, month?: string, currency = 'UYU') => {
     onUpdateState((draft) => {
       if (!draft.finance) draft.finance = { accounts: [], transactions: [], categories: [], budgets: {}, subscriptions: [], debts: [], investments: [] } as any;
       if (!draft.finance.budgets) draft.finance.budgets = {};
-      setCategoryBudget(draft.finance, categoryId, Number(amountStr) || 0);
+      const num = Number(amountStr) || 0;
+      setCategoryBudget(draft.finance, categoryId, num);
+      if (month) {
+        setMonthlyCategoryLimit(draft.finance, month, categoryId, num > 0 ? num : null, currency);
+      }
+    });
+  };
+
+  const handleSetGlobalBudget = (month: string, limit: number | null, currency = 'UYU') => {
+    onUpdateState((draft) => {
+      if (!draft.finance) draft.finance = { accounts: [], transactions: [], categories: [], budgets: {}, subscriptions: [], debts: [], investments: [] } as any;
+      setMonthlyGlobalLimit(draft.finance, month, limit, currency);
     });
   };
 
@@ -877,10 +889,12 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
           {/* Monthly Budgets Progress */}
           {financeCustomization.visibleSections.budgets !== false && (
             <FinanceBudgetProgress
+              state={state}
               categories={state.finance.categories}
               catSpent={catSpent}
               budgets={state.finance.budgets}
               onSetBudget={handleSetBudget}
+              onSetGlobalBudget={handleSetGlobalBudget}
               onOpenCategoryManager={() => setIsCategoryModalOpen(true)}
             />
           )}

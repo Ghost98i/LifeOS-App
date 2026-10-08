@@ -116,6 +116,7 @@ export interface Account {
   balance: number;
   initialBalance?: number;
   lastReconciledAt?: string | null;
+  currency?: string;
 }
 
 export interface Subscription {
@@ -225,12 +226,79 @@ export interface FinanceCategory {
 
 export type FinanceCategoryInput = string | FinanceCategory;
 
+export interface MonthlyBudgetConfig {
+  month: string; // YYYY-MM
+  currency?: string;
+  globalLimit?: number | null;
+  categoryLimits?: Record<string, number>;
+}
+
+export type CashflowWindow = '7d' | 'month' | '30d';
+
+export interface CashflowEventItem {
+  id: string;
+  date: string; // YYYY-MM-DD
+  label: string;
+  amount: number;
+  currency: string;
+  type: 'expected_income' | 'committed_expense';
+  category?: string | null;
+  accountId?: string | null;
+  sourceId: string;
+  isOverdue?: boolean;
+  kind?: 'commitment' | 'subscription' | 'debt' | 'expected_income';
+}
+
+export interface CashflowCurrencySummary {
+  currency: string;
+  realBalance: number;
+  committedExpenses: number;
+  availableAfterCommitments: number; // realBalance - committedExpenses
+  expectedIncomes: number;
+  projectedBalance: number; // realBalance + expectedIncomes - committedExpenses
+}
+
+export interface CashflowWindowProjection {
+  window: CashflowWindow;
+  fromIso: string;
+  horizonIso: string;
+  summariesByCurrency: Record<string, CashflowCurrencySummary>;
+  events: CashflowEventItem[];
+}
+
+export interface BudgetCategoryStatus {
+  categoryId: string;
+  categoryName: string;
+  currency: string;
+  limit: number | null;
+  hasBudget: boolean;
+  spent: number;
+  remaining: number | null; // limit - spent (null if no limit)
+  exceeded: number; // Math.max(0, spent - limit) if has limit, else 0
+  isExceeded: boolean;
+  pct: number;
+}
+
+export interface MonthlyBudgetStatus {
+  month: string; // YYYY-MM
+  currency: string;
+  hasBudget: boolean;
+  globalLimit: number | null;
+  totalSpent: number;
+  remaining: number | null; // globalLimit - totalSpent (null if no globalLimit)
+  exceeded: number;
+  isExceeded: boolean;
+  pct: number;
+  categories: BudgetCategoryStatus[];
+}
+
 export interface Finance {
   transactions: Transaction[];
   transfers: FinanceTransfer[];
   reconciliations: AccountReconciliation[];
   categories: FinanceCategory[];
   budgets: Record<string, number>;
+  monthlyBudgets?: Record<string, MonthlyBudgetConfig>;
   accounts: Account[];
   debts: Debt[];
   investments: Investment[];

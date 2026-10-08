@@ -40,6 +40,7 @@ export interface TransactionInput {
   reviewStatus?: Transaction['reviewStatus'];
   reviewed?: boolean;
   commitmentId?: string | null;
+  currency?: string;
 }
 
 function affectedAccountIds(accountIds: Array<string | null | undefined>): string[] {
@@ -116,6 +117,7 @@ export function addTransaction(state: LifeOSState, input: TransactionInput): Tra
     reviewStatus,
     reviewed: reviewStatus === 'reviewed',
     commitmentId: input.commitmentId || null,
+    currency: input.currency || (state.finance.accounts.find((a) => a.id === input.accountId)?.currency) || 'UYU',
   };
   state.finance.transactions.push(transaction);
   materializeAccounts(state, [input.accountId]);
@@ -294,6 +296,7 @@ export function updateTransaction(state: LifeOSState, transactionId: string, inp
     reviewStatus,
     reviewed: reviewStatus === 'reviewed',
     commitmentId: input.commitmentId !== undefined ? input.commitmentId : transaction.commitmentId,
+    currency: input.currency !== undefined ? input.currency : transaction.currency,
   });
   materializeAccounts(state, accountIds);
   return transaction;

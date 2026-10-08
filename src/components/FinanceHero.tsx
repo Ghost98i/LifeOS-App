@@ -1,6 +1,7 @@
-import React from 'react';
-import { FinancialCommitment, LifeOSState } from '../types';
+import React, { useMemo, useState } from 'react';
+import { CashflowWindow, FinancialCommitment, LifeOSState } from '../types';
 import { CashFlowProjectionResult, resolveFinancialCommitment } from '../lib/calculations';
+import { deriveCashflowProjection } from '../lib/financeCashflow';
 import { fmtDate, fmtMoney, todayISO } from '../lib/storage';
 import { AppIcon } from './AppIcon';
 import { PrivacyAmount } from './PrivacyAmount';
@@ -35,13 +36,41 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
   onEditCommitment,
   onOpenCustomize,
 }) => {
-  const disponible = cashFlow.currentBalance;
-  const realAvailable = cashFlow.realAvailable;
-  const committed = cashFlow.committed;
-  const projectedBalance = cashFlow.projectedBalance;
-  const totalExpectedIncome = cashFlow.totalExpectedIncome;
+  const [selectedWindow, setSelectedWindow] = useState<CashflowWindow>('month');
+  const windowProj = useMemo(() => deriveCashflowProjection(state, selectedWindow), [state, selectedWindow]);
+  const currencies = useMemo(() => Object.keys(windowProj.summariesByCurrency), [windowProj]);
+  const [selectedCurrency, setSelectedCurrency] = useState<string>('UYU');
+
+  const activeCurrency = currencies.includes(selectedCurrency) ? selectedCurrency : (currencies[0] || 'UYU');
+  const summary = windowProj.summariesByCurrency[activeCurrency] || {
+    currency: activeCurrency,
+    realBalance: cashFlow.currentBalance,
+    committedExpenses: cashFlow.committed,
+    availableAfterCommitments: cashFlow.realAvailable,
+    expectedIncomes: cashFlow.totalExpectedIncome,
+    projectedBalance: cashFlow.projectedBalance,
+  };
+
+  const realBalance = summary.realBalance;
+  const committedAmount = summary.committedExpenses;
+  const availableAfterCommitments = summary.availableAfterCommitments;
+  const expectedIncomes = summary.expectedIncomes;
+  const projectedBalance = summary.projectedBalance;
+
+  const windowEvents = windowProj.events.filter((e) => e.currency === activeCurrency);
+  const committedCount = windowEvents.filter((e) => e.type === 'committed_expense').length;
+
   const cushionStatus = cashFlow.cushionStatus;
-  const isDeficit = cashFlow.isDeficit;
+  const isDeficit = projectedBalance < 0;
+
+  const windowLabel = selectedWindow === '7d' ? '7 días' : selectedWindow === 'month' ? 'Resto del mes' : '30 días';
+
+  const formatCurr = (val: number) => {
+    if (activeCurrency === 'USD') {
+      return `US$ ${Math.round(val).toLocaleString('es-UY')}`;
+    }
+    return fmtMoney(val);
+  };
 
   const atmosphereStatus: 'healthy' | 'attention' | 'warning' | 'deficit' = isDeficit
     ? 'deficit'
@@ -53,13 +82,18 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
     return (
       <section className="finance-surface relative overflow-hidden rounded-2xl p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          {/* Main KPI: Saldo Actual Protagonista */}
+          {/* Main KPI: Saldo Real Protagonista */}
           <div className="flex items-center gap-3">
             <div>
               <div className="flex items-center gap-2">
                 <span className="finance-text-secondary text-[10px] font-bold uppercase tracking-wider">
-                  Saldo Actual
+                  Saldo Real
                 </span>
+                {currencies.length > 1 && (
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                    {activeCurrency}
+                  </span>
+                )}
                 <span className={`w-2 h-2 rounded-full ${
                   isDeficit
                     ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]'
@@ -72,47 +106,68 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
                 as="div"
                 className="finance-text-primary text-2xl sm:text-3xl font-black tracking-tight tabular-nums font-mono mt-0.5"
               >
-                {fmtMoney(disponible)}
+                {formatCurr(realBalance)}
               </PrivacyAmount>
             </div>
           </div>
 
-          {/* Subordinate Contextual Indicators (Clean, borderless typography) */}
+          {/* Subordinate Contextual Indicators (4 Conceptos) */}
           <div className="flex flex-wrap items-center gap-4 text-xs">
             <div>
-              <span className="finance-text-muted text-[10px] uppercase font-bold block">Disponible (30d)</span>
-              <PrivacyAmount as="span" className={`font-mono font-bold text-sm ${realAvailable < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                {fmtMoney(realAvailable)}
+              <span className="finance-text-muted text-[10px] uppercase font-bold block">Disponible tras compromisos</span>
+              <PrivacyAmount as="span" className={`font-mono font-bold text-sm ${availableAfterCommitments < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                {formatCurr(availableAfterCommitments)}
               </PrivacyAmount>
             </div>
 
             <div className="hidden sm:block w-px h-7 bg-[var(--finance-border)]" />
 
             <div>
-              <span className="finance-text-muted text-[10px] uppercase font-bold block">Proyectado (30d)</span>
+              <span className="finance-text-muted text-[10px] uppercase font-bold block">Comprometido ({windowLabel})</span>
+              <PrivacyAmount as="span" className="finance-text-secondary font-mono font-bold text-sm">
+                −{formatCurr(committedAmount)}
+              </PrivacyAmount>
+            </div>
+
+            <div className="hidden sm:block w-px h-7 bg-[var(--finance-border)]" />
+
+            <div>
+              <div className="flex items-center gap-1">
+                <span className="finance-text-muted text-[10px] uppercase font-bold block">Proyectado</span>
+                <span className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-1 rounded">Proyección</span>
+              </div>
               <PrivacyAmount as="span" className={`font-mono font-bold text-sm ${projectedBalance < 0 ? 'text-rose-500' : 'finance-text-primary'}`}>
-                {fmtMoney(projectedBalance)}
+                {formatCurr(projectedBalance)}
               </PrivacyAmount>
-            </div>
-
-            <div className="hidden sm:block w-px h-7 bg-[var(--finance-border)]" />
-
-            <div>
-              <span className="finance-text-muted text-[10px] uppercase font-bold block">Colchón</span>
-              <span className={`font-bold text-sm ${
-                cushionStatus === 'below_current' || cushionStatus === 'projected_below'
-                  ? 'text-amber-600 dark:text-amber-400'
-                  : isDeficit
-                  ? 'text-rose-600 dark:text-rose-400'
-                  : 'text-emerald-600 dark:text-emerald-400'
-              }`}>
-                {isDeficit ? 'Riesgo' : cushionStatus === 'below_current' || cushionStatus === 'projected_below' ? 'Atención' : 'Saludable'}
-              </span>
             </div>
           </div>
 
-          {/* Compact Actions */}
+          {/* Compact Actions & Window Selector */}
           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] text-[10px] font-semibold">
+              <button
+                type="button"
+                onClick={() => setSelectedWindow('7d')}
+                className={`px-1.5 py-0.5 rounded cursor-pointer ${selectedWindow === '7d' ? 'bg-indigo-600 text-white font-bold' : 'finance-text-secondary'}`}
+              >
+                7d
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedWindow('month')}
+                className={`px-1.5 py-0.5 rounded cursor-pointer ${selectedWindow === 'month' ? 'bg-indigo-600 text-white font-bold' : 'finance-text-secondary'}`}
+              >
+                Mes
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedWindow('30d')}
+                className={`px-1.5 py-0.5 rounded cursor-pointer ${selectedWindow === '30d' ? 'bg-indigo-600 text-white font-bold' : 'finance-text-secondary'}`}
+              >
+                30d
+              </button>
+            </div>
+
             {onOpenCustomize && (
               <button
                 type="button"
@@ -153,7 +208,7 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
                 ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)]'
                 : 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]'
             }`} />
-            <span>Liquidez y flujo diario</span>
+            <span>Liquidez y flujo ({windowLabel})</span>
           </span>
 
           <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
@@ -164,11 +219,31 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
               : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25'
           }`}>
             {isDeficit
-              ? 'Riesgo de déficit a 30d'
+              ? `Riesgo de déficit (${windowLabel})`
               : cushionStatus === 'below_current' || cushionStatus === 'projected_below'
               ? 'Por debajo del colchón'
               : 'Liquidez saludable'}
           </span>
+
+          {/* Currency Pill Selector if multi-currency exists */}
+          {currencies.length > 1 && (
+            <div className="flex items-center gap-1 ml-1 p-0.5 rounded-lg bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] text-xs font-mono font-bold">
+              {currencies.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setSelectedCurrency(c)}
+                  className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                    activeCurrency === c
+                      ? 'bg-indigo-600 text-white shadow-2xs'
+                      : 'finance-text-secondary hover:text-[var(--finance-text-primary)]'
+                  }`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Global Action CTAs */}
@@ -206,16 +281,16 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
         </div>
       </div>
 
-      {/* Main Hierarchy: Open Editorial Canvas (Protagonist = Saldo Actual, Right = Alpine Flow Bridge) */}
+      {/* Main Hierarchy: Protagonist Saldo Real & Alpine Flow Bridge */}
       <div className="relative z-10 grid gap-8 lg:grid-cols-12 items-center">
-        {/* Left Column: Protagonist Saldo Actual (Cols 1-5) */}
+        {/* Left Column: Protagonist Saldo Real (Cols 1-5) */}
         <div className="lg:col-span-5 space-y-2">
           <div className="flex items-center gap-2">
             <span className="finance-text-secondary text-xs font-bold uppercase tracking-wider">
-              {displayMode === 'real_available' ? 'Disponible Real' : 'Saldo Actual'}
+              {displayMode === 'real_available' ? 'Disponible Real' : 'Saldo Real'}
             </span>
             <span className="finance-surface-subtle finance-text-secondary text-[10px] font-semibold px-2 py-0.5 rounded-md">
-              {displayMode === 'real_available' ? 'Libre tras 30d' : 'En cuentas hoy'}
+              {displayMode === 'real_available' ? `Libre (${windowLabel})` : `En cuentas hoy (${activeCurrency})`}
             </span>
           </div>
 
@@ -225,7 +300,7 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
               as="h1"
               className="finance-text-primary text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight tabular-nums font-mono"
             >
-              {fmtMoney(displayMode === 'real_available' ? realAvailable : disponible)}
+              {formatCurr(displayMode === 'real_available' ? availableAfterCommitments : realBalance)}
             </PrivacyAmount>
 
             {isDeficit && (
@@ -238,22 +313,22 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
           <p className="finance-text-secondary text-xs max-w-sm">
             {displayMode === 'real_available'
               ? 'Monto libre utilizable tras reservar compromisos inminentes.'
-              : 'Capital total consolidado en cuentas bancarias y efectivo.'}
+              : 'Dinero real existente derivado exclusivamente del ledger contable.'}
           </p>
 
-          {/* Subordinate Contextual Metrics (Direct typography, no mini-cards) */}
+          {/* Subordinate Contextual Metrics (Direct typography) */}
           <div className="finance-text-secondary pt-2 flex flex-wrap items-center gap-3 text-xs">
-            <div className="flex items-center gap-1.5">
-              <span>Disponible (30d):</span>
-              <PrivacyAmount as="span" className={`font-mono font-bold ${realAvailable < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                {fmtMoney(realAvailable)}
+            <div className="flex items-center gap-1.5" title="Saldo real menos compromisos pendientes de la ventana. No incluye ingresos futuros.">
+              <span>Disponible tras compromisos:</span>
+              <PrivacyAmount as="span" className={`font-mono font-bold ${availableAfterCommitments < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                {formatCurr(availableAfterCommitments)}
               </PrivacyAmount>
             </div>
             <span>·</span>
             <div className="flex items-center gap-1.5">
-              <span>Compromisos:</span>
+              <span>Comprometido ({windowLabel}):</span>
               <PrivacyAmount as="span" className="finance-text-primary font-mono font-semibold">
-                −{fmtMoney(committed)}
+                −{formatCurr(committedAmount)}
               </PrivacyAmount>
             </div>
             <span>·</span>
@@ -263,32 +338,71 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
           </div>
         </div>
 
-        {/* Right Column: Alpine Financial Flow Bridge (Cols 6-12) */}
-        {/* Answers: ¿Cómo paso de mi saldo actual al saldo proyectado? */}
+        {/* Right Column: Arithmetic Flow Bridge (Cols 6-12) */}
+        {/* Answers: Saldo Real -> − Comprometido -> = Disponible tras compromisos -> + Ingresos -> = Saldo Proyectado */}
         <div className="lg:col-span-7">
-          <div className="finance-surface-subtle p-4 sm:p-5 rounded-2xl">
-            <div className="flex items-center justify-between mb-3">
-              <span className="finance-text-muted text-[10px] font-black uppercase tracking-wider">
-                Flujo de liquidez a 30 días
-              </span>
-              <button
-                type="button"
-                onClick={onOpenCushionModal}
-                className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-              >
-                Colchón: {fmtMoney(state.finance?.minCushion ?? 5000)}
-              </button>
+          <div className="finance-surface-subtle p-4 sm:p-5 rounded-2xl space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="finance-text-muted text-[10px] font-black uppercase tracking-wider">
+                  Flujo proyectado de liquidez
+                </span>
+                <button
+                  type="button"
+                  onClick={onOpenCushionModal}
+                  className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                >
+                  Colchón: {fmtMoney(state.finance?.minCushion ?? 5000)}
+                </button>
+              </div>
+
+              {/* Window Selector Tabs */}
+              <div className="flex items-center gap-1 p-0.5 rounded-xl bg-[var(--finance-surface)] border border-[var(--finance-border)] text-[10px] font-bold shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setSelectedWindow('7d')}
+                  className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${
+                    selectedWindow === '7d'
+                      ? 'bg-indigo-600 text-white shadow-2xs'
+                      : 'finance-text-secondary hover:text-[var(--finance-text-primary)]'
+                  }`}
+                >
+                  7 días
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedWindow('month')}
+                  className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${
+                    selectedWindow === 'month'
+                      ? 'bg-indigo-600 text-white shadow-2xs'
+                      : 'finance-text-secondary hover:text-[var(--finance-text-primary)]'
+                  }`}
+                >
+                  Resto del mes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedWindow('30d')}
+                  className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${
+                    selectedWindow === '30d'
+                      ? 'bg-indigo-600 text-white shadow-2xs'
+                      : 'finance-text-secondary hover:text-[var(--finance-text-primary)]'
+                  }`}
+                >
+                  30 días
+                </button>
+              </div>
             </div>
 
-            {/* Arithmetic Flow Rail: Saldo -> Compromisos -> Ingresos -> Proyección */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center sm:text-left">
-              {/* Step 1: Saldo actual */}
+            {/* Arithmetic Flow Rail: Saldo -> Compromisos -> Disponible -> Ingresos -> Proyección */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-center sm:text-left pt-1">
+              {/* Step 1: Saldo real actual */}
               <div className="space-y-0.5">
                 <span className="finance-text-muted text-[10px] font-semibold uppercase tracking-wider block">
-                  Saldo actual
+                  1. Saldo Real
                 </span>
-                <PrivacyAmount as="div" className="finance-text-primary text-base sm:text-lg font-black font-mono tabular-nums">
-                  {fmtMoney(disponible)}
+                <PrivacyAmount as="div" className="finance-text-primary text-sm sm:text-base font-black font-mono tabular-nums">
+                  {formatCurr(realBalance)}
                 </PrivacyAmount>
                 <span className="finance-text-muted text-[10px] block">
                   Base en cuentas
@@ -298,36 +412,52 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
               {/* Step 2: Compromisos (-) */}
               <div className="space-y-0.5">
                 <span className="finance-text-muted text-[10px] font-semibold uppercase tracking-wider block">
-                  − Compromisos
+                  2. − Comprometido
                 </span>
-                <PrivacyAmount as="div" className="finance-text-secondary text-base sm:text-lg font-black font-mono tabular-nums">
-                  −{fmtMoney(committed)}
+                <PrivacyAmount as="div" className="finance-text-secondary text-sm sm:text-base font-black font-mono tabular-nums">
+                  −{formatCurr(committedAmount)}
                 </PrivacyAmount>
                 <span className="finance-text-muted text-[10px] block">
-                  {cashFlow.commitments.length} {cashFlow.commitments.length === 1 ? 'pago' : 'pagos'} fijos
+                  {committedCount} {committedCount === 1 ? 'pago' : 'pagos'} en {windowLabel}
                 </span>
               </div>
 
-              {/* Step 3: Ingresos Previstos (+) */}
+              {/* Step 3: Disponible después de compromisos (=) */}
               <div className="space-y-0.5">
-                <span className="finance-text-muted text-[10px] font-semibold uppercase tracking-wider block">
-                  + Ingresos
+                <span className="finance-text-muted text-[10px] font-semibold uppercase tracking-wider block" title="Saldo real menos compromisos pendientes. No incluye ingresos futuros.">
+                  3. Disponible
                 </span>
-                <PrivacyAmount as="div" className="text-base sm:text-lg font-black font-mono text-emerald-600 dark:text-emerald-400 tabular-nums">
-                  +{fmtMoney(totalExpectedIncome)}
+                <PrivacyAmount as="div" className={`text-sm sm:text-base font-black font-mono tabular-nums ${availableAfterCommitments < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                  {formatCurr(availableAfterCommitments)}
                 </PrivacyAmount>
                 <span className="finance-text-muted text-[10px] block">
-                  previstos a 30d
+                  Tras compromisos
                 </span>
               </div>
 
-              {/* Step 4: Saldo Proyectado (=) */}
+              {/* Step 4: Ingresos Previstos (+) */}
               <div className="space-y-0.5">
                 <span className="finance-text-muted text-[10px] font-semibold uppercase tracking-wider block">
-                  = Proyectado
+                  4. + Ingresos
                 </span>
-                <PrivacyAmount as="div" className={`text-base sm:text-lg font-black font-mono tabular-nums ${projectedBalance < 0 ? 'text-rose-600 dark:text-rose-400' : 'finance-text-primary'}`}>
-                  {fmtMoney(projectedBalance)}
+                <PrivacyAmount as="div" className="text-sm sm:text-base font-black font-mono text-emerald-600 dark:text-emerald-400 tabular-nums">
+                  +{formatCurr(expectedIncomes)}
+                </PrivacyAmount>
+                <span className="finance-text-muted text-[10px] block">
+                  previstos en {windowLabel}
+                </span>
+              </div>
+
+              {/* Step 5: Saldo Proyectado (=) */}
+              <div className="space-y-0.5">
+                <div className="flex items-center justify-center sm:justify-start gap-1">
+                  <span className="finance-text-muted text-[10px] font-semibold uppercase tracking-wider block">
+                    5. Proyectado
+                  </span>
+                  <span className="text-[9px] font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-1 rounded">Proy.</span>
+                </div>
+                <PrivacyAmount as="div" className={`text-sm sm:text-base font-black font-mono tabular-nums ${projectedBalance < 0 ? 'text-rose-600 dark:text-rose-400' : 'finance-text-primary'}`}>
+                  {formatCurr(projectedBalance)}
                 </PrivacyAmount>
                 <span className={`text-[10px] font-bold block ${
                   projectedBalance < (state.finance?.minCushion ?? 5000)

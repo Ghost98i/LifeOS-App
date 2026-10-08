@@ -252,6 +252,7 @@ export function defaultState(): LifeOSState {
       reconciliations: [],
       categories: [...DEFAULT_FINANCE_CATEGORIES],
       budgets: {},
+      monthlyBudgets: {},
       accounts: [
         { id: accEfectivoId, name: 'Efectivo', balance: 0, initialBalance: 0 },
         { id: accBancoId, name: 'Banco', balance: 0, initialBalance: 0 },
@@ -391,6 +392,24 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
     reconciliations: Array.isArray(rawFinance.reconciliations) ? rawFinance.reconciliations : [],
     categories,
     budgets: (rawFinance.budgets && typeof rawFinance.budgets === 'object') ? rawFinance.budgets : {},
+    monthlyBudgets: (() => {
+      const mb = (rawFinance.monthlyBudgets && typeof rawFinance.monthlyBudgets === 'object') ? rawFinance.monthlyBudgets : {};
+      const normalized: Record<string, any> = {};
+      for (const [k, v] of Object.entries(mb)) {
+        if (!v || typeof v !== 'object') continue;
+        const cfg = v as any;
+        const cur = String(cfg.currency || (k.includes(':') ? k.split(':')[1] : 'UYU')).trim().toUpperCase();
+        const m = String(cfg.month || (k.includes(':') ? k.split(':')[0] : k)).trim();
+        const canonKey = `${m}:${cur}`;
+        normalized[canonKey] = {
+          month: m,
+          currency: cur,
+          globalLimit: typeof cfg.globalLimit === 'number' && Number.isFinite(cfg.globalLimit) && cfg.globalLimit > 0 ? cfg.globalLimit : null,
+          categoryLimits: (cfg.categoryLimits && typeof cfg.categoryLimits === 'object') ? { ...cfg.categoryLimits } : {},
+        };
+      }
+      return normalized;
+    })(),
     accounts: Array.isArray(rawFinance.accounts)
       ? rawFinance.accounts.map((acc: any) => {
           const id = typeof acc.id === 'string' ? acc.id : uid();
@@ -420,6 +439,7 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
             balance,
             initialBalance,
             lastReconciledAt: typeof acc.lastReconciledAt === 'string' ? acc.lastReconciledAt : undefined,
+            currency: typeof acc.currency === 'string' && acc.currency.trim() ? acc.currency.trim() : undefined,
           };
         })
       : def.finance.accounts,

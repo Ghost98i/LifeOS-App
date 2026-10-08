@@ -53,6 +53,23 @@ export {
 };
 export type { CushionEvaluation };
 
+export {
+  deriveCashflowProjection,
+  getCommittedEventsForWindow,
+  getExpectedIncomeEventsForWindow,
+  getRealBalancesByCurrency,
+  calculateAvailableAfterCommitments,
+  getCivilWindowBounds,
+} from './financeCashflow';
+
+export {
+  deriveMonthlyBudgetStatus,
+  deriveAllMonthlyBudgetStatuses,
+  setMonthlyBudget,
+  setMonthlyGlobalLimit,
+  setMonthlyCategoryLimit,
+} from './financeBudget';
+
 export function calcAccountsTotal(state: LifeOSState): number {
   return (state.finance?.accounts || []).reduce((s, a) => s + Number(a.balance || 0), 0);
 }

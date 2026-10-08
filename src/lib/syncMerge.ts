@@ -41,6 +41,7 @@ import type {
   Transaction,
   UsefulLink,
   FinanceCategory,
+  MonthlyBudgetConfig,
 } from '../types';
 import type { SyncModuleKey, SyncConflictItem, ModuleMergeResult } from './syncModel';
 import { normalizeCategories } from './financeCategories';
@@ -600,6 +601,197 @@ function mergeFinanceEventCollection<T extends VersionedFinanceEvent>(
   ));
 }
 
+export function mergeMonthlyBudgets(
+  localMonthlyBudgets?: Record<string, MonthlyBudgetConfig>,
+  remoteMonthlyBudgets?: Record<string, MonthlyBudgetConfig>,
+  baselineMonthlyBudgets?: Record<string, MonthlyBudgetConfig>,
+  onConflict?: (conflict: SyncConflictItem) => void,
+): Record<string, MonthlyBudgetConfig> {
+  const result: Record<string, MonthlyBudgetConfig> = {};
+  const allKeys = new Set([
+    ...Object.keys(localMonthlyBudgets || {}),
+    ...Object.keys(remoteMonthlyBudgets || {}),
+    ...Object.keys(baselineMonthlyBudgets || {}),
+  ]);
+
+  for (const key of allKeys) {
+    const l = localMonthlyBudgets?.[key];
+    const r = remoteMonthlyBudgets?.[key];
+    const b = baselineMonthlyBudgets?.[key];
+
+    // Deletion vs baseline
+    if (b && !l && r) {
+      if (stableEqual(r, b)) {
+        // Local deleted, remote unmodified -> delete!
+        continue;
+      }
+      result[key] = r;
+      continue;
+    }
+
+    if (b && l && !r) {
+      if (stableEqual(l, b)) {
+        // Remote deleted, local unmodified -> delete!
+        continue;
+      }
+      result[key] = l;
+      continue;
+    }
+
+    if (!l && !r) {
+      continue;
+    }
+
+    if (l && !r && !b) {
+      result[key] = l;
+      continue;
+    }
+
+    if (!l && r && !b) {
+      result[key] = r;
+      continue;
+    }
+
+    if (l && r) {
+      const month = l.month || r.month || (b?.month ?? (key.includes(':') ? key.split(':')[0] : key));
+      const currency = (l.currency || r.currency || b?.currency || (key.includes(':') ? key.split(':')[1] : 'UYU')).toUpperCase();
+
+      const lGlobal = typeof l.globalLimit === 'number' && Number.isFinite(l.globalLimit) ? l.globalLimit : null;
+      const rGlobal = typeof r.globalLimit === 'number' && Number.isFinite(r.globalLimit) ? r.globalLimit : null;
+      const bGlobal = typeof b?.globalLimit === 'number' && Number.isFinite(b?.globalLimit) ? b.globalLimit : null;
+
+      let mergedGlobal: number | null = lGlobal;
+      if (b) {
+        if (lGlobal === bGlobal) {
+          mergedGlobal = rGlobal;
+        } else if (rGlobal === bGlobal) {
+          mergedGlobal = lGlobal;
+        } else if (lGlobal === rGlobal) {
+          mergedGlobal = lGlobal;
+        } else {
+          if (onConflict) {
+            onConflict({
+              id: `conflict-monthly-budget-global-${key}`,
+              module: 'finance',
+              entityType: 'budget',
+              entityId: key,
+              field: 'globalLimit',
+              label: `Límite global mensual: ${key}`,
+              localSummary: `$${lGlobal}`,
+              remoteSummary: `$${rGlobal}`,
+              baseSummary: `$${bGlobal}`,
+              localValue: lGlobal,
+              remoteValue: rGlobal,
+              baseValue: bGlobal,
+            });
+          }
+          mergedGlobal = lGlobal;
+        }
+      } else {
+        if (lGlobal !== rGlobal && lGlobal !== null && rGlobal !== null && onConflict) {
+          onConflict({
+            id: `conflict-monthly-budget-global-${key}`,
+            module: 'finance',
+            entityType: 'budget',
+            entityId: key,
+            field: 'globalLimit',
+            label: `Límite global mensual: ${key}`,
+            localSummary: `$${lGlobal}`,
+            remoteSummary: `$${rGlobal}`,
+            localValue: lGlobal,
+            remoteValue: rGlobal,
+          });
+        }
+        mergedGlobal = lGlobal ?? rGlobal;
+      }
+
+      const mergedCatLimits: Record<string, number> = {};
+      const allCats = new Set([
+        ...Object.keys(l.categoryLimits || {}),
+        ...Object.keys(r.categoryLimits || {}),
+        ...Object.keys(b?.categoryLimits || {}),
+      ]);
+
+      for (const cat of allCats) {
+        const lVal = l.categoryLimits?.[cat];
+        const rVal = r.categoryLimits?.[cat];
+        const bVal = b?.categoryLimits?.[cat];
+
+        if (lVal !== undefined && rVal !== undefined) {
+          if (bVal !== undefined) {
+            if (lVal === bVal) {
+              mergedCatLimits[cat] = rVal;
+            } else if (rVal === bVal) {
+              mergedCatLimits[cat] = lVal;
+            } else if (lVal === rVal) {
+              mergedCatLimits[cat] = lVal;
+            } else {
+              if (onConflict) {
+                onConflict({
+                  id: `conflict-monthly-budget-${key}-${cat}`,
+                  module: 'finance',
+                  entityType: 'budget',
+                  entityId: `${key}:${cat}`,
+                  label: `Presupuesto ${key}: ${cat}`,
+                  localSummary: `$${lVal}`,
+                  remoteSummary: `$${rVal}`,
+                  baseSummary: `$${bVal}`,
+                  localValue: lVal,
+                  remoteValue: rVal,
+                  baseValue: bVal,
+                });
+              }
+              mergedCatLimits[cat] = lVal;
+            }
+          } else {
+            if (lVal !== rVal && onConflict) {
+              onConflict({
+                id: `conflict-monthly-budget-${key}-${cat}`,
+                module: 'finance',
+                entityType: 'budget',
+                entityId: `${key}:${cat}`,
+                label: `Presupuesto ${key}: ${cat}`,
+                localSummary: `$${lVal}`,
+                remoteSummary: `$${rVal}`,
+                localValue: lVal,
+                remoteValue: rVal,
+              });
+            }
+            mergedCatLimits[cat] = lVal;
+          }
+        } else if (lVal !== undefined && rVal === undefined) {
+          if (bVal !== undefined) {
+            if (lVal === bVal) {
+              continue; // Deleted remotely
+            }
+            mergedCatLimits[cat] = lVal;
+          } else {
+            mergedCatLimits[cat] = lVal;
+          }
+        } else if (rVal !== undefined && lVal === undefined) {
+          if (bVal !== undefined) {
+            if (rVal === bVal) {
+              continue; // Deleted locally
+            }
+            mergedCatLimits[cat] = rVal;
+          } else {
+            mergedCatLimits[cat] = rVal;
+          }
+        }
+      }
+
+      result[key] = {
+        month,
+        currency,
+        globalLimit: mergedGlobal,
+        categoryLimits: mergedCatLimits,
+      };
+    }
+  }
+
+  return result;
+}
+
 export function mergeFinanceModule(
   local: Finance,
   remote: Finance,
@@ -848,6 +1040,13 @@ export function mergeFinanceModule(
     }
   }
 
+  const monthlyBudgets = mergeMonthlyBudgets(
+    local.monthlyBudgets,
+    remote.monthlyBudgets,
+    baseline?.monthlyBudgets,
+    onConflict
+  );
+
   const calcAccountDelta = (
     accId: string,
     txs: Transaction[] = [],
@@ -1021,6 +1220,7 @@ export function mergeFinanceModule(
     reconciliations,
     categories,
     budgets,
+    monthlyBudgets,
     debts,
     investments,
     subscriptions,
