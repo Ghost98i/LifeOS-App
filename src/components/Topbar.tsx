@@ -110,7 +110,7 @@ export const Topbar: React.FC<TopbarProps> = ({
   })();
 
   return (
-    <header className="sticky top-0 z-30 flex min-h-16 items-center gap-3 border-b border-[var(--border)] bg-[var(--topbar)] px-4 py-3 backdrop-blur-xl lg:px-7">
+    <header className="sticky top-0 z-30 flex min-h-16 items-center gap-3 border-b border-[var(--border)] bg-[var(--topbar)] px-4 py-3 shadow-[var(--chrome-shadow)] backdrop-blur-xl lg:px-7">
       <button
         onClick={onOpenMobileNav}
         className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--text)] lg:hidden cursor-pointer"
@@ -170,7 +170,7 @@ export const Topbar: React.FC<TopbarProps> = ({
           <button
             onClick={onOpenCapture}
             title={(state.inbox || []).length > 0 ? `Capturar / Bandeja (${(state.inbox || []).length} pendientes)` : "Capturar (C)"}
-            className="flex h-9 items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 hover:brightness-110 px-3 text-xs font-bold text-white shadow-xs transition-all active:scale-[0.98] cursor-pointer border border-white/10"
+            className="flex h-9 items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:brightness-105 px-3 text-xs font-bold text-white shadow-xs transition-all active:scale-[0.98] cursor-pointer border border-white/10"
           >
             <AppIcon name="plus" className="h-3.5 w-3.5 text-white" />
             <span>Capturar</span>

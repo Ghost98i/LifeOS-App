@@ -87,7 +87,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   })();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-[var(--border)] bg-[var(--nav-mobile)] shadow-[0_-10px_30px_rgba(2,8,23,.08)] backdrop-blur-xl lg:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-[var(--border)] bg-[var(--nav-mobile)] shadow-[0_-12px_32px_-26px_rgba(15,23,42,.45)] backdrop-blur-xl lg:hidden">
       {/* Micro-bar: Sync status LED & Privacy quick toggle */}
       <div className="flex items-center justify-between px-3.5 py-1 border-b border-[var(--border)]/35 text-[10px]">
         {cloudConfigured && !cloudUser && onCloudSignIn ? (
@@ -149,7 +149,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
         )}
         <button
           onClick={onOpenCapture}
-          className="relative mx-2 -mt-5 flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 text-white shadow-lg shadow-indigo-500/25 active:scale-95 transition-transform cursor-pointer border border-white/20"
+          className="relative mx-2 -mt-5 flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md active:scale-95 transition-transform cursor-pointer border border-white/20"
           aria-label="Captura rápida"
         >
           <AppIcon name="plus" className="h-6 w-6 text-white" />

@@ -635,7 +635,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   }, [isCommitmentModalOpen, isIncomeModalOpen, isCushionModalOpen, payingCommitment]);
 
   return (
-    <div className="space-y-6">
+    <div className="finance-workspace space-y-6">
       {/* 1. Page Header with Privacy Toggle */}
       <PageHeader
         title="Finanzas"
@@ -681,14 +681,14 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       />
 
       {/* 3. Segmented Navigation Bar (4 Conceptual Areas) */}
-      <div className="flex items-center gap-1 p-1 rounded-2xl bg-slate-100/70 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800/60 shadow-2xs">
+      <div className="finance-tabs flex items-center gap-1 rounded-2xl p-1">
         <button
           type="button"
           onClick={() => setActiveTab('movimientos')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`finance-tab flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === 'movimientos'
-              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-              : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              ? 'finance-tab-active'
+              : ''
           }`}
         >
           <AppIcon name="wallet" className="h-4 w-4" />
@@ -698,15 +698,15 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('cuentas')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`finance-tab flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === 'cuentas'
-              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-              : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              ? 'finance-tab-active'
+              : ''
           }`}
         >
           <AppIcon name="repeat" className="h-4 w-4" />
           <span>Cuentas</span>
-          <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.2 rounded-full bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+          <span className="finance-surface-subtle hidden sm:inline-block rounded-full px-2 py-0.5 font-mono text-[10px] text-[var(--finance-text-secondary)]">
             {state.finance.accounts.length}
           </span>
         </button>
@@ -714,10 +714,10 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('analisis')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`finance-tab flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === 'analisis'
-              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-              : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              ? 'finance-tab-active'
+              : ''
           }`}
         >
           <AppIcon name="activity" className="h-4 w-4" />
@@ -727,16 +727,16 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('proyeccion')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`finance-tab flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === 'proyeccion'
-              ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-xs'
-              : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+              ? 'finance-tab-active'
+              : ''
           }`}
         >
           <AppIcon name="trendingUp" className="h-4 w-4" />
           <span>Futuro</span>
           {(state.finance.expectedIncomes?.length || 0) + (state.finance.commitments?.length || 0) > 0 && (
-            <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.2 rounded-full bg-slate-200/60 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+            <span className="finance-surface-subtle hidden sm:inline-block rounded-full px-2 py-0.5 font-mono text-[10px] text-[var(--finance-text-secondary)]">
               {(state.finance.expectedIncomes?.length || 0) + (state.finance.commitments?.length || 0)}
             </span>
           )}
@@ -764,11 +764,11 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white">
+                <h2 className="finance-text-primary text-base sm:text-lg font-black tracking-tight">
                   Libro Diario de Movimientos
                 </h2>
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="finance-text-secondary text-xs">
                 Registro histórico con filtros bajo demanda y conciliación instantánea
               </p>
             </div>
@@ -777,7 +777,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsCategoryModalOpen(true)}
-                className="px-2.5 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50 hover:bg-white dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs"
+                className="finance-control px-2.5 py-1.5 text-xs font-semibold rounded-xl border flex items-center gap-1.5 cursor-pointer transition-all"
                 title="Administrar categorías"
               >
                 <AppIcon name="settings" className="h-3.5 w-3.5" />

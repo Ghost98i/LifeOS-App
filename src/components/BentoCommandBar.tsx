@@ -182,8 +182,8 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
     <div className="w-full flex flex-col gap-2.5">
       <div className={`w-full rounded-2xl backdrop-blur-md transition-all duration-200 ${
         isFocused || input.trim()
-          ? 'p-3 sm:px-4 border border-indigo-500/50 shadow-[0_0_0_2px_rgba(99,102,241,0.2)] bg-white/90 dark:bg-slate-900/80'
-          : 'p-2.5 sm:px-4 border border-slate-200/70 dark:border-slate-800/70 bg-white/60 dark:bg-slate-900/40 hover:border-slate-300 dark:hover:border-slate-700 shadow-2xs'
+          ? 'border border-indigo-500/45 bg-[var(--card)] p-3 shadow-[0_4px_18px_-12px_rgba(79,70,229,.45)] sm:px-4'
+          : 'border border-[var(--border)] bg-[var(--card)]/85 p-2.5 shadow-[var(--card-shadow)] hover:border-[var(--border-hover)] sm:px-4'
       }`}>
         <form onSubmit={handleSubmit} className="flex flex-col gap-2">
           <div className="flex items-center gap-2.5">

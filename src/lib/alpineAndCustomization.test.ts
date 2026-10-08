@@ -13,47 +13,48 @@ import {
 
 describe('Alpine Day-Cycle Signature', () => {
   it('determines the correct day cycle period for each hour range', () => {
-    // Dawn: 05:00 to 08:59
-    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 5, 0)), 'dawn');
-    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 8, 59)), 'dawn');
+    // Dawn: 06:00 to 11:59
+    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 6, 0)), 'dawn');
+    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 11, 59)), 'dawn');
 
-    // Day: 09:00 to 17:59
-    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 9, 0)), 'day');
+    // Day: 12:00 to 17:59
+    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 12, 0)), 'day');
     assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 14, 30)), 'day');
     assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 17, 59)), 'day');
 
-    // Sunset: 18:00 to 20:59
+    // Sunset: 18:00 to 19:59
     assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 18, 0)), 'sunset');
-    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 20, 59)), 'sunset');
+    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 19, 59)), 'sunset');
 
-    // Night: 21:00 to 04:59
-    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 21, 0)), 'night');
+    // Night: 20:00 to 05:59
+    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 20, 0)), 'night');
     assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 2, 0)), 'night');
-    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 4, 59)), 'night');
+    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 5, 59)), 'night');
 
     // Number hour directly
     assert.equal(getDayCyclePeriod(7), 'dawn');
+    assert.equal(getDayCyclePeriod(11), 'dawn');
     assert.equal(getDayCyclePeriod(12), 'day');
     assert.equal(getDayCyclePeriod(19), 'sunset');
-    assert.equal(getDayCyclePeriod(23), 'night');
+    assert.equal(getDayCyclePeriod(20), 'night');
   });
 
   it('generates human greetings and atmospheric metadata for each period', () => {
     const dawn = getDayCycleConfig('dawn');
     assert.equal(dawn.label, 'Amanecer');
-    assert.ok(dawn.greeting('Christian').includes('Buen día'));
+    assert.equal(dawn.greeting('Christian'), 'Buenos días, Christian');
 
     const day = getDayCycleConfig('day');
     assert.equal(day.label, 'Día');
-    assert.ok(day.greeting('Christian').includes('Buenas tardes'));
+    assert.equal(day.greeting('Christian'), 'Buenas tardes, Christian');
 
     const sunset = getDayCycleConfig('sunset');
     assert.equal(sunset.label, 'Atardecer');
-    assert.ok(sunset.greeting('Christian').includes('Buenas tardes'));
+    assert.equal(sunset.greeting('Christian'), 'Buenas tardes, Christian');
 
     const night = getDayCycleConfig('night');
     assert.equal(night.label, 'Noche');
-    assert.ok(night.greeting().includes('Buenas noches'));
+    assert.equal(night.greeting(), 'Buenas noches');
   });
 });
 

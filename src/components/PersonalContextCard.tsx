@@ -11,7 +11,6 @@ import { todayISO } from '../lib/storage';
 
 import { AppIcon } from './AppIcon';
 import { playSound } from '../lib/audio';
-import { ContextWave } from './visual';
 
 interface PersonalContextCardProps {
   state: LifeOSState;
@@ -36,7 +35,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({ state,
   const summary = sleepSummary(state);
 
   // Check if today's context is already filled
-  const isRecorded = current.energy != null || current.sleepHours != null;
+  const isRecorded = current.energy != null || current.sleepHours != null || current.connection != null;
 
   useEffect(() => {
     setSleep(current.sleepHours == null ? '' : String(current.sleepHours));
@@ -67,55 +66,75 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({ state,
     saveWithData(sleep, energy, connection);
   };
 
-  // If recorded and not editing, render ultra-compact mini-surface row
-  if (isRecorded && !isEditing) {
+  // The resting state is always a summary. Editing is an explicit secondary action.
+  if (!isEditing) {
     return (
-      <section className="relative overflow-hidden rounded-2xl border border-[var(--border)] bg-gradient-to-r from-[var(--card)] to-[var(--card-subtle)] p-2.5 sm:px-3.5 shadow-xs transition-all space-y-2">
-        <ContextWave expanded={showAnalysis} />
-        <div className="relative flex items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="flex h-5 w-5 items-center justify-center rounded-md bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0 text-xs shadow-2xs">
-              ⚡
-            </span>
-            <div className="flex items-center gap-1.5 flex-wrap font-semibold text-[11px] text-[var(--text)]">
-              {energy != null && <span>Energía {energy}</span>}
-              {energy != null && current.sleepHours != null && <span className="text-[var(--text-faint)]">·</span>}
-              {current.sleepHours != null && <span className="font-mono">{current.sleepHours} h sueño</span>}
-              {connection && (
-                <>
-                  {(energy != null || current.sleepHours != null) && <span className="text-[var(--text-faint)]">·</span>}
-                  <span className="text-[var(--text-soft)]">{connection === 'solo' ? 'A solas' : connection === 'mensaje' ? 'Mensajes' : 'En persona'}</span>
-                </>
-              )}
-            </div>
+      <section className="space-y-4 border-y border-[var(--border)] py-4" aria-labelledby="today-context-title">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 id="today-context-title" className="text-sm font-bold text-[var(--text)]">Estado de hoy</h2>
+            <p className="text-[10px] text-[var(--text-faint)]">Energía, descanso y contexto</p>
           </div>
-
           <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowAnalysis(!showAnalysis)}
-              className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline px-1.5 py-0.5 cursor-pointer"
-            >
-              {showAnalysis ? 'Ocultar' : 'Tendencia'}
-            </button>
+            {isRecorded && (
+              <button
+                type="button"
+                onClick={() => setShowAnalysis(!showAnalysis)}
+                className="px-1.5 py-0.5 text-[10px] font-semibold text-[var(--text-soft)] hover:text-[var(--text)]"
+              >
+                {showAnalysis ? 'Ocultar' : 'Tendencia'}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setIsEditing(true)}
-              className="px-2 py-0.5 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] text-[10px] font-bold text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer"
+              className="rounded-lg border border-[var(--border)] px-2 py-1 text-[10px] font-semibold text-[var(--text-soft)] transition hover:border-[var(--border-hover)] hover:text-[var(--text)]"
             >
-              Editar
+              {isRecorded ? 'Editar' : 'Registrar'}
             </button>
           </div>
         </div>
 
-        {summary.shouldAlert && (
+        {isRecorded ? (
+          <div className="flex flex-wrap items-stretch divide-x divide-[var(--border)] rounded-xl bg-[var(--card-subtle)] px-1 py-3">
+            {energy != null && (
+              <div className="min-w-[92px] flex-1 px-3">
+                <span className="block text-[9px] font-semibold text-[var(--text-faint)]">Energía</span>
+                <strong className="mt-0.5 block text-base font-bold text-[var(--text)]">{energy}<span className="text-[10px] font-medium text-[var(--text-faint)]">/5</span></strong>
+              </div>
+            )}
+            {current.sleepHours != null && (
+              <div className="min-w-[92px] flex-1 px-3">
+                <span className="block text-[9px] font-semibold text-[var(--text-faint)]">Sueño</span>
+                <strong className="mt-0.5 block text-base font-bold text-[var(--text)]">{current.sleepHours}<span className="text-[10px] font-medium text-[var(--text-faint)]"> h</span></strong>
+              </div>
+            )}
+            {connection && (
+              <div className="min-w-[108px] flex-1 px-3">
+                <span className="block text-[9px] font-semibold text-[var(--text-faint)]">Contexto</span>
+                <strong className="mt-1 block text-xs font-semibold text-[var(--text)]">{connection === 'solo' ? 'A solas' : connection === 'mensaje' ? 'Mensajes' : 'En persona'}</strong>
+              </div>
+            )}
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setIsEditing(true)}
+            className="flex w-full items-center justify-between rounded-xl bg-[var(--card-subtle)] px-3 py-3 text-left transition hover:bg-[var(--surface-muted)]"
+          >
+            <span className="text-xs font-medium text-[var(--text-soft)]">Registrá cómo venís en menos de un minuto</span>
+            <AppIcon name="arrowRight" className="h-3.5 w-3.5 text-[var(--text-faint)]" />
+          </button>
+        )}
+
+        {isRecorded && summary.shouldAlert && (
           <div className="banner-warning rounded-xl p-2 text-xs flex items-center justify-between gap-2 shadow-2xs font-bold text-[var(--warning-text-emphasis)]">
             <span className="text-[10px]">⚠️ {summary.currentShortStreak} noches consecutivas con descanso corto (&lt; 7h)</span>
           </div>
         )}
 
-        {showAnalysis && (
-          <div className="pt-2 border-t border-[var(--border)]/60 text-xs animate-in fade-in duration-150 space-y-2">
+        {isRecorded && showAnalysis && (
+          <div className="space-y-2 border-t border-[var(--border)]/60 pt-3 text-xs animate-in fade-in duration-150">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Últimos 7 días</span>
               <span className="text-[10px] font-mono font-bold text-[var(--text-soft)]">Promedio {summary.averageHours != null ? `${summary.averageHours.toFixed(1)}h` : '—'}</span>
@@ -135,28 +154,19 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({ state,
   }
 
   return (
-    <section className="relative overflow-hidden signature-panel p-3.5 sm:p-4 space-y-3">
-      <ContextWave expanded={true} />
+    <section className="space-y-3 border-y border-[var(--border)] py-4" aria-labelledby="today-context-title">
       {/* Header / Summary row */}
-      <div className="relative flex items-center justify-between gap-2.5">
+      <div className="flex items-center justify-between gap-2.5">
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0 shadow-2xs">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/12 text-amber-600 dark:text-amber-400 shrink-0">
             <AppIcon name="flame" className="h-4 w-4" />
           </span>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-[var(--text-faint)]">
-                Contexto
-              </span>
-              <span className="signature-pill signature-pill-warning">
-                <span className="signature-pulse-dot signature-pulse-dot-warning" />
-                <span>Energía & Ritmo</span>
-              </span>
-              {saved && <span className="text-[10px] font-bold text-emerald-500 animate-in fade-in">✓ Guardado</span>}
+              <h2 id="today-context-title" className="text-sm font-bold text-[var(--text)]">Estado de hoy</h2>
+              {saved && <span className="text-[10px] font-bold text-emerald-500 animate-in fade-in">Guardado</span>}
             </div>
-            <h3 className="text-xs sm:text-sm font-bold text-[var(--text)] truncate">
-              ¿Cómo venís hoy?
-            </h3>
+            <p className="text-[10px] text-[var(--text-faint)]">¿Cómo venís hoy?</p>
           </div>
         </div>
 
@@ -185,7 +195,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({ state,
         <div className="banner-warning rounded-xl p-2 sm:p-2.5 text-xs flex items-center justify-between gap-2 shadow-2xs">
           <div className="min-w-0">
             <strong className="block text-[11px] font-bold leading-tight text-[var(--warning-text-emphasis)]">⚠️ {summary.currentShortStreak} noches con poco descanso (&lt; 7h)</strong>
-            <span className="text-[10px] text-[var(--warning-text)] block leading-tight mt-0.5 font-medium">Priorizá recuperar horas hoy para mantener tu energía.</span>
+            <span className="text-[10px] text-[var(--warning-text)] block leading-tight mt-0.5 font-medium">El patrón aparece en el registro de los últimos días.</span>
           </div>
         </div>
       )}
@@ -194,7 +204,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({ state,
         <div className="space-y-2.5 pt-1 border-t border-[var(--border)]/60">
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Nivel de Energía</span>
+              <span className="text-[10px] font-bold text-[var(--text-faint)]">Nivel de energía</span>
               <span className="text-[11px] font-mono font-bold text-[var(--text-soft)]">{energy ? `${energy}/5` : 'Seleccionar'}</span>
             </div>
             <div className="grid grid-cols-5 gap-1">
@@ -217,8 +227,8 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({ state,
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                Horas de Sueño
+              <span className="text-[10px] font-bold text-[var(--text-faint)] block mb-1">
+                Horas de sueño
               </span>
               <div className="flex items-center gap-1.5">
                 <input
@@ -238,8 +248,8 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({ state,
             </div>
 
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                Contacto Social
+              <span className="text-[10px] font-bold text-[var(--text-faint)] block mb-1">
+                Contacto social
               </span>
               <select
                 value={connection || ''}

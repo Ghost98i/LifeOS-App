@@ -51,13 +51,13 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
 
   if (variant === 'compact') {
     return (
-      <section className="relative overflow-hidden rounded-2xl bg-white/70 dark:bg-slate-900/60 backdrop-blur-md border border-slate-200/70 dark:border-slate-800/70 p-4 sm:p-5 shadow-xs">
+      <section className="finance-surface relative overflow-hidden rounded-2xl p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-4">
           {/* Main KPI: Saldo Actual Protagonista */}
           <div className="flex items-center gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <span className="finance-text-secondary text-[10px] font-bold uppercase tracking-wider">
                   Saldo Actual
                 </span>
                 <span className={`w-2 h-2 rounded-full ${
@@ -70,7 +70,7 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
               </div>
               <PrivacyAmount
                 as="div"
-                className="text-2xl sm:text-3xl font-black tracking-tight tabular-nums font-mono mt-0.5 text-slate-900 dark:text-white"
+                className="finance-text-primary text-2xl sm:text-3xl font-black tracking-tight tabular-nums font-mono mt-0.5"
               >
                 {fmtMoney(disponible)}
               </PrivacyAmount>
@@ -80,25 +80,25 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
           {/* Subordinate Contextual Indicators (Clean, borderless typography) */}
           <div className="flex flex-wrap items-center gap-4 text-xs">
             <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 block">Disponible (30d)</span>
+              <span className="finance-text-muted text-[10px] uppercase font-bold block">Disponible (30d)</span>
               <PrivacyAmount as="span" className={`font-mono font-bold text-sm ${realAvailable < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                 {fmtMoney(realAvailable)}
               </PrivacyAmount>
             </div>
 
-            <div className="hidden sm:block w-px h-7 bg-slate-200 dark:bg-slate-800" />
+            <div className="hidden sm:block w-px h-7 bg-[var(--finance-border)]" />
 
             <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 block">Proyectado (30d)</span>
-              <PrivacyAmount as="span" className={`font-mono font-bold text-sm ${projectedBalance < 0 ? 'text-rose-500' : 'text-slate-800 dark:text-slate-200'}`}>
+              <span className="finance-text-muted text-[10px] uppercase font-bold block">Proyectado (30d)</span>
+              <PrivacyAmount as="span" className={`font-mono font-bold text-sm ${projectedBalance < 0 ? 'text-rose-500' : 'finance-text-primary'}`}>
                 {fmtMoney(projectedBalance)}
               </PrivacyAmount>
             </div>
 
-            <div className="hidden sm:block w-px h-7 bg-slate-200 dark:bg-slate-800" />
+            <div className="hidden sm:block w-px h-7 bg-[var(--finance-border)]" />
 
             <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 block">Colchón</span>
+              <span className="finance-text-muted text-[10px] uppercase font-bold block">Colchón</span>
               <span className={`font-bold text-sm ${
                 cushionStatus === 'below_current' || cushionStatus === 'projected_below'
                   ? 'text-amber-600 dark:text-amber-400'
@@ -117,7 +117,7 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
               <button
                 type="button"
                 onClick={onOpenCustomize}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                className="finance-control finance-text-secondary p-2 rounded-xl border transition cursor-pointer"
                 title="Personalizar Finanzas"
               >
                 <AppIcon name="settings" className="h-4 w-4" />
@@ -138,14 +138,14 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
   }
 
   return (
-    <section className="relative overflow-hidden rounded-3xl bg-white/70 dark:bg-slate-900/60 backdrop-blur-md border border-slate-200/70 dark:border-slate-800/70 p-6 sm:p-8 shadow-xs">
+    <section className="finance-surface relative overflow-hidden rounded-3xl p-6 sm:p-8">
       {/* Ambient Visual Atmosphere (Alpine Narrative Flow behind) */}
       <FinanceBalanceAtmosphere status={atmosphereStatus} />
 
       {/* Top Bar: Eyebrow status & Fast Actions */}
       <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-2.5 flex-wrap">
-          <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+          <span className="finance-text-secondary flex items-center gap-1.5 text-xs font-semibold">
             <span className={`w-2 h-2 rounded-full ${
               isDeficit
                 ? 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.6)]'
@@ -177,7 +177,7 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
             <button
               type="button"
               onClick={onOpenCustomize}
-              className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 cursor-pointer flex items-center gap-1.5 transition-all shadow-2xs"
+              className="finance-control px-3 py-1.5 text-xs font-semibold rounded-xl border cursor-pointer flex items-center gap-1.5 transition-all"
               title="Personalizar Finanzas"
             >
               <AppIcon name="settings" className="h-3.5 w-3.5" />
@@ -188,7 +188,7 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
           <button
             type="button"
             onClick={onOpenTransfer}
-            className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-white/80 dark:bg-slate-800/80 hover:bg-white dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs"
+            className="finance-control px-3 py-1.5 text-xs font-semibold rounded-xl border flex items-center gap-1.5 cursor-pointer transition-all"
             title="Mover dinero entre cuentas propias"
           >
             <AppIcon name="repeat" className="h-3.5 w-3.5" />
@@ -211,10 +211,10 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
         {/* Left Column: Protagonist Saldo Actual (Cols 1-5) */}
         <div className="lg:col-span-5 space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+            <span className="finance-text-secondary text-xs font-bold uppercase tracking-wider">
               {displayMode === 'real_available' ? 'Disponible Real' : 'Saldo Actual'}
             </span>
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+            <span className="finance-surface-subtle finance-text-secondary text-[10px] font-semibold px-2 py-0.5 rounded-md">
               {displayMode === 'real_available' ? 'Libre tras 30d' : 'En cuentas hoy'}
             </span>
           </div>
@@ -223,7 +223,7 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
           <div className="flex items-baseline gap-3 flex-wrap">
             <PrivacyAmount
               as="h1"
-              className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight tabular-nums font-mono text-slate-900 dark:text-white"
+              className="finance-text-primary text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight tabular-nums font-mono"
             >
               {fmtMoney(displayMode === 'real_available' ? realAvailable : disponible)}
             </PrivacyAmount>
@@ -235,14 +235,14 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
             )}
           </div>
 
-          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm">
+          <p className="finance-text-secondary text-xs max-w-sm">
             {displayMode === 'real_available'
               ? 'Monto libre utilizable tras reservar compromisos inminentes.'
               : 'Capital total consolidado en cuentas bancarias y efectivo.'}
           </p>
 
           {/* Subordinate Contextual Metrics (Direct typography, no mini-cards) */}
-          <div className="pt-2 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+          <div className="finance-text-secondary pt-2 flex flex-wrap items-center gap-3 text-xs">
             <div className="flex items-center gap-1.5">
               <span>Disponible (30d):</span>
               <PrivacyAmount as="span" className={`font-mono font-bold ${realAvailable < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
@@ -252,7 +252,7 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
             <span>·</span>
             <div className="flex items-center gap-1.5">
               <span>Compromisos:</span>
-              <PrivacyAmount as="span" className="font-mono font-semibold text-slate-800 dark:text-slate-200">
+              <PrivacyAmount as="span" className="finance-text-primary font-mono font-semibold">
                 −{fmtMoney(committed)}
               </PrivacyAmount>
             </div>
@@ -266,9 +266,9 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
         {/* Right Column: Alpine Financial Flow Bridge (Cols 6-12) */}
         {/* Answers: ¿Cómo paso de mi saldo actual al saldo proyectado? */}
         <div className="lg:col-span-7">
-          <div className="p-4 sm:p-5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800/60 backdrop-blur-xs">
+          <div className="finance-surface-subtle p-4 sm:p-5 rounded-2xl">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              <span className="finance-text-muted text-[10px] font-black uppercase tracking-wider">
                 Flujo de liquidez a 30 días
               </span>
               <button
@@ -284,49 +284,49 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center sm:text-left">
               {/* Step 1: Saldo actual */}
               <div className="space-y-0.5">
-                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                <span className="finance-text-muted text-[10px] font-semibold uppercase tracking-wider block">
                   Saldo actual
                 </span>
-                <PrivacyAmount as="div" className="text-base sm:text-lg font-black font-mono text-slate-900 dark:text-white tabular-nums">
+                <PrivacyAmount as="div" className="finance-text-primary text-base sm:text-lg font-black font-mono tabular-nums">
                   {fmtMoney(disponible)}
                 </PrivacyAmount>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
+                <span className="finance-text-muted text-[10px] block">
                   Base en cuentas
                 </span>
               </div>
 
               {/* Step 2: Compromisos (-) */}
               <div className="space-y-0.5">
-                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                <span className="finance-text-muted text-[10px] font-semibold uppercase tracking-wider block">
                   − Compromisos
                 </span>
-                <PrivacyAmount as="div" className="text-base sm:text-lg font-black font-mono text-slate-700 dark:text-slate-300 tabular-nums">
+                <PrivacyAmount as="div" className="finance-text-secondary text-base sm:text-lg font-black font-mono tabular-nums">
                   −{fmtMoney(committed)}
                 </PrivacyAmount>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
+                <span className="finance-text-muted text-[10px] block">
                   {cashFlow.commitments.length} {cashFlow.commitments.length === 1 ? 'pago' : 'pagos'} fijos
                 </span>
               </div>
 
               {/* Step 3: Ingresos Previstos (+) */}
               <div className="space-y-0.5">
-                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                <span className="finance-text-muted text-[10px] font-semibold uppercase tracking-wider block">
                   + Ingresos
                 </span>
                 <PrivacyAmount as="div" className="text-base sm:text-lg font-black font-mono text-emerald-600 dark:text-emerald-400 tabular-nums">
                   +{fmtMoney(totalExpectedIncome)}
                 </PrivacyAmount>
-                <span className="text-[10px] text-slate-400 dark:text-slate-500 block">
+                <span className="finance-text-muted text-[10px] block">
                   previstos a 30d
                 </span>
               </div>
 
               {/* Step 4: Saldo Proyectado (=) */}
               <div className="space-y-0.5">
-                <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">
+                <span className="finance-text-muted text-[10px] font-semibold uppercase tracking-wider block">
                   = Proyectado
                 </span>
-                <PrivacyAmount as="div" className={`text-base sm:text-lg font-black font-mono tabular-nums ${projectedBalance < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'}`}>
+                <PrivacyAmount as="div" className={`text-base sm:text-lg font-black font-mono tabular-nums ${projectedBalance < 0 ? 'text-rose-600 dark:text-rose-400' : 'finance-text-primary'}`}>
                   {fmtMoney(projectedBalance)}
                 </PrivacyAmount>
                 <span className={`text-[10px] font-bold block ${
@@ -344,11 +344,11 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
 
       {/* Immediate Commitments Strip (if enabled) */}
       {showCommitmentsStrip && cashFlow.commitments.length > 0 && (
-        <div className="relative z-10 mt-6 pt-5 border-t border-slate-200/70 dark:border-slate-800/70 space-y-3">
+        <div className="finance-divider relative z-10 mt-6 pt-5 border-t space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+            <span className="finance-text-secondary text-xs font-bold uppercase tracking-wider flex items-center gap-1.5">
               <span>Próximos Vencimientos Inmediatos</span>
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+              <span className="finance-surface-subtle finance-text-secondary px-1.5 py-0.5 rounded-full text-[10px] font-mono">
                 {cashFlow.commitments.length}
               </span>
             </span>
@@ -372,15 +372,15 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
                   className={`p-3.5 rounded-2xl transition-all border ${
                     isOverdue
                       ? 'border-rose-500/30 bg-rose-50/50 dark:bg-rose-950/20'
-                      : 'border-slate-200/80 dark:border-slate-800/80 bg-white/60 dark:bg-slate-800/40 hover:border-slate-300 dark:hover:border-slate-700'
+                      : 'finance-surface-raised hover:border-[var(--finance-border-strong)]'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      <h4 className="finance-text-primary text-xs font-bold truncate">
                         {com.label}
                       </h4>
-                      <span className={`text-[10px] font-semibold mt-0.5 block ${isOverdue ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-slate-400 dark:text-slate-500'}`}>
+                      <span className={`text-[10px] font-semibold mt-0.5 block ${isOverdue ? 'text-rose-600 dark:text-rose-400 font-bold' : 'finance-text-muted'}`}>
                         {com.dueDate
                           ? isOverdue
                             ? `Venció ${fmtDate(com.dueDate)}`
@@ -389,13 +389,13 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
                       </span>
                     </div>
 
-                    <PrivacyAmount as="span" className="font-mono text-xs font-black text-slate-900 dark:text-white tabular-nums shrink-0">
+                    <PrivacyAmount as="span" className="finance-text-primary font-mono text-xs font-black tabular-nums shrink-0">
                       {fmtMoney(com.amount)}
                     </PrivacyAmount>
                   </div>
 
                   {persistedCommitment ? (
-                    <div className="mt-3 pt-2 border-t border-slate-200/50 dark:border-slate-800/50 flex items-center justify-between text-xs">
+                    <div className="finance-divider mt-3 pt-2 border-t flex items-center justify-between text-xs">
                       <button
                         type="button"
                         onClick={() => onPayCommitment(persistedCommitment)}
@@ -407,13 +407,13 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
                       <button
                         type="button"
                         onClick={() => onEditCommitment(persistedCommitment)}
-                        className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer text-[11px]"
+                        className="finance-text-muted hover:text-[var(--finance-text-primary)] cursor-pointer text-[11px]"
                       >
                         Editar
                       </button>
                     </div>
                   ) : (
-                    <div className="mt-3 pt-2 border-t border-slate-200/50 dark:border-slate-800/50 text-[11px] font-semibold text-slate-400 dark:text-slate-500">
+                    <div className="finance-divider finance-text-muted mt-3 pt-2 border-t text-[11px] font-semibold">
                       {com.kind === 'subscription' ? 'Suscripción prevista' : 'Cuota prevista'}
                     </div>
                   )}

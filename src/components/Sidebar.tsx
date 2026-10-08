@@ -48,7 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <aside
-        className={`fixed lg:sticky top-0 left-0 h-screen w-[232px] bg-[var(--sidebar)] border-r border-[var(--border)] flex flex-col p-4 z-50 transition-transform duration-200 ease-in-out shrink-0 ${
+        className={`fixed lg:sticky top-0 left-0 h-screen w-[232px] bg-[var(--sidebar)] border-r border-[var(--border)] flex flex-col p-4 z-50 transition-transform duration-200 ease-in-out shrink-0 shadow-[var(--chrome-shadow)] ${
           isOpenMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
@@ -60,7 +60,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="flex flex-col min-w-0">
               <div className="flex items-center gap-1.5">
                 <span className="text-base font-black leading-none tracking-tight text-[var(--text)] truncate">LifeOS</span>
-                <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 shadow-[0_0_6px_rgba(99,102,241,0.8)]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
               </div>
               <span className="mt-1 text-[10px] font-semibold text-[var(--text-faint)] truncate tracking-wide">Workspace Personal</span>
             </div>
@@ -99,7 +99,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   aria-current={isActive ? 'page' : undefined}
                   className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-[var(--card)] font-bold text-[var(--text)] shadow-xs border border-[var(--border)] glow-subtle'
+                      ? 'bg-[var(--surface-accent)] font-bold text-[var(--text)] border border-[var(--border)]'
                       : 'text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] border border-transparent'
                   }`}
                 >

@@ -68,12 +68,12 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
   };
 
   return (
-    <div className="rounded-2xl border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/50 backdrop-blur-md p-5 shadow-xs space-y-4">
+    <div className="finance-surface rounded-2xl p-5 space-y-4">
       {/* Header: Monarch Style */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+            <h3 className="finance-text-primary text-sm font-extrabold">
               Presupuestos por Categoría
             </h3>
             {totalBudget > 0 && (
@@ -88,7 +88,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="finance-text-secondary text-xs mt-0.5">
             Planificado vs. gasto real del mes en curso
           </p>
         </div>
@@ -98,7 +98,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
             <button
               type="button"
               onClick={onOpenCategoryManager}
-              className="text-xs font-semibold text-slate-500 hover:text-slate-900 dark:hover:text-white transition cursor-pointer"
+              className="finance-text-secondary text-xs font-semibold hover:text-[var(--finance-text-primary)] transition cursor-pointer"
             >
               Categorías
             </button>
@@ -116,17 +116,17 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
 
       {/* Global Progress Bar (if budget configured) */}
       {totalBudget > 0 && (
-        <div className="space-y-1.5 p-3 rounded-xl bg-slate-50/70 dark:bg-slate-800/30 border border-slate-200/50 dark:border-slate-800/50">
-          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+        <div className="finance-surface-subtle space-y-1.5 p-3 rounded-xl">
+          <div className="finance-text-secondary flex items-center justify-between text-xs">
             <span>
-              Gastado: <strong className="font-mono text-slate-900 dark:text-white"><PrivacyAmount>{fmtMoney(totalSpent)}</PrivacyAmount></strong> de <strong className="font-mono text-slate-900 dark:text-white"><PrivacyAmount>{fmtMoney(totalBudget)}</PrivacyAmount></strong>
+              Gastado: <strong className="finance-text-primary font-mono"><PrivacyAmount>{fmtMoney(totalSpent)}</PrivacyAmount></strong> de <strong className="finance-text-primary font-mono"><PrivacyAmount>{fmtMoney(totalBudget)}</PrivacyAmount></strong>
             </span>
             <span className="font-mono font-semibold">
               Restante: <strong className={remainingTotal < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}><PrivacyAmount>{fmtMoney(remainingTotal)}</PrivacyAmount></strong>
             </span>
           </div>
 
-          <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+          <div className="h-2 w-full rounded-full bg-[var(--finance-border)] overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-300 ${
                 globalPct >= 100
@@ -143,8 +143,8 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
 
       {/* Monarch Columnar Layout: Categoría | Planificado | Actual | Restante | Progreso */}
       {configured.length === 0 && !showAllCategories ? (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-xs">
-          <span className="text-slate-400">
+        <div className="finance-surface-subtle flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-xl border-dashed text-xs">
+          <span className="finance-text-secondary">
             Todavía no definiste límites de gasto mensuales para tus categorías.
           </span>
           <button
@@ -159,7 +159,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left border-collapse">
             <thead>
-              <tr className="border-b border-slate-200/80 dark:border-slate-800/80 text-slate-400 dark:text-slate-500 uppercase text-[10px] font-bold tracking-wider">
+              <tr className="finance-divider finance-text-muted border-b uppercase text-[10px] font-bold tracking-wider">
                 <th className="py-2.5 px-3">Categoría</th>
                 <th className="py-2.5 px-3">Planificado</th>
                 <th className="py-2.5 px-3">Actual</th>
@@ -167,24 +167,24 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                 <th className="py-2.5 px-4 text-right">Progreso</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+            <tbody className="divide-y divide-[var(--finance-border)]">
               {displayList.map((item) => {
                 const isEditing = editingCategory === item.categoryId;
                 return (
                   <tr
                     key={item.categoryId}
-                    className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors group"
+                    className="hover:bg-[var(--finance-surface-hover)] transition-colors group"
                   >
                     {/* Categoría */}
-                    <td className="py-2.5 px-3 font-semibold text-slate-900 dark:text-white">
+                    <td className="finance-text-primary py-2.5 px-3 font-semibold">
                       <span>{item.category}</span>
                       {!item.active && (
-                        <span className="text-[10px] text-slate-400 ml-1">(archivada)</span>
+                        <span className="finance-text-muted text-[10px] ml-1">(archivada)</span>
                       )}
                     </td>
 
                     {/* Planificado (Editable) */}
-                    <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300">
+                    <td className="finance-text-secondary py-2.5 px-3 font-mono">
                       {isEditing ? (
                         <div className="flex items-center gap-1">
                           <input
@@ -196,7 +196,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                               if (e.key === 'Enter') saveEdit(item.categoryId);
                               if (e.key === 'Escape') setEditingCategory(null);
                             }}
-                            className="w-24 px-2 py-0.5 rounded border border-indigo-500 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white outline-none"
+                            className="finance-control w-24 px-2 py-0.5 rounded border border-indigo-500 text-xs outline-none"
                             placeholder="Monto"
                           />
                           <button
@@ -221,7 +221,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                     </td>
 
                     {/* Actual */}
-                    <td className="py-2.5 px-3 font-mono font-semibold text-slate-800 dark:text-slate-200">
+                    <td className="finance-text-primary py-2.5 px-3 font-mono font-semibold">
                       <PrivacyAmount>{fmtMoney(item.spent)}</PrivacyAmount>
                     </td>
 
@@ -232,7 +232,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                           <PrivacyAmount>{item.remaining < 0 ? `−${fmtMoney(Math.abs(item.remaining))}` : fmtMoney(item.remaining)}</PrivacyAmount>
                         </span>
                       ) : (
-                        <span className="text-slate-400">—</span>
+                        <span className="finance-text-muted">—</span>
                       )}
                     </td>
 
@@ -240,7 +240,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                     <td className="py-2.5 px-4 text-right">
                       {item.hasBudget ? (
                         <div className="flex items-center justify-end gap-2.5">
-                          <div className="w-24 h-1.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                          <div className="w-24 h-1.5 rounded-full bg-[var(--finance-border)] overflow-hidden">
                             <div
                               className={`h-full rounded-full ${
                                 item.isExceeded
@@ -257,13 +257,13 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                               ? 'text-rose-600 dark:text-rose-400'
                               : item.isWarning
                               ? 'text-amber-600 dark:text-amber-400'
-                              : 'text-slate-600 dark:text-slate-400'
+                              : 'finance-text-secondary'
                           }`}>
                             {item.pct.toFixed(0)}%
                           </span>
                         </div>
                       ) : (
-                        <span className="text-slate-400 text-[11px]">—</span>
+                        <span className="finance-text-muted text-[11px]">—</span>
                       )}
                     </td>
                   </tr>

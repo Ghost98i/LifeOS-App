@@ -66,7 +66,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
   return (
     <div className="space-y-6 animate-in fade-in">
       {/* SECTION 1: Horizon Selector & Core Liquidity Trajectory */}
-      <div className="rounded-3xl border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/50 backdrop-blur-md p-6 shadow-xs space-y-5">
+      <div className="finance-surface rounded-3xl p-6 space-y-5">
         {/* Header with 30/60/90 Horizon Tabs */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
@@ -108,36 +108,36 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
 
         {/* 4-Bento Summary Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800/50">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">Saldo Inicial</span>
-            <PrivacyAmount as="span" className="font-mono font-black text-xl text-slate-900 dark:text-white block mt-1">
+          <div className="finance-surface-subtle p-3.5 rounded-2xl">
+            <span className="finance-text-muted text-[10px] font-bold uppercase tracking-wider block">Saldo Inicial</span>
+            <PrivacyAmount as="span" className="finance-text-primary font-mono font-black text-xl block mt-1">
               {fmtMoney(projection.currentBalance)}
             </PrivacyAmount>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">en cuentas hoy</span>
+            <span className="finance-text-muted text-[10px] block mt-0.5">en cuentas hoy</span>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800/50">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">Ingresos Esperados</span>
+          <div className="finance-surface-subtle p-3.5 rounded-2xl">
+            <span className="finance-text-muted text-[10px] font-bold uppercase tracking-wider block">Ingresos Esperados</span>
             <PrivacyAmount as="span" className="font-mono font-black text-xl text-emerald-600 dark:text-emerald-400 block mt-1">
               +{fmtMoney(projection.totalExpectedIncome)}
             </PrivacyAmount>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">{projection.forecastItems.filter((f) => f.type === 'income').length} cobros</span>
+            <span className="finance-text-muted text-[10px] block mt-0.5">{projection.forecastItems.filter((f) => f.type === 'income').length} cobros</span>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800/50">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">Salidas previstas</span>
-            <PrivacyAmount as="span" className="font-mono font-black text-xl text-slate-900 dark:text-white block mt-1">
+          <div className="finance-surface-subtle p-3.5 rounded-2xl">
+            <span className="finance-text-muted text-[10px] font-bold uppercase tracking-wider block">Salidas previstas</span>
+            <PrivacyAmount as="span" className="finance-text-primary font-mono font-black text-xl block mt-1">
               −{fmtMoney(projection.committed)}
             </PrivacyAmount>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">{projection.commitments.length} pagos</span>
+            <span className="finance-text-muted text-[10px] block mt-0.5">{projection.commitments.length} pagos</span>
           </div>
 
-          <div className="p-3.5 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/50 dark:border-slate-800/50">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 block">Saldo Proyectado</span>
-            <PrivacyAmount as="span" className={`font-mono font-black text-xl block mt-1 ${projection.projectedBalance < 0 ? 'text-rose-600' : 'text-slate-900 dark:text-white'}`}>
+          <div className="finance-surface-subtle p-3.5 rounded-2xl">
+            <span className="finance-text-muted text-[10px] font-bold uppercase tracking-wider block">Saldo Proyectado</span>
+            <PrivacyAmount as="span" className={`font-mono font-black text-xl block mt-1 ${projection.projectedBalance < 0 ? 'text-rose-600' : 'finance-text-primary'}`}>
               {fmtMoney(projection.projectedBalance)}
             </PrivacyAmount>
-            <span className="text-[10px] text-slate-400 dark:text-slate-500 block mt-0.5">al {fmtDate(projection.horizonIso)}</span>
+            <span className="finance-text-muted text-[10px] block mt-0.5">al {fmtDate(projection.horizonIso)}</span>
           </div>
         </div>
 

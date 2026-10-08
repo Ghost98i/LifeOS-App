@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* LifeOS owns theme selection; never let the OS color preference activate dark utilities. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @keyframes note-carousel-enter-next {
   from {
     opacity: 0.15;
@@ -53,20 +56,42 @@
 :root {
   color-scheme: light;
 
-  /* Layered Canvas Tokens (Light: Crisp Porcelain & Graphite) */
-  --bg: #F0F4F8;
-  --bg-elevated: #FFFFFF;
-  --shell: #FFFFFF;
-  --card: #FFFFFF;
-  --card-subtle: #F8FAFC;
-  --sidebar: #FAFBFD;
-  --topbar: rgb(255 255 255 / 0.88);
-  --nav-mobile: rgb(255 255 255 / 0.94);
-  --surface-muted: #E8EEF5;
-  --surface-accent: rgba(99, 102, 241, 0.07);
-  --border: #DDE4EE;
-  --border-hover: #CBD5E1;
-  --border-focus: #6366F1;
+  /* Core theme primitives: cool paper, white surfaces and graphite ink. */
+  --canvas: #F3F6FA;
+  --surface-1: #FFFFFF;
+  --surface-2: #ECF1F6;
+  --surface-elevated: #FFFFFF;
+  --border: #D4DDE8;
+  --border-strong: #B6C2D0;
+  --text-primary: #152033;
+  --text-secondary: #43536A;
+  --text-muted: #68778C;
+  --accent: #4F46E5;
+  --semantic-success: #047857;
+  --semantic-success-bg: rgb(5 150 105 / 0.11);
+  --semantic-warning: #B45309;
+  --semantic-warning-bg: rgb(217 119 6 / 0.11);
+  --semantic-danger: #C6283D;
+  --semantic-danger-bg: rgb(220 38 38 / 0.1);
+  --control-bg: #FFFFFF;
+  --control-disabled-bg: #E7ECF2;
+
+  /* Compatibility aliases consumed throughout the existing application. */
+  --bg: var(--canvas);
+  --bg-elevated: var(--surface-elevated);
+  --shell: #F8FAFC;
+  --card: var(--surface-1);
+  --card-subtle: #F7F9FC;
+  --sidebar: #F8FAFC;
+  --topbar: rgb(250 252 255 / 0.94);
+  --nav-mobile: rgb(252 253 255 / 0.97);
+  --surface-muted: var(--surface-2);
+  --surface-hover: #E3EAF2;
+  --surface-accent: rgb(79 70 229 / 0.08);
+  --border-hover: var(--border-strong);
+  --border-focus: var(--accent);
+  --hero-bg: #E9EEF5;
+  --hero-overlay: var(--canvas);
 
   /* Warning & Alert Semantics (Light: High-Contrast Amber/Brown) */
   --warning-bg: rgba(245, 158, 11, 0.14);
@@ -77,65 +102,87 @@
   --warning-icon: #D97706;
 
   /* High-Contrast Crisp Typography */
-  --text: #0F172A;
-  --text-soft: #475569;
-  --text-faint: #64748B;
+  --text: var(--text-primary);
+  --text-soft: var(--text-secondary);
+  --text-faint: var(--text-muted);
 
   /* Cohesive Subtle Bento Surfaces (Light) */
-  --bento-blue-bg: #FFFFFF;
-  --bento-blue-border: #E2E8F0;
+  --bento-blue-bg: var(--surface-1);
+  --bento-blue-border: var(--border);
   --bento-blue-text: #1E3A8A;
   --bento-blue-accent: #3B82F6;
 
-  --bento-peach-bg: #FFFFFF;
-  --bento-peach-border: #E2E8F0;
+  --bento-peach-bg: var(--surface-1);
+  --bento-peach-border: var(--border);
   --bento-peach-text: #9A3412;
   --bento-peach-accent: #F97316;
 
-  --bento-green-bg: #FFFFFF;
-  --bento-green-border: #E2E8F0;
+  --bento-green-bg: var(--surface-1);
+  --bento-green-border: var(--border);
   --bento-green-text: #065F46;
   --bento-green-accent: #10B981;
 
-  --bento-neutral-bg: #FFFFFF;
-  --bento-neutral-border: #E2E8F0;
+  --bento-neutral-bg: var(--surface-1);
+  --bento-neutral-border: var(--border);
 
   /* Vibrant Functional Accents */
-  --blue: #3B82F6;
-  --blue-hover: #2563EB;
+  --blue: #2563EB;
+  --blue-hover: #1D4ED8;
   --blue-soft: rgba(59, 130, 246, 0.12);
-  --indigo: #6366F1;
+  --indigo: var(--accent);
   --indigo-soft: rgba(99, 102, 241, 0.12);
   --violet: #8B5CF6;
   --violet-soft: rgba(139, 92, 246, 0.12);
-  --emerald: #10B981;
-  --rose: #EF4444;
-  --amber: #F59E0B;
-  --cyan: #06B6D4;
+  --emerald: #059669;
+  --rose: #DC2626;
+  --amber: #D97706;
+  --cyan: #0891B2;
 
   /* Atmospheric & Elevation */
-  --card-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
-  --card-shadow-hover: 0 6px 16px -2px rgba(15, 23, 42, 0.08), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
-  --card-glow: 0 0 0 1px rgba(99, 102, 241, 0.15), 0 8px 24px -4px rgba(99, 102, 241, 0.1);
+  --card-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px -20px rgba(15, 23, 42, 0.28);
+  --card-shadow-hover: 0 12px 30px -20px rgba(15, 23, 42, 0.34), 0 2px 5px rgba(15, 23, 42, 0.05);
+  --card-glow: 0 0 0 1px rgba(79, 70, 229, 0.13), 0 8px 24px -12px rgba(79, 70, 229, 0.16);
+  --chrome-shadow: 0 1px 0 rgba(255, 255, 255, 0.72), 0 12px 30px -28px rgba(15, 23, 42, 0.5);
 }
 
 .dark {
   color-scheme: dark;
 
-  /* Layered Deep Canvas Tokens (Dark: Midnight Ink / Deep Slate) */
-  --bg: #07090E;
-  --bg-elevated: #0F131C;
+  /* Keep the established dark identity while exposing the same primitives. */
+  --canvas: #07090E;
+  --surface-1: #0F131D;
+  --surface-2: #161C2A;
+  --surface-elevated: #0F131C;
+  --border: #1E2638;
+  --border-strong: #2E3A52;
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --accent: #6366F1;
+  --semantic-success: #34D399;
+  --semantic-success-bg: rgb(16 185 129 / 0.14);
+  --semantic-warning: #FBBF24;
+  --semantic-warning-bg: rgb(245 158 11 / 0.14);
+  --semantic-danger: #FB7185;
+  --semantic-danger-bg: rgb(244 63 94 / 0.14);
+  --control-bg: #0F131C;
+  --control-disabled-bg: #141926;
+
+  --bg: var(--canvas);
+  --bg-elevated: var(--surface-elevated);
   --shell: #0B0E15;
-  --card: #0F131D;
+  --card: var(--surface-1);
   --card-subtle: #141926;
   --sidebar: #090C13;
   --topbar: rgb(7 9 14 / 0.88);
   --nav-mobile: rgb(11 14 21 / 0.94);
-  --surface-muted: #161C2A;
+  --surface-muted: var(--surface-2);
+  --surface-hover: #1C2434;
   --surface-accent: rgba(99, 102, 241, 0.12);
-  --border: #1E2638;
-  --border-hover: #2E3A52;
+  --border-hover: var(--border-strong);
   --border-focus: #818CF8;
+  --hero-bg: #0A0E18;
+  --hero-overlay: #07090E;
 
   /* Warning & Alert Semantics (Dark: High-Contrast Luminous Amber) */
   --warning-bg: rgba(245, 158, 11, 0.14);
@@ -146,9 +193,9 @@
   --warning-icon: #FBBF24;
 
   /* High-Contrast Crisp Typography (Dark) */
-  --text: #F8FAFC;
-  --text-soft: #94A3B8;
-  --text-faint: #64748B;
+  --text: var(--text-primary);
+  --text-soft: var(--text-secondary);
+  --text-faint: var(--text-muted);
 
   /* Cohesive Subtle Bento Surfaces (Dark) */
   --bento-blue-bg: #0F131D;
@@ -186,6 +233,102 @@
   --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.04);
   --card-shadow-hover: 0 8px 24px -4px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
   --card-glow: 0 0 0 1px rgba(99, 102, 241, 0.35), 0 8px 32px -4px rgba(99, 102, 241, 0.25);
+  --chrome-shadow: 0 1px 0 rgba(255, 255, 255, 0.025), 0 16px 36px -30px rgba(0, 0, 0, 0.9);
+}
+
+/* Finance workspace semantics. These keep light surfaces explicit while the
+   dark values preserve the existing Finance appearance. */
+.finance-workspace {
+  --finance-surface: #FFFFFF;
+  --finance-surface-raised: #FFFFFF;
+  --finance-surface-subtle: #F1F5F9;
+  --finance-surface-hover: #E8EEF5;
+  --finance-control: #FFFFFF;
+  --finance-border: #CCD7E4;
+  --finance-border-strong: #AEBCCD;
+  --finance-text-primary: #142033;
+  --finance-text-secondary: #43536A;
+  --finance-text-muted: #64748B;
+  --finance-shadow: 0 1px 2px rgb(15 23 42 / 0.05), 0 12px 30px -24px rgb(15 23 42 / 0.3);
+}
+
+.dark .finance-workspace {
+  --finance-surface: rgb(15 23 42 / 0.6);
+  --finance-surface-raised: #0F172A;
+  --finance-surface-subtle: rgb(30 41 59 / 0.4);
+  --finance-surface-hover: rgb(30 41 59 / 0.62);
+  --finance-control: rgb(15 23 42 / 0.78);
+  --finance-border: rgb(30 41 59 / 0.7);
+  --finance-border-strong: #334155;
+  --finance-text-primary: #F8FAFC;
+  --finance-text-secondary: #CBD5E1;
+  --finance-text-muted: #94A3B8;
+  --finance-shadow: 0 1px 3px rgb(0 0 0 / 0.38), 0 12px 32px -24px rgb(0 0 0 / 0.8);
+}
+
+.finance-surface {
+  background: var(--finance-surface);
+  border: 1px solid var(--finance-border);
+  box-shadow: var(--finance-shadow);
+}
+
+.finance-surface-raised {
+  background: var(--finance-surface-raised);
+  border: 1px solid var(--finance-border);
+  box-shadow: var(--finance-shadow);
+}
+
+.finance-surface-subtle {
+  background: var(--finance-surface-subtle);
+  border: 1px solid var(--finance-border);
+}
+
+.finance-control {
+  background: var(--finance-control);
+  border: 1px solid var(--finance-border);
+  color: var(--finance-text-primary);
+  box-shadow: 0 1px 1px rgb(15 23 42 / 0.04);
+}
+
+.finance-control:hover {
+  background: var(--finance-surface-hover);
+  border-color: var(--finance-border-strong);
+}
+
+.finance-text-primary { color: var(--finance-text-primary); }
+.finance-text-secondary { color: var(--finance-text-secondary); }
+.finance-text-muted { color: var(--finance-text-muted); }
+.finance-divider { border-color: var(--finance-border); }
+
+.finance-tabs {
+  background: var(--finance-surface-subtle);
+  border: 1px solid var(--finance-border);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.45);
+}
+
+.dark .finance-tabs {
+  box-shadow: none;
+}
+
+.finance-tab {
+  color: var(--finance-text-secondary);
+  border: 1px solid transparent;
+}
+
+.finance-tab:hover {
+  color: var(--finance-text-primary);
+  background: var(--finance-surface-hover);
+}
+
+.finance-tab-active {
+  color: var(--accent);
+  background: var(--finance-surface-raised);
+  border-color: var(--finance-border);
+  box-shadow: var(--finance-shadow);
+}
+
+.dark .finance-tab-active {
+  color: #F8FAFC;
 }
 
 body {
@@ -415,8 +558,8 @@ details > summary::-webkit-details-marker { display: none; }
   font-size: 0.6875rem;
   font-weight: 700;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  background-color: rgb(16 185 129 / 0.12);
-  color: #059669;
+  background-color: var(--semantic-success-bg);
+  color: var(--semantic-success);
   border: 1px solid rgb(16 185 129 / 0.22);
 }
 .dark .trend-badge-up {
@@ -432,8 +575,8 @@ details > summary::-webkit-details-marker { display: none; }
   font-size: 0.6875rem;
   font-weight: 700;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  background-color: rgb(239 68 68 / 0.12);
-  color: #dc2626;
+  background-color: var(--semantic-danger-bg);
+  color: var(--semantic-danger);
   border: 1px solid rgb(239 68 68 / 0.22);
 }
 .dark .trend-badge-down {
@@ -476,27 +619,27 @@ details > summary::-webkit-details-marker { display: none; }
 }
 
 .lifeos-badge-success {
-  background-color: rgb(16 185 129 / 0.12);
+  background-color: var(--semantic-success-bg);
   border-color: rgb(16 185 129 / 0.25);
-  color: #059669;
+  color: var(--semantic-success);
 }
 .dark .lifeos-badge-success {
   color: #34d399;
 }
 
 .lifeos-badge-warning {
-  background-color: rgb(245 158 11 / 0.12);
+  background-color: var(--semantic-warning-bg);
   border-color: rgb(245 158 11 / 0.25);
-  color: #d97706;
+  color: var(--semantic-warning);
 }
 .dark .lifeos-badge-warning {
   color: #fbbf24;
 }
 
 .lifeos-badge-danger {
-  background-color: rgb(239 68 68 / 0.12);
+  background-color: var(--semantic-danger-bg);
   border-color: rgb(239 68 68 / 0.25);
-  color: #dc2626;
+  color: var(--semantic-danger);
 }
 .dark .lifeos-badge-danger {
   color: #f87171;
@@ -639,6 +782,27 @@ button:disabled {
 
 input, select, textarea {
   accent-color: var(--blue);
+  background-color: var(--control-bg);
+  color: var(--text);
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  background-color: var(--control-disabled-bg);
+  color: var(--text-muted);
+  opacity: 1;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-faint);
+  opacity: 1;
+}
+
+select option {
+  background: var(--bg-elevated);
+  color: var(--text);
 }
 
 button:active {

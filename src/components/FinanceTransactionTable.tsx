@@ -135,7 +135,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
         <div className="relative min-w-[220px] flex-1 sm:max-w-md">
           <AppIcon
             name="search"
-            className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none"
+            className="finance-text-muted absolute left-3 top-2.5 h-4 w-4 pointer-events-none"
           />
           <input
             type="text"
@@ -145,13 +145,13 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
               setPage(1);
             }}
             placeholder="Buscar por comercio, categoría, cuenta..."
-            className="w-full rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/50 py-2 pl-9 pr-8 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 outline-none focus:border-indigo-500 transition-colors shadow-2xs"
+            className="finance-control w-full rounded-xl border py-2 pl-9 pr-8 text-xs placeholder:text-[var(--finance-text-muted)] outline-none focus:border-indigo-500 transition-colors"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-2 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+              className="finance-text-muted absolute right-2.5 top-2 text-xs hover:text-[var(--finance-text-primary)] cursor-pointer"
             >
               ✕
             </button>
@@ -166,7 +166,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
             className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
               activeFiltersCount > 0 || isFiltersOpen
                 ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500/40 text-indigo-700 dark:text-indigo-300 font-bold shadow-2xs'
-                : 'bg-white/70 dark:bg-slate-900/50 border-slate-200/80 dark:border-slate-800/80 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/60'
+                : 'finance-control'
             }`}
           >
             <AppIcon name="settings" className="h-3.5 w-3.5 opacity-80" />
@@ -181,7 +181,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortOption)}
-            className="rounded-xl border border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/50 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
+            className="finance-control rounded-xl border px-3 py-2 text-xs font-medium outline-none focus:border-indigo-500 cursor-pointer"
           >
             <option value="date_desc">Más recientes</option>
             <option value="date_asc">Más antiguos</option>
@@ -191,9 +191,9 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
 
           {/* On-demand Filter Dropdown / Popover */}
           {isFiltersOpen && (
-            <div className="absolute right-0 top-12 z-30 w-80 sm:w-96 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl space-y-3.5 animate-in fade-in slide-in-from-top-2">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
-                <span className="text-xs font-bold text-slate-900 dark:text-white">Filtros de Movimientos</span>
+            <div className="finance-surface-raised absolute right-0 top-12 z-30 w-80 sm:w-96 p-4 rounded-2xl space-y-3.5 animate-in fade-in slide-in-from-top-2">
+              <div className="finance-divider flex items-center justify-between pb-2 border-b">
+                <span className="finance-text-primary text-xs font-bold">Filtros de Movimientos</span>
                 {hasActiveFilters && (
                   <button
                     type="button"
@@ -207,7 +207,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
 
               {/* Cuenta */}
               <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                <label className="finance-text-muted text-[10px] font-bold uppercase tracking-wider">
                   Cuenta
                 </label>
                 <select
@@ -216,7 +216,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                     setSelectedAccount(e.target.value);
                     setPage(1);
                   }}
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none"
+                  className="finance-control w-full rounded-xl border px-3 py-1.5 text-xs outline-none"
                 >
                   <option value="all">Todas las cuentas ({transactions.length})</option>
                   {accounts.map((acc) => (
@@ -229,7 +229,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
 
               {/* Categoría */}
               <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                <label className="finance-text-muted text-[10px] font-bold uppercase tracking-wider">
                   Categoría
                 </label>
                 <select
@@ -238,7 +238,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                     setSelectedCategory(e.target.value);
                     setPage(1);
                   }}
-                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 px-3 py-1.5 text-xs text-slate-800 dark:text-slate-200 outline-none"
+                  className="finance-control w-full rounded-xl border px-3 py-1.5 text-xs outline-none"
                 >
                   <option value="all">Todas las categorías</option>
                   {allCats.map((cat) => (
@@ -251,7 +251,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
 
               {/* Tipo */}
               <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                <label className="finance-text-muted text-[10px] font-bold uppercase tracking-wider">
                   Tipo
                 </label>
                 <div className="flex gap-2">
@@ -263,8 +263,8 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                     }}
                     className={`flex-1 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
                       selectedType === 'all'
-                        ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-950 font-bold'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                        ? 'bg-[var(--accent)] text-white font-bold'
+                        : 'finance-surface-subtle finance-text-secondary'
                     }`}
                   >
                     Todos
@@ -278,7 +278,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                     className={`flex-1 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
                       selectedType === 'gasto'
                         ? 'bg-rose-500 text-white font-bold'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                        : 'finance-surface-subtle finance-text-secondary'
                     }`}
                   >
                     Gastos
@@ -292,7 +292,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                     className={`flex-1 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
                       selectedType === 'ingreso'
                         ? 'bg-emerald-600 text-white font-bold'
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                        : 'finance-surface-subtle finance-text-secondary'
                     }`}
                   >
                     Ingresos
@@ -317,7 +317,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
       {/* Active Filter Chips Rail (Only appears when active filters exist) */}
       {hasActiveFilters && (
         <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-          <span className="text-[10px] font-bold uppercase text-slate-400 dark:text-slate-500">
+          <span className="finance-text-muted text-[10px] font-bold uppercase">
             Filtros activos:
           </span>
 
@@ -370,7 +370,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
           )}
 
           {searchQuery.trim() !== '' && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[11px] font-medium">
+            <span className="finance-surface-subtle finance-text-secondary inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium">
               <span>Búsqueda: &ldquo;{searchQuery}&rdquo;</span>
               <button
                 type="button"
@@ -394,9 +394,9 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
 
       {/* Main Transactions Surface: Open, Clean Monarch-Inspired Table */}
       {sortedTransactions.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white/70 dark:bg-slate-900/50 p-8 text-center backdrop-blur-md">
-          <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">No se encontraron movimientos</p>
-          <p className="mt-1 text-xs text-slate-400">
+        <div className="finance-surface rounded-2xl p-8 text-center">
+          <p className="finance-text-primary text-sm font-semibold">No se encontraron movimientos</p>
+          <p className="finance-text-secondary mt-1 text-xs">
             {hasActiveFilters
               ? 'Probá ajustando o limpiando los filtros seleccionados.'
               : 'Todavía no registraste ningún movimiento financiero.'}
@@ -412,15 +412,15 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
           )}
         </div>
       ) : (
-        <div className="rounded-2xl border border-slate-200/70 dark:border-slate-800/70 bg-white/70 dark:bg-slate-900/50 backdrop-blur-md overflow-hidden shadow-xs">
+        <div className="finance-surface rounded-2xl overflow-hidden">
           {/* Mobile Card List */}
-          <div className="divide-y divide-slate-100 dark:divide-slate-800/60 md:hidden">
+          <div className="divide-y divide-[var(--finance-border)] md:hidden">
             {paginatedTransactions.map((t) => {
               const account = accounts.find((a) => a.id === t.accountId);
               const isExpense = t.type === 'gasto';
               const merchant = identifyMerchant(t.note);
               return (
-                <article key={t.id} className="p-3.5 space-y-2 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                <article key={t.id} className="p-3.5 space-y-2 hover:bg-[var(--finance-surface-hover)] transition-colors">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -447,19 +447,19 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                             {isExpense ? 'Gasto' : 'Ingreso'}
                           </span>
                         )}
-                        <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                        <span className="finance-text-secondary text-[11px] font-medium">
                           {getCategoryName(categories, t.category)}
                         </span>
                         {account && (
-                          <span className="text-[10px] text-slate-400">
+                          <span className="finance-text-muted text-[10px]">
                             · {account.name}
                           </span>
                         )}
                       </div>
-                      <p className="mt-1 text-sm font-semibold text-slate-900 dark:text-white truncate">
+                      <p className="finance-text-primary mt-1 text-sm font-semibold truncate">
                         {t.note || getCategoryName(categories, t.category)}
                       </p>
-                      <p className="text-[11px] text-slate-400 font-mono">
+                      <p className="finance-text-muted text-[11px] font-mono">
                         {fmtDate(t.date)}
                         {t.fixed && ` · ${t.fixed}`}
                       </p>
@@ -469,7 +469,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                       <PrivacyAmount
                         as="strong"
                         className={`font-mono text-sm font-extrabold block ${
-                          isExpense ? 'text-slate-900 dark:text-white' : 'text-emerald-600 dark:text-emerald-400'
+                          isExpense ? 'finance-text-primary' : 'text-emerald-600 dark:text-emerald-400'
                         }`}
                       >
                         {isExpense ? '−' : '+'} {fmtMoney(t.amount)}
@@ -489,7 +489,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                               onDelete(t.id);
                             }
                           }}
-                          className="rounded-md px-1.5 py-0.5 text-[11px] text-slate-400 hover:text-rose-500 cursor-pointer"
+                          className="finance-text-muted rounded-md px-1.5 py-0.5 text-[11px] hover:text-rose-500 cursor-pointer"
                         >
                           ✕
                         </button>
@@ -505,7 +505,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-xs text-left border-collapse">
               <thead>
-                <tr className="border-b border-slate-200/80 dark:border-slate-800/80 bg-slate-50/50 dark:bg-slate-800/30 text-slate-400 dark:text-slate-500 uppercase text-[10px] font-bold tracking-wider">
+                <tr className="finance-divider finance-text-muted bg-[var(--finance-surface-subtle)] border-b uppercase text-[10px] font-bold tracking-wider">
                   <th className="py-3 px-4">Comercio / Descripción</th>
                   <th className="py-3 px-3.5">Categoría</th>
                   <th className="py-3 px-3.5">Cuenta</th>
@@ -523,7 +523,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                   return (
                     <tr
                       key={t.id}
-                      className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors group"
+                      className="hover:bg-[var(--finance-surface-hover)] transition-colors group"
                     >
                       {/* Column 1: Merchant / Description */}
                       <td className="py-3 px-4 max-w-[280px]">
@@ -541,21 +541,21 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                               <span>{merchant.name}</span>
                             </span>
                           )}
-                          <span className="font-semibold text-slate-900 dark:text-slate-100 truncate">
+                          <span className="finance-text-primary font-semibold truncate">
                             {t.note || getCategoryName(categories, t.category)}
                           </span>
                         </div>
                       </td>
 
                       {/* Column 2: Categoría */}
-                      <td className="py-3 px-3.5 text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                        <span className="inline-block px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                      <td className="finance-text-secondary py-3 px-3.5 whitespace-nowrap">
+                        <span className="finance-surface-subtle finance-text-secondary inline-block px-2 py-0.5 rounded-md text-[11px] font-medium">
                           {getCategoryName(categories, t.category)}
                         </span>
                       </td>
 
                       {/* Column 3: Cuenta */}
-                      <td className="py-3 px-3.5 text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                      <td className="finance-text-secondary py-3 px-3.5 whitespace-nowrap">
                         {account?.name ? (
                           <span className="inline-flex items-center gap-1.5">
                             <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
@@ -567,7 +567,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                       </td>
 
                       {/* Column 4: Fecha */}
-                      <td className="py-3 px-3 font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                      <td className="finance-text-secondary py-3 px-3 font-mono whitespace-nowrap">
                         {fmtDate(t.date)}
                       </td>
 
@@ -589,7 +589,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                         <PrivacyAmount
                           as="span"
                           className={`font-black text-xs sm:text-sm ${
-                            isExpense ? 'text-slate-900 dark:text-white' : 'text-emerald-600 dark:text-emerald-400'
+                            isExpense ? 'finance-text-primary' : 'text-emerald-600 dark:text-emerald-400'
                           }`}
                         >
                           {isExpense ? '−' : '+'} {fmtMoney(t.amount)}
@@ -613,7 +613,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                                 onDelete(t.id);
                               }
                             }}
-                            className="rounded-lg px-1.5 py-1 text-[11px] text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer"
+                            className="finance-text-muted rounded-lg px-1.5 py-1 text-[11px] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer"
                             title="Eliminar movimiento"
                           >
                             ✕
@@ -628,8 +628,8 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
           </div>
 
           {/* Clean Footer with Filtered Totals & Pagination */}
-          <div className="p-3 sm:px-4 bg-slate-50/60 dark:bg-slate-800/30 border-t border-slate-200/70 dark:border-slate-800/70 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400">
+          <div className="finance-divider bg-[var(--finance-surface-subtle)] p-3 sm:px-4 border-t flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="finance-text-secondary flex items-center gap-3">
               <span>
                 {filteredTransactions.length} {filteredTransactions.length === 1 ? 'movimiento' : 'movimientos'}
               </span>
@@ -647,18 +647,18 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                   type="button"
                   disabled={currentPage <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none cursor-pointer text-xs"
+                  className="finance-control px-2.5 py-1 rounded-lg border disabled:opacity-50 disabled:pointer-events-none cursor-pointer text-xs"
                 >
                   Anterior
                 </button>
-                <span className="font-mono text-slate-500">
+                <span className="finance-text-secondary font-mono">
                   {currentPage} / {totalPages}
                 </span>
                 <button
                   type="button"
                   disabled={currentPage >= totalPages}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 disabled:opacity-30 disabled:pointer-events-none cursor-pointer text-xs"
+                  className="finance-control px-2.5 py-1 rounded-lg border disabled:opacity-50 disabled:pointer-events-none cursor-pointer text-xs"
                 >
                   Siguiente
                 </button>

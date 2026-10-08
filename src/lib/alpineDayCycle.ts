@@ -1,10 +1,10 @@
 /**
  * Alpine Day-Cycle System
  * Computes temporal daylight periods and themes based on local solar hour:
- * - dawn: 05:00 - 08:59 (celeste suave, dorado tenue, energía ascendente)
- * - day: 09:00 - 17:59 (limpio, claro, contraste activo)
- * - sunset: 18:00 - 20:59 (violeta cálido, ámbar/coral sutil, transición)
- * - night: 21:00 - 04:59 (azul profundo, índigo, calma y foco)
+ * - dawn: 06:00 - 11:59 (celeste suave, dorado tenue, energía ascendente)
+ * - day: 12:00 - 17:59 (limpio, claro, contraste activo)
+ * - sunset: 18:00 - 19:59 (violeta cálido, ámbar/coral sutil, transición)
+ * - night: 20:00 - 05:59 (azul profundo, índigo, calma y foco)
  */
 
 export type DayCyclePeriod = 'dawn' | 'day' | 'sunset' | 'night';
@@ -33,9 +33,9 @@ export function getDayCyclePeriod(input?: Date | number): DayCyclePeriod {
   } else {
     h = new Date().getHours();
   }
-  if (h >= 5 && h < 9) return 'dawn';
-  if (h >= 9 && h < 18) return 'day';
-  if (h >= 18 && h < 21) return 'sunset';
+  if (h >= 6 && h < 12) return 'dawn';
+  if (h >= 12 && h < 18) return 'day';
+  if (h >= 18 && h < 20) return 'sunset';
   return 'night';
 }
 
@@ -46,7 +46,7 @@ export function getDayCycleConfig(period: DayCyclePeriod): DayCycleConfig {
         period: 'dawn',
         label: 'Amanecer',
         greetingPrefix: 'Buenos días',
-        greeting: (name) => `Buen día${name ? `, ${name}` : ''}`,
+        greeting: (name) => `Buenos días${name ? `, ${name}` : ''}`,
         skyTone: {
           ambientColor: 'rgba(56, 189, 248, 0.08)',
           accentGlow: 'rgba(251, 191, 36, 0.15)',
@@ -60,7 +60,7 @@ export function getDayCycleConfig(period: DayCyclePeriod): DayCycleConfig {
       return {
         period: 'day',
         label: 'Día',
-        greetingPrefix: 'Buen día',
+        greetingPrefix: 'Buenas tardes',
         greeting: (name) => `Buenas tardes${name ? `, ${name}` : ''}`,
         skyTone: {
           ambientColor: 'rgba(59, 130, 246, 0.06)',

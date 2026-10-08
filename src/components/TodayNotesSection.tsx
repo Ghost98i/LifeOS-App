@@ -83,7 +83,7 @@ export const TodayNotesSection: React.FC<TodayNotesSectionProps> = ({
 
   return (
     <section
-      className="space-y-3"
+      className="space-y-4"
       aria-labelledby="today-notes-title"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
@@ -97,10 +97,13 @@ export const TodayNotesSection: React.FC<TodayNotesSectionProps> = ({
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--text-soft)]">
-            <AppIcon name="note" className="h-3.5 w-3.5" />
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+            <AppIcon name="note" className="h-4 w-4" />
           </span>
-          <h3 id="today-notes-title" className="text-xs font-bold text-[var(--text)] sm:text-sm">Notas</h3>
+          <div>
+            <h2 id="today-notes-title" className="text-base font-bold text-[var(--text)]">Notas</h2>
+            <p className="text-[10px] text-[var(--text-faint)]">Memoria visible</p>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
@@ -120,27 +123,27 @@ export const TodayNotesSection: React.FC<TodayNotesSectionProps> = ({
       {activeNote && (
         <div className="space-y-2" role="region" aria-roledescription="carrusel" aria-label="Notas fijadas">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">Fijadas</p>
+            <p className="text-[10px] font-semibold text-[var(--text-faint)]">Fijadas</p>
             {pinnedNotes.length > 1 && (
               <div className="flex items-center gap-1">
-                <button type="button" onClick={showPrevious} className="rounded-lg p-1.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text)]" aria-label="Nota fijada anterior">
+                <button type="button" onClick={showPrevious} className="rounded-lg border border-[var(--border)] p-1.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text)]" aria-label="Nota fijada anterior">
                   <AppIcon name="chevronLeft" className="h-3.5 w-3.5" />
                 </button>
-                <button type="button" onClick={showNext} className="rounded-lg p-1.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text)]" aria-label="Nota fijada siguiente">
+                <button type="button" onClick={showNext} className="rounded-lg border border-[var(--border)] p-1.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text)]" aria-label="Nota fijada siguiente">
                   <AppIcon name="chevronRight" className="h-3.5 w-3.5" />
                 </button>
               </div>
             )}
           </div>
 
-          <div className="relative min-h-36 overflow-hidden rounded-xl">
+          <div className="relative min-h-40 overflow-hidden rounded-xl sm:min-h-44">
             {transitionFrom && (
               <button
                 type="button"
                 tabIndex={-1}
                 aria-hidden="true"
                 onClick={onNavigate}
-                className={`absolute inset-0 flex w-full flex-col rounded-xl border border-[var(--border)] bg-[var(--card-subtle)] px-4 py-3.5 text-left pointer-events-none ${direction === 'next' ? 'note-carousel-exit-next' : 'note-carousel-exit-previous'}`}
+                className={`absolute inset-0 flex w-full flex-col rounded-xl bg-[var(--card-subtle)] px-4 py-4 text-left pointer-events-none ${direction === 'next' ? 'note-carousel-exit-next' : 'note-carousel-exit-previous'}`}
               >
                 <span className={`line-clamp-1 text-sm font-semibold leading-5 text-[var(--text)] ${privacyClass}`}>
                   {noteTitle(transitionFrom)}
@@ -161,7 +164,7 @@ export const TodayNotesSection: React.FC<TodayNotesSectionProps> = ({
                 transitionTimerRef.current = null;
                 setTransitionFrom(null);
               }}
-              className={`absolute inset-0 flex w-full flex-col rounded-xl border border-[var(--border)] bg-[var(--card-subtle)] px-4 py-3.5 text-left transition-colors hover:border-[var(--border-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--border-focus)] ${transitionFrom ? (direction === 'next' ? 'note-carousel-enter-next' : 'note-carousel-enter-previous') : ''}`}
+              className={`absolute inset-0 flex w-full flex-col rounded-xl bg-[var(--card-subtle)] px-4 py-4 text-left ring-1 ring-inset ring-[var(--border)]/70 transition-colors hover:bg-[var(--surface-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--border-focus)] ${transitionFrom ? (direction === 'next' ? 'note-carousel-enter-next' : 'note-carousel-enter-previous') : ''}`}
               aria-label={`Abrir nota fijada ${activeIndex + 1} de ${pinnedNotes.length}: ${noteTitle(activeNote)}`}
             >
               <span className={`line-clamp-1 text-sm font-semibold leading-5 text-[var(--text)] ${privacyClass}`}>
@@ -194,7 +197,7 @@ export const TodayNotesSection: React.FC<TodayNotesSectionProps> = ({
 
       {recentNotes.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--text-faint)]">Recientes</p>
+          <p className="text-[10px] font-semibold text-[var(--text-faint)]">Recientes</p>
           <div className="divide-y divide-[var(--border)]/70">
             {recentNotes.map((note) => (
               <button key={note.id} type="button" onClick={onNavigate} className="group flex w-full items-center gap-3 rounded-lg px-1 py-2.5 text-left transition-colors hover:bg-[var(--surface-muted)]/50">
@@ -208,6 +211,20 @@ export const TodayNotesSection: React.FC<TodayNotesSectionProps> = ({
             ))}
           </div>
         </div>
+      )}
+
+      {!activeNote && recentNotes.length === 0 && (
+        <button
+          type="button"
+          onClick={onAddNote}
+          className="flex w-full items-center justify-between rounded-xl border border-dashed border-[var(--border)] bg-[var(--card-subtle)] px-3 py-4 text-left transition hover:border-[var(--border-hover)]"
+        >
+          <span>
+            <span className="block text-xs font-semibold text-[var(--text)]">Guardá algo que quieras tener presente</span>
+            <span className="mt-0.5 block text-[10px] text-[var(--text-faint)]">Tu primera nota aparecerá acá.</span>
+          </span>
+          <AppIcon name="plus" className="h-4 w-4 text-indigo-500" />
+        </button>
       )}
     </section>
   );
