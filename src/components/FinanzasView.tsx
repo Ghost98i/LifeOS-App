@@ -37,6 +37,7 @@ import { FinanceAccountsView } from './FinanceAccountsView';
 import { FinanceAnalyticsView } from './FinanceAnalyticsView';
 import { FinanceFutureView } from './FinanceFutureView';
 import { FinanceCategoryModal } from './FinanceCategoryModal';
+import { FinanceReviewInbox } from './FinanceReviewInbox';
 import { getActiveCategories, getAllCategories, setCategoryBudget } from '../lib/financeCategories';
 import {
   addAccount,
@@ -45,6 +46,11 @@ import {
   confirmFinancialCommitment,
   deleteAccount,
   deleteTransaction,
+  ignoreTransactionReview,
+  linkTransactionToCommitment,
+  markMultipleTransactionsReviewed,
+  markTransactionReviewed,
+  resolveTransactionDuplicate,
   updateTransaction,
 } from '../lib/financeFlows';
 import { loadFinanceCustomization, saveFinanceCustomization, FinanceViewCustomization } from '../lib/viewCustomization';
@@ -221,6 +227,60 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'No se puede eliminar este movimiento.', 'error');
     }
+  };
+
+  // Review Inbox Operations (Fase 2.2)
+  const handleMarkReviewed = (txId: string) => {
+    onUpdateState((draft) => {
+      markTransactionReviewed(draft, txId);
+    });
+    showToast('Movimiento marcado como revisado.');
+  };
+
+  const handleBulkReview = (txIds: string[]) => {
+    onUpdateState((draft) => {
+      markMultipleTransactionsReviewed(draft, txIds);
+    });
+    showToast(`${txIds.length} movimientos marcados como revisados.`);
+  };
+
+  const handleIgnoreReview = (txId: string) => {
+    onUpdateState((draft) => {
+      ignoreTransactionReview(draft, txId);
+    });
+    showToast('Movimiento excluido de la revisión.');
+  };
+
+  const handleResolveDuplicate = (duplicateTxId: string, keepTxId?: string) => {
+    onUpdateState((draft) => {
+      resolveTransactionDuplicate(draft, duplicateTxId, keepTxId);
+    });
+    showToast('Duplicado resuelto.');
+  };
+
+  const handleLinkCommitment = (txId: string, commitmentId: string) => {
+    onUpdateState((draft) => {
+      linkTransactionToCommitment(draft, txId, commitmentId);
+    });
+    showToast('Movimiento vinculado al compromiso.');
+  };
+
+  const handleQuickUpdateTx = (txId: string, updates: { category?: string; note?: string; date?: string }) => {
+    onUpdateState((draft) => {
+      const tx = draft.finance.transactions.find((t) => t.id === txId);
+      if (!tx) return;
+      updateTransaction(draft, txId, {
+        type: tx.type,
+        amount: tx.amount,
+        category: updates.category || tx.category,
+        fixed: tx.fixed,
+        accountId: tx.accountId,
+        date: updates.date || tx.date,
+        note: updates.note !== undefined ? updates.note : tx.note,
+        reviewStatus: 'reviewed',
+      });
+    });
+    showToast('Movimiento actualizado y revisado.');
   };
 
   const handleSetBudget = (categoryId: string, amountStr: string) => {
@@ -816,6 +876,18 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
               onOpenCategoryManager={() => setIsCategoryModalOpen(true)}
             />
           )}
+
+          {/* Review Inbox (Fase 2.2) */}
+          <FinanceReviewInbox
+            state={state}
+            onMarkReviewed={handleMarkReviewed}
+            onBulkReview={handleBulkReview}
+            onIgnore={handleIgnoreReview}
+            onResolveDuplicate={handleResolveDuplicate}
+            onLinkCommitment={handleLinkCommitment}
+            onUpdateTx={handleQuickUpdateTx}
+            onPayCommitment={openPayCommitment}
+          />
 
           {/* Transaction History Clean Table with 1-Click Filters */}
           {financeCustomization.visibleSections.transactions !== false && (

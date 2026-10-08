@@ -63,6 +63,8 @@ export interface DailyContextEntry {
   note?: string;
 }
 
+export type TransactionReviewStatus = 'pending' | 'reviewed' | 'ignored';
+
 export interface Transaction {
   id: string;
   effectiveOrder?: string;
@@ -74,7 +76,10 @@ export interface Transaction {
   date: string;
   note?: string;
   accountId?: string | null;
-  origin?: 'manual' | 'adjustment' | 'reventa' | 'quick-capture' | 'quick' | 'resale_purchase' | 'resale_sale';
+  origin?: 'manual' | 'adjustment' | 'reventa' | 'quick-capture' | 'quick' | 'resale_purchase' | 'resale_sale' | 'import' | 'commitment';
+  reviewStatus?: TransactionReviewStatus;
+  reviewed?: boolean;
+  commitmentId?: string | null;
 }
 
 export interface FinanceTransfer {
@@ -151,16 +156,23 @@ export interface FinancialCommitment {
   id: string;
   name: string;
   amount: number;
+  currency?: string;
   category?: string | null;
   frequency: FinancialCommitmentFrequency;
   nextDueDate: string; // ISO date YYYY-MM-DD
   active: boolean;
+  status?: 'pending' | 'paid' | 'cancelled';
   accountId?: string | null;
   endDate?: string | null; // ISO date YYYY-MM-DD or null
   totalOccurrences?: number | null; // Total planned installments (e.g. 3)
   remainingOccurrences?: number | null; // Remaining unpaid installments (e.g. 2)
+  currentInstallment?: number | null; // e.g. 3 (cuota 3 de 12)
+  totalInstallments?: number | null; // e.g. 12 (cuota 3 de 12)
+  installmentAmount?: number | null; // Importe por cuota si aplica
   dueDay?: number | null; // Anchor day of month (1-31) to prevent date drift
   notes?: string | null;
+  lastSettledTxId?: string | null; // ID del movimiento real que finalmente la liquida
+  settledTxIds?: string[]; // IDs de movimientos que liquidaron cuotas de este compromiso
   createdAt?: string;
   updatedAt?: string;
 }

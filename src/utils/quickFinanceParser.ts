@@ -19,6 +19,9 @@ export interface ParsedQuickFinance {
   isValid: boolean;
   amount: number | null;
   type: 'gasto' | 'ingreso';
+  destination?: 'transaction' | 'commitment';
+  currentInstallment?: number;
+  totalInstallments?: number;
   category: string | null;
   categoryMatched: string | null;
   accountId: string | null;
@@ -292,16 +295,21 @@ export function parseQuickFinance(
     };
   }
 
-  // Reject future obligations/debts (e.g. "Debo 5939 pesos a Jorge pagar el 25 de septiembre")
-  const isObligation =
-    /\b(?:debo|le\s+debo|deuda(?:\s+de)?|adeudo|por\s+pagar|a\s+pagar|compromiso\s+de\s+pago)\b/i.test(raw) ||
-    /\b(?:tengo\s+que|hay\s+que|deber[ií]a)\s+pagar\b/i.test(raw);
-  if (isObligation && !/^(?:gast[eé]|pagu[eé]|compr[eé]|cobr[eé])\b/i.test(raw)) {
+  // Normalize repeated currency prefix in input
+  const normalizedRaw = raw.replace(/(?:\$U\s*)+/gi, '$U ').trim();
+
+  // Detect whether it's an explicit past action vs future commitment
+  const isPastAction = /^(?:gast[eé]|pagu[eé]|compr[eé]|cobr[eé])\b/i.test(normalizedRaw);
+  const isFuturePayment = !isPastAction && (/^(?:pagar|pago\s+de)\b/i.test(normalizedRaw) || /\bcuota\s+\d+/i.test(normalizedRaw));
+  const isDebt = !isPastAction && !isFuturePayment && /\b(?:debo|le\s+debo|deuda(?:\s+de)?|adeudo|compromiso\s+de\s+pago)\b/i.test(normalizedRaw);
+
+  if (isDebt) {
     return {
       raw,
       isValid: false,
       amount: null,
       type: 'gasto',
+      destination: 'commitment',
       category: null,
       categoryMatched: null,
       accountId: null,
@@ -318,17 +326,17 @@ export function parseQuickFinance(
   // 1. Detect Currency
   let currency = 'UYU';
   let isCurrencyIncompatible = false;
-  if (/\b(?:usd|d[oó]lares?)\b/i.test(raw)) {
+  if (/\b(?:usd|d[oó]lares?)\b/i.test(normalizedRaw)) {
     currency = 'USD';
     isCurrencyIncompatible = true;
-  } else if (/\b(?:eur|euros?)\b/i.test(raw)) {
+  } else if (/\b(?:eur|euros?)\b/i.test(normalizedRaw)) {
     currency = 'EUR';
     isCurrencyIncompatible = true;
   }
 
   // 2. Detect Type (income vs expense)
   let type: 'gasto' | 'ingreso' = 'gasto';
-  let processed = raw;
+  let processed = normalizedRaw;
 
   if (
     /^(\+U|\$U\s*\+|\+)/i.test(processed) ||
@@ -346,9 +354,29 @@ export function parseQuickFinance(
   const timeRegex = /\b([01]?\d|2[0-3]):([0-5]\d)(?:\s*(?:hs?\b|horas?\b))?\b/gi;
   processed = processed.replace(timeRegex, ' ');
 
-  // 4. Extract Installments / Cuotas (e.g. 6 cuotas) so installment count isn't mistaken for amount
-  const cuotasRegex = /\b(\d+)\s+cuotas?\b/gi;
-  processed = processed.replace(cuotasRegex, ' ');
+  // 4. Extract Installments / Cuotas (e.g. "cuota 3 de 12", "6 cuotas")
+  let currentInstallment: number | undefined;
+  let totalInstallments: number | undefined;
+
+  const planMatch = /\bcuota\s+(\d+)\s*(?:de|\/)\s*(\d+)\b/i.exec(processed);
+  if (planMatch) {
+    currentInstallment = parseInt(planMatch[1], 10);
+    totalInstallments = parseInt(planMatch[2], 10);
+    processed = processed.replace(planMatch[0], ' ');
+  } else {
+    const cuotasCountMatch = /\b(\d+)\s+cuotas?\b/i.exec(processed);
+    if (cuotasCountMatch) {
+      totalInstallments = parseInt(cuotasCountMatch[1], 10);
+      currentInstallment = 1;
+      processed = processed.replace(cuotasCountMatch[0], ' ');
+    } else {
+      const singleCuotaMatch = /\bcuota\s+(\d+)\b/i.exec(processed);
+      if (singleCuotaMatch) {
+        currentInstallment = parseInt(singleCuotaMatch[1], 10);
+        processed = processed.replace(singleCuotaMatch[0], ' ');
+      }
+    }
+  }
 
   // 5. Extract Date BEFORE Amount (so explicit dates like "25 de octubre" or "15/09" are not eaten as amounts)
   let targetDate = today;
@@ -372,6 +400,21 @@ export function parseQuickFinance(
       dateLabel = rawYear ? `${day} de ${SPANISH_MONTH_NAMES[month]} de ${year}` : `${day} de ${SPANISH_MONTH_NAMES[month]}`;
       processed = processed.replace(explicitMatch[0], ' ');
     }
+  } else if (/(?:\b(?:el|para\s+el)\s+)?\b([2][0-9]{3})-([0-1]\d)-([0-3]\d)\b/i.test(processed)) {
+    const isoDateRegex = /(?:\b(?:el|para\s+el)\s+)?\b([2][0-9]{3})-([0-1]\d)-([0-3]\d)\b/i;
+    const isoMatch = processed.match(isoDateRegex);
+    if (isoMatch) {
+      const year = parseInt(isoMatch[1], 10);
+      const month = parseInt(isoMatch[2], 10);
+      const day = parseInt(isoMatch[3], 10);
+      if (isValidCalendarDate(year, month, day)) {
+        const formattedMonth = String(month).padStart(2, '0');
+        const formattedDay = String(day).padStart(2, '0');
+        targetDate = `${year}-${formattedMonth}-${formattedDay}`;
+        dateLabel = `${formattedDay}/${formattedMonth}/${year}`;
+        processed = processed.replace(isoMatch[0], ' ');
+      }
+    }
   } else {
     // Slashed dates: 15/09, 15/9, 15/09/2026
     const slashedDateRegex = /\b([0-3]?\d)\/([0-1]?\d)(?:\/(\d{2,4}))?\b/;
@@ -387,49 +430,71 @@ export function parseQuickFinance(
       dateLabel = `${formattedDay}/${formattedMonth}`;
       processed = processed.replace(slashedMatch[0], ' ');
     } else {
-    const normalizedText = normalize(processed);
-    if (/\b(ayer)\b/.test(normalizedText)) {
-      targetDate = computeRelativeDate(today, -1);
-      dateLabel = 'Ayer';
-      processed = processed.replace(/\bayer\b/gi, ' ');
-    } else if (/\b(anteayer|ante\s+ayer)\b/.test(normalizedText)) {
-      targetDate = computeRelativeDate(today, -2);
-      dateLabel = 'Anteayer';
-      processed = processed.replace(/\b(anteayer|ante\s+ayer)\b/gi, ' ');
-    } else if (/\b(pasado\s+ma[nñ]ana)\b/.test(normalizedText)) {
-      targetDate = computeRelativeDate(today, 2);
-      dateLabel = 'Pasado mañana';
-      processed = processed.replace(/\b(pasado\s+ma[nñ]ana)\b/gi, ' ');
-    } else if (/\b(ma[nñ]ana)\b/.test(normalizedText)) {
-      targetDate = computeRelativeDate(today, 1);
-      dateLabel = 'Mañana';
-      processed = processed.replace(/\bma[nñ]ana\b/gi, ' ');
-    } else if (/\b(hoy)\b/.test(normalizedText)) {
-      targetDate = today;
-      dateLabel = 'Hoy';
-      processed = processed.replace(/\bhoy\b/gi, ' ');
-    } else {
-      const daysMap: Record<string, number> = {
-        domingo: 0,
-        lunes: 1,
-        martes: 2,
-        miercoles: 3,
-        jueves: 4,
-        viernes: 5,
-        sabado: 6,
-      };
-      for (const [dayName, dayIdx] of Object.entries(daysMap)) {
-        const reg = new RegExp(`\\b${dayName}\\b`, 'i');
-        if (reg.test(normalizedText)) {
-          targetDate = findClosestDayOfWeek(today, dayIdx);
-          dateLabel = formatDateLabel(targetDate, today);
-          processed = processed.replace(reg, ' ');
-          break;
+      // Explicit day: "el 15", "vence el 20"
+      const explicitDayRegex = /\b(?:el|para\s+el|vence\s+el|d[ií]a)\s+([1-9]|[12]\d|3[01])\b(?![/a-z])/i;
+      const dayMatch = processed.match(explicitDayRegex);
+      if (dayMatch) {
+        const day = parseInt(dayMatch[1], 10);
+        const refDate = new Date(today + 'T00:00:00');
+        let curYear = refDate.getFullYear();
+        let curMonth = refDate.getMonth();
+        if (day < refDate.getDate() && (isFuturePayment || currentInstallment !== undefined)) {
+          curMonth += 1;
+          if (curMonth > 11) {
+            curYear += 1;
+            curMonth = 0;
+          }
+        }
+        const formattedMonth = String(curMonth + 1).padStart(2, '0');
+        const formattedDay = String(day).padStart(2, '0');
+        targetDate = `${curYear}-${formattedMonth}-${formattedDay}`;
+        dateLabel = `${day} de ${SPANISH_MONTH_NAMES[curMonth + 1]}`;
+        processed = processed.replace(dayMatch[0], ' ');
+      } else {
+        const normalizedText = normalize(processed);
+        if (/\b(ayer)\b/.test(normalizedText)) {
+          targetDate = computeRelativeDate(today, -1);
+          dateLabel = 'Ayer';
+          processed = processed.replace(/\bayer\b/gi, ' ');
+        } else if (/\b(anteayer|ante\s+ayer)\b/.test(normalizedText)) {
+          targetDate = computeRelativeDate(today, -2);
+          dateLabel = 'Anteayer';
+          processed = processed.replace(/\b(anteayer|ante\s+ayer)\b/gi, ' ');
+        } else if (/\b(pasado\s+ma[nñ]ana)\b/.test(normalizedText)) {
+          targetDate = computeRelativeDate(today, 2);
+          dateLabel = 'Pasado mañana';
+          processed = processed.replace(/\b(pasado\s+ma[nñ]ana)\b/gi, ' ');
+        } else if (/\b(ma[nñ]ana)\b/.test(normalizedText)) {
+          targetDate = computeRelativeDate(today, 1);
+          dateLabel = 'Mañana';
+          processed = processed.replace(/\bma[nñ]ana\b/gi, ' ');
+        } else if (/\b(hoy)\b/.test(normalizedText)) {
+          targetDate = today;
+          dateLabel = 'Hoy';
+          processed = processed.replace(/\bhoy\b/gi, ' ');
+        } else {
+          const daysMap: Record<string, number> = {
+            domingo: 0,
+            lunes: 1,
+            martes: 2,
+            miercoles: 3,
+            jueves: 4,
+            viernes: 5,
+            sabado: 6,
+          };
+          for (const [dayName, dayIdx] of Object.entries(daysMap)) {
+            const reg = new RegExp(`\\b${dayName}\\b`, 'i');
+            if (reg.test(normalizedText)) {
+              targetDate = findClosestDayOfWeek(today, dayIdx);
+              dateLabel = formatDateLabel(targetDate, today);
+              processed = processed.replace(reg, ' ');
+              break;
+            }
+          }
         }
       }
     }
   }
-}
 
   // 6. Extract Amount (with explicit policy and unit protection)
   const MEASUREMENT_UNITS_SUFFIX = /^\s*(?:horas?|hs?\b|h\b|minutos?|mins?\b|min\b|segundos?|segs?\b|s\b|d[ií]as?|semanas?|meses|a[ñn]os?|km|kms?|kil[oó]metros?|metros?|m\b|cm\b|cent[ií]metros?|mm\b|millas?|kg|kgs?|kilos?|kilogramos?|gramos?|g\b|lbs?|libras?|reps?\b|repeticiones|series?\b|sets?\b|vueltas?|flexiones|caps?\b|c[aá]psulas?|pastillas?|gotas?|dosis|gb\b|mb\b|tb\b|kb\b|fps\b|hz\b|ghz\b|mhz\b|%|por ciento|pts?\b|puntos|p[aá]ginas?|p[aá]gs?\b|cap[ií]tulos?|episodios?|canciones?|art[ií]culos?|videos?)\b/i;
@@ -585,15 +650,23 @@ export function parseQuickFinance(
 
   // 9. Remaining text becomes note
   const cleanNote = processed
+    .replace(/(?:\$U|\$)/gi, ' ')
+    .replace(/^(?:pagar|pagu[eé]|gast[eé]|compr[eé]|cobr[eé])\s+/gi, '')
     .replace(/[,\-;:]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
-  // 10. Build missing list
+  // 10. Destination (transaction vs commitment)
+  const destination: 'transaction' | 'commitment' =
+    isFuturePayment || currentInstallment !== undefined || totalInstallments !== undefined
+      ? 'commitment'
+      : 'transaction';
+
+  // 11. Build missing list
   const missing: ('amount' | 'category' | 'account')[] = [];
   if (amount === null || isAmbiguous) missing.push('amount');
   if (!matchedCategoryId) missing.push('category');
-  if (!matchedAccountId && !matchedAccountName) missing.push('account');
+  if (destination === 'transaction' && !matchedAccountId && !matchedAccountName) missing.push('account');
 
   const formattedAmount =
     amount !== null
@@ -603,13 +676,24 @@ export function parseQuickFinance(
   const formattedCategory = matchedCategoryName || 'Categoría pendiente';
   const formattedAccount = matchedAccountName ? (isAccountSuggested ? `${matchedAccountName} (sugerida)` : matchedAccountName) : 'Cuenta no especificada';
 
-  const preview = `${formattedAmount} · ${formattedCategory} · ${formattedAccount} · ${dateLabel}`;
+  let preview: string;
+  if (destination === 'commitment') {
+    const comLabel = currentInstallment && totalInstallments
+      ? `Cuota ${currentInstallment}/${totalInstallments}`
+      : 'Compromiso';
+    preview = `${formattedAmount} · ${formattedCategory} · ${comLabel} para ${dateLabel}`;
+  } else {
+    preview = `${formattedAmount} · ${formattedCategory} · ${formattedAccount} · ${dateLabel}`;
+  }
 
   return {
     raw,
     isValid: amount !== null && amount > 0 && !isAmbiguous && !isCurrencyIncompatible,
     amount,
     type,
+    destination,
+    currentInstallment,
+    totalInstallments,
     category: matchedCategoryId,
     categoryMatched: matchedCategoryName,
     accountId: matchedAccountId,

@@ -1,4 +1,11 @@
-import type { Account, AccountReconciliation, FinanceTransfer, LifeOSState, Transaction } from '../types';
+import type {
+  Account,
+  AccountReconciliation,
+  FinanceTransfer,
+  FinancialCommitment,
+  LifeOSState,
+  Transaction,
+} from '../types';
 import { advanceCommitmentDueDate, advanceExpectedIncomeDate } from './financialCommitments';
 import {
   compareLedgerEvents,
@@ -19,14 +26,18 @@ export interface TransferInput {
 }
 
 export interface TransactionInput {
+  id?: string;
   type: Transaction['type'];
   amount: number;
   category: string;
-  fixed: Transaction['fixed'];
+  fixed?: Transaction['fixed'];
   date?: string;
   note?: string;
   accountId: string | null;
   origin?: Transaction['origin'];
+  reviewStatus?: Transaction['reviewStatus'];
+  reviewed?: boolean;
+  commitmentId?: string | null;
 }
 
 function affectedAccountIds(accountIds: Array<string | null | undefined>): string[] {
@@ -83,18 +94,26 @@ export function addTransaction(state: LifeOSState, input: TransactionInput): Tra
 
   const date = input.date || todayISO();
   assertAccountsCanMaterialize(state, [input.accountId]);
+
+  const reviewStatus = input.reviewStatus !== undefined
+    ? input.reviewStatus
+    : (input.reviewed ? 'reviewed' : 'pending');
+
   const transaction: Transaction = {
-    id: uid(),
+    id: input.id || uid(),
     effectiveOrder: nextFinanceEffectiveOrder(state, date),
     revisionOrder: createFinanceRevisionOrder(),
     type: input.type,
     amount,
     category: input.category.trim(),
-    fixed: input.fixed,
+    fixed: input.fixed || 'variable',
     date,
     note: input.note?.trim() || '',
     accountId: input.accountId,
     origin: input.origin || 'manual',
+    reviewStatus,
+    reviewed: reviewStatus === 'reviewed',
+    commitmentId: input.commitmentId || null,
   };
   state.finance.transactions.push(transaction);
   materializeAccounts(state, [input.accountId]);
@@ -116,21 +135,57 @@ export function confirmFinancialCommitment(
   const commitment = (state.finance.commitments || []).find((item) => item.id === input.commitmentId);
   if (!commitment) throw new Error('El compromiso ya no existe.');
 
+  const total = commitment.totalInstallments || commitment.totalOccurrences || null;
+  const curInst = commitment.currentInstallment || 1;
+  const txDate = input.date || todayISO();
+  const settlementKey = total
+    ? `inst-${curInst}`
+    : commitment.frequency === 'once'
+      ? 'once'
+      : `cycle-${commitment.nextDueDate}`;
+  const deterministicTxId = `settle-${commitment.id}-${settlementKey}`;
+
+  // Idempotency check: if already settled by this deterministic id or lastSettledTxId
+  const existingTx = state.finance.transactions.find((tx) =>
+    tx.id === deterministicTxId ||
+    (tx.commitmentId === commitment.id && tx.id === commitment.lastSettledTxId)
+  );
+  if (existingTx) {
+    return existingTx;
+  }
+  if (!commitment.active && commitment.status === 'paid') {
+    if (commitment.lastSettledTxId) {
+      const lastTx = state.finance.transactions.find((tx) => tx.id === commitment.lastSettledTxId);
+      if (lastTx) return lastTx;
+    }
+    throw new Error('El compromiso ya fue pagado y finalizado.');
+  }
+
   const amount = input.amount ?? Number(commitment.amount);
   const accountId = input.accountId || commitment.accountId || state.finance.accounts[0]?.id || null;
   const advanced = advanceCommitmentDueDate(commitment);
+  const installmentLabel = total ? ` (Cuota ${curInst}/${total})` : '';
+
   const transaction = addTransaction(state, {
+    id: deterministicTxId,
     type: 'gasto',
     amount,
     category: commitment.category || 'Varios',
     fixed: 'fijo',
     accountId,
-    date: input.date || todayISO(),
-    note: `Pago de compromiso: ${commitment.name}`,
+    date: txDate,
+    note: `Pago de compromiso: ${commitment.name}${installmentLabel}`,
+    commitmentId: commitment.id,
+    reviewStatus: 'reviewed',
+    reviewed: true,
   });
+
+  const settledTxIds = commitment.settledTxIds ? [...commitment.settledTxIds, transaction.id] : [transaction.id];
 
   Object.assign(commitment, advanced, {
     ...(input.updateFutureAmount ? { amount: Number(amount) } : {}),
+    lastSettledTxId: transaction.id,
+    settledTxIds,
     updatedAt: new Date().toISOString(),
   });
   return transaction;
@@ -219,16 +274,24 @@ export function updateTransaction(state: LifeOSState, transactionId: string, inp
     ? transaction.effectiveOrder
     : nextFinanceEffectiveOrder(state, date);
   const revisionOrder = createFinanceRevisionOrderAfter(transaction.revisionOrder);
+  const reviewStatus = input.reviewStatus !== undefined
+    ? input.reviewStatus
+    : (input.reviewed !== undefined
+      ? (input.reviewed ? 'reviewed' : 'pending')
+      : transaction.reviewStatus);
   Object.assign(transaction, {
     type: input.type,
     amount,
     category: input.category.trim(),
-    fixed: input.fixed,
+    fixed: input.fixed !== undefined ? input.fixed : transaction.fixed,
     date,
     effectiveOrder,
     revisionOrder,
     note: input.note?.trim() || '',
     accountId: input.accountId,
+    reviewStatus,
+    reviewed: reviewStatus === 'reviewed',
+    commitmentId: input.commitmentId !== undefined ? input.commitmentId : transaction.commitmentId,
   });
   materializeAccounts(state, accountIds);
   return transaction;
@@ -511,4 +574,188 @@ export function updateReconciliation(state: LifeOSState, reconciliationId: strin
   refreshLastReconciledAt(state, reconciliation.accountId);
   materializeAccounts(state, [reconciliation.accountId]);
   return reconciliation;
+}
+
+/* =========================================================================
+   REVIEW INBOX ACTION LAYER
+   ========================================================================= */
+
+export function markTransactionReviewed(state: LifeOSState, transactionId: string): Transaction {
+  const transaction = state.finance.transactions.find((item) => item.id === transactionId);
+  if (!transaction) throw new Error('El movimiento ya no existe.');
+  transaction.reviewStatus = 'reviewed';
+  transaction.reviewed = true;
+  transaction.revisionOrder = createFinanceRevisionOrderAfter(transaction.revisionOrder);
+  return transaction;
+}
+
+export function markMultipleTransactionsReviewed(state: LifeOSState, transactionIds: string[]): Transaction[] {
+  const reviewedTxs: Transaction[] = [];
+  for (const id of transactionIds) {
+    const tx = state.finance.transactions.find((item) => item.id === id);
+    if (tx) {
+      tx.reviewStatus = 'reviewed';
+      tx.reviewed = true;
+      tx.revisionOrder = createFinanceRevisionOrderAfter(tx.revisionOrder);
+      reviewedTxs.push(tx);
+    }
+  }
+  return reviewedTxs;
+}
+
+export function ignoreTransactionReview(state: LifeOSState, transactionId: string): Transaction {
+  const transaction = state.finance.transactions.find((item) => item.id === transactionId);
+  if (!transaction) throw new Error('El movimiento ya no existe.');
+  transaction.reviewStatus = 'ignored';
+  transaction.reviewed = false;
+  transaction.revisionOrder = createFinanceRevisionOrderAfter(transaction.revisionOrder);
+  return transaction;
+}
+
+export function resolveTransactionDuplicate(state: LifeOSState, duplicateTxId: string, keepTxId?: string): void {
+  deleteTransaction(state, duplicateTxId);
+  if (keepTxId) {
+    const keepTx = state.finance.transactions.find((item) => item.id === keepTxId);
+    if (keepTx) {
+      keepTx.reviewStatus = 'reviewed';
+      keepTx.reviewed = true;
+      keepTx.revisionOrder = createFinanceRevisionOrderAfter(keepTx.revisionOrder);
+    }
+  }
+}
+
+export function linkTransactionToCommitment(
+  state: LifeOSState,
+  transactionId: string,
+  commitmentId: string,
+): { transaction: Transaction; commitment: FinancialCommitment } {
+  const transaction = state.finance.transactions.find((item) => item.id === transactionId);
+  if (!transaction) throw new Error('El movimiento ya no existe.');
+  const commitment = (state.finance.commitments || []).find((item) => item.id === commitmentId);
+  if (!commitment) throw new Error('El compromiso ya no existe.');
+
+  transaction.commitmentId = commitment.id;
+  transaction.reviewStatus = 'reviewed';
+  transaction.reviewed = true;
+  transaction.revisionOrder = createFinanceRevisionOrderAfter(transaction.revisionOrder);
+
+  const advanced = advanceCommitmentDueDate(commitment);
+  const settledTxIds = commitment.settledTxIds ? [...commitment.settledTxIds, transaction.id] : [transaction.id];
+  Object.assign(commitment, advanced, {
+    lastSettledTxId: transaction.id,
+    settledTxIds,
+    updatedAt: new Date().toISOString(),
+  });
+
+  return { transaction, commitment };
+}
+
+/* =========================================================================
+   FINANCIAL COMMITMENT CRUD ACTIONS
+   ========================================================================= */
+
+export interface FinancialCommitmentInput {
+  name?: string;
+  title?: string;
+  amount: number;
+  currency?: string;
+  frequency?: FinancialCommitment['frequency'];
+  nextDueDate?: string;
+  dueDate?: string;
+  category?: string | null;
+  accountId?: string | null;
+  endDate?: string | null;
+  totalInstallments?: number | null;
+  currentInstallment?: number | null;
+  totalOccurrences?: number | null;
+  remainingOccurrences?: number | null;
+  occurrencesLeft?: number | null;
+  dueDay?: number | null;
+  notes?: string | null;
+}
+
+export function addFinancialCommitment(
+  state: LifeOSState,
+  input: FinancialCommitmentInput,
+): FinancialCommitment {
+  const name = (input.name || input.title || '').trim();
+  if (!name) throw new Error('Escribí un nombre para el compromiso.');
+  const amount = Number(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error('Ingresá un monto mayor a cero.');
+
+  if (!state.finance.commitments) state.finance.commitments = [];
+
+  const total = input.totalInstallments ?? input.totalOccurrences ?? null;
+  const current = input.currentInstallment ?? (total ? 1 : null);
+  const remaining = input.remainingOccurrences ?? input.occurrencesLeft ?? (total ? (current ? Math.max(1, total - current + 1) : total) : null);
+  const nextDueDate = input.nextDueDate || input.dueDate || todayISO();
+  const curDate = new Date(`${nextDueDate}T12:00:00`);
+  const dueDay = input.dueDay ?? curDate.getDate();
+
+  const commitment: FinancialCommitment = {
+    id: uid(),
+    name,
+    amount,
+    currency: input.currency || 'UYU',
+    category: input.category?.trim() || 'Varios',
+    frequency: input.frequency || (total && total > 1 ? 'monthly' : 'once'),
+    nextDueDate,
+    active: true,
+    status: 'pending',
+    accountId: input.accountId || null,
+    endDate: input.endDate || null,
+    totalOccurrences: total,
+    remainingOccurrences: remaining,
+    totalInstallments: total,
+    currentInstallment: current,
+    dueDay,
+    notes: input.notes?.trim() || null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  state.finance.commitments.push(commitment);
+  return commitment;
+}
+
+export function updateFinancialCommitment(
+  state: LifeOSState,
+  commitmentId: string,
+  input: Partial<FinancialCommitmentInput>,
+): FinancialCommitment {
+  const commitment = (state.finance.commitments || []).find((item) => item.id === commitmentId);
+  if (!commitment) throw new Error('El compromiso ya no existe.');
+
+  if (input.name !== undefined) {
+    const name = input.name.trim();
+    if (!name) throw new Error('Escribí un nombre para el compromiso.');
+    commitment.name = name;
+  }
+  if (input.amount !== undefined) {
+    const amount = Number(input.amount);
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error('Ingresá un monto mayor a cero.');
+    commitment.amount = amount;
+  }
+  if (input.currency !== undefined) commitment.currency = input.currency;
+  if (input.category !== undefined) commitment.category = input.category?.trim() || 'Varios';
+  if (input.frequency !== undefined) commitment.frequency = input.frequency;
+  if (input.nextDueDate !== undefined) commitment.nextDueDate = input.nextDueDate;
+  if (input.accountId !== undefined) commitment.accountId = input.accountId;
+  if (input.endDate !== undefined) commitment.endDate = input.endDate;
+  if (input.totalInstallments !== undefined) {
+    commitment.totalInstallments = input.totalInstallments;
+    commitment.totalOccurrences = input.totalInstallments;
+  }
+  if (input.currentInstallment !== undefined) commitment.currentInstallment = input.currentInstallment;
+  if (input.remainingOccurrences !== undefined) commitment.remainingOccurrences = input.remainingOccurrences;
+  if (input.dueDay !== undefined) commitment.dueDay = input.dueDay;
+  if (input.notes !== undefined) commitment.notes = input.notes?.trim() || null;
+
+  commitment.updatedAt = new Date().toISOString();
+  return commitment;
+}
+
+export function deleteFinancialCommitment(state: LifeOSState, commitmentId: string): void {
+  if (!state.finance.commitments) return;
+  state.finance.commitments = state.finance.commitments.filter((item) => item.id !== commitmentId);
 }

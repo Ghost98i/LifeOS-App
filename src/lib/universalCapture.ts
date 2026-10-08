@@ -1,6 +1,7 @@
 import type { LifeOSState, Account, Subject, FinanceCategoryInput } from '../types';
 import { parseQuickFinance } from '../utils/quickFinanceParser';
 import { addQuickTask, addQuickNote, addQuickTransaction, addQuickInbox } from './quickCapture';
+import { addFinancialCommitment } from './financeFlows';
 import { todayISO, uid } from './storage';
 import { isModuleEnabled } from './moduleVisibility';
 
@@ -8,12 +9,15 @@ export type UniversalCaptureIntent =
   | {
       kind: 'finance';
       type: 'gasto' | 'ingreso';
+      destination?: 'transaction' | 'commitment';
       amount: number;
       category: string;
       accountId?: string;
       accountName?: string;
       note?: string;
       date?: string;
+      currentInstallment?: number;
+      totalInstallments?: number;
     }
   | {
       kind: 'study';
@@ -122,7 +126,7 @@ export function parseUniversalIntent(
   // Unless there is an explicit currency symbol ($ / $U / USD / EUR / UYU) or transactional verb (gasté / compré / etc.)
   const hasCurrencySign = /(?:\$|\$U\b|USD\b|EUR\b|UYU\b)/i.test(trimmed);
   const hasTransactionalKeyword =
-    /(?:^|\s|\b)(?:gaste|gasté|gasto|pague|pagué|pago|compre|compré|compra|compras|costo|costó|ingreso|cobro|cobre|cobré|sueldo|salario|ganancia|honorarios)(?:\s|$|\b)/i.test(trimmed) ||
+    /(?:^|\s|\b)(?:gaste|gasté|gasto|pague|pagué|pago|pagar|compre|compré|compra|compras|costo|costó|ingreso|cobro|cobre|cobré|sueldo|salario|ganancia|honorarios|cuota|cuotas)(?:\s|$|\b)/i.test(trimmed) ||
     /^(?:\+|-)\s*\d+/i.test(trimmed);
 
   const containsNoteOrIdeaWord = /(?:^|\s|\b)(?:idea|ideas|nota|notas|recordar|recordatorio|pensar)(?:\s|$|\b)/i.test(trimmed);
@@ -178,12 +182,15 @@ export function parseUniversalIntent(
       return {
         kind: 'finance',
         type: parsedFinance.type,
+        destination: parsedFinance.destination,
         amount: parsedFinance.amount,
         category: parsedFinance.category || 'Varios',
-        accountId: parsedFinance.accountId,
-        accountName: parsedFinance.accountName,
+        accountId: parsedFinance.accountId || undefined,
+        accountName: parsedFinance.accountName || undefined,
         note: parsedFinance.note || '',
         date: parsedFinance.date,
+        currentInstallment: parsedFinance.currentInstallment,
+        totalInstallments: parsedFinance.totalInstallments,
       };
     }
   }
@@ -221,6 +228,22 @@ export function executeUniversalCapture(
         return {
           message: 'El módulo Finanzas está desactivado. No se registró el movimiento.',
           sound: 'click',
+        };
+      }
+      if (intent.destination === 'commitment') {
+        const com = addFinancialCommitment(draft, {
+          name: intent.note?.trim() || intent.category || 'Compromiso',
+          amount: intent.amount,
+          category: intent.category,
+          nextDueDate: intent.date,
+          accountId: intent.accountId,
+          currentInstallment: intent.currentInstallment,
+          totalInstallments: intent.totalInstallments,
+        });
+        const instLabel = com.totalInstallments ? ` (Cuota ${com.currentInstallment}/${com.totalInstallments})` : '';
+        return {
+          message: `Compromiso de $${intent.amount} registrado para el ${intent.date || 'vencimiento'}${instLabel}.`,
+          sound: 'coins',
         };
       }
       addQuickTransaction(draft, {

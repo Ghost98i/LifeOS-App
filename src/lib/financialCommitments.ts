@@ -256,6 +256,8 @@ export function advanceCommitmentDueDate(commitment: FinancialCommitment): {
   nextDueDate: string;
   remainingOccurrences: number | null;
   active: boolean;
+  status: 'pending' | 'paid';
+  currentInstallment?: number | null;
   dueDay?: number | null;
 } {
   const currentIso = commitment.nextDueDate || toIso(new Date());
@@ -263,16 +265,29 @@ export function advanceCommitmentDueDate(commitment: FinancialCommitment): {
   const anchorDay = commitment.dueDay || curDate.getDate();
 
   let newRemaining: number | null = null;
-  if (commitment.remainingOccurrences !== null && commitment.remainingOccurrences !== undefined) {
-    newRemaining = Math.max(0, commitment.remainingOccurrences - 1);
+  const initialRemaining = commitment.remainingOccurrences ?? (commitment as any).occurrencesLeft ?? null;
+  if (initialRemaining !== null && initialRemaining !== undefined) {
+    newRemaining = Math.max(0, initialRemaining - 1);
   }
 
-  // If once or remaining reaches 0, mark inactive
+  const total = commitment.totalInstallments || commitment.totalOccurrences || null;
+  let nextInstallment: number | null = null;
+  if (commitment.currentInstallment !== null && commitment.currentInstallment !== undefined) {
+    nextInstallment = total !== null
+      ? Math.min(total, commitment.currentInstallment + 1)
+      : commitment.currentInstallment + 1;
+  } else if (total !== null && newRemaining !== null) {
+    nextInstallment = Math.min(total, total - newRemaining + 1);
+  }
+
+  // If once or remaining reaches 0, mark inactive and paid
   if (commitment.frequency === 'once' || (newRemaining !== null && newRemaining <= 0)) {
     return {
       nextDueDate: currentIso,
       remainingOccurrences: newRemaining,
       active: false,
+      status: 'paid',
+      currentInstallment: nextInstallment,
       dueDay: anchorDay,
     };
   }
@@ -306,6 +321,8 @@ export function advanceCommitmentDueDate(commitment: FinancialCommitment): {
       nextDueDate: nextIso,
       remainingOccurrences: newRemaining,
       active: false,
+      status: 'paid',
+      currentInstallment: nextInstallment,
       dueDay: anchorDay,
     };
   }
@@ -314,6 +331,8 @@ export function advanceCommitmentDueDate(commitment: FinancialCommitment): {
     nextDueDate: nextIso,
     remainingOccurrences: newRemaining,
     active: true,
+    status: 'pending',
+    currentInstallment: nextInstallment,
     dueDay: anchorDay,
   };
 }
