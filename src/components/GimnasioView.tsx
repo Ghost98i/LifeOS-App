@@ -19,7 +19,7 @@ import { BodyCompositionCard } from './BodyCompositionCard';
 import { WorkoutSummaryModal } from './WorkoutSummaryModal';
 import { ExerciseHistoryModal } from './ExerciseHistoryModal';
 import { PageHeader } from './PageHeader';
-import { AppIcon } from './AppIcon';
+import { AppIcon, type AppIconName } from './AppIcon';
 import {
   todayISO,
   DAYS,
@@ -83,6 +83,8 @@ import { showToast } from '../lib/toast';
 interface GimnasioViewProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => void;
+  initialTab?: 'entrenar' | 'historial' | 'progresion';
+  initialEditingTemplateId?: string | null;
 }
 
 const COMMON_EXERCISE_SUGGESTIONS = [
@@ -110,6 +112,87 @@ const COMMON_EXERCISE_SUGGESTIONS = [
   'Plancha abdominal',
 ];
 
+type RoutineIdentity = {
+  label: string;
+  icon: AppIconName;
+  surface: string;
+  accent: string;
+};
+
+function getRoutineIdentity(exercises: Exercise[], routineName = ''): RoutineIdentity {
+  const groups = exercises.reduce<Record<string, number>>((result, exercise) => {
+    const group = exercise.muscleGroup || inferMuscleGroup(exercise.name);
+    result[group] = (result[group] || 0) + 1;
+    return result;
+  }, {});
+  const nameIdentity = /pecho/i.test(routineName)
+    ? 'Pecho'
+    : /espalda|dorsal/i.test(routineName)
+      ? 'Espalda'
+      : /pierna|cuádriceps|isquio|glúteo|pantorrilla/i.test(routineName)
+        ? 'Piernas'
+        : /core|abdomen/i.test(routineName)
+          ? 'Core'
+          : null;
+  const dominant = nameIdentity || Object.entries(groups).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Entrenamiento';
+  const normalized = dominant.toLocaleLowerCase('es-UY');
+
+  if (/pierna|cuádriceps|isquio|glúteo|pantorrilla/.test(normalized)) {
+    return {
+      label: dominant,
+      icon: 'activity',
+      surface: 'from-indigo-500/20 via-blue-500/10 to-transparent',
+      accent: 'text-indigo-600 dark:text-indigo-300',
+    };
+  }
+  if (/espalda|dorsal/.test(normalized)) {
+    return {
+      label: dominant,
+      icon: 'repeat',
+      surface: 'from-sky-500/20 via-blue-500/10 to-transparent',
+      accent: 'text-sky-700 dark:text-sky-300',
+    };
+  }
+  if (/pecho/.test(normalized)) {
+    return {
+      label: dominant,
+      icon: 'target',
+      surface: 'from-blue-500/22 via-indigo-500/10 to-transparent',
+      accent: 'text-blue-700 dark:text-blue-300',
+    };
+  }
+  if (/core|abdomen/.test(normalized)) {
+    return {
+      label: dominant,
+      icon: 'shield',
+      surface: 'from-slate-500/20 via-blue-500/8 to-transparent',
+      accent: 'text-slate-700 dark:text-slate-300',
+    };
+  }
+  return {
+    label: dominant,
+    icon: 'dumbbell',
+    surface: 'from-violet-500/18 via-blue-500/8 to-transparent',
+    accent: 'text-violet-700 dark:text-violet-300',
+  };
+}
+
+const RoutineIdentityMark: React.FC<{ exercises: Exercise[]; name?: string; compact?: boolean }> = ({ exercises, name, compact = false }) => {
+  const identity = getRoutineIdentity(exercises, name);
+  return (
+    <div
+      aria-hidden="true"
+      className={`relative shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br ${identity.surface} ring-1 ring-inset ring-[var(--border)] ${compact ? 'h-11 w-11' : 'h-14 w-14 sm:h-16 sm:w-16'}`}
+    >
+      <span className="absolute -right-3 -top-3 h-9 w-9 rounded-full border border-current opacity-[0.08]" />
+      <span className="absolute -bottom-4 -left-2 h-10 w-10 rounded-full bg-current opacity-[0.04]" />
+      <span className={`absolute inset-0 flex items-center justify-center ${identity.accent}`}>
+        <AppIcon name={identity.icon} className={compact ? 'h-5 w-5' : 'h-6 w-6 sm:h-7 sm:w-7'} />
+      </span>
+    </div>
+  );
+};
+
 function getPreviousExerciseStats(
   sessions: GymSession[],
   currentSessionId: string,
@@ -126,8 +209,13 @@ function getPreviousExerciseStats(
     : null;
 }
 
-export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState }) => {
-  const [activeTab, setActiveTab] = useState<'entrenar' | 'historial' | 'progresion'>('entrenar');
+export const GimnasioView: React.FC<GimnasioViewProps> = ({
+  state,
+  onUpdateState,
+  initialTab = 'entrenar',
+  initialEditingTemplateId = null,
+}) => {
+  const [activeTab, setActiveTab] = useState<'entrenar' | 'historial' | 'progresion'>(initialTab);
   const [weightDate, setWeightDate] = useState(todayISO());
   const [weightKg, setWeightKg] = useState('');
 
@@ -137,9 +225,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
 
   const [templateName, setTemplateName] = useState('');
   const [showBodyComposition, setShowBodyComposition] = useState(false);
-  const [showPRs, setShowPRs] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
-  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(initialEditingTemplateId);
 
   // Live Workout Mobile Navigation State
   const [liveExIdx, setLiveExIdx] = useState<number>(0);
@@ -255,12 +342,6 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   };
 
   const weightPts = sortedWeight(state);
-  const ref = new Date();
-  const diasEntrenadosAnio = new Set(
-    (state.gym?.sessions || [])
-      .filter((s) => isPerformedGymSession(s) && new Date(s.date + 'T00:00:00').getFullYear() === ref.getFullYear())
-      .map((s) => s.date)
-  ).size;
 
   const bodyWeightChartData = weightPts.map((p) => ({
     dateLabel: fmtDate(p.date),
@@ -520,15 +601,6 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
     showToast('Plantilla eliminada.', 'info');
   };
 
-  const handleRenameTemplate = (id: string, currentName: string) => {
-    const name = window.prompt('Nuevo nombre de la plantilla:', currentName);
-    if (!name?.trim() || name.trim() === currentName) return;
-    onUpdateState((draft) => {
-      updateGymTemplate(draft.gym, id, { name });
-    });
-    showToast('Plantilla renombrada.');
-  };
-
   const handleDuplicateTemplate = (id: string) => {
     let duplicateId: string | null = null;
     onUpdateState((draft) => {
@@ -776,7 +848,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                 <select
                   value={sessionTemplate}
                   onChange={(e) => setSessionTemplate(e.target.value)}
-                  className="px-2.5 py-2 text-xs font-semibold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] cursor-pointer outline-none"
+                  className="min-h-11 px-3 text-xs font-semibold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] cursor-pointer outline-none"
                 >
                   <option value="">En blanco (sin plantilla)</option>
                   {state.gym.routineTemplates.map((t) => (
@@ -789,10 +861,10 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
               <button
                 type="button"
                 onClick={() => handleStartWorkout(sessionTemplate || undefined)}
-                className="px-3.5 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer flex items-center gap-1.5"
+                className="flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--blue)] px-3.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-[var(--blue-hover)] active:scale-[0.98] cursor-pointer"
               >
                 <AppIcon name="dumbbell" className="h-3.5 w-3.5" />
-                <span>Iniciar Entrenamiento</span>
+                <span>Iniciar entrenamiento</span>
               </button>
             </div>
             ) : undefined
@@ -806,7 +878,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
         <button
           type="button"
           onClick={() => setActiveTab('entrenar')}
-          className={`flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-bold transition-all cursor-pointer sm:px-3 ${
+          className={`flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-2 text-xs font-bold transition-all cursor-pointer sm:px-3 ${
             activeTab === 'entrenar'
               ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
               : 'text-[var(--text-soft)] hover:text-[var(--text)]'
@@ -820,7 +892,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
         <button
           type="button"
           onClick={() => setActiveTab('historial')}
-          className={`flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-bold transition-all cursor-pointer sm:px-3 ${
+          className={`flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-2 text-xs font-bold transition-all cursor-pointer sm:px-3 ${
             activeTab === 'historial'
               ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
               : 'text-[var(--text-soft)] hover:text-[var(--text)]'
@@ -828,7 +900,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
         >
           <AppIcon name="calendar" className="h-4 w-4" />
           <span className="sm:hidden">Historial</span>
-          <span className="hidden truncate sm:inline">{activeWorkoutSession ? 'Historial' : 'Historial de semanas'}</span>
+          <span className="hidden truncate sm:inline">Historial</span>
           <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--surface-muted)] border border-[var(--border)] text-[var(--text-soft)]">
             {state.gym.sessions.length}
           </span>
@@ -837,7 +909,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
         <button
           type="button"
           onClick={() => setActiveTab('progresion')}
-          className={`flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-xs font-bold transition-all cursor-pointer sm:px-3 ${
+          className={`flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-2 text-xs font-bold transition-all cursor-pointer sm:px-3 ${
             activeTab === 'progresion'
               ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
               : 'text-[var(--text-soft)] hover:text-[var(--text)]'
@@ -934,62 +1006,77 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
               {/* Today's Gym Status */}
               <section
                 data-gym-today-status
-                className="rounded-2xl bg-[var(--card-subtle)] px-4 py-4 sm:px-5"
+                className="relative overflow-hidden rounded-3xl bg-[var(--card)] shadow-sm ring-1 ring-inset ring-[var(--border)]"
               >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                <span className="pointer-events-none absolute -right-12 -top-16 h-44 w-44 rounded-full bg-blue-500/[0.07] blur-2xl" />
+                <div className="relative grid lg:grid-cols-[minmax(0,1fr)_auto]">
+                  <div className="min-w-0 px-5 py-5 sm:px-6 sm:py-6">
+                    <div className="flex items-start gap-3">
                       {isTrainedToday && (
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
-                          <AppIcon name="check" className="h-4 w-4" />
+                        <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
+                          <AppIcon name="check" className="h-5 w-5" />
                         </span>
                       )}
                       <div className="min-w-0">
-                        <p className="text-sm font-bold text-[var(--text)] sm:text-base">
+                        <p className="text-xs font-semibold text-[var(--text-soft)]">
+                          {isTrainedToday ? 'Sesión de hoy completada' : 'Entrenar hoy'}
+                        </p>
+                        <h2 className="mt-1 text-xl font-black tracking-tight text-[var(--text)] sm:text-2xl">
                           {isTrainedToday
-                            ? 'Sesión de hoy completada'
+                            ? todayPresentation?.name || 'Entrenamiento completado'
                             : isRestDayToday
                             ? 'Día de descanso activo'
                             : sessionTemplate
                             ? state.gym.routineTemplates.find((template) => template.id === sessionTemplate)?.name || 'Rutina personalizada'
                             : 'Listo para entrenar'}
-                        </p>
+                        </h2>
                         {!isTrainedToday && (
-                          <p className="mt-0.5 text-xs leading-5 text-[var(--text-soft)]">
+                          <p className="mt-1 text-sm leading-5 text-[var(--text-soft)]">
                             {isRestDayToday
                               ? 'Racha protegida para priorizar recuperación.'
-                              : `${state.gym.routineTemplates.length} plantilla${state.gym.routineTemplates.length === 1 ? '' : 's'} · Racha de ${streak} días`}
+                              : `${state.gym.routineTemplates.length} rutina${state.gym.routineTemplates.length === 1 ? '' : 's'} lista${state.gym.routineTemplates.length === 1 ? '' : 's'} · Racha de ${streak} días`}
                           </p>
                         )}
                       </div>
                     </div>
 
                     {todayPresentation && (
-                      <dl className="mt-3 grid grid-cols-2 gap-x-5 gap-y-2 pl-9 sm:flex sm:flex-wrap sm:items-center">
+                      <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-[1.4fr_repeat(4,minmax(0,1fr))] sm:items-end">
+                        <div className="col-span-2 sm:col-span-1">
+                          <dt className="text-[11px] font-semibold text-[var(--text-faint)]">Volumen total</dt>
+                          <dd className="mt-1 text-3xl font-black tracking-tight tabular-nums text-[var(--text)] sm:text-4xl">
+                            {todayPresentation.volumeKg.toLocaleString('es-UY')}
+                            <span className="ml-1.5 text-sm font-semibold text-[var(--text-soft)]">kg</span>
+                          </dd>
+                        </div>
                         {[
                           ['Ejercicios', todayPresentation.exerciseCount],
                           ['Series', todayPresentation.completedSetCount],
-                          ['Volumen', `${todayPresentation.volumeKg.toLocaleString('es-UY')} kg`],
                           ...(todayPresentation.durationLabel
-                            ? [['Duración', todayPresentation.durationLabel] as [string, string]]
+                            ? [['Duración', todayPresentation.durationLabel] as [string, string | number]]
+                            : []),
+                          ...(todayPresentation.prExerciseCount > 0
+                            ? [['Mejores marcas', `${todayPresentation.prExerciseCount} PR${todayPresentation.prExerciseCount === 1 ? '' : 's'}`] as [string, string | number]]
                             : []),
                         ].map(([label, value]) => (
-                          <div key={label} className="sm:min-w-24">
-                            <dt className="text-[11px] font-medium text-[var(--text-faint)]">{label}</dt>
-                            <dd className="mt-0.5 text-sm font-bold tabular-nums text-[var(--text)]">{value}</dd>
+                          <div key={label}>
+                            <dt className="text-[11px] font-semibold text-[var(--text-faint)]">{label}</dt>
+                            <dd className={`mt-1 text-xl font-black tabular-nums ${label === 'Mejores marcas' ? 'text-amber-600 dark:text-amber-300' : 'text-[var(--text)]'}`}>
+                              {value}
+                            </dd>
                           </div>
                         ))}
                       </dl>
                     )}
                   </div>
 
-                  <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center lg:w-auto">
+                  <div className="flex w-full flex-col gap-2 border-t border-[var(--border)] bg-[var(--surface-muted)]/55 p-4 sm:flex-row sm:items-center lg:w-72 lg:flex-col lg:items-stretch lg:justify-center lg:border-l lg:border-t-0 lg:p-5">
                     {state.gym.routineTemplates.length > 0 && (
                       <select
                         aria-label="Plantilla para el próximo entrenamiento"
                         value={sessionTemplate}
                         onChange={(event) => setSessionTemplate(event.target.value)}
-                        className="min-h-11 min-w-48 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-medium text-[var(--text)] outline-none focus:border-[var(--blue)]"
+                        className="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-medium text-[var(--text)] outline-none focus:border-[var(--blue)] lg:w-full"
                       >
                         <option value="">Entrenamiento en blanco</option>
                         {state.gym.routineTemplates.map((template) => (
@@ -1002,7 +1089,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                       <button
                         type="button"
                         onClick={handleToggleRestDay}
-                        className="min-h-11 rounded-xl px-3 text-sm font-semibold text-[var(--text-soft)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                        className="min-h-11 rounded-xl px-3 text-sm font-semibold text-[var(--text-soft)] transition-colors hover:bg-[var(--card)] hover:text-[var(--text)]"
                       >
                         {isRestDayToday ? 'Cancelar descanso' : 'Descanso hoy'}
                       </button>
@@ -1021,135 +1108,128 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
               </section>
 
               {/* Routine Templates Manager */}
-              <section className="border-y border-[var(--border)] py-1">
-                <div className="flex min-h-14 items-center justify-between gap-3 px-1">
+              <section data-gym-routines className="space-y-4 py-2">
+                <div className="flex items-end justify-between gap-3 px-1">
                   <div className="flex min-w-0 items-center gap-3">
-                    <span className="text-[var(--blue)]">
-                      <AppIcon name="repeat" className="h-4 w-4" />
-                    </span>
                     <div className="min-w-0">
-                      <h2 className="text-sm font-bold text-[var(--text)]">Plantillas</h2>
-                      <p className="text-xs text-[var(--text-soft)]">
-                        {state.gym.routineTemplates.length} plantilla{state.gym.routineTemplates.length === 1 ? '' : 's'} guardada{state.gym.routineTemplates.length === 1 ? '' : 's'}
+                      <p className="text-xs font-semibold text-[var(--text-soft)]">Tu biblioteca</p>
+                      <h2 className="mt-0.5 text-lg font-black tracking-tight text-[var(--text)]">Rutinas</h2>
+                      <p className="mt-0.5 text-xs text-[var(--text-soft)]">
+                        {state.gym.routineTemplates.length} rutina{state.gym.routineTemplates.length === 1 ? '' : 's'} preparada{state.gym.routineTemplates.length === 1 ? '' : 's'} para entrenar
                       </p>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowTemplates((v) => !v)}
-                    className="min-h-11 shrink-0 rounded-lg px-2 text-sm font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--surface-muted)]"
+                    className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--surface-muted)]"
                   >
-                    {showTemplates ? 'Cerrar' : 'Gestionar plantillas'}
+                    <AppIcon name={showTemplates ? 'x' : 'plus'} className="h-4 w-4" />
+                    {showTemplates ? 'Cancelar' : 'Nueva rutina'}
                   </button>
                 </div>
 
                 {showTemplates && (
-                  <div className="space-y-4 border-t border-[var(--border)] px-1 py-4 animate-in fade-in">
-                    {/* Normalization Banner */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
-                      <div>
-                        <strong className="text-xs text-[var(--text)] block">
-                          🪄 Auto-reparación y normalización del historial
-                        </strong>
-                        <p className="text-[11px] text-[var(--text-soft)]">
-                          Corrige de una sola vez todas las mancuernas, poleas, máquinas y barras de las semanas pasadas en lote.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={handleNormalizeAllHistory}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl cursor-pointer shadow-xs transition"
-                      >
-                        🪄 Reparar todo el historial
-                      </button>
-                    </div>
-
-                    {/* Create Template Form */}
-                    <form onSubmit={handleAddTemplate} className="flex gap-2">
+                  <div className="rounded-2xl bg-[var(--surface-muted)] p-3 animate-in fade-in sm:p-4">
+                    <form onSubmit={handleAddTemplate} className="flex flex-col gap-2 sm:flex-row">
                       <input
                         type="text"
+                        aria-label="Nombre de la nueva rutina"
                         value={templateName}
                         onChange={(e) => setTemplateName(e.target.value)}
-                        placeholder="Ej: Empuje (Pecho / Hombro / Tríceps)"
-                        className="flex-1 px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-hidden focus:border-[var(--blue)]"
+                        placeholder="Ej. Empuje"
+                        className="min-h-11 flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm text-[var(--text)] outline-none focus:border-[var(--blue)]"
                       />
                       <button
                         type="submit"
-                        className="px-4 py-2 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold rounded-xl cursor-pointer hover:opacity-90"
+                        className="min-h-11 rounded-xl bg-[var(--text)] px-4 text-sm font-bold text-[var(--bg-elevated)] hover:opacity-90"
                       >
-                        ＋ Crear
+                        Crear rutina
                       </button>
                     </form>
+                  </div>
+                )}
 
-                    {/* Templates List & Expanded Exercise Editor */}
-                    <div className="space-y-3">
-                      {state.gym.routineTemplates.map((t) => {
-                        const isEditing = editingTemplateId === t.id;
-                        return (
-                          <div
-                            key={t.id}
-                            className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] overflow-hidden transition-all shadow-2xs"
-                          >
-                            <div className="p-3.5 flex items-center justify-between gap-2 flex-wrap">
-                              <div>
-                                <strong className="text-xs font-bold text-[var(--text)] block">{t.name}</strong>
-                                <span className="text-[11px] text-[var(--text-soft)]">
-                                  {t.exercises.length} ejercicio{t.exercises.length === 1 ? '' : 's'} configurado{t.exercises.length === 1 ? '' : 's'}
-                                  {t.days?.length ? ` · ${t.days.map((day) => DAY_LABELS[day].slice(0, 3)).join(', ')}` : ''}
-                                </span>
+                <div className="overflow-visible rounded-3xl bg-[var(--card)] shadow-sm ring-1 ring-inset ring-[var(--border)]">
+                  {state.gym.routineTemplates.length === 0 && !showTemplates && (
+                    <p className="px-5 py-7 text-sm text-[var(--text-soft)]">
+                      Creá una rutina para iniciar entrenamientos con ejercicios y descansos preparados.
+                    </p>
+                  )}
+                  {state.gym.routineTemplates.map((t) => {
+                    const isEditing = editingTemplateId === t.id;
+                    const identity = getRoutineIdentity(t.exercises, t.name);
+                    return (
+                      <article key={t.id} className="border-b border-[var(--border)] last:border-b-0">
+                        <div className="grid gap-4 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:p-5">
+                          <div className="flex min-w-0 items-center gap-3 sm:contents">
+                            <RoutineIdentityMark exercises={t.exercises} name={t.name} />
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="truncate text-base font-black tracking-tight text-[var(--text)]">{t.name}</h3>
+                                <span className={`text-[10px] font-semibold ${identity.accent}`}>{identity.label}</span>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartWorkout(t.id)}
-                                  className="px-2.5 py-1 rounded-lg bg-blue-600 text-white text-[10px] font-bold hover:bg-blue-700 cursor-pointer shadow-2xs"
-                                >
-                                  ⚡ Iniciar
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRenameTemplate(t.id, t.name)}
-                                  className="px-2.5 py-1 rounded-lg bg-[var(--card)] text-[10px] font-bold text-[var(--text)] border border-[var(--border)]"
-                                >
-                                  Renombrar
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDuplicateTemplate(t.id)}
-                                  className="px-2.5 py-1 rounded-lg bg-[var(--card)] text-[10px] font-bold text-[var(--text)] border border-[var(--border)]"
-                                >
-                                  Duplicar
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingTemplateId(isEditing ? null : t.id)}
-                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer border transition ${
-                                    isEditing
-                                      ? 'bg-[var(--text)] text-[var(--bg-elevated)] border-transparent'
-                                      : 'bg-[var(--card)] text-[var(--text)] border-[var(--border)] hover:border-blue-500/40'
-                                  }`}
-                                >
-                                  {isEditing ? 'Cerrar editor ✕' : '✏️ Configurar'}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteTemplate(t.id)}
-                                  className="text-xs text-[var(--text-faint)] hover:text-rose-500 cursor-pointer p-1"
-                                  title="Eliminar plantilla"
-                                >
-                                  ✕
-                                </button>
-                              </div>
+                              <p className="mt-1 text-xs leading-5 text-[var(--text-soft)]">
+                                {t.exercises.length} ejercicio{t.exercises.length === 1 ? '' : 's'}
+                                {t.days?.length ? ` · ${t.days.map((day) => DAY_LABELS[day].slice(0, 3)).join(', ')}` : ' · Sin días asignados'}
+                              </p>
+                              {t.exercises.length > 0 && (
+                                <p className="mt-1 hidden truncate text-xs text-[var(--text-faint)] sm:block">
+                                  {t.exercises.slice(0, 3).map((exercise) => exercise.name).join(' · ')}
+                                </p>
+                              )}
                             </div>
+                          </div>
+                          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1.5 sm:flex sm:items-center">
+                            <button
+                              type="button"
+                              onClick={() => handleStartWorkout(t.id)}
+                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--blue)] px-4 text-sm font-bold text-white shadow-xs hover:bg-[var(--blue-hover)]"
+                            >
+                              <AppIcon name="play" className="h-4 w-4" />
+                              Iniciar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingTemplateId(isEditing ? null : t.id)}
+                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]"
+                            >
+                              <AppIcon name="edit" className="h-4 w-4 text-[var(--text-soft)]" />
+                              {isEditing ? 'Cerrar' : 'Editar'}
+                            </button>
+                            <details className="group relative">
+                              <summary aria-label={`Más acciones para ${t.name}`} className="flex h-11 w-11 cursor-pointer list-none items-center justify-center rounded-xl text-[var(--text-soft)] hover:bg-[var(--surface-muted)]">
+                                <AppIcon name="more" className="h-5 w-5" />
+                              </summary>
+                              <div className="absolute right-0 top-12 z-30 w-48 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-xl">
+                                <button type="button" onClick={() => handleDuplicateTemplate(t.id)} className="flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]">
+                                  Duplicar rutina
+                                </button>
+                                <button type="button" onClick={() => handleDeleteTemplate(t.id)} className="flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm font-semibold text-rose-600 hover:bg-rose-500/10 dark:text-rose-400">
+                                  Eliminar rutina
+                                </button>
+                              </div>
+                            </details>
+                          </div>
+                        </div>
 
-                            {/* Template Exercises Sub-editor */}
-                            {isEditing && (
-                              <div className="p-4 border-t border-[var(--border)] bg-[var(--card)] space-y-4 animate-in fade-in">
-                                <div className="space-y-2 border-b border-[var(--border)] pb-3">
-                                  <span className="text-xs font-bold text-[var(--text-soft)]">
-                                    Días y ejercicios de la plantilla "{t.name}"
-                                  </span>
-                                  <div className="flex flex-wrap gap-1.5" aria-label="Días de rutina">
+                        {isEditing && (
+                          <div data-gym-routine-editor className="space-y-6 border-t border-[var(--border)] bg-[var(--card-subtle)] p-4 animate-in fade-in sm:p-6">
+                            <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_1.1fr]">
+                              <label className="block text-xs font-semibold text-[var(--text-soft)]">
+                                Nombre de la rutina
+                                <input
+                                  type="text"
+                                  value={t.name}
+                                  onChange={(event) => onUpdateState((draft) => {
+                                    updateGymTemplate(draft.gym, t.id, { name: event.target.value });
+                                  })}
+                                  className="mt-1.5 min-h-11 w-full rounded-xl border border-transparent bg-[var(--card)] px-3 text-base font-bold text-[var(--text)] shadow-xs outline-none focus:border-[var(--blue)]"
+                                />
+                              </label>
+                              <div>
+                                <p className="text-xs font-semibold text-[var(--text-soft)]">Días de entrenamiento</p>
+                                <div className="mt-1.5 grid grid-cols-4 gap-1.5 sm:flex" aria-label="Días de rutina">
                                     {DAYS.map((day) => {
                                       const selected = t.days?.includes(day) || false;
                                       return (
@@ -1158,63 +1238,64 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                                           type="button"
                                           aria-pressed={selected}
                                           onClick={() => handleToggleTemplateDay(t.id, day)}
-                                          className={`rounded-lg border px-2 py-1 text-[10px] font-bold ${selected
-                                            ? 'border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                                            : 'border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)]'
+                                          className={`min-h-11 rounded-xl px-3 text-xs font-semibold ${selected
+                                            ? 'bg-blue-500/12 text-blue-700 ring-1 ring-blue-500/30 dark:text-blue-300'
+                                            : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'
                                           }`}
                                         >
                                           {DAY_LABELS[day].slice(0, 3)}
                                         </button>
                                       );
                                     })}
-                                  </div>
                                 </div>
+                              </div>
+                            </div>
 
-                                {t.exercises.length === 0 ? (
-                                  <p className="text-xs text-[var(--text-faint)] py-2">
-                                    Esta plantilla aún no tiene ejercicios. Agregá el primero abajo.
-                                  </p>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {t.exercises.map((ex, exIdx) => {
-                                      const exEq = ex.equipment || (ex.barWeight && ex.barWeight > 0 ? 'barra' : 'mancuerna');
-                                      return (
-                                        <div
-                                          key={ex.id || exIdx}
-                                          className="p-2.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-between gap-2 flex-wrap text-xs"
-                                        >
-                                          <div className="flex items-center gap-2">
-                                            <div className="flex items-center gap-0.5">
+                            {t.exercises.length === 0 ? (
+                              <p className="rounded-xl bg-[var(--surface-muted)] px-4 py-5 text-sm text-[var(--text-soft)]">
+                                Agregá el primer ejercicio de esta rutina.
+                              </p>
+                            ) : (
+                              <div className="space-y-3">
+                                {t.exercises.map((ex, exIdx) => {
+                                  const exEq = ex.equipment || (ex.barWeight && ex.barWeight > 0 ? 'barra' : 'mancuerna');
+                                  return (
+                                    <section key={ex.id || exIdx} className="rounded-2xl bg-[var(--card)] p-3 shadow-xs ring-1 ring-inset ring-[var(--border)] sm:p-4">
+                                      <div className="flex items-center justify-between gap-3">
+                                        <div className="flex min-w-0 items-center gap-3">
+                                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-xs font-black tabular-nums text-[var(--blue)]">
+                                            {String(exIdx + 1).padStart(2, '0')}
+                                          </span>
+                                          <div className="min-w-0">
+                                            <h4 className="truncate text-sm font-bold text-[var(--text)]">{ex.name}</h4>
+                                            <p className="mt-0.5 text-xs text-[var(--text-soft)]">{ex.muscleGroup || 'Sin grupo muscular'}</p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-1">
                                               <button
                                                 type="button"
                                                 disabled={exIdx === 0}
                                                 onClick={() => handleReorderTemplateExercise(t.id, exIdx, exIdx - 1)}
-                                                className="rounded px-1 text-[11px] text-[var(--text-soft)] disabled:opacity-25"
+                                                className="flex h-11 w-11 items-center justify-center rounded-xl text-[var(--text-soft)] hover:bg-[var(--card)] disabled:opacity-25"
                                                 aria-label={`Subir ${ex.name}`}
                                               >
-                                                ↑
+                                                <AppIcon name="arrowUp" className="h-4 w-4" />
                                               </button>
                                               <button
                                                 type="button"
                                                 disabled={exIdx === t.exercises.length - 1}
                                                 onClick={() => handleReorderTemplateExercise(t.id, exIdx, exIdx + 1)}
-                                                className="rounded px-1 text-[11px] text-[var(--text-soft)] disabled:opacity-25"
+                                                className="flex h-11 w-11 items-center justify-center rounded-xl text-[var(--text-soft)] hover:bg-[var(--card)] disabled:opacity-25"
                                                 aria-label={`Bajar ${ex.name}`}
                                               >
-                                                ↓
+                                                <AppIcon name="arrowUp" className="h-4 w-4 rotate-180" />
                                               </button>
-                                            </div>
-                                            <span className="font-bold text-[var(--text)]">{ex.name}</span>
-                                            {ex.muscleGroup && (
-                                              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[var(--card)] border border-[var(--border)] text-[var(--text-soft)]">
-                                                {ex.muscleGroup}
-                                              </span>
-                                            )}
-                                          </div>
+                                        </div>
+                                      </div>
 
-                                          <div className="flex items-center gap-2 flex-wrap">
-                                            <label className="flex items-center gap-1 text-[10px] text-[var(--text-soft)]">
-                                              Sets
+                                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                                            <label className="text-xs font-medium text-[var(--text-soft)]">
+                                              Series
                                               <input
                                                 type="number"
                                                 min={1}
@@ -1226,10 +1307,10 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                                                   targetWeight: ex.sets[0]?.weight ?? ex.weight ?? 0,
                                                   restSeconds: ex.restSeconds || 90,
                                                 })}
-                                                className="w-14 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs text-[var(--text)]"
+                                                className="mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
                                               />
                                             </label>
-                                            <label className="flex items-center gap-1 text-[10px] text-[var(--text-soft)]">
+                                            <label className="text-xs font-medium text-[var(--text-soft)]">
                                               Reps
                                               <input
                                                 type="number"
@@ -1242,11 +1323,11 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                                                   targetWeight: ex.sets[0]?.weight ?? ex.weight ?? 0,
                                                   restSeconds: ex.restSeconds || 90,
                                                 })}
-                                                className="w-14 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs text-[var(--text)]"
+                                                className="mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
                                               />
                                             </label>
-                                            <label className="flex items-center gap-1 text-[10px] text-[var(--text-soft)]">
-                                              Kg objetivo
+                                            <label className="text-xs font-medium text-[var(--text-soft)]">
+                                              Objetivo (kg)
                                               <input
                                                 type="number"
                                                 min={0}
@@ -1258,11 +1339,11 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                                                   targetWeight: Number(event.target.value),
                                                   restSeconds: ex.restSeconds || 90,
                                                 })}
-                                                className="w-16 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs text-[var(--text)]"
+                                                className="mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
                                               />
                                             </label>
-                                            <label className="flex items-center gap-1 text-[10px] text-[var(--text-soft)]">
-                                              Descanso
+                                            <label className="text-xs font-medium text-[var(--text-soft)]">
+                                              Descanso (s)
                                               <input
                                                 type="number"
                                                 min={15}
@@ -1275,35 +1356,36 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                                                   targetWeight: ex.sets[0]?.weight ?? ex.weight ?? 0,
                                                   restSeconds: Number(event.target.value),
                                                 })}
-                                                className="w-16 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs text-[var(--text)]"
+                                                className="mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
                                               />
-                                              s
                                             </label>
-                                            {/* Equipment selector */}
+                                      </div>
+                                      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
                                             <select
+                                              aria-label={`Equipamiento de ${ex.name}`}
                                               value={exEq}
                                               onChange={(e) => {
                                                 const eq = e.target.value as ExerciseEquipment;
                                                 const bw = eq === 'barra' ? 20 : 0;
                                                 handleUpdateTemplateExercise(t.id, exIdx, { equipment: eq, barWeight: bw });
                                               }}
-                                              className="px-2 py-1 text-xs font-semibold rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
+                                              className="min-h-11 flex-1 rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
                                             >
-                                              <option value="barra">🏋️ Barra</option>
-                                              <option value="mancuerna">💪 Mancuerna</option>
-                                              <option value="polea">🪢 Polea</option>
-                                              <option value="maquina">⚙️ Máquina</option>
-                                              <option value="corporal">🤸 Corporal</option>
+                                              <option value="barra">Barra</option>
+                                              <option value="mancuerna">Mancuerna</option>
+                                              <option value="polea">Polea</option>
+                                              <option value="maquina">Máquina</option>
+                                              <option value="corporal">Peso corporal</option>
                                             </select>
 
-                                            {/* Bar weight if barra */}
                                             {exEq === 'barra' && (
                                               <select
+                                                aria-label={`Peso de barra de ${ex.name}`}
                                                 value={ex.barWeight ?? 20}
                                                 onChange={(e) =>
                                                   handleUpdateTemplateExercise(t.id, exIdx, { barWeight: Number(e.target.value) })
                                                 }
-                                                className="px-2 py-1 text-xs font-mono font-bold rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
+                                                className="min-h-11 rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
                                               >
                                                 <option value={20}>20 kg</option>
                                                 <option value={15}>15 kg</option>
@@ -1314,41 +1396,41 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                                             <button
                                               type="button"
                                               onClick={() => handleDeleteExerciseFromTemplate(t.id, exIdx)}
-                                              className="text-[var(--text-faint)] hover:text-rose-500 text-xs px-1 cursor-pointer"
-                                              title="Eliminar de la plantilla"
+                                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-rose-600 hover:bg-rose-500/10 dark:text-rose-400"
                                             >
-                                              ✕
+                                              <AppIcon name="trash" className="h-4 w-4" />
+                                              Eliminar
                                             </button>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-
-                                {/* Add exercise to template */}
-                                <TemplateAddExerciseForm
-                                  onAdd={(name, muscle, equipment, barWeight) =>
-                                    handleAddExerciseToTemplate(t.id, name, muscle, equipment, barWeight)
-                                  }
-                                />
+                                      </div>
+                                    </section>
+                                  );
+                                })}
                               </div>
                             )}
+
+                            <TemplateAddExerciseForm
+                              onAdd={(name, muscle, equipment, barWeight) =>
+                                handleAddExerciseToTemplate(t.id, name, muscle, equipment, barWeight)
+                              }
+                            />
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
               </section>
 
               {/* Latest Session Card (Quick Glance) */}
               {latestSession && (
                 <section className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-sm font-bold text-[var(--text)]">
-                      Última sesión registrada
-                    </h2>
+                  <div className="flex items-end justify-between gap-3 px-1">
+                    <div>
+                      <p className="text-xs font-semibold text-[var(--text-soft)]">Actividad reciente</p>
+                      <h2 className="mt-0.5 text-lg font-black tracking-tight text-[var(--text)]">
+                        Última sesión
+                      </h2>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setActiveTab('historial')}
@@ -1441,39 +1523,39 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
             </div>
           )}
 
-          {/* Quick Create Manual Session Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-xs">
-            <div>
-              <h2 className="text-sm font-bold text-[var(--text)]">Cargar Sesión Manual</h2>
-              <p className="text-xs text-[var(--text-soft)]">
-                Agregá un entrenamiento pasado o normalizá el equipamiento histórico.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleNormalizeAllHistory}
-                className="px-3 py-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-xs font-bold rounded-xl cursor-pointer hover:bg-amber-500/20 transition-all flex items-center gap-1.5"
-                title="Detecta mancuernas, poleas, máquinas y barras en todo tu historial y corrige pesos de barra"
-              >
-                <span>🪄 Normalizar todo el historial</span>
-              </button>
-              <input
-                type="date"
-                value={sessionDate}
-                onChange={(e) => setSessionDate(e.target.value)}
-                className="px-2.5 py-1.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
-              />
+          {/* Secondary creation and maintenance actions stay out of the reading flow. */}
+          <details className="group border-y border-[var(--border)]">
+            <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-1 text-sm font-semibold text-[var(--text)]">
+              <span>Cargar una sesión pasada</span>
+              <AppIcon name="chevronDown" className="h-4 w-4 text-[var(--text-soft)] transition-transform group-open:rotate-180" />
+            </summary>
+            <div className="flex flex-col gap-3 border-t border-[var(--border)] py-4 sm:flex-row sm:items-end sm:justify-between">
+              <label className="flex flex-1 flex-col gap-1.5 text-xs font-medium text-[var(--text-soft)]">
+                Fecha de la sesión
+                <input
+                  type="date"
+                  value={sessionDate}
+                  onChange={(e) => setSessionDate(e.target.value)}
+                  className="min-h-11 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm text-[var(--text)]"
+                />
+              </label>
               <button
                 type="button"
                 onClick={() => handleAddSession()}
-                className="px-3 py-1.5 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold rounded-xl cursor-pointer hover:opacity-90"
+                className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[var(--text)] px-4 text-sm font-bold text-[var(--bg-elevated)] hover:opacity-90"
               >
-                ＋ Nueva Sesión
+                Crear sesión
+              </button>
+              <button
+                type="button"
+                onClick={handleNormalizeAllHistory}
+                className="min-h-11 rounded-xl px-3 text-sm font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+                title="Revisa el equipamiento y los pesos de barra del historial"
+              >
+                Revisar datos históricos
               </button>
             </div>
-          </div>
+          </details>
 
           {/* Recent Weeks */}
           {gymHistory.recentWeeks.length === 0 ? (
@@ -1482,22 +1564,17 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
             </div>
           ) : (
             gymHistory.recentWeeks.map((week) => (
-              <div key={week.key} className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3 shadow-xs">
-                <div className="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-1 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 font-extrabold text-xs border border-blue-500/20">
-                      🗓️ {week.weekName}
-                    </span>
-                    <span className="text-xs font-mono text-[var(--text-soft)]">({week.rangeLabel})</span>
-                    <span className="text-xs font-bold text-[var(--text-faint)] bg-[var(--surface-muted)] px-2 py-0.5 rounded-lg border border-[var(--border)]">
-                      {week.sessions.length} sesión{week.sessions.length === 1 ? '' : 'es'}
-                    </span>
-                  </div>
+              <section key={week.key} className="space-y-3">
+                <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
+                  <h2 className="text-sm font-bold text-[var(--text)]">{week.weekName}</h2>
+                  <p className="text-xs text-[var(--text-soft)]">
+                    {week.rangeLabel} · {week.sessions.length} sesión{week.sessions.length === 1 ? '' : 'es'}
+                  </p>
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {week.sessions.map((session) => (
-                    <WorkoutSessionCard
+                    <LatestWorkoutSession
                       key={session.id}
                       session={session}
                       allSessions={state.gym.sessions}
@@ -1537,15 +1614,15 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                     />
                   ))}
                 </div>
-              </div>
+              </section>
             ))
           )}
 
           {/* Archived Older Months */}
           {gymHistory.archivedMonths.length > 0 && (
             <div className="space-y-2 pt-4">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-faint)]">
-                Meses Anteriores Archivados
+              <h3 className="text-xs font-semibold text-[var(--text-soft)]">
+                Historial anterior
               </h3>
               {gymHistory.archivedMonths.map((month) => (
                 <details
@@ -1554,8 +1631,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                 >
                   <summary className="flex cursor-pointer items-center justify-between p-4 list-none hover:bg-[var(--surface-muted)] transition-colors">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-[var(--text)]">📁 {month.label}</span>
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-soft)]">
+                      <span className="text-sm font-bold text-[var(--text)]">{month.label}</span>
+                      <span className="text-xs font-semibold text-[var(--text-soft)]">
                         {month.sessionsCount} sesiones
                       </span>
                     </div>
@@ -1566,7 +1643,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
 
                   <div className="p-4 pt-0 space-y-4 border-t border-[var(--border)] mt-2">
                     {month.weeks.flatMap((w) => w.sessions).map((session) => (
-                      <WorkoutSessionCard
+                      <LatestWorkoutSession
                         key={session.id}
                         session={session}
                         allSessions={state.gym.sessions}
@@ -1615,209 +1692,245 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
 
       {/* TAB 3: PROGRESIÓN & SALUD */}
       {activeTab === 'progresion' && (
-        <div className="space-y-6 animate-in fade-in">
-          {/* Summary Health Metrics */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">⚖️ Peso actual</span>
-              <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">
-                {peso != null ? `${peso} kg` : '—'}
-              </div>
-              <p className="text-[11px] text-[var(--text-soft)] mt-0.5">
-                {variacion == null
-                  ? 'sin registros'
-                  : `${variacion > 0 ? '+' : ''}${variacion.toFixed(1)} kg desde inicio`}
-              </p>
-            </div>
-
-            <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs flex flex-col justify-between">
+        <div className="space-y-7 animate-in fade-in">
+          <section data-gym-progress-overview className="relative overflow-hidden rounded-3xl bg-[var(--card)] shadow-sm ring-1 ring-inset ring-[var(--border)]">
+            <span className="pointer-events-none absolute -right-10 -top-16 h-52 w-52 rounded-full bg-blue-500/[0.08] blur-2xl" />
+            <div className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
               <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">📐 Composición</span>
-                  <button
-                    type="button"
-                    onClick={() => setShowBodyComposition((v) => !v)}
-                    className="text-[10px] font-bold text-[var(--blue)] hover:underline cursor-pointer"
-                  >
-                    {showBodyComposition ? 'Ocultar' : 'Ver RFM →'}
-                  </button>
+                <div className="flex items-center gap-2 text-[var(--blue)]">
+                  <AppIcon name="activity" className="h-4 w-4" />
+                  <p className="text-xs font-bold">Frecuencia reciente</p>
                 </div>
-                <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">
-                  {imc != null ? imc.toFixed(1) : '—'} <span className="text-xs font-normal text-[var(--text-soft)]">IMC</span>
-                </div>
-                <span
-                  className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 ${
-                    imcCat.color === 'green'
-                      ? 'bg-emerald-500/10 text-emerald-500'
-                      : imcCat.color === 'blue'
-                      ? 'bg-blue-500/10 text-blue-500'
-                      : imcCat.color === 'amber'
-                      ? 'bg-amber-500/10 text-amber-500'
-                      : 'bg-red-500/10 text-red-500'
-                  }`}
-                >
-                  {imcCat.label}
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">🔥 Racha activa</span>
-                  {streakDetails.weeksStreak > 0 && (
-                    <span className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                      {streakDetails.weeksStreak} sem.
-                    </span>
-                  )}
-                </div>
-                <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">
-                  {streak} día{streak === 1 ? '' : 's'}
-                </div>
-                <p className="text-[11px] text-[var(--text-soft)] mt-0.5">
-                  {streakDetails.workoutCount} entreno{streakDetails.workoutCount === 1 ? '' : 's'} · {streakDetails.restDaysCount} descanso{streakDetails.restDaysCount === 1 ? '' : 's'}
+                <p className="mt-3 flex items-end gap-2 text-[var(--text)]">
+                  <span className="text-6xl font-black leading-none tracking-[-0.06em] tabular-nums sm:text-7xl">
+                    {gymProgress.frequency.last7Days.workoutCount}
+                  </span>
+                  <span className="pb-1 text-base font-semibold leading-tight text-[var(--text-soft)]">
+                    sesión{gymProgress.frequency.last7Days.workoutCount === 1 ? '' : 'es'}<br />en 7 días
+                  </span>
+                </p>
+                <p className="mt-3 text-sm text-[var(--text-soft)]">
+                  {gymProgress.frequency.previous7Days.workoutCount === gymProgress.frequency.last7Days.workoutCount
+                    ? 'Mismo ritmo que los 7 días anteriores.'
+                    : `${Math.abs(gymProgress.frequency.last7Days.workoutCount - gymProgress.frequency.previous7Days.workoutCount)} ${gymProgress.frequency.last7Days.workoutCount > gymProgress.frequency.previous7Days.workoutCount ? 'más' : 'menos'} que en los 7 días anteriores.`}
                 </p>
               </div>
+              <dl className="grid grid-cols-2 gap-6 border-t border-[var(--border)] pt-5 lg:min-w-80 lg:border-l lg:border-t-0 lg:pl-7 lg:pt-0">
+                <div>
+                  <dt className="text-xs font-medium text-[var(--text-faint)]">Últimos 30 días</dt>
+                  <dd className="mt-1 text-2xl font-black tabular-nums text-[var(--text)]">
+                    {gymProgress.frequency.last30Days.workoutCount}
+                    <span className="ml-1 text-xs font-semibold text-[var(--text-soft)]">sesiones</span>
+                  </dd>
+                </div>
+                {gymProgress.frequency.last30Days.volume > 0 && (
+                  <div>
+                    <dt className="text-xs font-medium text-[var(--text-faint)]">Volumen del período</dt>
+                    <dd className="mt-1 text-2xl font-black tabular-nums text-[var(--text)]">
+                      {gymProgress.frequency.last30Days.volume.toLocaleString('es-UY')}
+                      <span className="ml-1 text-xs font-semibold text-[var(--text-soft)]">kg</span>
+                    </dd>
+                  </div>
+                )}
+              </dl>
             </div>
+          </section>
 
-            <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">📅 Días en el año</span>
-              <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{diasEntrenadosAnio}</div>
-              <p className="text-[11px] text-[var(--text-soft)] mt-0.5">
-                sesiones registradas en {ref.getFullYear()}
+          {activeExerciseMetric ? (
+            <section data-gym-exercise-progress className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-[var(--text-soft)]">Evolución por ejercicio</p>
+                  <h2 className="mt-1 text-xl font-bold text-[var(--text)]">{activeExerciseMetric.exerciseName}</h2>
+                </div>
+                <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-soft)]">
+                  Elegir ejercicio
+                  <select
+                    value={activeExerciseMetric.key}
+                    onChange={(e) => setSelectedExercise(e.target.value)}
+                    className="min-h-11 min-w-56 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold text-[var(--text)] outline-none focus:border-[var(--blue)]"
+                  >
+                    {gymProgress.exercises.map((exercise) => (
+                      <option key={exercise.key} value={exercise.key}>{exercise.exerciseName}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="rounded-3xl bg-[var(--card)] p-5 shadow-sm ring-1 ring-inset ring-[var(--border)] sm:p-6">
+                <div className="grid gap-6 lg:grid-cols-[1.15fr_1fr] lg:items-end">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-semibold text-[var(--text-faint)]">Mejor serie</p>
+                      <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${
+                        activeExerciseMetric.state === 'improved'
+                          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                          : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'
+                      }`}>
+                        {activeExerciseMetric.state === 'improved'
+                          ? 'Mejorando'
+                          : activeExerciseMetric.state === 'stable'
+                            ? 'Estable'
+                            : 'Faltan datos'}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-4xl font-black tracking-tight tabular-nums text-[var(--text)] sm:text-5xl">
+                      {activeExerciseMetric.bestSet
+                        ? <>{activeExerciseMetric.bestSet.weight}<span className="ml-1.5 text-base font-semibold text-[var(--text-soft)]">kg × {activeExerciseMetric.bestSet.reps}</span></>
+                        : '—'}
+                    </p>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-5 border-t border-[var(--border)] pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+                    <div>
+                      <dt className="text-xs text-[var(--text-faint)]">Última ejecución</dt>
+                      <dd className="mt-1 text-base font-bold text-[var(--text)]">
+                        {activeExerciseMetric.lastExecution ? fmtDate(activeExerciseMetric.lastExecution.date) : '—'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs text-[var(--text-faint)]">Sesiones en 30 días</dt>
+                      <dd className="mt-1 text-base font-bold tabular-nums text-[var(--text)]">
+                        {activeExerciseMetric.recentSessionCount}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+                <p className="mt-5 border-t border-[var(--border)] pt-4 text-sm leading-6 text-[var(--text-soft)]">
+                  {activeExerciseMetric.state === 'improved'
+                    ? 'Tu mejor serie reciente superó el período anterior.'
+                    : activeExerciseMetric.state === 'stable'
+                      ? 'La mejor serie se mantuvo frente al período anterior.'
+                      : 'Necesitamos ejecuciones en dos períodos comparables para marcar una tendencia.'}
+                  {activeExerciseMetric.previousVolume > 0 && (
+                    <> Volumen reciente: <span className="font-semibold tabular-nums text-[var(--text)]">{activeExerciseMetric.recentVolume.toLocaleString('es-UY')} kg</span>.</>
+                  )}
+                </p>
+              </div>
+
+              {liftingChartData.length >= 2 ? (
+                <div className="rounded-3xl bg-[var(--card-subtle)] p-4 sm:p-5">
+                  <div className="mb-3">
+                    <h3 className="text-sm font-bold text-[var(--text)]">¿Cómo cambió la carga máxima?</h3>
+                    <p className="mt-0.5 text-xs text-[var(--text-soft)]">Mayor peso realizado en cada sesión.</p>
+                  </div>
+                  <div className="h-48 w-full sm:h-52">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={liftingChartData} margin={{ top: 10, right: 10, left: -22, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.45} vertical={false} />
+                        <XAxis dataKey="dateLabel" tick={{ fill: 'var(--text-faint)', fontSize: 10 }} axisLine={false} tickLine={false} />
+                        <YAxis domain={[liftMin, liftMax]} tick={{ fill: 'var(--text-faint)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v} kg`} />
+                        <Tooltip content={<CustomChartTooltip unit="kg" />} />
+                        <Line type="monotone" dataKey="kg" stroke="var(--blue)" strokeWidth={2.5} dot={{ r: 3, fill: 'var(--blue)', stroke: 'var(--card)', strokeWidth: 2 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              ) : (
+                <p data-gym-progress-low-data className="rounded-2xl bg-[var(--surface-muted)] px-4 py-5 text-sm text-[var(--text-soft)]">
+                  Registrá otra ejecución de {activeExercise} para ver su evolución de carga.
+                </p>
+              )}
+            </section>
+          ) : (
+            <section data-gym-progress-low-data className="rounded-2xl bg-[var(--surface-muted)] px-5 py-7">
+              <h2 className="text-base font-bold text-[var(--text)]">Tu progreso aparecerá acá</h2>
+              <p className="mt-1 max-w-xl text-sm text-[var(--text-soft)]">
+                Completá series en una sesión para ver última ejecución, mejor serie y evolución por ejercicio.
               </p>
-            </div>
-          </div>
-
-          {/* Body Composition Card (RFM, Masa Magra, Grasa %, FFMI) */}
-          {showBodyComposition && (
-            <div className="animate-in fade-in">
-              <BodyCompositionCard state={state} onUpdateState={onUpdateState} />
-            </div>
+            </section>
           )}
 
-          {/* PRs Card (Récords Personales con 1RM estimado y filtros) */}
-          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 shadow-xs">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-sm font-bold text-[var(--text)]">Récords Personales & Progresión 1RM</h2>
-              <button
-                type="button"
-                onClick={() => setShowPRs((v) => !v)}
-                className="text-xs font-bold text-[var(--blue)] hover:underline cursor-pointer"
-              >
-                {showPRs ? 'Ocultar PRs ↑' : 'Ver todos los PRs →'}
-              </button>
-            </div>
-            {showPRs && (
-              <div className="mt-3 pt-3 border-t border-[var(--border)] animate-in fade-in">
+          {gymProgress.exercises.length > 0 && (
+            <details className="group border-y border-[var(--border)]">
+              <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-1 text-sm font-semibold text-[var(--text)]">
+                <span>Récords personales</span>
+                <AppIcon name="chevronDown" className="h-4 w-4 text-[var(--text-soft)] transition-transform group-open:rotate-180" />
+              </summary>
+              <div className="border-t border-[var(--border)] py-4">
                 <PersonalRecordsCard state={state} onSelectExercise={setHistoryExercise} />
               </div>
-            )}
-          </div>
+            </details>
+          )}
 
-          {/* Progress Charts Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Body Weight Progression */}
-            <div id="qa-focus-peso" className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3 shadow-xs">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xs font-bold text-[var(--text)] flex items-center gap-1.5">
-                  <span>⚖️</span> Evolución de Peso Corporal
-                </h2>
-                {peso != null && (
-                  <span className="text-xs font-mono font-bold text-[var(--blue)] px-2.5 py-0.5 bg-blue-500/10 rounded-lg border border-blue-500/20">
-                    {peso} kg
-                  </span>
-                )}
+          <details className="group border-y border-[var(--border)]">
+            <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-1 text-sm font-semibold text-[var(--text)]">
+              <span>Salud corporal</span>
+              <span className="flex items-center gap-3 text-xs font-medium text-[var(--text-soft)]">
+                {peso != null ? `${peso} kg` : 'Sin peso registrado'}
+                <AppIcon name="chevronDown" className="h-4 w-4 transition-transform group-open:rotate-180" />
+              </span>
+            </summary>
+            <div id="qa-focus-peso" className="space-y-5 border-t border-[var(--border)] py-5">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs text-[var(--text-faint)]">Peso actual</p>
+                  <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--text)]">{peso != null ? `${peso} kg` : '—'}</p>
+                  <p className="mt-0.5 text-xs text-[var(--text-soft)]">
+                    {variacion == null ? 'Sin variación calculable' : `${variacion > 0 ? '+' : ''}${variacion.toFixed(1)} kg desde el inicio`}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-[var(--text-faint)]">IMC</p>
+                  <p className="mt-1 text-lg font-bold tabular-nums text-[var(--text)]">{imc != null ? imc.toFixed(1) : '—'}</p>
+                  <p className="text-xs text-[var(--text-soft)]">{imcCat.label}</p>
+                </div>
               </div>
 
-              <form onSubmit={handleAddWeight} className="flex items-center gap-2">
+              <form onSubmit={handleAddWeight} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem_auto]">
                 <input
                   type="date"
+                  aria-label="Fecha del peso"
                   value={weightDate}
                   onChange={(e) => setWeightDate(e.target.value)}
-                  className="px-2 py-1 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
+                  className="min-h-11 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm text-[var(--text)]"
                 />
                 <input
                   type="number"
+                  aria-label="Peso en kilogramos"
                   step="0.1"
                   value={weightKg}
                   onChange={(e) => setWeightKg(e.target.value)}
                   placeholder="70.5 kg"
-                  className="w-24 px-2 py-1 text-xs font-mono rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
+                  className="min-h-11 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm text-[var(--text)]"
                 />
-                <button
-                  type="submit"
-                  className="px-3 py-1 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold rounded-lg cursor-pointer hover:opacity-90"
-                >
-                  ＋ Cargar
+                <button type="submit" className="min-h-11 rounded-xl bg-[var(--text)] px-4 text-sm font-bold text-[var(--bg-elevated)] hover:opacity-90">
+                  Registrar peso
                 </button>
               </form>
 
-              {bodyWeightChartData.length < 2 ? (
-                <p className="text-center py-6 text-xs text-[var(--text-faint)]">
-                  Cargá al menos 2 registros para ver el gráfico de tendencia de peso.
-                </p>
-              ) : (
-                <div className="h-48 w-full pt-1">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={bodyWeightChartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                      <defs>
-                        <linearGradient id="colorBw" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
-                      <XAxis dataKey="dateLabel" tick={{ fill: 'var(--text-faint)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                      <YAxis domain={[bwMin, bwMax]} tick={{ fill: 'var(--text-faint)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}k`} />
-                      <Tooltip content={<CustomChartTooltip unit="kg" />} />
-                      <Area type="monotone" dataKey="kg" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#colorBw)" dot={{ r: 3, fill: '#10b981', stroke: '#fff', strokeWidth: 1 }} />
-                    </AreaChart>
-                  </ResponsiveContainer>
+              {bodyWeightChartData.length >= 2 && (
+                <div>
+                  <h3 className="text-sm font-bold text-[var(--text)]">¿Cómo cambió tu peso?</h3>
+                  <div className="mt-3 h-48 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={bodyWeightChartData} margin={{ top: 10, right: 10, left: -22, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="colorBw" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="var(--blue)" stopOpacity={0.24} />
+                            <stop offset="95%" stopColor="var(--blue)" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.45} vertical={false} />
+                        <XAxis dataKey="dateLabel" tick={{ fill: 'var(--text-faint)', fontSize: 10 }} axisLine={false} tickLine={false} />
+                        <YAxis domain={[bwMin, bwMax]} tick={{ fill: 'var(--text-faint)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v} kg`} />
+                        <Tooltip content={<CustomChartTooltip unit="kg" />} />
+                        <Area type="monotone" dataKey="kg" stroke="var(--blue)" strokeWidth={2.5} fillOpacity={1} fill="url(#colorBw)" dot={{ r: 3, fill: 'var(--blue)', stroke: 'var(--card)', strokeWidth: 2 }} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               )}
-            </div>
 
-            {/* Lifting Weight Progression */}
-            <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3 shadow-xs">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-xs font-bold text-[var(--text)] flex items-center gap-1.5">
-                  <span>🏋️</span> Progresión de Cargas
-                </h2>
-                {gymProgress.exercises.length > 0 && (
-                  <select
-                    value={activeExerciseMetric?.key || ''}
-                    onChange={(e) => setSelectedExercise(e.target.value)}
-                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
-                  >
-                    {gymProgress.exercises.map((exercise) => (
-                      <option key={exercise.key} value={exercise.key}>
-                        {exercise.exerciseName}
-                      </option>
-                    ))}
-                  </select>
-                )}
-              </div>
-
-              {liftingChartData.length === 0 ? (
-                <p className="text-center py-6 text-xs text-[var(--text-faint)]">
-                  Sin registros de carga para "{activeExercise}". Completá series en tus entrenamientos.
-                </p>
-              ) : (
-                <div className="h-48 w-full pt-1">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={liftingChartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.5} />
-                      <XAxis dataKey="dateLabel" tick={{ fill: 'var(--text-faint)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                      <YAxis domain={[liftMin, liftMax]} tick={{ fill: 'var(--text-faint)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}k`} />
-                      <Tooltip content={<CustomChartTooltip unit="kg" />} />
-                      <Line type="monotone" dataKey="kg" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 4, fill: '#3b82f6', stroke: '#fff', strokeWidth: 1.5 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={() => setShowBodyComposition((value) => !value)}
+                className="min-h-11 rounded-xl px-3 text-sm font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)]"
+              >
+                {showBodyComposition ? 'Ocultar composición corporal' : 'Ver composición corporal'}
+              </button>
+              {showBodyComposition && <BodyCompositionCard state={state} onUpdateState={onUpdateState} />}
             </div>
-          </div>
+          </details>
         </div>
       )}
 
@@ -1891,11 +2004,11 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
   return (
     <form
       onSubmit={handleSubmit}
-      className="p-3 bg-[var(--card)] border border-dashed border-[var(--border)] rounded-xl flex flex-wrap items-end gap-2"
+      className="grid gap-3 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] p-3 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,1fr)_auto_auto_auto_auto] lg:items-end"
     >
-      <div className="flex-1 min-w-[160px]">
-        <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-1">
-          Agregar ejercicio a plantilla
+      <div className="sm:col-span-2 lg:col-span-1">
+        <label className="mb-1.5 block text-xs font-medium text-[var(--text-soft)]">
+          Ejercicio
         </label>
         <input
           type="text"
@@ -1912,7 +2025,7 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
             }
           }}
           placeholder="Ej: Curl con mancuernas"
-          className="w-full px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-hidden focus:border-[var(--blue)]"
+          className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm text-[var(--text)] outline-none focus:border-[var(--blue)]"
         />
         <datalist id="template-gym-suggestions">
           {COMMON_EXERCISE_SUGGESTIONS.map((s) => (
@@ -1921,14 +2034,14 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
         </datalist>
       </div>
 
-      <div>
-        <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-1">
+      <div className="min-w-0">
+        <label className="mb-1.5 block text-xs font-medium text-[var(--text-soft)]">
           Músculo
         </label>
         <select
           value={muscleGroup}
           onChange={(e) => setMuscleGroup(e.target.value as MuscleGroup)}
-          className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
+          className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold text-[var(--text)]"
         >
           {['Pecho', 'Espalda', 'Piernas', 'Hombros', 'Brazos', 'Core', 'Cardio', 'Otros'].map((m) => (
             <option key={m} value={m}>
@@ -1938,9 +2051,9 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
         </select>
       </div>
 
-      <div>
-        <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-1">
-          Tipo equipo
+      <div className="min-w-0">
+        <label className="mb-1.5 block text-xs font-medium text-[var(--text-soft)]">
+          Equipo
         </label>
         <select
           value={equipment}
@@ -1953,7 +2066,7 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
               setBarWeight(20);
             }
           }}
-          className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
+          className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold text-[var(--text)]"
         >
           {EXERCISE_EQUIPMENT_OPTIONS.map((item) => (
             <option key={item.key} value={item.key}>
@@ -1964,14 +2077,14 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
       </div>
 
       {equipment === 'barra' && (
-        <div>
-          <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-1">
+        <div className="min-w-0">
+          <label className="mb-1.5 block text-xs font-medium text-[var(--text-soft)]">
             Barra
           </label>
           <select
             value={barWeight}
             onChange={(e) => setBarWeight(Number(e.target.value))}
-            className="px-2 py-1.5 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
+            className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold text-[var(--text)]"
           >
             <option value={20}>20 kg (Olímpica)</option>
             <option value={15}>15 kg (Técnica)</option>
@@ -1982,9 +2095,9 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
 
       <button
         type="submit"
-        className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-all shadow-2xs"
+        className="min-h-11 rounded-xl bg-[var(--blue)] px-4 text-sm font-bold text-white hover:bg-[var(--blue-hover)] sm:col-span-2 lg:col-span-1"
       >
-        ＋ Añadir
+        Agregar
       </button>
     </form>
   );
@@ -2318,7 +2431,79 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                 </div>
 
                 {/* Sets Table */}
-                <div className="overflow-x-auto">
+                <div className="space-y-2 sm:hidden">
+                  {(exercise.sets || []).map((set, setIdx) => {
+                    const setWeight = Number(set.weight) || 0;
+                    const ghostSet = exerciseGhost?.sets[setIdx];
+                    return (
+                      <div key={set.id || setIdx} className="rounded-xl bg-[var(--card)] p-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-xs font-semibold text-[var(--text-soft)]">Serie {setIdx + 1}</span>
+                          <button
+                            type="button"
+                            onClick={() => onUpdateSet(exIdx, setIdx, { completed: !set.completed })}
+                            className={`inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold ${
+                              set.completed
+                                ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
+                                : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'
+                            }`}
+                          >
+                            <AppIcon name={set.completed ? 'checkCircle' : 'check'} className="h-4 w-4" />
+                            {set.completed ? 'Realizada' : 'Marcar realizada'}
+                          </button>
+                        </div>
+                        {ghostSet && (
+                          <p className="mt-1 text-xs text-[var(--text-faint)]">
+                            Anterior: {ghostSet.weight} kg × {ghostSet.reps}
+                          </p>
+                        )}
+                        <div className="mt-3 grid grid-cols-2 gap-2">
+                          <label className="text-xs font-medium text-[var(--text-soft)]">
+                            Peso (kg)
+                            <input
+                              type="number"
+                              step="0.5"
+                              min="0"
+                              value={set.weight}
+                              onChange={(event) => onUpdateSet(exIdx, setIdx, { weight: Number(event.target.value) || 0 })}
+                              className="mt-1 min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-bold text-[var(--text)]"
+                            />
+                          </label>
+                          <label className="text-xs font-medium text-[var(--text-soft)]">
+                            Reps
+                            <input
+                              type="number"
+                              min="1"
+                              value={set.reps}
+                              onChange={(event) => onUpdateSet(exIdx, setIdx, { reps: Number(event.target.value) || 0 })}
+                              className="mt-1 min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-bold text-[var(--text)]"
+                            />
+                          </label>
+                        </div>
+                        <div className="mt-2 flex items-center justify-between">
+                          {currentEquipment === 'barra' ? (
+                            <button
+                              type="button"
+                              onClick={() => onOpenCalculator(exIdx, setIdx, setWeight, currentBarWeight)}
+                              className="min-h-11 rounded-xl px-3 text-sm font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)]"
+                            >
+                              Calcular discos
+                            </button>
+                          ) : <span />}
+                          <button
+                            type="button"
+                            onClick={() => onDeleteSet(exIdx, setIdx)}
+                            className="flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-rose-600 hover:bg-rose-500/10 dark:text-rose-400"
+                          >
+                            <AppIcon name="trash" className="h-4 w-4" />
+                            Eliminar
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="hidden overflow-x-auto sm:block">
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="text-[10px] uppercase font-bold text-[var(--text-faint)] border-b border-[var(--border)]">
@@ -2748,70 +2933,81 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
   return (
     <article
       data-latest-session-summary
-      className="overflow-visible rounded-2xl border border-[var(--border)] bg-[var(--card)]"
+      data-history-session-summary
+      className="overflow-visible rounded-3xl bg-[var(--card)] shadow-sm ring-1 ring-inset ring-[var(--border)]"
     >
-      <div className="p-4 sm:p-5">
+      <div className="p-4 sm:p-6">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <time className="text-sm font-medium text-[var(--text-soft)]" dateTime={session.date}>
-                {fmtDate(session.date)}
-              </time>
-              <span className="text-[var(--text-faint)]">·</span>
-              <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                <AppIcon name="checkCircle" className="h-3.5 w-3.5" />
-                Completada
-              </span>
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-500/10 text-[var(--blue)]">
+              <AppIcon name="calendar" className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <time className="text-xs font-semibold text-[var(--text-soft)]" dateTime={session.date}>
+                  {fmtDate(session.date)}
+                </time>
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                  <AppIcon name="check" className="h-3 w-3" />
+                  Completada
+                </span>
+              </div>
+              <h3 className="mt-1 truncate text-lg font-black tracking-tight text-[var(--text)] sm:text-xl">
+                {presentation.name}
+              </h3>
             </div>
-            <h3 className="mt-1 truncate text-base font-bold text-[var(--text)] sm:text-lg">
-              {presentation.name}
-            </h3>
           </div>
           {secondaryActions}
         </div>
 
-        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-5">
-          <div>
-            <dt className="text-xs text-[var(--text-faint)]">Ejercicios</dt>
-            <dd className="mt-0.5 text-sm font-bold tabular-nums text-[var(--text)]">{presentation.exerciseCount}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-[var(--text-faint)]">Series realizadas</dt>
-            <dd className="mt-0.5 text-sm font-bold tabular-nums text-[var(--text)]">{presentation.completedSetCount}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-[var(--text-faint)]">Volumen</dt>
-            <dd className="mt-0.5 text-sm font-bold tabular-nums text-[var(--text)]">
-              {presentation.volumeKg.toLocaleString('es-UY')} kg
+        <dl className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-[1.4fr_repeat(4,minmax(0,1fr))] sm:items-end">
+          <div className="col-span-2 sm:col-span-1">
+            <dt className="text-[11px] font-semibold text-[var(--text-faint)]">Volumen</dt>
+            <dd className="mt-1 text-3xl font-black tracking-tight tabular-nums text-[var(--text)]">
+              {presentation.volumeKg.toLocaleString('es-UY')}
+              <span className="ml-1 text-xs font-semibold text-[var(--text-soft)]">kg</span>
             </dd>
+          </div>
+          <div>
+            <dt className="text-[11px] text-[var(--text-faint)]">Series realizadas</dt>
+            <dd className="mt-1 text-lg font-black tabular-nums text-[var(--text)]">{presentation.completedSetCount}</dd>
+          </div>
+          <div>
+            <dt className="text-[11px] text-[var(--text-faint)]">Ejercicios</dt>
+            <dd className="mt-1 text-lg font-black tabular-nums text-[var(--text)]">{presentation.exerciseCount}</dd>
           </div>
           {presentation.durationLabel && (
             <div>
-              <dt className="text-xs text-[var(--text-faint)]">Duración</dt>
-              <dd className="mt-0.5 text-sm font-bold tabular-nums text-[var(--text)]">{presentation.durationLabel}</dd>
+              <dt className="text-[11px] text-[var(--text-faint)]">Duración</dt>
+              <dd className="mt-1 text-lg font-black tabular-nums text-[var(--text)]">{presentation.durationLabel}</dd>
             </div>
           )}
           {presentation.prExerciseCount > 0 && (
             <div>
-              <dt className="text-xs text-[var(--text-faint)]">Récords</dt>
-              <dd className="mt-0.5 text-sm font-bold tabular-nums text-[var(--text)]">
+              <dt className="text-[11px] text-[var(--text-faint)]">Mejores marcas</dt>
+              <dd className="mt-1 text-lg font-black tabular-nums text-amber-600 dark:text-amber-300">
                 {presentation.prExerciseCount} PR{presentation.prExerciseCount === 1 ? '' : 's'}
               </dd>
             </div>
           )}
         </dl>
 
-        <div className="mt-4 flex flex-col gap-3 border-t border-[var(--border)] pt-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="min-w-0 text-sm text-[var(--text-soft)]">
-            {presentation.bestSet
-              ? <><span className="font-medium">Mejor serie:</span> {presentation.bestSet.exerciseName} · <span className="font-mono font-semibold text-[var(--text)]">{presentation.bestSet.weight} kg × {presentation.bestSet.reps}</span></>
-              : 'Sin una mejor serie registrada.'}
+        <div className="mt-5 flex flex-col gap-3 rounded-2xl bg-[var(--surface-muted)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="min-w-0 text-xs text-[var(--text-soft)]">
+            {presentation.bestSet ? (
+              <>
+                <span className="block font-semibold text-[var(--text-faint)]">Mejor serie</span>
+                <span className="mt-0.5 block truncate text-sm text-[var(--text)]">
+                  {presentation.bestSet.exerciseName} · <strong className="font-mono text-base">{presentation.bestSet.weight} kg × {presentation.bestSet.reps}</strong>
+                </span>
+              </>
+            ) : 'Sin una mejor serie registrada.'}
           </p>
           <button
             type="button"
             aria-expanded={isExpanded}
             onClick={() => setIsExpanded((value) => !value)}
-            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--surface-muted)]"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--card)]"
           >
             {isExpanded ? 'Ocultar detalle' : 'Ver detalle'}
             <AppIcon name={isExpanded ? 'chevronUp' : 'chevronDown'} className="h-4 w-4" />
@@ -2820,7 +3016,7 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
       </div>
 
       {isExpanded && (
-        <div data-latest-session-detail className="border-t border-[var(--border)] px-4 py-4 sm:px-5">
+        <div data-latest-session-detail className="border-t border-[var(--border)] bg-[var(--card-subtle)] px-4 py-5 sm:px-6">
           <div className="divide-y divide-[var(--border)]">
             {session.exercises.map((exercise, exerciseIndex) => {
               const inferred = inferExerciseEquipment(exercise.name);
@@ -2828,13 +3024,16 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
                 (exercise.barWeight && exercise.barWeight > 0 ? 'barra' : inferred.equipment);
               const previousBest = getPreviousExerciseStats(allSessions, session.id, exercise.name, exercise.id);
               return (
-                <section key={exercise.id || exerciseIndex} className="py-4 first:pt-0 last:pb-0">
-                  <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                    <div>
-                      <h4 className="text-sm font-bold text-[var(--text)]">{exercise.name}</h4>
-                      <p className="mt-0.5 text-xs text-[var(--text-soft)]">
-                        {[exercise.muscleGroup, EQUIPMENT_LABELS[equipment]].filter(Boolean).join(' · ')}
-                      </p>
+                <section key={exercise.id || exerciseIndex} className="py-5 first:pt-0 last:pb-0">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                    <div className="flex items-center gap-3">
+                      <RoutineIdentityMark exercises={[exercise]} compact />
+                      <div>
+                        <h4 className="text-sm font-black text-[var(--text)]">{exercise.name}</h4>
+                        <p className="mt-0.5 text-xs text-[var(--text-soft)]">
+                          {[exercise.muscleGroup, EQUIPMENT_LABELS[equipment]].filter(Boolean).join(' · ')}
+                        </p>
+                      </div>
                     </div>
                     {previousBest && (
                       <p className="text-xs text-[var(--text-soft)] sm:text-right">
@@ -2843,24 +3042,21 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
                     )}
                   </div>
 
-                  <div className="mt-3 space-y-1">
+                  <div className="mt-4 space-y-1">
                     {(exercise.sets || []).map((set, setIndex) => (
                       <div
                         key={set.id || setIndex}
-                        className="flex min-h-10 items-center justify-between gap-3 rounded-lg px-2 text-sm hover:bg-[var(--surface-muted)]/60"
+                        className="grid min-h-11 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-3 hover:bg-[var(--surface-muted)]"
                       >
-                        <span className="text-xs font-medium text-[var(--text-faint)]">Serie {setIndex + 1}</span>
-                        <span className="flex-1 text-right font-mono font-semibold tabular-nums text-[var(--text)]">
+                        <span className="text-[11px] font-semibold text-[var(--text-faint)]">Serie {setIndex + 1}</span>
+                        <span className="text-right font-mono text-base font-black tabular-nums text-[var(--text)]">
                           {Number(set.weight) || 0} kg × {Number(set.reps) || 0}
                         </span>
-                        <span className={`inline-flex w-24 items-center justify-end gap-1.5 text-xs font-medium ${
-                          set.completed
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-[var(--text-faint)]'
-                        }`}>
-                          {set.completed && <AppIcon name="check" className="h-3.5 w-3.5" />}
-                          {set.completed ? 'Realizada' : 'No realizada'}
-                        </span>
+                        {set.completed ? (
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/70" aria-label="Serie realizada" />
+                        ) : (
+                          <span className="text-[10px] font-semibold text-[var(--text-faint)]">No realizada</span>
+                        )}
                       </div>
                     ))}
                   </div>

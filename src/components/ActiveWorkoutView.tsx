@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { ExerciseEquipment, GymSession, GymSet, MuscleGroup } from '../types';
 import { EXERCISE_EQUIPMENT_OPTIONS, inferExerciseEquipment, inferMuscleGroup } from '../lib/gymMigration';
 import { getPerformedGymVolume } from '../lib/gymFlows';
+import type { ExerciseMetricTarget } from '../lib/gymMetrics';
 import { AppIcon } from './AppIcon';
 
 interface PreviousSetReference {
@@ -43,7 +44,7 @@ interface ActiveWorkoutViewProps {
     config: { equipment: ExerciseEquipment; barWeight: number; muscleGroup?: MuscleGroup }
   ) => void;
   onOpenCalculator: (exerciseIndex: number, setIndex: number, initialWeight: number, barWeight: number) => void;
-  onOpenHistory: (exerciseName: string) => void;
+  onOpenHistory: (target: ExerciseMetricTarget) => void;
   onOpenHistoryTab: () => void;
   onOpenProgressTab: () => void;
   onFinish: () => void;
@@ -289,7 +290,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                 </div>
                 <button
                   type="button"
-                  onClick={() => onOpenHistory(exercise.name)}
+                  onClick={() => onOpenHistory({ exerciseId: exercise.id, exerciseName: exercise.name })}
                   className="min-h-11 rounded-xl border border-[var(--border)] px-3 text-xs font-semibold text-[var(--text-soft)] transition-colors hover:text-[var(--blue)]"
                 >
                   Historial
