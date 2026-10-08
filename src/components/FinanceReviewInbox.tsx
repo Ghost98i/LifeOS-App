@@ -15,7 +15,8 @@ interface FinanceReviewInboxProps {
   onBulkReview: (txIds: string[]) => void;
   onIgnore: (txId: string) => void;
   onResolveDuplicate: (duplicateTxId: string, keepTxId?: string) => void;
-  onLinkCommitment: (txId: string, commitmentId: string) => void;
+  onLinkCommitment: (txId: string, commitmentId: string, targetType?: 'commitment' | 'expected_income') => void;
+  onRejectMatch?: (txId: string, candidateId: string, cycleKey?: string) => void;
   onUpdateTx: (txId: string, updates: { category?: string; note?: string; date?: string }) => void;
   onPayCommitment: (commitment: FinancialCommitment) => void;
 }
@@ -27,6 +28,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
   onIgnore,
   onResolveDuplicate,
   onLinkCommitment,
+  onRejectMatch,
   onUpdateTx,
   onPayCommitment,
 }) => {
@@ -290,6 +292,77 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                     </div>
                   ))}
                 </div>
+
+                {/* Finance 2.3 Match Candidates Card */}
+                {item.matchResult && item.matchResult.candidates.length > 0 && (
+                  <div className="p-3 rounded-xl border border-indigo-500/30 bg-indigo-500/5 space-y-2 mt-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-1.5 font-bold text-indigo-700 dark:text-indigo-300">
+                        <span>🔗</span>
+                        <span>
+                          {item.matchResult.confidence === 'strong'
+                            ? 'Coincidencia detectada'
+                            : item.matchResult.confidence === 'ambiguous'
+                            ? 'Coincidencia ambigua (elegí cuál corresponde)'
+                            : 'Posible coincidencia'}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-[var(--text-faint)]">
+                        {item.matchResult.candidates.length} candidato{item.matchResult.candidates.length === 1 ? '' : 's'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {item.matchResult.candidates.map((cand) => (
+                        <div
+                          key={cand.targetId}
+                          className="p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] flex flex-wrap items-center justify-between gap-2 text-xs"
+                        >
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-[var(--text)]">{cand.name}</span>
+                              <span className="text-[var(--text-faint)]">·</span>
+                              <span className="font-mono font-bold text-[var(--text)]">
+                                {cand.currency === 'USD' ? 'U$S ' : '$U '}{fmtMoney(cand.amount)}
+                              </span>
+                              <span className="text-[var(--text-faint)]">·</span>
+                              <span className="text-[11px] text-[var(--text-soft)]">{cand.cycleLabel}</span>
+                            </div>
+                            {cand.reasons.length > 0 && (
+                              <div className="flex items-center gap-1 flex-wrap text-[10px] text-[var(--text-soft)]">
+                                {cand.reasons.map((r, i) => (
+                                  <span key={i} className="px-1.5 py-0.5 rounded bg-[var(--surface-muted)] text-[var(--text-soft)]">
+                                    {r}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => onLinkCommitment(tx.id, cand.targetId, cand.targetType)}
+                              className="px-2.5 py-1 rounded-md text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer transition-colors shadow-2xs"
+                            >
+                              Vincular
+                            </button>
+                            {onRejectMatch && (
+                              <button
+                                type="button"
+                                onClick={() => onRejectMatch(tx.id, cand.targetId, cand.cycleKey)}
+                                className="px-2 py-1 rounded-md text-xs font-medium text-[var(--text-soft)] hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer transition-colors"
+                                title="Descartar esta sugerencia para este movimiento"
+                              >
+                                No corresponde
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Inline Category Dropdown Selector if opened */}
                 {editingCategoryTxId === tx.id && (

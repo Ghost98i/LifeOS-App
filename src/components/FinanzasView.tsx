@@ -44,12 +44,13 @@ import {
   addTransaction,
   confirmExpectedIncome,
   confirmFinancialCommitment,
+  confirmTransactionMatch,
   deleteAccount,
   deleteTransaction,
   ignoreTransactionReview,
-  linkTransactionToCommitment,
   markMultipleTransactionsReviewed,
   markTransactionReviewed,
+  rejectTransactionMatch,
   resolveTransactionDuplicate,
   updateTransaction,
 } from '../lib/financeFlows';
@@ -258,11 +259,18 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
     showToast('Duplicado resuelto.');
   };
 
-  const handleLinkCommitment = (txId: string, commitmentId: string) => {
+  const handleLinkCommitment = (txId: string, targetId: string, targetType: 'commitment' | 'expected_income' = 'commitment') => {
     onUpdateState((draft) => {
-      linkTransactionToCommitment(draft, txId, commitmentId);
+      confirmTransactionMatch(draft, txId, targetId, targetType);
     });
-    showToast('Movimiento vinculado al compromiso.');
+    showToast(targetType === 'expected_income' ? 'Movimiento vinculado al ingreso previsto.' : 'Movimiento vinculado al compromiso.');
+  };
+
+  const handleRejectMatch = (txId: string, candidateId: string, cycleKey?: string) => {
+    onUpdateState((draft) => {
+      rejectTransactionMatch(draft, txId, candidateId, cycleKey);
+    });
+    showToast('Sugerencia descartada.');
   };
 
   const handleQuickUpdateTx = (txId: string, updates: { category?: string; note?: string; date?: string }) => {
@@ -877,7 +885,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
             />
           )}
 
-          {/* Review Inbox (Fase 2.2) */}
+          {/* Review Inbox (Fase 2.2 & 2.3) */}
           <FinanceReviewInbox
             state={state}
             onMarkReviewed={handleMarkReviewed}
@@ -885,6 +893,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
             onIgnore={handleIgnoreReview}
             onResolveDuplicate={handleResolveDuplicate}
             onLinkCommitment={handleLinkCommitment}
+            onRejectMatch={handleRejectMatch}
             onUpdateTx={handleQuickUpdateTx}
             onPayCommitment={openPayCommitment}
           />

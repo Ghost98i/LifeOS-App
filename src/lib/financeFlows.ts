@@ -1,12 +1,14 @@
 import type {
   Account,
   AccountReconciliation,
+  ExpectedIncome,
   FinanceTransfer,
   FinancialCommitment,
   LifeOSState,
   Transaction,
 } from '../types';
 import { advanceCommitmentDueDate, advanceExpectedIncomeDate } from './financialCommitments';
+import { deriveCycleIdentity } from './financeMatching';
 import {
   compareLedgerEvents,
   compareMaterializedBalanceShadow,
@@ -634,7 +636,34 @@ export function linkTransactionToCommitment(
   const commitment = (state.finance.commitments || []).find((item) => item.id === commitmentId);
   if (!commitment) throw new Error('El compromiso ya no existe.');
 
+  // Idempotency: if already linked to this commitment and already settled
+  if (
+    transaction.commitmentId === commitment.id &&
+    (commitment.settledTxIds?.includes(transaction.id) || commitment.lastSettledTxId === transaction.id)
+  ) {
+    return { transaction, commitment };
+  }
+
+  // Guard against reusing a transaction already linked to another commitment
+  if (transaction.commitmentId && transaction.commitmentId !== commitment.id) {
+    throw new Error('El movimiento ya está vinculado a otro compromiso.');
+  }
+
+  // Guard if commitment is already fully paid and finalized
+  if (!commitment.active && commitment.status === 'paid') {
+    throw new Error('El compromiso ya fue pagado y finalizado.');
+  }
+
+  const total = commitment.totalInstallments || commitment.totalOccurrences || null;
+  const curInst = commitment.currentInstallment || 1;
+  const settlementKey = total
+    ? `inst-${curInst}`
+    : commitment.frequency === 'once'
+      ? 'once'
+      : `cycle-${commitment.nextDueDate}`;
+
   transaction.commitmentId = commitment.id;
+  transaction.matchedCycle = settlementKey;
   transaction.reviewStatus = 'reviewed';
   transaction.reviewed = true;
   transaction.revisionOrder = createFinanceRevisionOrderAfter(transaction.revisionOrder);
@@ -650,11 +679,103 @@ export function linkTransactionToCommitment(
   return { transaction, commitment };
 }
 
+export function linkTransactionToExpectedIncome(
+  state: LifeOSState,
+  transactionId: string,
+  expectedIncomeId: string,
+): { transaction: Transaction; expectedIncome: ExpectedIncome } {
+  const transaction = state.finance.transactions.find((item) => item.id === transactionId);
+  if (!transaction) throw new Error('El movimiento ya no existe.');
+  const income = (state.finance.expectedIncomes || []).find((item) => item.id === expectedIncomeId);
+  if (!income) throw new Error('El ingreso previsto ya no existe.');
+
+  // Idempotency: if already linked to this income and settled
+  if (
+    transaction.expectedIncomeId === income.id &&
+    (income.settledTxIds?.includes(transaction.id) || income.lastSettledTxId === transaction.id)
+  ) {
+    return { transaction, expectedIncome: income };
+  }
+
+  // Guard against reusing a transaction already linked to another income
+  if (transaction.expectedIncomeId && transaction.expectedIncomeId !== income.id) {
+    throw new Error('El movimiento ya está vinculado a otra previsión.');
+  }
+
+  if (!income.active) {
+    throw new Error('El ingreso previsto ya fue finalizado.');
+  }
+
+  const settlementKey = income.frequency === 'once' ? 'once' : `cycle-${income.startDate}`;
+
+  transaction.expectedIncomeId = income.id;
+  transaction.matchedCycle = settlementKey;
+  transaction.reviewStatus = 'reviewed';
+  transaction.reviewed = true;
+  transaction.revisionOrder = createFinanceRevisionOrderAfter(transaction.revisionOrder);
+
+  const advanced = advanceExpectedIncomeDate(income);
+  const settledTxIds = income.settledTxIds ? [...income.settledTxIds, transaction.id] : [transaction.id];
+  Object.assign(income, advanced, {
+    lastSettledTxId: transaction.id,
+    settledTxIds,
+    updatedAt: new Date().toISOString(),
+  });
+
+  return { transaction, expectedIncome: income };
+}
+
+export function rejectTransactionMatch(
+  state: LifeOSState,
+  transactionId: string,
+  targetId: string,
+  cycleKey?: string,
+): Transaction {
+  const transaction = state.finance.transactions.find((item) => item.id === transactionId);
+  if (!transaction) throw new Error('El movimiento ya no existe.');
+
+  let resolvedCycleKey = cycleKey;
+  if (!resolvedCycleKey) {
+    const com = state.finance.commitments?.find((c) => c.id === targetId);
+    if (com) {
+      resolvedCycleKey = deriveCycleIdentity(com, 'commitment').cycleKey;
+    } else {
+      const inc = state.finance.expectedIncomes?.find((i) => i.id === targetId);
+      if (inc) {
+        resolvedCycleKey = deriveCycleIdentity(inc, 'expected_income').cycleKey;
+      }
+    }
+  }
+
+  const rejectionScopedId = resolvedCycleKey ? `${targetId}:${resolvedCycleKey}` : targetId;
+  const currentRejected = transaction.rejectedMatchIds || [];
+  if (!currentRejected.includes(rejectionScopedId)) {
+    transaction.rejectedMatchIds = [...currentRejected, rejectionScopedId];
+    transaction.revisionOrder = createFinanceRevisionOrderAfter(transaction.revisionOrder);
+  }
+  return transaction;
+}
+
+export function confirmTransactionMatch(
+  state: LifeOSState,
+  transactionId: string,
+  targetId: string,
+  targetType: 'commitment' | 'expected_income' = 'commitment',
+): { transaction: Transaction; target: FinancialCommitment | ExpectedIncome } {
+  if (targetType === 'expected_income') {
+    const res = linkTransactionToExpectedIncome(state, transactionId, targetId);
+    return { transaction: res.transaction, target: res.expectedIncome };
+  }
+  const res = linkTransactionToCommitment(state, transactionId, targetId);
+  return { transaction: res.transaction, target: res.commitment };
+}
+
 /* =========================================================================
    FINANCIAL COMMITMENT CRUD ACTIONS
    ========================================================================= */
 
 export interface FinancialCommitmentInput {
+  id?: string;
   name?: string;
   title?: string;
   amount: number;
@@ -672,6 +793,8 @@ export interface FinancialCommitmentInput {
   occurrencesLeft?: number | null;
   dueDay?: number | null;
   notes?: string | null;
+  active?: boolean;
+  status?: FinancialCommitment['status'];
 }
 
 export function addFinancialCommitment(
@@ -693,15 +816,15 @@ export function addFinancialCommitment(
   const dueDay = input.dueDay ?? curDate.getDate();
 
   const commitment: FinancialCommitment = {
-    id: uid(),
+    id: input.id || uid(),
     name,
     amount,
     currency: input.currency || 'UYU',
     category: input.category?.trim() || 'Varios',
     frequency: input.frequency || (total && total > 1 ? 'monthly' : 'once'),
     nextDueDate,
-    active: true,
-    status: 'pending',
+    active: input.active !== undefined ? input.active : (remaining !== null ? remaining > 0 : true),
+    status: input.status || 'pending',
     accountId: input.accountId || null,
     endDate: input.endDate || null,
     totalOccurrences: total,

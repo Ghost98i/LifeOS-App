@@ -79,7 +79,11 @@ export interface Transaction {
   origin?: 'manual' | 'adjustment' | 'reventa' | 'quick-capture' | 'quick' | 'resale_purchase' | 'resale_sale' | 'import' | 'commitment';
   reviewStatus?: TransactionReviewStatus;
   reviewed?: boolean;
+  currency?: string;
   commitmentId?: string | null;
+  expectedIncomeId?: string | null;
+  matchedCycle?: string | null;
+  rejectedMatchIds?: string[];
 }
 
 export interface FinanceTransfer {
@@ -141,12 +145,15 @@ export interface ExpectedIncome {
   id: string;
   name: string;
   amount: number;
+  currency?: string;
   startDate: string; // ISO date YYYY-MM-DD
   frequency: ExpectedIncomeFrequency;
   active: boolean;
   category?: string | null;
   accountId?: string | null;
   endDate?: string | null; // ISO date YYYY-MM-DD or null
+  lastSettledTxId?: string | null;
+  settledTxIds?: string[];
   updatedAt?: string;
 }
 

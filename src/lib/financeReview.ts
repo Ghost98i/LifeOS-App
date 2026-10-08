@@ -1,5 +1,6 @@
 import type { FinancialCommitment, LifeOSState, Transaction } from '../types';
 import { identifyMerchant } from './merchantIdentity';
+import { findMatchCandidates, type MatchCandidate, type TransactionMatchResult } from './financeMatching';
 import { todayISO } from './storage';
 
 export type ReviewReasonCode =
@@ -11,7 +12,9 @@ export type ReviewReasonCode =
   | 'suspicious_amount'
   | 'missing_account'
   | 'pending_confirmation'
-  | 'compatible_commitment';
+  | 'compatible_commitment'
+  | 'possible_match'
+  | 'ambiguous_match';
 
 export interface ReviewReason {
   code: ReviewReasonCode;
@@ -21,12 +24,15 @@ export interface ReviewReason {
   suggestedCategory?: string;
   duplicateTransactionId?: string;
   compatibleCommitmentId?: string;
+  matchCandidate?: MatchCandidate;
+  matchCandidates?: MatchCandidate[];
 }
 
 export interface FinanceReviewInboxItem {
   transaction: Transaction;
   reasons: ReviewReason[];
   suggestedAction?: 'categorize' | 'normalize_merchant' | 'resolve_duplicate' | 'fix_date' | 'link_commitment' | 'confirm';
+  matchResult?: TransactionMatchResult;
 }
 
 export interface AttentionCommitment {
@@ -231,25 +237,34 @@ export function deriveFinanceReviewInbox(
     }
 
     // 8. Compatible Commitment Signal (Section 6)
-    if (!tx.commitmentId && tx.type === 'gasto' && tx.amount > 0) {
-      const match = commitments.find((c) => {
-        const amountMatch = Math.abs(Number(c.amount) - tx.amount) < 0.001;
-        const diffDays = Math.abs(daysDiff(tx.date, c.nextDueDate));
-        const dateClose = diffDays <= 7;
-        const noteMatch = tx.note && c.name && (
-          tx.note.toLowerCase().includes(c.name.toLowerCase()) ||
-          c.name.toLowerCase().includes(tx.note.toLowerCase())
-        );
-        const categoryMatch = c.category && tx.category && c.category.toLowerCase() === tx.category.toLowerCase();
-        return amountMatch && dateClose && (noteMatch || categoryMatch);
-      });
-
-      if (match) {
+    // 8. Compatible Commitment / Automatic Matching Signal (Finance 2.3)
+    let matchResult: TransactionMatchResult | undefined;
+    if (!tx.commitmentId && !tx.expectedIncomeId) {
+      matchResult = findMatchCandidates(tx, state);
+      if (matchResult.confidence === 'strong' && matchResult.bestCandidate) {
         reasons.push({
           code: 'compatible_commitment',
           label: 'Compromiso compatible',
-          description: `Coincide con el compromiso "${match.name}" ($${match.amount}). Podés vincularlo para resolverlo sin duplicar gasto.`,
-          compatibleCommitmentId: match.id,
+          description: `Coincide con "${matchResult.bestCandidate.name}" (${matchResult.bestCandidate.cycleLabel}, $${matchResult.bestCandidate.amount}). Podés vincularlo para resolverlo sin duplicar gasto.`,
+          compatibleCommitmentId: matchResult.bestCandidate.targetId,
+          matchCandidate: matchResult.bestCandidate,
+          matchCandidates: matchResult.candidates,
+        });
+      } else if (matchResult.confidence === 'possible' && matchResult.bestCandidate) {
+        reasons.push({
+          code: 'possible_match',
+          label: 'Posible coincidencia',
+          description: `Podría corresponder a "${matchResult.bestCandidate.name}" (${matchResult.bestCandidate.cycleLabel}, $${matchResult.bestCandidate.amount}).`,
+          compatibleCommitmentId: matchResult.bestCandidate.targetId,
+          matchCandidate: matchResult.bestCandidate,
+          matchCandidates: matchResult.candidates,
+        });
+      } else if (matchResult.confidence === 'ambiguous') {
+        reasons.push({
+          code: 'ambiguous_match',
+          label: 'Coincidencia ambigua',
+          description: `Hay ${matchResult.candidates.length} candidatos compatibles con condiciones similares. Elegí cuál corresponde.`,
+          matchCandidates: matchResult.candidates,
         });
       }
     }
@@ -259,7 +274,7 @@ export function deriveFinanceReviewInbox(
       let suggestedAction: FinanceReviewInboxItem['suggestedAction'] = 'confirm';
       if (reasons.some((r) => r.code === 'possible_duplicate')) {
         suggestedAction = 'resolve_duplicate';
-      } else if (reasons.some((r) => r.code === 'compatible_commitment')) {
+      } else if (reasons.some((r) => r.code === 'compatible_commitment' || r.code === 'possible_match' || r.code === 'ambiguous_match')) {
         suggestedAction = 'link_commitment';
       } else if (reasons.some((r) => r.code === 'missing_category' || r.code === 'doubtful_category')) {
         suggestedAction = 'categorize';
@@ -273,6 +288,7 @@ export function deriveFinanceReviewInbox(
         transaction: tx,
         reasons,
         suggestedAction,
+        matchResult: matchResult && matchResult.confidence !== 'none' ? matchResult : undefined,
       });
     }
   }

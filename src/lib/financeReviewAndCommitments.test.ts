@@ -327,7 +327,7 @@ test('8. Cuotas: semántica estricta de currentInstallment en cuota 1, intermedi
   };
 
   // 1. Confirmar primera cuota -> avanza a cuota 2
-  let step1 = advanceCommitmentDueDate(plan);
+  const step1 = advanceCommitmentDueDate(plan);
   assert.equal(step1.currentInstallment, 2);
   assert.equal(step1.remainingOccurrences, 11);
   assert.equal(step1.status, 'pending');
@@ -339,7 +339,7 @@ test('8. Cuotas: semántica estricta de currentInstallment en cuota 1, intermedi
     currentInstallment: 6,
     remainingOccurrences: 7,
   };
-  let stepInter = advanceCommitmentDueDate(intermediate);
+  const stepInter = advanceCommitmentDueDate(intermediate);
   assert.equal(stepInter.currentInstallment, 7);
   assert.equal(stepInter.remainingOccurrences, 6);
   assert.equal(stepInter.status, 'pending');
@@ -351,7 +351,7 @@ test('8. Cuotas: semántica estricta de currentInstallment en cuota 1, intermedi
     currentInstallment: 12,
     remainingOccurrences: 1,
   };
-  let stepFinal = advanceCommitmentDueDate(finalInst);
+  const stepFinal = advanceCommitmentDueDate(finalInst);
   // Debe topar en 12 (no 13) y transicionar limpiamente a paid
   assert.equal(stepFinal.currentInstallment, 12);
   assert.equal(stepFinal.remainingOccurrences, 0);
