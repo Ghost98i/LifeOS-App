@@ -1,4 +1,5 @@
 import type { DayKey, Exercise, ExerciseEquipment, Gym, GymSession, GymSet, MuscleGroup, RoutineTemplate } from '../types';
+import { normalizeGymSyncMetadata } from './gymSync';
 
 interface LegacyExercise {
   id?: unknown;
@@ -265,6 +266,7 @@ export function migrateGym(value: unknown): Gym {
   const timer = gym.activeTimer && typeof gym.activeTimer === 'object' && !Array.isArray(gym.activeTimer)
     ? gym.activeTimer as Record<string, unknown>
     : null;
+  const syncMetadata = normalizeGymSyncMetadata(gym._sync);
   return {
     weight: Array.isArray(gym.weight) ? gym.weight as Gym['weight'] : [],
     measurements: Array.isArray(gym.measurements) ? gym.measurements as Gym['measurements'] : [],
@@ -280,18 +282,8 @@ export function migrateGym(value: unknown): Gym {
         setId: typeof timer.setId === 'string' ? timer.setId : null,
       }
       : null,
+    ...(syncMetadata ? { _sync: syncMetadata } : {}),
   };
-}
-
-export function exerciseVolume(exercise: Exercise): number {
-  return exercise.sets.reduce(
-    (sum, set) => sum + (set.completed === true ? set.weight * set.reps : 0),
-    0
-  );
-}
-
-export function sessionVolume(session: GymSession): number {
-  return session.exercises.reduce((sum, exercise) => sum + exerciseVolume(exercise), 0);
 }
 
 /**

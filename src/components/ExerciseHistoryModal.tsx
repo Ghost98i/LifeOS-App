@@ -14,12 +14,14 @@ import { AppIcon } from './AppIcon';
 import { fmtDate } from '../lib/storage';
 
 interface ExerciseHistoryModalProps {
+  exerciseId?: string;
   exerciseName: string;
   sessions: GymSession[];
   onClose: () => void;
 }
 
 export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = ({
+  exerciseId,
   exerciseName,
   sessions,
   onClose,
@@ -46,8 +48,8 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = ({
   }, [onClose]);
 
   const history = useMemo(
-    () => getExerciseHistory(sessions, exerciseName),
-    [sessions, exerciseName]
+    () => getExerciseHistory(sessions, { exerciseId, exerciseName }),
+    [sessions, exerciseId, exerciseName]
   );
 
   const hasChartData = history.chartPoints.length >= 2;

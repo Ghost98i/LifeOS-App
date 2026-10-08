@@ -1,8 +1,7 @@
 import React from 'react';
 import type { GymSession } from '../types';
 import type { NewPRRecord } from '../lib/gymMetrics';
-import { calculateSessionDuration } from '../lib/gymMetrics';
-import { sessionVolume } from '../lib/gymMigration';
+import { calculateSessionDuration, getCompletedGymSets, getPerformedGymVolume } from '../lib/gymMetrics';
 import { AppIcon } from './AppIcon';
 import { fmtDate } from '../lib/storage';
 
@@ -40,21 +39,9 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
 
   const duration = calculateSessionDuration(session.startedAt, session.finishedAt);
   const totalExercises = (session.exercises || []).length;
-  const completedSets = session.exercises.reduce(
-    (acc, ex) => acc + (ex.sets || []).filter((s) => s.completed).length,
-    0
-  );
+  const completedSets = getCompletedGymSets(session).length;
   const totalSets = session.exercises.reduce((acc, ex) => acc + (ex.sets || []).length, 0);
-  const totalVolume = completedSets > 0
-    ? session.exercises.reduce(
-        (acc, ex) =>
-          acc +
-          (ex.sets || [])
-            .filter((s) => s.completed)
-            .reduce((sum, s) => sum + (Number(s.weight) || 0) * (Number(s.reps) || 0), 0),
-        0
-      )
-    : sessionVolume(session);
+  const totalVolume = getPerformedGymVolume(session);
 
   return (
     <div

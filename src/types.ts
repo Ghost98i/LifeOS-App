@@ -277,6 +277,18 @@ export interface GymSession {
   finishedAt?: string | null;
 }
 
+export interface GymRevision {
+  counter: number;
+  deviceId: string;
+}
+
+export interface GymSyncMetadata {
+  version: 2;
+  clock: number;
+  fields: Record<string, GymRevision>;
+  tombstones: Record<string, GymRevision>;
+}
+
 export interface Gym {
   weight: WeightPoint[];
   measurements: MeasurementPoint[];
@@ -284,6 +296,7 @@ export interface Gym {
   routineTemplates: RoutineTemplate[];
   restDays?: string[];
   activeTimer?: any;
+  _sync?: GymSyncMetadata;
 }
 
 export interface Subject {

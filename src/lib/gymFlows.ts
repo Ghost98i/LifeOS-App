@@ -1,4 +1,5 @@
 import type {
+  DayKey,
   Exercise,
   ExerciseEquipment,
   Gym,
@@ -8,7 +9,17 @@ import type {
   RoutineTemplate,
 } from '../types';
 import { uid } from './storage';
-import { applyHistoryToTemplateExercises, getExerciseGhostValues } from './gymMetrics';
+import {
+  applyHistoryToTemplateExercises,
+  getExerciseGhostValues,
+  hasPerformedGymWork,
+} from './gymMetrics';
+export {
+  getCompletedGymSets,
+  getPerformedGymVolume,
+  hasPerformedGymWork,
+  isPerformedGymSession,
+} from './gymMetrics';
 import {
   inferExerciseEquipment,
   inferMuscleGroup,
@@ -24,27 +35,6 @@ export function getActiveGymSession(gym: Gym, _referenceDate?: string): GymSessi
       (b.startedAt || '').localeCompare(a.startedAt || '') ||
       a.id.localeCompare(b.id)
     )[0] || null;
-}
-
-export function getCompletedGymSets(session: GymSession): GymSet[] {
-  return (session.exercises || []).flatMap((exercise) =>
-    (exercise.sets || []).filter((set) => set.completed === true)
-  );
-}
-
-export function hasPerformedGymWork(session: GymSession): boolean {
-  return getCompletedGymSets(session).length > 0;
-}
-
-export function isPerformedGymSession(session: GymSession): boolean {
-  return session.status === 'completed' && hasPerformedGymWork(session);
-}
-
-export function getPerformedGymVolume(session: GymSession): number {
-  return getCompletedGymSets(session).reduce(
-    (total, set) => total + (Number(set.weight) || 0) * (Number(set.reps) || 0),
-    0
-  );
 }
 
 export interface StartGymSessionInput {
@@ -129,6 +119,133 @@ export function deleteGymTemplate(gym: Gym, templateId: string): boolean {
   return gym.routineTemplates.length !== previousLength;
 }
 
+export function updateGymTemplate(
+  gym: Gym,
+  templateId: string,
+  updates: { name?: string; days?: DayKey[] }
+): boolean {
+  const template = gym.routineTemplates.find((candidate) => candidate.id === templateId);
+  if (!template) return false;
+  if (updates.name !== undefined) {
+    const name = updates.name.trim();
+    if (!name) return false;
+    template.name = name;
+  }
+  if (updates.days !== undefined) template.days = [...new Set(updates.days)];
+  return true;
+}
+
+export function duplicateGymTemplate(
+  gym: Gym,
+  templateId: string,
+  input: { templateId?: string; name?: string } = {}
+): RoutineTemplate | null {
+  const source = gym.routineTemplates.find((candidate) => candidate.id === templateId);
+  if (!source) return null;
+
+  const duplicate: RoutineTemplate = {
+    id: input.templateId || uid(),
+    name: input.name?.trim() || `${source.name} (copia)`,
+    days: source.days ? [...source.days] : undefined,
+    exercises: source.exercises.map((exercise) => ({
+      ...exercise,
+      // Exercise IDs are logical identities shared with history; only legacy entries receive one.
+      id: exercise.id || uid(),
+      sets: (exercise.sets || []).map((set) => ({
+        ...set,
+        id: uid(),
+        completed: false,
+        completedAt: null,
+      })),
+    })),
+  };
+  gym.routineTemplates.push(duplicate);
+  return duplicate;
+}
+
+export type TemplateExerciseTarget = string | { exerciseId?: string; exerciseIndex?: number };
+
+export function findTemplateExercise(
+  template: RoutineTemplate | undefined,
+  target: TemplateExerciseTarget
+): { exercise: Exercise; index: number } | null {
+  if (!template) return null;
+  const exerciseId = typeof target === 'string' ? target : target.exerciseId;
+  if (exerciseId) {
+    const index = template.exercises.findIndex((exercise) => exercise.id === exerciseId);
+    return index >= 0 ? { exercise: template.exercises[index], index } : null;
+  }
+  const legacyIndex = typeof target === 'string' ? undefined : target.exerciseIndex;
+  if (legacyIndex === undefined || legacyIndex < 0 || legacyIndex >= template.exercises.length) return null;
+  const exercise = template.exercises[legacyIndex];
+  return exercise.id ? null : { exercise, index: legacyIndex };
+}
+
+export function updateGymTemplateExercise(
+  gym: Gym,
+  templateId: string,
+  target: TemplateExerciseTarget,
+  updates: Partial<Exercise>
+): boolean {
+  const template = gym.routineTemplates.find((candidate) => candidate.id === templateId);
+  const found = findTemplateExercise(template, target);
+  if (!found) return false;
+  Object.assign(found.exercise, updates);
+  return true;
+}
+
+export function configureGymTemplateExercise(
+  gym: Gym,
+  templateId: string,
+  target: TemplateExerciseTarget,
+  input: { setsCount: number; reps: number; targetWeight: number; restSeconds: number }
+): boolean {
+  const template = gym.routineTemplates.find((candidate) => candidate.id === templateId);
+  const found = findTemplateExercise(template, target);
+  if (!found) return false;
+
+  const setsCount = Math.min(20, Math.max(1, Math.round(input.setsCount) || 1));
+  const reps = Math.min(1000, Math.max(1, Math.round(input.reps) || 1));
+  const targetWeight = Math.max(0, Number(input.targetWeight) || 0);
+  const restSeconds = Math.min(600, Math.max(15, Math.round(input.restSeconds) || 90));
+  found.exercise.sets = Array.from({ length: setsCount }, (_, index) => ({
+    id: found.exercise.sets[index]?.id || uid(),
+    weight: targetWeight,
+    reps,
+    completed: false,
+    completedAt: null,
+  }));
+  found.exercise.weight = targetWeight;
+  found.exercise.restSeconds = restSeconds;
+  return true;
+}
+
+export function reorderGymTemplateExercise(
+  gym: Gym,
+  templateId: string,
+  target: TemplateExerciseTarget,
+  toIndex: number
+): boolean {
+  const template = gym.routineTemplates.find((candidate) => candidate.id === templateId);
+  const found = findTemplateExercise(template, target);
+  if (!template || !found || toIndex < 0 || toIndex >= template.exercises.length || toIndex === found.index) return false;
+  const [exercise] = template.exercises.splice(found.index, 1);
+  template.exercises.splice(toIndex, 0, exercise);
+  return true;
+}
+
+export function deleteGymTemplateExercise(
+  gym: Gym,
+  templateId: string,
+  target: TemplateExerciseTarget
+): boolean {
+  const template = gym.routineTemplates.find((candidate) => candidate.id === templateId);
+  const found = findTemplateExercise(template, target);
+  if (!template || !found) return false;
+  template.exercises.splice(found.index, 1);
+  return true;
+}
+
 export function requestGymSessionDeletion(
   session: GymSession,
   confirm: (message: string) => boolean
@@ -160,7 +277,7 @@ export function addExerciseToGymSession(
   const barWeight = equipment === 'barra'
     ? (input.barWeight ?? inferred.barWeight)
     : 0;
-  const ghost = getExerciseGhostValues(gym.sessions, name, sessionId);
+  const ghost = getExerciseGhostValues(gym.sessions, { exerciseName: name }, sessionId);
   const initialWeight = input.initialWeight ?? 20;
   const initialReps = input.initialReps ?? 10;
   const startWeight = ghost?.sets[0]?.weight ?? initialWeight;
@@ -209,12 +326,13 @@ export function findSessionExercise(
   // 1. Stable identity match: prefer exerciseId when present
   if (targetId) {
     const idx = session.exercises.findIndex((ex) => ex.id === targetId);
-    if (idx >= 0) return { exercise: session.exercises[idx], index: idx };
+    return idx >= 0 ? { exercise: session.exercises[idx], index: idx } : null;
   }
 
-  // 2. Fallback to index if within bounds (backward compatibility for legacy exercises without ID)
+  // 2. Fallback to index only for legacy exercises without an ID.
   if (targetIndex !== undefined && targetIndex >= 0 && targetIndex < session.exercises.length) {
-    return { exercise: session.exercises[targetIndex], index: targetIndex };
+    const exercise = session.exercises[targetIndex];
+    return exercise.id ? null : { exercise, index: targetIndex };
   }
 
   return null;
@@ -257,6 +375,7 @@ export function updateGymSessionSet(
   Object.assign(set, updates);
   if (updates.weight != null) exercise.weight = updates.weight;
   if (justCompleted) set.completedAt = completedAt;
+  if (updates.completed === false) set.completedAt = null;
   return { updated: true, justCompleted };
 }
 

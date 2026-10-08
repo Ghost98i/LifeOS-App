@@ -79,7 +79,11 @@ export function syncModuleData(state: LifeOSState, module: SyncModuleKey): unkno
     };
     case 'context': return { dailyContext: state.dailyContext };
     case 'finance': return { finance: state.finance };
-    case 'gym': return { gym: state.gym };
+    case 'gym': {
+      const syncedGym = { ...state.gym };
+      delete syncedGym.activeTimer;
+      return { gym: syncedGym };
+    }
     case 'study': return { study: state.study };
     case 'streaming': return { streaming: state.streaming };
     case 'jobs': return { jobs: state.jobs };
@@ -132,6 +136,9 @@ export function applySyncModule(state: LifeOSState, module: SyncModuleKey, data:
   }
   const pureData = extractPureModuleData(data);
   const candidate = { ...state, ...(pureData as Partial<LifeOSState>) };
+  if (module === 'gym' && candidate.gym) {
+    candidate.gym = { ...candidate.gym, activeTimer: state.gym.activeTimer ?? null };
+  }
   return normalizeStoredState(candidate);
 }
 
@@ -150,6 +157,9 @@ export function mergeSyncModule(
   const localData = syncModuleData(state, module);
   const mergedData = mergeModuleData(module, localData, pureRemote, pureBaseline, tombstones);
   const candidate = { ...state, ...(mergedData as Partial<LifeOSState>) };
+  if (module === 'gym' && candidate.gym) {
+    candidate.gym = { ...candidate.gym, activeTimer: state.gym.activeTimer ?? null };
+  }
   return normalizeStoredState(candidate);
 }
 
@@ -168,6 +178,9 @@ export function mergeSyncModuleWithConflicts(
   const localData = syncModuleData(state, module);
   const { data: mergedData, conflicts } = mergeModuleDataWithConflicts(module, localData, pureRemote, pureBaseline, tombstones);
   const candidate = { ...state, ...(mergedData as Partial<LifeOSState>) };
+  if (module === 'gym' && candidate.gym) {
+    candidate.gym = { ...candidate.gym, activeTimer: state.gym.activeTimer ?? null };
+  }
   return { state: normalizeStoredState(candidate), conflicts };
 }
 

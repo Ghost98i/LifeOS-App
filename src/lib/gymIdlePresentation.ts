@@ -1,6 +1,11 @@
 import type { GymSession } from '../types';
 import { getCompletedGymSets, getPerformedGymVolume } from './gymFlows';
-import { calcDetailedPRs, calculateSessionDuration } from './gymMetrics';
+import {
+  calcDetailedPRs,
+  calculateSessionDuration,
+  getPerformedExerciseSets,
+  selectBestPerformedSet,
+} from './gymMetrics';
 
 export interface GymSessionPresentation {
   completedSetCount: number;
@@ -41,19 +46,14 @@ export function buildGymSessionPresentation(
     }
   }
 
-  const completedWithExercise = (session.exercises || []).flatMap((exercise) =>
-    (exercise.sets || [])
-      .filter((set) => set.completed === true)
-      .map((set) => ({
-        exerciseName: exercise.name,
-        reps: Number(set.reps) || 0,
-        weight: Number(set.weight) || 0,
-      }))
-  );
-
-  const bestSet = completedWithExercise.sort(
-    (a, b) => b.weight - a.weight || b.reps - a.reps
-  )[0] || null;
+  const bestSet = (session.exercises || []).reduce<GymSessionPresentation['bestSet']>((best, exercise) => {
+    const candidate = selectBestPerformedSet(getPerformedExerciseSets(session, exercise));
+    if (!candidate) return best;
+    if (!best || candidate.weight > best.weight || (candidate.weight === best.weight && candidate.reps > best.reps)) {
+      return { exerciseName: exercise.name, weight: candidate.weight, reps: candidate.reps };
+    }
+    return best;
+  }, null);
 
   return {
     completedSetCount: completedSets.length,

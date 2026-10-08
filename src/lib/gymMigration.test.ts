@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { inferMuscleGroup, migrateGym, parseLegacyReps, sessionVolume } from './gymMigration';
+import { inferMuscleGroup, migrateGym, parseLegacyReps } from './gymMigration';
+import { getPerformedGymVolume } from './gymMetrics';
 
 test('clasifica jalones y remos al pecho como espalda', () => {
   assert.equal(inferMuscleGroup('Jalón al pecho'), 'Espalda');
@@ -41,7 +42,7 @@ test('migra sesiones v6 con ids deterministas y calcula volumen', () => {
   assert.deepEqual(first, second);
   assert.equal(first.sessions[0].status, 'completed');
   assert.deepEqual(first.sessions[0].exercises[0].sets.map((set) => set.reps), [10, 10, 10]);
-  assert.equal(sessionVolume(first.sessions[0]), 1500);
+  assert.equal(getPerformedGymVolume(first.sessions[0]), 1500);
 });
 
 test('la migración v7 es idempotente y conserva texto no interpretable', () => {
@@ -82,8 +83,8 @@ test('sesiones completadas legacy conservan su volumen, pero planes activos no c
       { id: 'planned', date: '2026-08-21', status: 'active', exercises: [{ name: 'Curl', weight: 20, reps: '3x10' }] },
     ],
   });
-  assert.equal(sessionVolume(gym.sessions.find((session) => session.id === 'done')!), 600);
-  assert.equal(sessionVolume(gym.sessions.find((session) => session.id === 'planned')!), 0);
+  assert.equal(getPerformedGymVolume(gym.sessions.find((session) => session.id === 'done')!), 600);
+  assert.equal(getPerformedGymVolume(gym.sessions.find((session) => session.id === 'planned')!), 0);
 });
 
 test('el temporizador queda opt-in al migrar ejercicios', () => {

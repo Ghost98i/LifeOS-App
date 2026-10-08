@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 import { buildGymHistory, gymWeekMonday } from './gymHistory';
 import type { GymSession } from '../types';
 
-const session = (id: string, date: string): GymSession => ({ id, date, exercises: [], status: 'completed' });
+const session = (id: string, date: string): GymSession => ({
+  id,
+  date,
+  status: 'completed',
+  exercises: [{ name: 'Remo', sets: [{ id: `${id}-set`, weight: 50, reps: 10, completed: true }] }],
+});
 
 test('calcula el lunes incluso para una sesión del domingo', () => {
   assert.equal(gymWeekMonday('2026-08-09'), '2026-08-03');

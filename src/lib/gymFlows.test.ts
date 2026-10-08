@@ -5,17 +5,23 @@ import { calcGymStreakDetails, calcPRs, todayGymStatus } from './calculations';
 import {
   addExerciseToGymSession,
   addSetToGymSession,
+  configureGymTemplateExercise,
   deleteGymSessionExercise,
   deleteGymSessionSet,
+  deleteGymTemplateExercise,
   deleteGymTemplate,
   deleteGymSession,
+  duplicateGymTemplate,
   finishGymSession,
   getActiveGymSession,
   getPerformedGymVolume,
   previewNormalizeGymHistory,
   previewTemplateHistoryPropagation,
   requestGymSessionDeletion,
+  reorderGymTemplateExercise,
   startGymSession,
+  updateGymTemplate,
+  updateGymTemplateExercise,
   updateGymSessionExercise,
   updateGymSessionSet,
 } from './gymFlows';
@@ -232,6 +238,105 @@ test('el snapshot de sesión no cambia al editar o eliminar la plantilla', () =>
   assert.equal(gym.sessions[0].exercises[0].sets[0].weight, 80);
 });
 
+test('editar nombre, días y objetivos de plantilla no altera sesiones históricas', () => {
+  const historical = session({
+    id: 'historical',
+    status: 'completed',
+    exercises: [{
+      id: 'template-bench',
+      name: 'Press banca',
+      restSeconds: 120,
+      sets: [{ id: 'historical-set', weight: 80, reps: 8, completed: true }],
+    }],
+  });
+  const gym = emptyGym({
+    sessions: [historical],
+    routineTemplates: [structuredClone(pushTemplate)],
+  });
+  const before = structuredClone(historical);
+
+  assert.equal(updateGymTemplate(gym, pushTemplate.id, { name: 'Empuje pesado', days: ['lunes', 'jueves'] }), true);
+  assert.equal(configureGymTemplateExercise(gym, pushTemplate.id, 'template-bench', {
+    setsCount: 4,
+    reps: 6,
+    targetWeight: 90,
+    restSeconds: 180,
+  }), true);
+
+  assert.deepEqual(gym.sessions[0], before);
+  assert.equal(gym.routineTemplates[0].name, 'Empuje pesado');
+  assert.deepEqual(gym.routineTemplates[0].days, ['lunes', 'jueves']);
+  assert.deepEqual(gym.routineTemplates[0].exercises[0].sets.map((set) => [set.weight, set.reps]), [
+    [90, 6], [90, 6], [90, 6], [90, 6],
+  ]);
+  assert.equal(gym.routineTemplates[0].exercises[0].restSeconds, 180);
+});
+
+test('eliminar plantilla conserva intacto el historial', () => {
+  const historical = session({ id: 'kept-history', status: 'completed' });
+  const gym = emptyGym({
+    sessions: [historical],
+    routineTemplates: [structuredClone(pushTemplate)],
+  });
+  const before = structuredClone(historical);
+
+  assert.equal(deleteGymTemplate(gym, pushTemplate.id), true);
+  assert.deepEqual(gym.sessions, [before]);
+});
+
+test('duplicar plantilla crea identidad de plantilla nueva y copia independiente', () => {
+  const gym = emptyGym({ routineTemplates: [structuredClone(pushTemplate)] });
+  const duplicate = duplicateGymTemplate(gym, pushTemplate.id, { templateId: 'template-copy' });
+
+  assert.ok(duplicate);
+  assert.equal(duplicate.id, 'template-copy');
+  assert.notEqual(duplicate.id, pushTemplate.id);
+  assert.equal(duplicate.exercises[0].id, pushTemplate.exercises[0].id, 'el mismo ejercicio conserva identidad e historial');
+  assert.notEqual(duplicate.exercises[0], gym.routineTemplates[0].exercises[0]);
+  assert.notEqual(duplicate.exercises[0].sets[0].id, pushTemplate.exercises[0].sets[0].id);
+  assert.deepEqual(duplicate.days, pushTemplate.days);
+  assert.equal(duplicate.exercises[0].sets[0].completed, false);
+});
+
+test('reordenar por ID conserva exactamente los ejercicios correctos', () => {
+  const template = structuredClone(pushTemplate);
+  template.exercises.push({ id: 'template-press', name: 'Press militar', sets: [] });
+  template.exercises.push({ id: 'template-dips', name: 'Fondos', sets: [] });
+  const gym = emptyGym({ routineTemplates: [template] });
+
+  assert.equal(reorderGymTemplateExercise(gym, template.id, 'template-dips', 0), true);
+  assert.deepEqual(template.exercises.map((exercise) => exercise.id), [
+    'template-dips', 'template-bench', 'template-press',
+  ]);
+  assert.deepEqual(template.exercises.map((exercise) => exercise.name), [
+    'Fondos', 'Press banca', 'Press militar',
+  ]);
+});
+
+test('iniciar desde plantilla crea snapshot y cambios posteriores no lo alteran', () => {
+  const gym = emptyGym({ routineTemplates: [structuredClone(pushTemplate)] });
+  const started = startGymSession(gym, {
+    templateId: pushTemplate.id,
+    date: '2026-10-08',
+    startedAt: '18:00',
+    sessionId: 'independent-snapshot',
+  }).session;
+  const snapshot = structuredClone(started.exercises);
+
+  assert.notEqual(started.exercises, gym.routineTemplates[0].exercises);
+  assert.notEqual(started.exercises[0].sets, gym.routineTemplates[0].exercises[0].sets);
+  updateGymTemplateExercise(gym, pushTemplate.id, 'template-bench', { name: 'Press banca pausado' });
+  configureGymTemplateExercise(gym, pushTemplate.id, 'template-bench', {
+    setsCount: 5,
+    reps: 5,
+    targetWeight: 100,
+    restSeconds: 240,
+  });
+  deleteGymTemplateExercise(gym, pushTemplate.id, 'template-bench');
+
+  assert.deepEqual(started.exercises, snapshot);
+});
+
 test('agregar ejercicio conserva las reps introducidas en la sesión persistida', () => {
   const active = session();
   const gym = emptyGym({ sessions: [active] });
@@ -413,5 +518,47 @@ test('mutaciones de ejercicio conservan fallback por exerciseIndex cuando id est
   const deletedEx = deleteGymSessionExercise(gym, 'legacy-session', 0);
   assert.equal(deletedEx, true);
   assert.equal(testSession.exercises.length, 0);
+
+  const legacyTemplate: RoutineTemplate = {
+    id: 'legacy-template',
+    name: 'Legacy',
+    exercises: [{ name: 'Remo legacy', sets: [] }],
+  };
+  gym.routineTemplates = [legacyTemplate];
+  assert.equal(updateGymTemplateExercise(gym, legacyTemplate.id, { exerciseIndex: 0 }, { restSeconds: 75 }), true);
+  assert.equal(legacyTemplate.exercises[0].restSeconds, 75);
+  assert.equal(reorderGymTemplateExercise(gym, legacyTemplate.id, { exerciseIndex: 0 }, 0), false);
+});
+
+test('un ID moderno inválido nunca cae por accidente al índice legacy', () => {
+  const modern = session({
+    id: 'modern-session',
+    exercises: [{ id: 'modern-exercise', name: 'Sentadilla', sets: [{ id: 'modern-set', weight: 100, reps: 5 }] }],
+  });
+  const template = structuredClone(pushTemplate);
+  const gym = emptyGym({ sessions: [modern], routineTemplates: [template] });
+
+  assert.equal(updateGymSessionSet(gym, modern.id, { exerciseId: 'missing-id', exerciseIndex: 0 }, 0, { weight: 999 }).updated, false);
+  assert.equal(updateGymTemplateExercise(gym, template.id, { exerciseId: 'missing-id', exerciseIndex: 0 }, { name: 'Incorrecto' }), false);
+  assert.equal(modern.exercises[0].sets[0].weight, 100);
+  assert.equal(template.exercises[0].name, 'Press banca');
+});
+
+test('desmarcar una serie limpia completedAt y mantiene coherencia del estado realizado', () => {
+  const completedSession = session({
+    id: 'uncomplete-session',
+    exercises: [{
+      id: 'exercise-1',
+      name: 'Press banca',
+      sets: [{ id: 'set-1', weight: 80, reps: 8, completed: true, completedAt: '2026-10-08T10:00:00.000Z' }],
+    }],
+  });
+  const gym = emptyGym({ sessions: [completedSession] });
+
+  const result = updateGymSessionSet(gym, completedSession.id, 'exercise-1', 0, { completed: false });
+
+  assert.equal(result.updated, true);
+  assert.equal(completedSession.exercises[0].sets[0].completed, false);
+  assert.equal(completedSession.exercises[0].sets[0].completedAt, null);
 });
 

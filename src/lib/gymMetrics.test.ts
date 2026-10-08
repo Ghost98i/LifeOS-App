@@ -9,6 +9,9 @@ import {
   detectSessionPRs,
   getExerciseHistory,
   calculateSessionDuration,
+  getExerciseProgressMetrics,
+  getGymFrequencyMetrics,
+  getGymProgressMetrics,
   normalizeExerciseName,
 } from './gymMetrics';
 
@@ -59,6 +62,7 @@ test('getExerciseGhostValues: finds the correct previous session and ignores cur
       date: '2026-09-25',
       exercises: [
         {
+          id: 'tmpl-ex-1',
           name: 'Press banca plano',
           sets: [{ id: 's1', weight: 85, reps: 6, completed: true }],
         },
@@ -207,6 +211,7 @@ test('applyHistoryToTemplateExercises: template with 4 sets, history with 3 sets
       date: '2026-09-20',
       exercises: [
         {
+          id: 'tmpl-ex-1',
           name: 'Press banca',
           sets: [
             { id: 's1', weight: 80, reps: 8 },
@@ -245,6 +250,7 @@ test('applyHistoryToTemplateExercises: template with 2 sets, history with 4 sets
       date: '2026-09-20',
       exercises: [
         {
+          id: 'tmpl-ex-1',
           name: 'Dominadas',
           sets: [
             { id: 's1', weight: 10, reps: 8 },
@@ -592,4 +598,108 @@ test('getExerciseHistory: handles zero sessions and single session gracefully wi
   const singleHistory = getExerciseHistory(singleSession, 'Dominadas');
   assert.equal(singleHistory.sessions.length, 1);
   assert.equal(singleHistory.chartPoints.length, 1);
+});
+
+test('frecuencia 7/30 días usa sólo sesiones completadas con trabajo real y períodos comparables', () => {
+  const completed = (id: string, date: string, completedSet = true): GymSession => ({
+    id,
+    date,
+    status: 'completed',
+    exercises: [{
+      id: 'press',
+      name: 'Press banca',
+      sets: [{ id: `${id}-set`, weight: 80, reps: 8, completed: completedSet }],
+    }],
+  });
+  const sessions = [
+    completed('today', '2026-10-08'),
+    completed('six-days', '2026-10-02'),
+    completed('eight-days', '2026-09-30'),
+    completed('previous-30', '2026-09-08'),
+    { ...completed('active', '2026-10-08'), status: 'active' as const },
+    completed('ghost-only', '2026-10-07', false),
+  ];
+
+  const result = getGymFrequencyMetrics(sessions, '2026-10-08');
+  assert.equal(result.last7Days.workoutCount, 2);
+  assert.equal(result.previous7Days.workoutCount, 1);
+  assert.equal(result.last30Days.workoutCount, 3);
+  assert.equal(result.previous30Days.workoutCount, 1);
+  assert.deepEqual(
+    [result.last30Days.startDate, result.last30Days.endDate],
+    ['2026-09-09', '2026-10-08']
+  );
+  assert.deepEqual(
+    [result.previous30Days.startDate, result.previous30Days.endDate],
+    ['2026-08-10', '2026-09-08']
+  );
+});
+
+test('progreso por ejercicio mantiene IDs homónimos separados y unifica última ejecución y mejor serie', () => {
+  const sessions: GymSession[] = [
+    {
+      id: 'a-old', date: '2026-09-01', status: 'completed',
+      exercises: [{ id: 'exercise-a', name: 'Remo', sets: [{ id: 'a1', weight: 80, reps: 8, completed: true }] }],
+    },
+    {
+      id: 'a-new', date: '2026-09-20', status: 'completed',
+      exercises: [{ id: 'exercise-a', name: 'Remo', sets: [
+        { id: 'a2', weight: 85, reps: 6, completed: true },
+        { id: 'a-ghost', weight: 120, reps: 3, completed: false },
+      ] }],
+    },
+    {
+      id: 'b-new', date: '2026-09-25', status: 'completed',
+      exercises: [{ id: 'exercise-b', name: 'Remo', sets: [{ id: 'b1', weight: 100, reps: 5, completed: true }] }],
+    },
+    {
+      id: 'a-active', date: '2026-10-01', status: 'active',
+      exercises: [{ id: 'exercise-a', name: 'Remo', sets: [{ id: 'a3', weight: 130, reps: 2, completed: true }] }],
+    },
+  ];
+
+  const result = getGymProgressMetrics(sessions, '2026-10-08');
+  assert.equal(result.exercises.length, 2);
+  const exerciseA = result.exercises.find((exercise) => exercise.exerciseId === 'exercise-a');
+  const exerciseB = result.exercises.find((exercise) => exercise.exerciseId === 'exercise-b');
+  assert.ok(exerciseA);
+  assert.ok(exerciseB);
+  assert.equal(exerciseA.lastExecution?.sessionId, 'a-new');
+  assert.equal(exerciseA.bestSet?.weight, 85);
+  assert.equal(exerciseA.state, 'improved');
+  assert.equal(exerciseB.bestSet?.weight, 100);
+  assert.equal(exerciseB.state, 'insufficient_data');
+});
+
+test('fallback legacy por nombre compara ventanas y deriva stable sin inferir estancamiento', () => {
+  const sessions: GymSession[] = [
+    {
+      id: 'legacy-previous', date: '2026-09-01',
+      exercises: [{ name: 'Curl Bíceps', sets: [{ id: 'l1', weight: 20, reps: 10 }] }],
+    },
+    {
+      id: 'legacy-recent', date: '2026-09-20',
+      exercises: [{ name: ' curl biceps ', sets: [{ id: 'l2', weight: 20, reps: 10 }] }],
+    },
+  ];
+
+  const result = getExerciseProgressMetrics(sessions, 'CURL BÍCEPS', '2026-10-08');
+  assert.equal(result.lastExecution?.sessionId, 'legacy-recent');
+  assert.equal(result.recentVolume, 200);
+  assert.equal(result.previousVolume, 200);
+  assert.equal(result.state, 'stable');
+});
+
+test('comparación reciente queda insufficient_data si falta cualquiera de los dos períodos', () => {
+  const sessions: GymSession[] = [{
+    id: 'only-recent', date: '2026-10-01', status: 'completed',
+    exercises: [{ id: 'squat', name: 'Sentadilla', sets: [{ id: 's1', weight: 100, reps: 5, completed: true }] }],
+  }];
+  const result = getExerciseProgressMetrics(
+    sessions,
+    { exerciseId: 'squat', exerciseName: 'Sentadilla' },
+    '2026-10-08'
+  );
+  assert.equal(result.state, 'insufficient_data');
+  assert.equal(result.previousSessionCount, 0);
 });

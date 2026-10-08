@@ -1,14 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import type { LifeOSState, MuscleGroup } from '../types';
-import { calcPRs, PRInfo } from '../lib/calculations';
+import type { ExerciseMetricTarget } from '../lib/gymMetrics';
 import { inferMuscleGroup } from '../lib/gymMigration';
-import { calculate1RM } from '../lib/gymMetrics';
-import { fmtDate } from '../lib/storage';
+import { calculate1RM, getGymProgressMetrics } from '../lib/gymMetrics';
+import { fmtDate, todayISO } from '../lib/storage';
 import { AppIcon } from './AppIcon';
 
 interface PersonalRecordsCardProps {
   state: LifeOSState;
-  onSelectExercise?: (exerciseName: string) => void;
+  onSelectExercise?: (target: ExerciseMetricTarget) => void;
 }
 
 const MUSCLE_GROUPS: MuscleGroup[] = ['Pecho', 'Espalda', 'Piernas', 'Hombros', 'Brazos', 'Core', 'Cardio', 'Otros'];
@@ -30,32 +30,36 @@ const MUSCLE_COLORS: Record<string, { bg: string; text: string; border: string }
 
 export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = ({ state, onSelectExercise }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const prs = useMemo(() => calcPRs(state), [state]);
+  const progress = useMemo(
+    () => getGymProgressMetrics(state.gym.sessions, todayISO()),
+    [state.gym.sessions]
+  );
   const [selectedMuscle, setSelectedMuscle] = useState<string>('Todos');
   const [search, setSearch] = useState('');
 
-  const completedSessions = useMemo(
-    () => state.gym.sessions.filter((s) => s.status === 'completed'),
-    [state.gym.sessions]
-  );
-
   const prList = useMemo(() => {
-    return Object.entries(prs).map(([name, pr]: [string, PRInfo]) => {
-      const storedMuscle = completedSessions
-        .flatMap((s) => s.exercises)
-        .find((e) => e.name.toLowerCase() === name.toLowerCase())?.muscleGroup;
-      const muscle = storedMuscle || inferMuscleGroup(name);
-      const est1RM = estimate1RM(pr.weight, pr.reps);
+    return progress.exercises.flatMap((exercise) => {
+      const best = exercise.bestSet;
+      if (!best) return [];
+      const storedMuscle = state.gym.sessions
+        .find((session) => session.id === best.sessionId)
+        ?.exercises.find((candidate) => exercise.exerciseId
+          ? candidate.id === exercise.exerciseId
+          : !candidate.id && candidate.name.trim().toLowerCase() === exercise.exerciseName.trim().toLowerCase()
+        )?.muscleGroup;
+      const muscle = storedMuscle || inferMuscleGroup(exercise.exerciseName);
       return {
-        name,
+        key: exercise.key,
+        exerciseId: exercise.exerciseId,
+        name: exercise.exerciseName,
         muscle,
-        weight: pr.weight,
-        reps: pr.reps,
-        date: pr.date,
-        est1RM,
+        weight: best.weight,
+        reps: best.reps,
+        date: best.date,
+        est1RM: best.e1RM,
       };
     }).sort((a, b) => b.weight - a.weight || b.est1RM - a.est1RM);
-  }, [prs, completedSessions]);
+  }, [progress.exercises, state.gym.sessions]);
 
   const filteredPRs = useMemo(() => {
     return prList.filter((item) => {
@@ -111,8 +115,8 @@ export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = ({ state,
                   const muscleStyle = MUSCLE_COLORS[item.muscle] || MUSCLE_COLORS.Otros;
                   return (
                     <div
-                      key={item.name}
-                      onClick={() => onSelectExercise?.(item.name)}
+                      key={item.key}
+                      onClick={() => onSelectExercise?.({ exerciseId: item.exerciseId, exerciseName: item.name })}
                       className={`flex items-center justify-between py-2 transition ${
                         onSelectExercise ? 'cursor-pointer hover:bg-[var(--surface-muted)]/60 rounded-xl px-2 -mx-2' : ''
                       }`}
@@ -234,8 +238,8 @@ export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = ({ state,
 
                 return (
                   <div
-                    key={item.name}
-                    onClick={() => onSelectExercise?.(item.name)}
+                    key={item.key}
+                    onClick={() => onSelectExercise?.({ exerciseId: item.exerciseId, exerciseName: item.name })}
                     className={`rounded-xl border bg-[var(--card)] p-3 space-y-1.5 transition ${
                       onSelectExercise ? 'cursor-pointer hover:border-[var(--blue)] shadow-xs' : 'hover:border-[var(--border-hover)]'
                     } ${

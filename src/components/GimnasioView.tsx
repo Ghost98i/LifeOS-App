@@ -10,7 +10,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts';
-import { Exercise, ExerciseEquipment, GymSession, GymSet, LifeOSState, MuscleGroup } from '../types';
+import { DayKey, Exercise, ExerciseEquipment, GymSession, GymSet, LifeOSState, MuscleGroup } from '../types';
 import { GymRestTimerBar } from './GymRestTimerBar';
 import { ActiveWorkoutView } from './ActiveWorkoutView';
 import { GymPlateCalculator } from './GymPlateCalculator';
@@ -22,6 +22,8 @@ import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 import {
   todayISO,
+  DAYS,
+  DAY_LABELS,
   fmtDate,
   uid,
 } from '../lib/storage';
@@ -29,8 +31,11 @@ import {
   getExerciseGhostValues,
   calcDetailedPRs,
   detectSessionPRs,
+  getExerciseHistory,
+  getGymProgressMetrics,
   NewPRRecord,
 } from '../lib/gymMetrics';
+import type { ExerciseMetricTarget } from '../lib/gymMetrics';
 import {
   currentWeight,
   weightVariation,
@@ -49,20 +54,25 @@ import {
 import {
   addExerciseToGymSession,
   addSetToGymSession,
+  configureGymTemplateExercise,
   deleteGymSession,
   deleteGymSessionExercise,
   deleteGymSessionSet,
+  deleteGymTemplateExercise,
   deleteGymTemplate,
   discardGymSession,
   finishGymSession,
   getActiveGymSession,
   getPerformedGymVolume,
+  duplicateGymTemplate,
   isPerformedGymSession,
   previewExerciseHistoryPropagation,
   previewNormalizeGymHistory,
-  previewTemplateHistoryPropagation,
+  reorderGymTemplateExercise,
   requestGymSessionDeletion,
   startGymSession,
+  updateGymTemplate,
+  updateGymTemplateExercise,
   updateGymSessionExercise,
   updateGymSession,
   updateGymSessionSet,
@@ -103,32 +113,17 @@ const COMMON_EXERCISE_SUGGESTIONS = [
 function getPreviousExerciseStats(
   sessions: GymSession[],
   currentSessionId: string,
-  exerciseName: string
+  exerciseName: string,
+  exerciseId?: string
 ): string | null {
-  const norm = exerciseName.trim().toLowerCase();
-  if (!norm) return null;
-  const pastSessions = (sessions || [])
-    .filter((s) =>
-      s.id !== currentSessionId &&
-      isPerformedGymSession(s) &&
-      (s.exercises || []).some((e) => e.name?.trim().toLowerCase() === norm)
-    )
-    .sort((a, b) => b.date.localeCompare(a.date));
-
-  if (pastSessions.length === 0) return null;
-  const ex = (pastSessions[0].exercises || []).find((e) => e.name?.trim().toLowerCase() === norm);
-  if (!ex) return null;
-  if (ex.sets && ex.sets.length > 0) {
-    const bestSet = ex.sets
-      .filter((set) => set.completed === true)
-      .sort((a, b) => b.weight - a.weight || b.reps - a.reps)[0];
-    if (!bestSet) return null;
-    return `${bestSet.weight} kg × ${bestSet.reps}`;
-  }
-  if (Number(ex.weight) > 0 || ex.reps) {
-    return `${ex.weight || 0} kg × ${ex.reps || ''}`;
-  }
-  return null;
+  const previous = getExerciseGhostValues(
+    sessions,
+    { exerciseId, exerciseName },
+    currentSessionId
+  );
+  return previous?.bestSet
+    ? `${previous.bestSet.weight} kg × ${previous.bestSet.reps}`
+    : null;
 }
 
 export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState }) => {
@@ -160,7 +155,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   } | null>(null);
 
   // Exercise History Modal state
-  const [historyExerciseName, setHistoryExerciseName] = useState<string | null>(null);
+  const [historyExercise, setHistoryExercise] = useState<ExerciseMetricTarget | null>(null);
 
   // Workout Summary Modal state (after finishing a workout)
   const [completedSummarySession, setCompletedSummarySession] = useState<{
@@ -168,14 +163,15 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
     newPRs: NewPRRecord[];
   } | null>(null);
 
-  const allExerciseNames = Array.from(
-    new Set(
-      (state.gym?.sessions || []).flatMap((s) => (s.exercises || []).map((e) => e.name?.trim())).filter(Boolean)
-    )
-  );
-
   const [selectedExercise, setSelectedExercise] = useState<string>('');
-  const activeExercise = selectedExercise || allExerciseNames[0] || '';
+  const gymProgress = useMemo(
+    () => getGymProgressMetrics(state.gym.sessions, todayISO()),
+    [state.gym.sessions]
+  );
+  const activeExerciseMetric = gymProgress.exercises.find((exercise) => exercise.key === selectedExercise)
+    || gymProgress.exercises[0]
+    || null;
+  const activeExercise = activeExerciseMetric?.exerciseName || '';
 
   const peso = currentWeight(state);
   const variacion = weightVariation(state);
@@ -192,7 +188,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   }, [gymSessions]);
 
   const latestSession = useMemo(() => {
-    return sortedSessions.find(isPerformedGymSession) || sortedSessions[0] || null;
+    return sortedSessions.find(isPerformedGymSession) || null;
   }, [sortedSessions]);
 
   const todayCompletedSession = useMemo(
@@ -276,30 +272,16 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   const bwMin = bwVals.length > 0 ? Math.max(0, Math.floor(Math.min(...bwVals) - 2)) : 50;
   const bwMax = bwVals.length > 0 ? Math.ceil(Math.max(...bwVals) + 2) : 100;
 
-  const liftingChartData = (state.gym?.sessions || [])
-    .filter((s) =>
-      isPerformedGymSession(s) &&
-      (s.exercises || []).some((e) => e.name?.trim().toLowerCase() === activeExercise.trim().toLowerCase())
-    )
-    .map((s) => {
-      const exList = (s.exercises || []).filter(
-        (e) => e.name?.trim().toLowerCase() === activeExercise.trim().toLowerCase()
-      );
-      const maxKg = Math.max(
-        ...exList.flatMap((e) =>
-          e.sets && e.sets.length > 0
-            ? e.sets.filter((set) => set.completed === true).map((set) => Number(set.weight) || 0)
-            : [Number(e.weight) || 0]
-        ),
-        0
-      );
-      return {
-        dateLabel: fmtDate(s.date),
-        rawDate: s.date,
-        kg: maxKg,
-      };
-    })
-    .sort((a, b) => a.rawDate.localeCompare(b.rawDate));
+  const liftingChartData = activeExerciseMetric
+    ? getExerciseHistory(state.gym?.sessions || [], {
+        exerciseId: activeExerciseMetric.exerciseId,
+        exerciseName: activeExerciseMetric.exerciseName,
+      }).chartPoints.map((point) => ({
+        dateLabel: fmtDate(point.date),
+        rawDate: point.date,
+        kg: point.maxWeight,
+      }))
+    : [];
 
   const liftVals = liftingChartData.map((d) => d.kg);
   const liftMin = liftVals.length > 0 ? Math.max(0, Math.floor(Math.min(...liftVals) - 5)) : 0;
@@ -538,6 +520,38 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
     showToast('Plantilla eliminada.', 'info');
   };
 
+  const handleRenameTemplate = (id: string, currentName: string) => {
+    const name = window.prompt('Nuevo nombre de la plantilla:', currentName);
+    if (!name?.trim() || name.trim() === currentName) return;
+    onUpdateState((draft) => {
+      updateGymTemplate(draft.gym, id, { name });
+    });
+    showToast('Plantilla renombrada.');
+  };
+
+  const handleDuplicateTemplate = (id: string) => {
+    let duplicateId: string | null = null;
+    onUpdateState((draft) => {
+      duplicateId = duplicateGymTemplate(draft.gym, id)?.id || null;
+    });
+    if (!duplicateId) return;
+    setEditingTemplateId(duplicateId);
+    showToast('Plantilla duplicada con identidad independiente.');
+  };
+
+  const handleToggleTemplateDay = (templateId: string, day: DayKey) => {
+    onUpdateState((draft) => {
+      const template = draft.gym.routineTemplates.find((candidate) => candidate.id === templateId);
+      if (!template) return;
+      const currentDays = template.days || [];
+      updateGymTemplate(draft.gym, templateId, {
+        days: currentDays.includes(day)
+          ? currentDays.filter((candidate) => candidate !== day)
+          : [...currentDays, day],
+      });
+    });
+  };
+
   const handleSaveSessionAsTemplate = (session: GymSession) => {
     const defaultName = session.weekLabel ? `Rutina ${session.weekLabel}` : `Rutina del ${fmtDate(session.date)}`;
     const name = window.prompt('Nombre para la nueva plantilla de rutina:', defaultName);
@@ -577,18 +591,48 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   ) => {
     onUpdateState((draft) => {
       const t = draft.gym.routineTemplates.find((x) => x.id === templateId);
-      if (t && t.exercises[exerciseIndex]) {
-        t.exercises[exerciseIndex] = { ...t.exercises[exerciseIndex], ...updates };
-      }
+      const exercise = t?.exercises[exerciseIndex];
+      updateGymTemplateExercise(draft.gym, templateId, {
+        exerciseId: exercise?.id,
+        exerciseIndex,
+      }, updates);
+    });
+  };
+
+  const handleConfigureTemplateExercise = (
+    templateId: string,
+    exerciseIndex: number,
+    input: { setsCount: number; reps: number; targetWeight: number; restSeconds: number }
+  ) => {
+    onUpdateState((draft) => {
+      const template = draft.gym.routineTemplates.find((candidate) => candidate.id === templateId);
+      const exercise = template?.exercises[exerciseIndex];
+      configureGymTemplateExercise(draft.gym, templateId, {
+        exerciseId: exercise?.id,
+        exerciseIndex,
+      }, input);
+    });
+  };
+
+  const handleReorderTemplateExercise = (templateId: string, exerciseIndex: number, toIndex: number) => {
+    onUpdateState((draft) => {
+      const template = draft.gym.routineTemplates.find((candidate) => candidate.id === templateId);
+      const exercise = template?.exercises[exerciseIndex];
+      reorderGymTemplateExercise(draft.gym, templateId, {
+        exerciseId: exercise?.id,
+        exerciseIndex,
+      }, toIndex);
     });
   };
 
   const handleDeleteExerciseFromTemplate = (templateId: string, exerciseIndex: number) => {
     onUpdateState((draft) => {
       const t = draft.gym.routineTemplates.find((x) => x.id === templateId);
-      if (t) {
-        t.exercises.splice(exerciseIndex, 1);
-      }
+      const exercise = t?.exercises[exerciseIndex];
+      deleteGymTemplateExercise(draft.gym, templateId, {
+        exerciseId: exercise?.id,
+        exerciseIndex,
+      });
     });
     showToast('Ejercicio eliminado de la plantilla.', 'info');
   };
@@ -632,28 +676,6 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
       }
     });
     showToast(`Ejercicio agregado a plantilla: ${name.trim()}`);
-  };
-
-  const handlePropagateTemplateToHistory = (templateId: string) => {
-    const tmpl = state.gym.routineTemplates.find((t) => t.id === templateId);
-    if (!tmpl || tmpl.exercises.length === 0) {
-      showToast('La plantilla no contiene ejercicios para propagar.', 'info');
-      return;
-    }
-    const preview = previewTemplateHistoryPropagation(state.gym, templateId);
-    if (preview.affectedSessionIds.length === 0) {
-      showToast('El historial completado ya utiliza esta configuración.', 'info');
-      return;
-    }
-    if (!window.confirm(
-      `Se actualizarán ${preview.affectedExerciseCount} ejercicios en ${preview.affectedSessionIds.length} sesiones completadas. ¿Continuar?`
-    )) return;
-    onUpdateState((draft) => {
-      const current = previewTemplateHistoryPropagation(draft.gym, templateId);
-      draft.gym.sessions = current.updatedSessions;
-      draft.gym.routineTemplates = current.updatedTemplates;
-    });
-    showToast(`⚡ Plantilla "${tmpl.name}" propagada: ${preview.affectedSessionIds.length} sesiones actualizadas.`);
   };
 
   const handleNormalizeAllHistory = () => {
@@ -705,11 +727,14 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   const liveSafeSetIdx = Math.max(0, Math.min(liveSetIdx, Math.max(0, liveSets.length - 1)));
   const liveCurrentSet = liveSets[liveSafeSetIdx];
   const liveGhost = liveCurrentEx
-    ? getExerciseGhostValues(state.gym.sessions, liveCurrentEx.name, activeWorkoutSession?.id)
+    ? getExerciseGhostValues(state.gym.sessions, {
+        exerciseId: liveCurrentEx.id,
+        exerciseName: liveCurrentEx.name,
+      }, activeWorkoutSession?.id)
     : null;
   const livePreviousSet = liveGhost?.sets[liveSafeSetIdx] || null;
   const livePreviousSessionBest = activeWorkoutSession && liveCurrentEx
-    ? getPreviousExerciseStats(state.gym.sessions, activeWorkoutSession.id, liveCurrentEx.name)
+    ? getPreviousExerciseStats(state.gym.sessions, activeWorkoutSession.id, liveCurrentEx.name, liveCurrentEx.id)
     : null;
 
   const handleLiveAdjustWeight = (delta: number) => {
@@ -894,7 +919,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                   barWeight,
                 })
               }
-              onOpenHistory={setHistoryExerciseName}
+              onOpenHistory={setHistoryExercise}
               onOpenHistoryTab={() => setActiveTab('historial')}
               onOpenProgressTab={() => setActiveTab('progresion')}
               onFinish={() => handleFinishWorkout(activeWorkoutSession.id)}
@@ -1070,6 +1095,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                                 <strong className="text-xs font-bold text-[var(--text)] block">{t.name}</strong>
                                 <span className="text-[11px] text-[var(--text-soft)]">
                                   {t.exercises.length} ejercicio{t.exercises.length === 1 ? '' : 's'} configurado{t.exercises.length === 1 ? '' : 's'}
+                                  {t.days?.length ? ` · ${t.days.map((day) => DAY_LABELS[day].slice(0, 3)).join(', ')}` : ''}
                                 </span>
                               </div>
                               <div className="flex items-center gap-2">
@@ -1082,6 +1108,20 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                                 </button>
                                 <button
                                   type="button"
+                                  onClick={() => handleRenameTemplate(t.id, t.name)}
+                                  className="px-2.5 py-1 rounded-lg bg-[var(--card)] text-[10px] font-bold text-[var(--text)] border border-[var(--border)]"
+                                >
+                                  Renombrar
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDuplicateTemplate(t.id)}
+                                  className="px-2.5 py-1 rounded-lg bg-[var(--card)] text-[10px] font-bold text-[var(--text)] border border-[var(--border)]"
+                                >
+                                  Duplicar
+                                </button>
+                                <button
+                                  type="button"
                                   onClick={() => setEditingTemplateId(isEditing ? null : t.id)}
                                   className={`px-2.5 py-1 rounded-lg text-[10px] font-bold cursor-pointer border transition ${
                                     isEditing
@@ -1089,7 +1129,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                                       : 'bg-[var(--card)] text-[var(--text)] border-[var(--border)] hover:border-blue-500/40'
                                   }`}
                                 >
-                                  {isEditing ? 'Cerrar editor ✕' : '✏️ Editar ejercicios'}
+                                  {isEditing ? 'Cerrar editor ✕' : '✏️ Configurar'}
                                 </button>
                                 <button
                                   type="button"
@@ -1105,18 +1145,29 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                             {/* Template Exercises Sub-editor */}
                             {isEditing && (
                               <div className="p-4 border-t border-[var(--border)] bg-[var(--card)] space-y-4 animate-in fade-in">
-                                <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-2 flex-wrap">
+                                <div className="space-y-2 border-b border-[var(--border)] pb-3">
                                   <span className="text-xs font-bold text-[var(--text-soft)]">
-                                    Ejercicios y equipamiento de la plantilla "{t.name}"
+                                    Días y ejercicios de la plantilla "{t.name}"
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handlePropagateTemplateToHistory(t.id)}
-                                    className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/20 rounded-lg text-[11px] font-bold cursor-pointer flex items-center gap-1"
-                                    title="Aplica este equipamiento y barra a todas las sesiones anteriores con estos mismos ejercicios"
-                                  >
-                                    ⚡ Propagar toda la plantilla al historial
-                                  </button>
+                                  <div className="flex flex-wrap gap-1.5" aria-label="Días de rutina">
+                                    {DAYS.map((day) => {
+                                      const selected = t.days?.includes(day) || false;
+                                      return (
+                                        <button
+                                          key={day}
+                                          type="button"
+                                          aria-pressed={selected}
+                                          onClick={() => handleToggleTemplateDay(t.id, day)}
+                                          className={`rounded-lg border px-2 py-1 text-[10px] font-bold ${selected
+                                            ? 'border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                                            : 'border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)]'
+                                          }`}
+                                        >
+                                          {DAY_LABELS[day].slice(0, 3)}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
 
                                 {t.exercises.length === 0 ? (
@@ -1133,6 +1184,26 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                                           className="p-2.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)] flex items-center justify-between gap-2 flex-wrap text-xs"
                                         >
                                           <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-0.5">
+                                              <button
+                                                type="button"
+                                                disabled={exIdx === 0}
+                                                onClick={() => handleReorderTemplateExercise(t.id, exIdx, exIdx - 1)}
+                                                className="rounded px-1 text-[11px] text-[var(--text-soft)] disabled:opacity-25"
+                                                aria-label={`Subir ${ex.name}`}
+                                              >
+                                                ↑
+                                              </button>
+                                              <button
+                                                type="button"
+                                                disabled={exIdx === t.exercises.length - 1}
+                                                onClick={() => handleReorderTemplateExercise(t.id, exIdx, exIdx + 1)}
+                                                className="rounded px-1 text-[11px] text-[var(--text-soft)] disabled:opacity-25"
+                                                aria-label={`Bajar ${ex.name}`}
+                                              >
+                                                ↓
+                                              </button>
+                                            </div>
                                             <span className="font-bold text-[var(--text)]">{ex.name}</span>
                                             {ex.muscleGroup && (
                                               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[var(--card)] border border-[var(--border)] text-[var(--text-soft)]">
@@ -1142,6 +1213,72 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                                           </div>
 
                                           <div className="flex items-center gap-2 flex-wrap">
+                                            <label className="flex items-center gap-1 text-[10px] text-[var(--text-soft)]">
+                                              Sets
+                                              <input
+                                                type="number"
+                                                min={1}
+                                                max={20}
+                                                value={ex.sets.length || 1}
+                                                onChange={(event) => handleConfigureTemplateExercise(t.id, exIdx, {
+                                                  setsCount: Number(event.target.value),
+                                                  reps: ex.sets[0]?.reps || 10,
+                                                  targetWeight: ex.sets[0]?.weight ?? ex.weight ?? 0,
+                                                  restSeconds: ex.restSeconds || 90,
+                                                })}
+                                                className="w-14 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs text-[var(--text)]"
+                                              />
+                                            </label>
+                                            <label className="flex items-center gap-1 text-[10px] text-[var(--text-soft)]">
+                                              Reps
+                                              <input
+                                                type="number"
+                                                min={1}
+                                                max={1000}
+                                                value={ex.sets[0]?.reps || 10}
+                                                onChange={(event) => handleConfigureTemplateExercise(t.id, exIdx, {
+                                                  setsCount: ex.sets.length || 1,
+                                                  reps: Number(event.target.value),
+                                                  targetWeight: ex.sets[0]?.weight ?? ex.weight ?? 0,
+                                                  restSeconds: ex.restSeconds || 90,
+                                                })}
+                                                className="w-14 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs text-[var(--text)]"
+                                              />
+                                            </label>
+                                            <label className="flex items-center gap-1 text-[10px] text-[var(--text-soft)]">
+                                              Kg objetivo
+                                              <input
+                                                type="number"
+                                                min={0}
+                                                step="0.5"
+                                                value={ex.sets[0]?.weight ?? ex.weight ?? 0}
+                                                onChange={(event) => handleConfigureTemplateExercise(t.id, exIdx, {
+                                                  setsCount: ex.sets.length || 1,
+                                                  reps: ex.sets[0]?.reps || 10,
+                                                  targetWeight: Number(event.target.value),
+                                                  restSeconds: ex.restSeconds || 90,
+                                                })}
+                                                className="w-16 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs text-[var(--text)]"
+                                              />
+                                            </label>
+                                            <label className="flex items-center gap-1 text-[10px] text-[var(--text-soft)]">
+                                              Descanso
+                                              <input
+                                                type="number"
+                                                min={15}
+                                                max={600}
+                                                step={15}
+                                                value={ex.restSeconds || 90}
+                                                onChange={(event) => handleConfigureTemplateExercise(t.id, exIdx, {
+                                                  setsCount: ex.sets.length || 1,
+                                                  reps: ex.sets[0]?.reps || 10,
+                                                  targetWeight: ex.sets[0]?.weight ?? ex.weight ?? 0,
+                                                  restSeconds: Number(event.target.value),
+                                                })}
+                                                className="w-16 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-xs text-[var(--text)]"
+                                              />
+                                              s
+                                            </label>
                                             {/* Equipment selector */}
                                             <select
                                               value={exEq}
@@ -1173,21 +1310,6 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                                                 <option value={10}>10 kg</option>
                                               </select>
                                             )}
-
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                handlePropagateExerciseToHistory(ex.name, {
-                                                  equipment: exEq,
-                                                  barWeight: exEq === 'barra' ? (ex.barWeight ?? 20) : 0,
-                                                  muscleGroup: ex.muscleGroup,
-                                                })
-                                              }
-                                              className="px-2 py-1 rounded-lg bg-[var(--card)] text-[var(--text-soft)] hover:text-blue-600 border border-[var(--border)] text-[10px] font-bold cursor-pointer"
-                                              title="Aplicar a todo el historial"
-                                            >
-                                              ⚡ Al historial
-                                            </button>
 
                                             <button
                                               type="button"
@@ -1270,7 +1392,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                         barWeight: barW,
                       })
                     }
-                    onOpenHistory={setHistoryExerciseName}
+                    onOpenHistory={setHistoryExercise}
                   />
                 </section>
               )}
@@ -1411,7 +1533,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                           barWeight: barW,
                         })
                       }
-                      onOpenHistory={setHistoryExerciseName}
+                      onOpenHistory={setHistoryExercise}
                     />
                   ))}
                 </div>
@@ -1480,7 +1602,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                             barWeight: barW,
                           })
                         }
-                        onOpenHistory={setHistoryExerciseName}
+                        onOpenHistory={setHistoryExercise}
                       />
                     ))}
                   </div>
@@ -1588,7 +1710,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
             </div>
             {showPRs && (
               <div className="mt-3 pt-3 border-t border-[var(--border)] animate-in fade-in">
-                <PersonalRecordsCard state={state} onSelectExercise={setHistoryExerciseName} />
+                <PersonalRecordsCard state={state} onSelectExercise={setHistoryExercise} />
               </div>
             )}
           </div>
@@ -1662,15 +1784,15 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                 <h2 className="text-xs font-bold text-[var(--text)] flex items-center gap-1.5">
                   <span>🏋️</span> Progresión de Cargas
                 </h2>
-                {allExerciseNames.length > 0 && (
+                {gymProgress.exercises.length > 0 && (
                   <select
-                    value={activeExercise}
+                    value={activeExerciseMetric?.key || ''}
                     onChange={(e) => setSelectedExercise(e.target.value)}
                     className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
                   >
-                    {allExerciseNames.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
+                    {gymProgress.exercises.map((exercise) => (
+                      <option key={exercise.key} value={exercise.key}>
+                        {exercise.exerciseName}
                       </option>
                     ))}
                   </select>
@@ -1732,11 +1854,12 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
       )}
 
       {/* Exercise History Modal */}
-      {historyExerciseName && (
+      {historyExercise && (
         <ExerciseHistoryModal
-          exerciseName={historyExerciseName}
+          exerciseName={historyExercise.exerciseName}
+          exerciseId={historyExercise.exerciseId}
           sessions={state.gym?.sessions || []}
-          onClose={() => setHistoryExerciseName(null)}
+          onClose={() => setHistoryExercise(null)}
         />
       )}
     </div>
@@ -1903,7 +2026,7 @@ interface WorkoutSessionCardProps {
     initialWeight: number,
     barWeight: number
   ) => void;
-  onOpenHistory?: (exerciseName: string) => void;
+  onOpenHistory?: (target: ExerciseMetricTarget) => void;
   showSessionActions?: boolean;
 }
 
@@ -2074,8 +2197,11 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
           </p>
         ) : (
           session.exercises.map((exercise, exIdx) => {
-            const previousBest = getPreviousExerciseStats(allSessions, session.id, exercise.name);
-            const exerciseGhost = getExerciseGhostValues(allSessions, exercise.name, session.id);
+            const previousBest = getPreviousExerciseStats(allSessions, session.id, exercise.name, exercise.id);
+            const exerciseGhost = getExerciseGhostValues(allSessions, {
+              exerciseId: exercise.id,
+              exerciseName: exercise.name,
+            }, session.id);
             const inferred = inferExerciseEquipment(exercise.name);
             const currentEquipment: ExerciseEquipment =
               exercise.equipment ||
@@ -2093,7 +2219,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => onOpenHistory?.(exercise.name)}
+                      onClick={() => onOpenHistory?.({ exerciseId: exercise.id, exerciseName: exercise.name })}
                       className="text-sm font-extrabold text-[var(--text)] hover:text-[var(--blue)] transition text-left cursor-pointer flex items-center gap-1"
                       title="Ver historial de este ejercicio"
                     >
@@ -2700,7 +2826,7 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
               const inferred = inferExerciseEquipment(exercise.name);
               const equipment = exercise.equipment ||
                 (exercise.barWeight && exercise.barWeight > 0 ? 'barra' : inferred.equipment);
-              const previousBest = getPreviousExerciseStats(allSessions, session.id, exercise.name);
+              const previousBest = getPreviousExerciseStats(allSessions, session.id, exercise.name, exercise.id);
               return (
                 <section key={exercise.id || exerciseIndex} className="py-4 first:pt-0 last:pb-0">
                   <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">

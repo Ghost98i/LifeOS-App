@@ -169,7 +169,9 @@ function toCloudUser(user: User | null): CloudUser | null {
 export function getOrCreateDeviceId(): string {
   const current = localStorage.getItem(DEVICE_KEY);
   if (current) return current;
-  const generated = uid();
+  const generated = typeof globalThis.crypto?.randomUUID === 'function'
+    ? globalThis.crypto.randomUUID()
+    : `device-${uid()}-${uid()}`;
   localStorage.setItem(DEVICE_KEY, generated);
   return generated;
 }

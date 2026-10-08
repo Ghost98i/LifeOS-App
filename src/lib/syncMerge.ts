@@ -8,20 +8,16 @@ import type {
   DailyContextEntry,
   DailyPriority,
   DayKey,
-  Exercise,
   Finance,
   FinanceTransfer,
   Goal,
   Gym,
-  GymSession,
-  GymSet,
   Idea,
   InboxItem,
   JobApplication,
   JobOpportunity,
   Jobs,
   LifeOSState,
-  MeasurementPoint,
   Notes,
   PossessionItem,
   Postit,
@@ -44,13 +40,13 @@ import type {
   TodayExtra,
   Transaction,
   UsefulLink,
-  WeightPoint,
   FinanceCategory,
 } from '../types';
 import type { SyncModuleKey, SyncConflictItem, ModuleMergeResult } from './syncModel';
 import { normalizeCategories } from './financeCategories';
 import { compareLedgerEvents, reconstructAccountBalance } from './financeLedger';
 import { financeRevisionMillis, parseFinanceRevisionOrder } from './financeRevision';
+import { gymSyncPath, mergeGymState } from './gymSync';
 
 const TOMBSTONE_PREFIX = 'lifeos-cloud-tombstones-v2:';
 const DEFAULT_MAX_TOMBSTONE_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -138,18 +134,25 @@ function collectEntityIds(state: LifeOSState): Set<string> {
   }
 
   if (state.gym) {
-    add(state.gym.sessions);
-    add(state.gym.routineTemplates);
-    if (state.gym.sessions) {
-      for (const sess of state.gym.sessions) {
-        if (sess.exercises) {
-          for (const ex of sess.exercises) {
-            if (ex.id) ids.add(ex.id);
-            if (ex.sets) add(ex.sets);
-          }
-        }
+    for (const session of state.gym.sessions || []) {
+      ids.add(`gym/${gymSyncPath.session(session.id)}`);
+      for (const [exerciseIndex, ex] of (session.exercises || []).entries()) {
+        const exerciseId = ex.id || `legacy-${ex.name.trim().toLocaleLowerCase() || exerciseIndex}`;
+        ids.add(`gym/${gymSyncPath.sessionExercise(session.id, exerciseId)}`);
+        for (const set of ex.sets || []) ids.add(`gym/${gymSyncPath.sessionSet(session.id, exerciseId, set.id)}`);
       }
     }
+    for (const template of state.gym.routineTemplates || []) {
+      ids.add(`gym/${gymSyncPath.template(template.id)}`);
+      for (const [exerciseIndex, ex] of (template.exercises || []).entries()) {
+        const exerciseId = ex.id || `legacy-${ex.name.trim().toLocaleLowerCase() || exerciseIndex}`;
+        ids.add(`gym/${gymSyncPath.templateExercise(template.id, exerciseId)}`);
+        for (const set of ex.sets || []) ids.add(`gym/${gymSyncPath.templateSet(template.id, exerciseId, set.id)}`);
+      }
+    }
+    for (const date of state.gym.restDays || []) ids.add(`gym/${gymSyncPath.restDay(date)}`);
+    for (const point of state.gym.weight || []) ids.add(`gym/${gymSyncPath.weight(point.date)}`);
+    for (const point of state.gym.measurements || []) ids.add(`gym/${gymSyncPath.measurement(point.date)}`);
   }
 
   add(state.tasksRecurring);
@@ -1029,108 +1032,13 @@ export function mergeFinanceModule(
   };
 }
 
-function mergeGymSets(localSets: GymSet[] = [], remoteSets: GymSet[] = []): GymSet[] {
-  const map = new Map<string, GymSet>();
-  for (const s of localSets) map.set(s.id, s);
-  for (const s of remoteSets) {
-    const existing = map.get(s.id);
-    if (!existing) {
-      map.set(s.id, s);
-    } else {
-      map.set(s.id, {
-        ...existing,
-        ...s,
-        completed: Boolean(existing.completed || s.completed),
-        completedAt: s.completedAt || existing.completedAt || null,
-      });
-    }
-  }
-  return Array.from(map.values());
-}
-
-function mergeGymExercises(localExs: Exercise[] = [], remoteExs: Exercise[] = []): Exercise[] {
-  const result: Exercise[] = [];
-  const remoteMatched = new Set<number>();
-
-  for (const lEx of localExs) {
-    const rIndex = remoteExs.findIndex(
-      (r, i) => !remoteMatched.has(i) && ((lEx.id && r.id && lEx.id === r.id) || lEx.name === r.name)
-    );
-    if (rIndex >= 0) {
-      remoteMatched.add(rIndex);
-      const rEx = remoteExs[rIndex];
-      result.push({
-        ...lEx,
-        ...rEx,
-        sets: mergeGymSets(lEx.sets, rEx.sets),
-      });
-    } else {
-      result.push(lEx);
-    }
-  }
-
-  for (let i = 0; i < remoteExs.length; i += 1) {
-    if (!remoteMatched.has(i)) {
-      result.push(remoteExs[i]);
-    }
-  }
-
-  return result;
-}
-
 export function mergeGymModule(
   local: Gym,
   remote: Gym,
   baseline?: Gym,
   tombstones: Record<string, number> = {}
 ): Gym {
-  const sessions = mergeEntityCollection<GymSession>(
-    local.sessions,
-    remote.sessions,
-    baseline?.sessions,
-    tombstones,
-    (lSess, rSess) => ({
-      ...lSess,
-      ...rSess,
-      exercises: mergeGymExercises(lSess.exercises, rSess.exercises),
-      status: lSess.status === 'completed' || rSess.status === 'completed' ? 'completed' : 'active',
-      finishedAt: rSess.finishedAt || lSess.finishedAt || undefined,
-    })
-  ).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-
-  const weight = mergeDateCollection<WeightPoint>(
-    local.weight,
-    remote.weight,
-    baseline?.weight,
-    (l, r) => (extractTimestamp(r) >= extractTimestamp(l) ? r : l)
-  );
-
-  const measurements = mergeDateCollection<MeasurementPoint>(
-    local.measurements,
-    remote.measurements,
-    baseline?.measurements,
-    (l, r) => (extractTimestamp(r) >= extractTimestamp(l) ? r : l)
-  );
-
-  const routineTemplates = mergeEntityCollection(
-    local.routineTemplates,
-    remote.routineTemplates,
-    baseline?.routineTemplates,
-    tombstones
-  );
-
-  const restDays = Array.from(
-    new Set([...(local.restDays || []), ...(remote.restDays || [])])
-  ).sort();
-
-  return {
-    sessions,
-    weight,
-    measurements,
-    routineTemplates,
-    restDays,
-    ...(local.activeTimer || remote.activeTimer ? { activeTimer: local.activeTimer || remote.activeTimer } : {}),
-  };
+  return mergeGymState(local, remote, baseline, tombstones);
 }
 
 export function mergeTasksModule(

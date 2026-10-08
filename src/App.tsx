@@ -62,6 +62,7 @@ import {
   saveTombstones,
 } from './lib/syncMerge';
 import { nextFinanceDeletionTimestamp } from './lib/financeRevision';
+import { stampGymMutation } from './lib/gymSync';
 
 import { AppIcon } from './components/AppIcon';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
@@ -164,9 +165,17 @@ export default function App() {
   }, []);
 
   const applyRemoteState = (remoteState: LifeOSState, userId = storageUserIdRef.current) => {
-    const saved = saveStoredState(remoteState, userId);
-    stateRef.current = remoteState;
-    setStateObj({ state: remoteState, storageBackend: saved ? 'localStorage' : 'ninguno' });
+    const localTimer = stateRef.current.gym.activeTimer ?? null;
+    const nextState = {
+      ...remoteState,
+      gym: {
+        ...remoteState.gym,
+        activeTimer: localTimer,
+      },
+    };
+    const saved = saveStoredState(nextState, userId);
+    stateRef.current = nextState;
+    setStateObj({ state: nextState, storageBackend: saved ? 'localStorage' : 'ninguno' });
   };
 
   const persistRevisionMap = (userId: string, revisions: SyncRevisionMap) => {
@@ -324,6 +333,7 @@ export default function App() {
     const previous = stateRef.current;
     const draft = structuredClone(previous) as LifeOSState;
     updater(draft);
+    stampGymMutation(previous.gym, draft.gym, deviceIdRef.current);
 
     const deletedIds = detectDeletedEntityIds(previous, draft);
     if (deletedIds.length > 0 && cloudUserRef.current) {

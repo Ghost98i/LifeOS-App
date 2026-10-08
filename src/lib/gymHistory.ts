@@ -1,5 +1,6 @@
 import type { GymSession } from '../types';
 import { todayISO } from './storage';
+import { isPerformedGymSession } from './gymMetrics';
 
 export interface GymWeekGroup {
   key: string;
@@ -55,7 +56,7 @@ export function buildGymHistory(sessions: GymSession[], referenceDate = todayISO
   const recentCutoff = shiftDays(referenceMonday, -21);
   const grouped = new Map<string, GymSession[]>();
 
-  sessions.forEach((session) => {
+  sessions.filter(isPerformedGymSession).forEach((session) => {
     if (!session.date || Number.isNaN(dateFromISO(session.date).getTime())) return;
     const monday = gymWeekMonday(session.date);
     grouped.set(monday, [...(grouped.get(monday) || []), session]);

@@ -57,6 +57,197 @@ export function calculate1RM(weight: number, reps: number): number {
   return Math.round(e1rm * 10) / 10;
 }
 
+export interface ExerciseMetricTarget {
+  exerciseId?: string;
+  exerciseName: string;
+}
+
+export interface PerformedSetMetric {
+  setId: string;
+  weight: number;
+  reps: number;
+  e1RM: number;
+}
+
+export interface ExerciseExecutionMetric {
+  sessionId: string;
+  date: string;
+  exerciseId?: string;
+  exerciseName: string;
+  sets: GymSet[];
+  bestSet: PerformedSetMetric | null;
+  volume: number;
+}
+
+export type ExerciseProgressState = 'improved' | 'stable' | 'insufficient_data';
+
+export interface GymPeriodMetrics {
+  startDate: string;
+  endDate: string;
+  workoutCount: number;
+  volume: number;
+}
+
+export interface GymFrequencyMetrics {
+  last7Days: GymPeriodMetrics;
+  previous7Days: GymPeriodMetrics;
+  last30Days: GymPeriodMetrics;
+  previous30Days: GymPeriodMetrics;
+}
+
+export interface ExerciseProgressMetrics {
+  key: string;
+  exerciseId?: string;
+  exerciseName: string;
+  lastExecution: ExerciseExecutionMetric | null;
+  bestSet: (PerformedSetMetric & { sessionId: string; date: string }) | null;
+  recentVolume: number;
+  previousVolume: number;
+  recentSessionCount: number;
+  previousSessionCount: number;
+  state: ExerciseProgressState;
+}
+
+export interface GymProgressMetrics {
+  frequency: GymFrequencyMetrics;
+  exercises: ExerciseProgressMetrics[];
+}
+
+function metricTarget(target: string | ExerciseMetricTarget): ExerciseMetricTarget {
+  return typeof target === 'string' ? { exerciseName: target } : target;
+}
+
+/** IDs are authoritative for modern exercises; normalized names are only a legacy fallback. */
+export function getExerciseMetricKey(exercise: Pick<Exercise, 'id' | 'name'>): string {
+  return exercise.id ? `id:${exercise.id}` : normalizeExerciseName(exercise.name);
+}
+
+function exerciseMatchesTarget(exercise: Exercise, target: ExerciseMetricTarget): boolean {
+  if (target.exerciseId) {
+    if (exercise.id) return exercise.id === target.exerciseId;
+    return normalizeExerciseName(exercise.name) === normalizeExerciseName(target.exerciseName);
+  }
+  return !exercise.id && normalizeExerciseName(exercise.name) === normalizeExerciseName(target.exerciseName);
+}
+
+function validPerformedSet(set: GymSet): boolean {
+  const weight = Number(set.weight) || 0;
+  const reps = Number(set.reps) || 0;
+  return weight > 0 || reps > 0;
+}
+
+/**
+ * Selects only work that was actually performed. Explicitly completed sessions require
+ * completed=true; raw pre-status legacy sessions retain their historical fallback.
+ */
+export function getPerformedExerciseSets(session: GymSession, exercise: Exercise): GymSet[] {
+  if ((exercise.sets || []).length > 0) {
+    return exercise.sets.filter((set) =>
+      validPerformedSet(set) && (session.status === undefined ? set.completed !== false : set.completed === true)
+    );
+  }
+
+  if (session.status === 'active') return [];
+  const weight = Number(exercise.weight) || 0;
+  const hasLegacyReps = typeof exercise.reps === 'string' && /\d/.test(exercise.reps);
+  if (weight <= 0 && !hasLegacyReps) return [];
+  const reps = parseLegacyRepCount(exercise.reps);
+  return [{ id: `legacy-${session.id}-${normalizeExerciseName(exercise.name)}`, weight, reps, completed: true }];
+}
+
+export function getCompletedGymSets(session: GymSession): GymSet[] {
+  return (session.exercises || []).flatMap((exercise) => getPerformedExerciseSets(session, exercise));
+}
+
+export function hasPerformedGymWork(session: GymSession): boolean {
+  return getCompletedGymSets(session).length > 0;
+}
+
+export function isPerformedGymSession(session: GymSession): boolean {
+  return session.status !== 'active' && hasPerformedGymWork(session);
+}
+
+export function getPerformedGymVolume(session: GymSession): number {
+  return getCompletedGymSets(session).reduce(
+    (total, set) => total + (Number(set.weight) || 0) * (Number(set.reps) || 0),
+    0
+  );
+}
+
+function comparePerformedSets(a: PerformedSetMetric, b: PerformedSetMetric): number {
+  return a.weight - b.weight || a.reps - b.reps;
+}
+
+export function selectBestPerformedSet(sets: GymSet[]): PerformedSetMetric | null {
+  let best: PerformedSetMetric | null = null;
+  for (const set of sets) {
+    if (!validPerformedSet(set)) continue;
+    const candidate = {
+      setId: set.id,
+      weight: Number(set.weight) || 0,
+      reps: Number(set.reps) || 0,
+      e1RM: calculate1RM(Number(set.weight) || 0, Number(set.reps) || 0),
+    };
+    if (!best || comparePerformedSets(candidate, best) > 0) best = candidate;
+  }
+  return best;
+}
+
+function toExecutionMetric(session: GymSession, exercise: Exercise): ExerciseExecutionMetric | null {
+  const sets = getPerformedExerciseSets(session, exercise);
+  if (sets.length === 0) return null;
+  return {
+    sessionId: session.id,
+    date: session.date,
+    exerciseId: exercise.id,
+    exerciseName: exercise.name,
+    sets,
+    bestSet: selectBestPerformedSet(sets),
+    volume: sets.reduce(
+      (total, set) => total + (Number(set.weight) || 0) * (Number(set.reps) || 0),
+      0
+    ),
+  };
+}
+
+function dateAtNoon(iso: string): Date {
+  return new Date(`${iso}T12:00:00`);
+}
+
+function toLocalISO(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function shiftISO(iso: string, days: number): string {
+  const date = dateAtNoon(iso);
+  date.setDate(date.getDate() + days);
+  return toLocalISO(date);
+}
+
+function periodMetrics(sessions: GymSession[], startDate: string, endDate: string): GymPeriodMetrics {
+  const performed = sessions.filter((session) =>
+    isPerformedGymSession(session) && session.date >= startDate && session.date <= endDate
+  );
+  return {
+    startDate,
+    endDate,
+    workoutCount: performed.length,
+    volume: performed.reduce((total, session) => total + getPerformedGymVolume(session), 0),
+  };
+}
+
+export function getGymFrequencyMetrics(
+  sessions: GymSession[],
+  referenceDate = toLocalISO(new Date())
+): GymFrequencyMetrics {
+  return {
+    last7Days: periodMetrics(sessions, shiftISO(referenceDate, -6), referenceDate),
+    previous7Days: periodMetrics(sessions, shiftISO(referenceDate, -13), shiftISO(referenceDate, -7)),
+    last30Days: periodMetrics(sessions, shiftISO(referenceDate, -29), referenceDate),
+    previous30Days: periodMetrics(sessions, shiftISO(referenceDate, -59), shiftISO(referenceDate, -30)),
+  };
+}
+
 export interface ExerciseGhostSet {
   setIndex: number;
   weight: number;
@@ -74,66 +265,51 @@ export interface ExerciseGhostData {
   totalVolume: number;
 }
 
+export function getExerciseExecutions(
+  sessions: GymSession[],
+  targetValue: string | ExerciseMetricTarget,
+  options: { excludeSessionId?: string; upToDate?: string } = {}
+): ExerciseExecutionMetric[] {
+  const target = metricTarget(targetValue);
+  if (!normalizeExerciseName(target.exerciseName) && !target.exerciseId) return [];
+  const maxDate = options.upToDate || toLocalISO(new Date());
+
+  return (sessions || [])
+    .filter((session) =>
+      session.id !== options.excludeSessionId &&
+      session.date <= maxDate &&
+      isPerformedGymSession(session)
+    )
+    .sort((a, b) =>
+      b.date.localeCompare(a.date) ||
+      (b.finishedAt || b.startedAt || '').localeCompare(a.finishedAt || a.startedAt || '') ||
+      b.id.localeCompare(a.id)
+    )
+    .flatMap((session) => (session.exercises || [])
+      .filter((exercise) => exerciseMatchesTarget(exercise, target))
+      .flatMap((exercise) => {
+        const execution = toExecutionMetric(session, exercise);
+        return execution ? [execution] : [];
+      }));
+}
+
 /**
  * Encuentra los Ghost Values (valores de la sesión real anterior más reciente)
  * para un ejercicio específico, excluyendo la sesión actual.
  */
 export function getExerciseGhostValues(
   sessions: GymSession[],
-  exerciseName: string,
+  targetValue: string | ExerciseMetricTarget,
   currentSessionId?: string,
   beforeDate?: string
 ): ExerciseGhostData | null {
-  const targetNorm = normalizeExerciseName(exerciseName);
-  if (!targetNorm) return null;
+  const previous = getExerciseExecutions(sessions, targetValue, {
+    excludeSessionId: currentSessionId,
+    upToDate: beforeDate,
+  })[0];
+  if (!previous) return null;
 
-  const today = new Date().toISOString().slice(0, 10);
-  const maxDate = beforeDate || today;
-
-  // Filtrar sesiones pasadas válidas que contengan el ejercicio con datos reales
-  const eligibleSessions = (sessions || [])
-    .filter((s) => {
-      if (currentSessionId && s.id === currentSessionId) return false;
-      if (s.status === 'active') return false;
-      if (s.date && s.date > maxDate) return false;
-      const ex = (s.exercises || []).find((e) => normalizeExerciseName(e.name) === targetNorm);
-      if (!ex) return false;
-      const sets = ex.sets || [];
-      const hasSetsData = sets.some((st) => Number(st.weight) > 0 || Number(st.reps) > 0);
-      return hasSetsData || Number(ex.weight) > 0;
-    })
-    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-
-  if (eligibleSessions.length === 0) return null;
-
-  const prevSession = eligibleSessions[0];
-  const prevEx = (prevSession.exercises || []).find(
-    (e) => normalizeExerciseName(e.name) === targetNorm
-  );
-
-  if (!prevEx) return null;
-
-  let setsToProcess = prevEx.sets || [];
-  if (setsToProcess.length === 0 && Number(prevEx.weight) > 0) {
-    const r = parseLegacyRepCount(prevEx.reps);
-    setsToProcess = [{ id: `legacy-${prevSession.id}`, weight: Number(prevEx.weight), reps: r, completed: true }];
-  }
-
-  if (setsToProcess.length === 0) return null;
-
-  const hasAnyCompleted = setsToProcess.some((st) => st.completed === true);
-  const candidateSets = setsToProcess.filter((st) => {
-    const w = Number(st.weight) || 0;
-    const r = Number(st.reps) || 0;
-    if (w <= 0 && r <= 0) return false;
-    if (hasAnyCompleted) return Boolean(st.completed);
-    return st.completed !== false;
-  });
-
-  if (candidateSets.length === 0) return null;
-  const finalSets = candidateSets;
-
-  const validSets: ExerciseGhostSet[] = finalSets.map((set, idx) => ({
+  const validSets: ExerciseGhostSet[] = previous.sets.map((set, idx) => ({
     setIndex: idx,
     weight: Number(set.weight) || 0,
     reps: Number(set.reps) || 0,
@@ -141,32 +317,17 @@ export function getExerciseGhostValues(
     rpe: typeof set.rpe === 'number' ? set.rpe : undefined,
   }));
 
-  // Encontrar el mejor set de esa sesión previa
-  let bestSet: { weight: number; reps: number; e1RM: number } | undefined;
-  let bestWeight = -1;
-  let bestReps = -1;
-
-  for (const s of validSets) {
-    if (s.weight > bestWeight || (s.weight === bestWeight && s.reps > bestReps)) {
-      bestWeight = s.weight;
-      bestReps = s.reps;
-      bestSet = {
-        weight: s.weight,
-        reps: s.reps,
-        e1RM: calculate1RM(s.weight, s.reps),
-      };
-    }
-  }
-
-  const vol = validSets.reduce((sum, s) => sum + s.weight * s.reps, 0);
-
   return {
-    previousSessionId: prevSession.id,
-    previousSessionDate: prevSession.date,
-    exerciseName: prevEx.name,
+    previousSessionId: previous.sessionId,
+    previousSessionDate: previous.date,
+    exerciseName: previous.exerciseName,
     sets: validSets,
-    bestSet,
-    totalVolume: vol,
+    bestSet: previous.bestSet ? {
+      weight: previous.bestSet.weight,
+      reps: previous.bestSet.reps,
+      e1RM: previous.bestSet.e1RM,
+    } : undefined,
+    totalVolume: previous.volume,
   };
 }
 
@@ -180,7 +341,10 @@ export function applyHistoryToTemplateExercises(
   currentSessionId?: string
 ): Exercise[] {
   return templateExercises.map((templateEx) => {
-    const ghost = getExerciseGhostValues(sessions, templateEx.name, currentSessionId);
+    const ghost = getExerciseGhostValues(sessions, {
+      exerciseId: templateEx.id,
+      exerciseName: templateEx.name,
+    }, currentSessionId);
     const templateSets = templateEx.sets && templateEx.sets.length > 0
       ? templateEx.sets
       : [
@@ -235,6 +399,8 @@ export interface MetricRecord {
 }
 
 export interface ExercisePRs {
+  exerciseId?: string;
+  exerciseName?: string;
   maxWeight?: MetricRecord;
   maxReps?: MetricRecord;
   maxE1RM?: MetricRecord;
@@ -255,11 +421,11 @@ export function calcDetailedPRs(
   upToDate?: string
 ): Record<string, ExercisePRs> {
   const prs: Record<string, ExercisePRs> = {};
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toLocalISO(new Date());
 
   const sortedSessions = [...(sessions || [])]
     .filter((s) => {
-      if (s.status === 'active') return false;
+      if (!isPerformedGymSession(s)) return false;
       if (excludeSessionId && s.id === excludeSessionId) return false;
       if (upToDate && s.date && s.date > upToDate) return false;
       if (!upToDate && s.date && s.date > today) return false;
@@ -269,27 +435,17 @@ export function calcDetailedPRs(
 
   for (const session of sortedSessions) {
     for (const ex of session.exercises || []) {
-      const norm = normalizeExerciseName(ex.name);
-      if (!norm) continue;
+      const key = getExerciseMetricKey(ex);
+      if (!key) continue;
 
-      if (!prs[norm]) {
-        prs[norm] = {};
+      if (!prs[key]) {
+        prs[key] = { exerciseId: ex.id, exerciseName: ex.name };
       }
-      const record = prs[norm];
-
-      let sets = ex.sets || [];
-      if (sets.length === 0 && Number(ex.weight) > 0) {
-        const r = parseLegacyRepCount(ex.reps);
-        sets = [{ id: `legacy-${session.id}`, weight: Number(ex.weight), reps: r, completed: true }];
-      }
-
-      const hasAnyCompleted = sets.some((st) => st.completed === true);
+      const record = prs[key];
+      const sets = getPerformedExerciseSets(session, ex);
       let sessionExVolume = 0;
 
       for (const set of sets) {
-        if (hasAnyCompleted && !set.completed) continue;
-        if (!hasAnyCompleted && set.completed === false) continue;
-
         const w = Number(set.weight) || 0;
         const r = Number(set.reps) || 0;
 
@@ -377,14 +533,14 @@ export function detectSessionPRs(
   historicalPRs: Record<string, ExercisePRs>
 ): NewPRRecord[] {
   const newPRs: NewPRRecord[] = [];
+  if (!isPerformedGymSession(session)) return newPRs;
 
   for (const ex of session.exercises || []) {
-    const norm = normalizeExerciseName(ex.name);
-    if (!norm) continue;
+    const key = getExerciseMetricKey(ex);
+    if (!key) continue;
 
-    const oldPR = historicalPRs[norm] || {};
-    const sets = ex.sets || [];
-    const hasAnyCompleted = sets.some((st) => st.completed === true);
+    const oldPR = historicalPRs[key] || {};
+    const sets = getPerformedExerciseSets(session, ex);
 
     let sessionMaxWeight = 0;
     let sessionMaxWeightReps = 0;
@@ -396,9 +552,6 @@ export function detectSessionPRs(
     let sessionVolumeTotal = 0;
 
     for (const set of sets) {
-      if (hasAnyCompleted && !set.completed) continue;
-      if (!hasAnyCompleted && set.completed === false) continue;
-
       const w = Number(set.weight) || 0;
       const r = Number(set.reps) || 0;
       if (w <= 0 && r <= 0) continue;
@@ -525,62 +678,35 @@ export interface ExerciseHistoryDetails {
  */
 export function getExerciseHistory(
   sessions: GymSession[],
-  exerciseName: string
+  targetValue: string | ExerciseMetricTarget
 ): ExerciseHistoryDetails {
-  const norm = normalizeExerciseName(exerciseName);
+  const target = metricTarget(targetValue);
   const allPRs = calcDetailedPRs(sessions);
-  const prs = allPRs[norm] || {};
+  const key = target.exerciseId ? `id:${target.exerciseId}` : normalizeExerciseName(target.exerciseName);
+  const prs = allPRs[key] || {};
 
   let equipment: ExerciseEquipment | undefined;
   let barWeight: number | undefined;
   let muscleGroup: MuscleGroup | string | undefined;
 
-  const today = new Date().toISOString().slice(0, 10);
   const matchingSessions: ExerciseSessionHistoryPoint[] = [];
+  const executions = getExerciseExecutions(sessions, target);
 
-  const sortedSessions = [...(sessions || [])]
-    .filter((s) => {
-      if (s.status === 'active') return false;
-      if (s.date && s.date > today) return false;
-      return true;
-    })
-    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  for (const execution of executions) {
+    const sourceExercise = sessions
+      .find((session) => session.id === execution.sessionId)
+      ?.exercises.find((exercise) =>
+        exercise.id === execution.exerciseId && exercise.name === execution.exerciseName
+      );
+    if (!equipment && sourceExercise?.equipment) equipment = sourceExercise.equipment;
+    if (barWeight === undefined && typeof sourceExercise?.barWeight === 'number') barWeight = sourceExercise.barWeight;
+    if (!muscleGroup && sourceExercise?.muscleGroup) muscleGroup = sourceExercise.muscleGroup;
 
-  for (const s of sortedSessions) {
-    const ex = (s.exercises || []).find((e) => normalizeExerciseName(e.name) === norm);
-    if (!ex) continue;
-
-    if (!equipment && ex.equipment) equipment = ex.equipment;
-    if (barWeight === undefined && typeof ex.barWeight === 'number') barWeight = ex.barWeight;
-    if (!muscleGroup && ex.muscleGroup) muscleGroup = ex.muscleGroup;
-
-    let sets = ex.sets || [];
-    if (sets.length === 0 && Number(ex.weight) > 0) {
-      const r = parseLegacyRepCount(ex.reps);
-      sets = [{ id: `legacy-${s.id}`, weight: Number(ex.weight), reps: r, completed: true }];
-    }
-
-    const hasAnyCompleted = sets.some((st) => st.completed === true);
-    const eligibleSets = sets.filter((st) => {
-      const w = Number(st.weight) || 0;
-      const r = Number(st.reps) || 0;
-      if (w <= 0 && r <= 0) return false;
-      if (hasAnyCompleted) return Boolean(st.completed);
-      return st.completed !== false;
-    });
-
-    if (eligibleSets.length === 0) continue;
-
-    let vol = 0;
-    let maxW = 0;
     let maxR = 0;
     let maxE1rm = 0;
-
-    for (const set of eligibleSets) {
+    for (const set of execution.sets) {
       const w = Number(set.weight) || 0;
       const r = Number(set.reps) || 0;
-      vol += w * r;
-      if (w > maxW) maxW = w;
       if (r > maxR) maxR = r;
       if (w > 0 && r >= 1 && r <= 12) {
         const est = calculate1RM(w, r);
@@ -588,26 +714,26 @@ export function getExerciseHistory(
       }
     }
 
-    const [, month, day] = (s.date || '').split('-');
-    const shortDate = day && month ? `${day}/${month}` : (s.date || '');
+    const [, month, day] = (execution.date || '').split('-');
+    const shortDate = day && month ? `${day}/${month}` : (execution.date || '');
 
     matchingSessions.push({
-      sessionId: s.id,
-      date: s.date,
+      sessionId: execution.sessionId,
+      date: execution.date,
       shortDate,
-      sets: eligibleSets,
-      volume: vol,
-      maxWeight: maxW,
+      sets: execution.sets,
+      volume: execution.volume,
+      maxWeight: execution.bestSet?.weight || 0,
       maxReps: maxR,
       e1rm: maxE1rm,
     });
   }
 
   if (!equipment) {
-    equipment = inferExerciseEquipment(exerciseName).equipment;
+    equipment = inferExerciseEquipment(target.exerciseName).equipment;
   }
   if (!muscleGroup) {
-    muscleGroup = inferMuscleGroup(exerciseName);
+    muscleGroup = inferMuscleGroup(target.exerciseName);
   }
 
   const recent5 = matchingSessions.slice(0, 5);
@@ -625,7 +751,7 @@ export function getExerciseHistory(
     }));
 
   return {
-    exerciseName,
+    exerciseName: target.exerciseName,
     equipment,
     barWeight,
     muscleGroup,
@@ -633,6 +759,83 @@ export function getExerciseHistory(
     sessions: matchingSessions,
     recent5,
     chartPoints,
+  };
+}
+
+function bestSetAcrossExecutions(
+  executions: ExerciseExecutionMetric[]
+): (PerformedSetMetric & { sessionId: string; date: string }) | null {
+  let best: (PerformedSetMetric & { sessionId: string; date: string }) | null = null;
+  for (const execution of executions) {
+    if (!execution.bestSet) continue;
+    const candidate = {
+      ...execution.bestSet,
+      sessionId: execution.sessionId,
+      date: execution.date,
+    };
+    if (!best || comparePerformedSets(candidate, best) > 0) best = candidate;
+  }
+  return best;
+}
+
+export function getExerciseProgressMetrics(
+  sessions: GymSession[],
+  targetValue: string | ExerciseMetricTarget,
+  referenceDate = toLocalISO(new Date())
+): ExerciseProgressMetrics {
+  const target = metricTarget(targetValue);
+  const executions = getExerciseExecutions(sessions, target, { upToDate: referenceDate });
+  const recentStart = shiftISO(referenceDate, -29);
+  const previousStart = shiftISO(referenceDate, -59);
+  const previousEnd = shiftISO(referenceDate, -30);
+  const recent = executions.filter((execution) => execution.date >= recentStart);
+  const previous = executions.filter((execution) =>
+    execution.date >= previousStart && execution.date <= previousEnd
+  );
+  const recentBest = bestSetAcrossExecutions(recent);
+  const previousBest = bestSetAcrossExecutions(previous);
+
+  let state: ExerciseProgressState = 'insufficient_data';
+  if (recent.length > 0 && previous.length > 0 && recentBest && previousBest) {
+    state = comparePerformedSets(recentBest, previousBest) > 0 ? 'improved' : 'stable';
+  }
+
+  return {
+    key: target.exerciseId ? `id:${target.exerciseId}` : normalizeExerciseName(target.exerciseName),
+    exerciseId: target.exerciseId,
+    exerciseName: target.exerciseName,
+    lastExecution: executions[0] || null,
+    bestSet: bestSetAcrossExecutions(executions),
+    recentVolume: recent.reduce((total, execution) => total + execution.volume, 0),
+    previousVolume: previous.reduce((total, execution) => total + execution.volume, 0),
+    recentSessionCount: new Set(recent.map((execution) => execution.sessionId)).size,
+    previousSessionCount: new Set(previous.map((execution) => execution.sessionId)).size,
+    state,
+  };
+}
+
+export function getGymProgressMetrics(
+  sessions: GymSession[],
+  referenceDate = toLocalISO(new Date())
+): GymProgressMetrics {
+  const targets = new Map<string, ExerciseMetricTarget>();
+  [...(sessions || [])]
+    .filter((session) => session.date <= referenceDate && isPerformedGymSession(session))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .forEach((session) => {
+      for (const exercise of session.exercises || []) {
+        if (getPerformedExerciseSets(session, exercise).length === 0) continue;
+        const key = getExerciseMetricKey(exercise);
+        if (!key) continue;
+        targets.set(key, { exerciseId: exercise.id, exerciseName: exercise.name });
+      }
+    });
+
+  return {
+    frequency: getGymFrequencyMetrics(sessions, referenceDate),
+    exercises: [...targets.values()].map((target) =>
+      getExerciseProgressMetrics(sessions, target, referenceDate)
+    ),
   };
 }
 

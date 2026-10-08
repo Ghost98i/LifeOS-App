@@ -3,6 +3,7 @@ import { daysBetween, todayISO } from './storage';
 import { sleepSummary } from './contextInsights';
 import { getCategoryName } from './financeCategories';
 import { isModuleEnabled } from './moduleVisibility';
+import { getCompletedGymSets, getPerformedGymVolume, isPerformedGymSession } from './gymMetrics';
 
 export interface ReviewException {
   id: string;
@@ -143,26 +144,16 @@ export function gatherWeeklyReviewData(state: LifeOSState, today = todayISO()): 
 
   // Gym sessions
   const gymSessions = (state.gym.sessions || [])
-    .filter((s) => s.status === 'completed' && isInWindow(s.date))
+    .filter((s) => isPerformedGymSession(s) && isInWindow(s.date))
     .map((s) => {
-      let sessionVolume = 0;
-      let sessionSets = 0;
-      (s.exercises || []).forEach((ex) => {
-        (ex.sets || []).forEach((st) => {
-          if (st.completed) {
-            sessionSets++;
-            sessionVolume += Number(st.weight || 0) * Number(st.reps || 0);
-          }
-        });
-      });
       const firstExercise = (s.exercises || [])[0]?.name;
       const title = s.weekLabel || firstExercise || 'Sesión de entrenamiento';
       return {
         id: s.id,
         title,
         date: s.date,
-        setsCount: sessionSets,
-        volumeKg: Math.round(sessionVolume),
+        setsCount: getCompletedGymSets(s).length,
+        volumeKg: Math.round(getPerformedGymVolume(s)),
       };
     });
 

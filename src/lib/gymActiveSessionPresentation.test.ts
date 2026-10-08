@@ -14,7 +14,7 @@ function renderActiveGym() {
       status: 'completed',
       exercises: [
         {
-          id: 'previous-bench',
+          id: 'bench',
           name: 'Press banca plano',
           equipment: 'barra',
           barWeight: 20,
@@ -33,7 +33,7 @@ function renderActiveGym() {
       startedAt: '18:30',
       exercises: [
         {
-          id: 'active-bench',
+          id: 'bench',
           name: 'Press banca plano',
           equipment: 'barra',
           barWeight: 20,

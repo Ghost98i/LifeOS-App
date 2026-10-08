@@ -32,6 +32,7 @@ import {
 } from './taskDependencies';
 import { isModuleEnabled } from './moduleVisibility';
 import { getPerformedGymVolume, isPerformedGymSession } from './gymFlows';
+import { calcDetailedPRs } from './gymMetrics';
 import {
   calculateRealAvailable,
   evaluateCushionStatus,
@@ -722,33 +723,16 @@ export interface PRInfo {
 
 export function calcPRs(state: LifeOSState): Record<string, PRInfo> {
   const prs: Record<string, PRInfo> = {};
-  (state.gym.sessions || []).filter(isPerformedGymSession).forEach((s) => {
-    (s.exercises || []).forEach((ex) => {
-      const exerciseName = (ex.name || '').trim();
-      if (!exerciseName) return;
-
-      const sets = ex.sets || [];
-      if (sets.length > 0) {
-        sets.filter((set) => set.completed === true).forEach((set) => {
-          const w = Number(set.weight) || 0;
-          const r = Number(set.reps) || 0;
-          if (w <= 0 && r <= 0) return;
-          const current = prs[exerciseName];
-          if (!current || w > current.weight || (w === current.weight && r > current.reps)) {
-            prs[exerciseName] = { weight: w, reps: r, date: s.date };
-          }
-        });
-      } else if (Number(ex.weight) > 0 || ex.reps) {
-        const w = Number(ex.weight) || 0;
-        const rMatch = String(ex.reps || '').match(/\d+/);
-        const r = rMatch ? Number(rMatch[0]) : 1;
-        const current = prs[exerciseName];
-        if (!current || w > current.weight || (w === current.weight && r > current.reps)) {
-          prs[exerciseName] = { weight: w, reps: r, date: s.date };
-        }
-      }
-    });
-  });
+  for (const [key, records] of Object.entries(calcDetailedPRs(state.gym.sessions || []))) {
+    if (!records.maxWeight) continue;
+    const exerciseName = records.exerciseName?.trim() || key;
+    const outputKey = prs[exerciseName] ? `${exerciseName} (${records.exerciseId || key})` : exerciseName;
+    prs[outputKey] = {
+      weight: records.maxWeight.weight || records.maxWeight.value,
+      reps: records.maxWeight.reps || 0,
+      date: records.maxWeight.date,
+    };
+  }
   return prs;
 }
 
