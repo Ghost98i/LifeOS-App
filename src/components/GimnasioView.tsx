@@ -25,7 +25,6 @@ import {
   uid,
 } from '../lib/storage';
 import {
-  applyHistoryToTemplateExercises,
   getExerciseGhostValues,
   calcDetailedPRs,
   detectSessionPRs,
@@ -44,10 +43,28 @@ import {
   EXERCISE_EQUIPMENT_OPTIONS,
   inferExerciseEquipment,
   inferMuscleGroup,
-  normalizeAllGymSessions,
-  propagateExerciseConfiguration,
-  sessionVolume,
 } from '../lib/gymMigration';
+import {
+  addExerciseToGymSession,
+  addSetToGymSession,
+  deleteGymSession,
+  deleteGymSessionExercise,
+  deleteGymSessionSet,
+  deleteGymTemplate,
+  discardGymSession,
+  finishGymSession,
+  getActiveGymSession,
+  getPerformedGymVolume,
+  isPerformedGymSession,
+  previewExerciseHistoryPropagation,
+  previewNormalizeGymHistory,
+  previewTemplateHistoryPropagation,
+  requestGymSessionDeletion,
+  startGymSession,
+  updateGymSessionExercise,
+  updateGymSession,
+  updateGymSessionSet,
+} from '../lib/gymFlows';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
 
@@ -89,14 +106,21 @@ function getPreviousExerciseStats(
   const norm = exerciseName.trim().toLowerCase();
   if (!norm) return null;
   const pastSessions = (sessions || [])
-    .filter((s) => s.id !== currentSessionId && (s.exercises || []).some((e) => e.name?.trim().toLowerCase() === norm))
+    .filter((s) =>
+      s.id !== currentSessionId &&
+      isPerformedGymSession(s) &&
+      (s.exercises || []).some((e) => e.name?.trim().toLowerCase() === norm)
+    )
     .sort((a, b) => b.date.localeCompare(a.date));
 
   if (pastSessions.length === 0) return null;
   const ex = (pastSessions[0].exercises || []).find((e) => e.name?.trim().toLowerCase() === norm);
   if (!ex) return null;
   if (ex.sets && ex.sets.length > 0) {
-    const bestSet = [...ex.sets].sort((a, b) => b.weight - a.weight || b.reps - a.reps)[0];
+    const bestSet = ex.sets
+      .filter((set) => set.completed === true)
+      .sort((a, b) => b.weight - a.weight || b.reps - a.reps)[0];
+    if (!bestSet) return null;
     return `${bestSet.weight} kg × ${bestSet.reps}`;
   }
   if (Number(ex.weight) > 0 || ex.reps) {
@@ -166,33 +190,34 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   }, [gymSessions]);
 
   const latestSession = useMemo(() => {
-    return sortedSessions.find((s) => s.status === 'completed') || sortedSessions[0] || null;
+    return sortedSessions.find(isPerformedGymSession) || sortedSessions[0] || null;
   }, [sortedSessions]);
 
-  const isTrainedToday = (state.gym?.sessions || []).some((s) => s.date === todayISO() && s.status === 'completed');
-
-  const activeWorkoutSession = (state.gym?.sessions || []).find(
-    (s) => s.date === todayISO() && s.status === 'active'
+  const isTrainedToday = (state.gym?.sessions || []).some(
+    (s) => s.date === todayISO() && isPerformedGymSession(s)
   );
 
+  const activeWorkoutSession = getActiveGymSession(state.gym);
+
   const staleActiveSessions = (state.gym?.sessions || []).filter(
-    (s) => (s.date || '') < todayISO() && s.status === 'active'
+    (s) => s.status === 'active' && s.id !== activeWorkoutSession?.id
   );
 
   const handleCompleteStaleSession = (sessionId: string) => {
+    let result: ReturnType<typeof finishGymSession> | null = null;
     onUpdateState((draft) => {
-      const s = draft.gym.sessions.find((x) => x.id === sessionId);
-      if (s) {
-        s.status = 'completed';
-        if (!s.finishedAt) s.finishedAt = 'Auto-cerrada';
-      }
+      result = finishGymSession(draft.gym, sessionId, { finishedAt: 'Cerrada' });
     });
+    if (result?.status === 'no_completed_sets') {
+      showToast('Completá al menos una serie o descartá la sesión.', 'error');
+      return;
+    }
     showToast('Sesión anterior completada.', 'info');
   };
 
   const handleDiscardStaleSession = (sessionId: string) => {
     onUpdateState((draft) => {
-      draft.gym.sessions = draft.gym.sessions.filter((x) => x.id !== sessionId);
+      discardGymSession(draft.gym, sessionId);
     });
     showToast('Sesión descartada.', 'info');
   };
@@ -223,7 +248,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   const ref = new Date();
   const diasEntrenadosAnio = new Set(
     (state.gym?.sessions || [])
-      .filter((s) => new Date(s.date + 'T00:00:00').getFullYear() === ref.getFullYear())
+      .filter((s) => isPerformedGymSession(s) && new Date(s.date + 'T00:00:00').getFullYear() === ref.getFullYear())
       .map((s) => s.date)
   ).size;
 
@@ -239,6 +264,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
 
   const liftingChartData = (state.gym?.sessions || [])
     .filter((s) =>
+      isPerformedGymSession(s) &&
       (s.exercises || []).some((e) => e.name?.trim().toLowerCase() === activeExercise.trim().toLowerCase())
     )
     .map((s) => {
@@ -248,7 +274,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
       const maxKg = Math.max(
         ...exList.flatMap((e) =>
           e.sets && e.sets.length > 0
-            ? e.sets.map((set) => Number(set.weight) || 0)
+            ? e.sets.filter((set) => set.completed === true).map((set) => Number(set.weight) || 0)
             : [Number(e.weight) || 0]
         ),
         0
@@ -296,100 +322,82 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   // Workout sessions
   const handleStartWorkout = (templateId?: string) => {
     const today = todayISO();
-    const template = templateId ? state.gym.routineTemplates.find((t) => t.id === templateId) : null;
-
+    let result: ReturnType<typeof startGymSession> | null = null;
     onUpdateState((draft) => {
-      if (!draft.gym) draft.gym = { sessions: [], exercises: [], routineTemplates: [], weight: [] } as any;
-      if (!draft.gym.sessions) draft.gym.sessions = [];
-      draft.gym.sessions.forEach((s) => {
-        if (s.status === 'active') {
-          s.status = 'completed';
-          if (!s.finishedAt) s.finishedAt = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        }
-      });
-      const newSession: GymSession = {
-        id: uid(),
+      result = startGymSession(draft.gym, {
+        templateId,
         date: today,
-        weekLabel: undefined,
-        status: 'active',
         startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        finishedAt: null,
-        exercises: template
-          ? applyHistoryToTemplateExercises(template.exercises, state.gym.sessions)
-          : [],
-      };
-      draft.gym.sessions.unshift(newSession);
+        sessionId: uid(),
+      });
     });
     setLiveExIdx(0);
     setLiveSetIdx(0);
     setActiveTab('entrenar');
     playSound('click');
-    showToast('🏋️ Entrenamiento iniciado con tu historial más reciente.');
+    showToast(result?.created
+      ? '🏋️ Entrenamiento iniciado con tu historial más reciente.'
+      : 'Entrenamiento activo reanudado.');
   };
 
   const handleFinishWorkout = (sessionId: string) => {
     const sessionToFinish = state.gym.sessions.find((x) => x.id === sessionId);
     const finishTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    let summaryPayload: { session: GymSession; newPRs: NewPRRecord[] } | null = null;
-    if (sessionToFinish) {
-      const historicalPRs = calcDetailedPRs(state.gym.sessions, sessionId);
-      const finishedSnapshot: GymSession = {
-        ...sessionToFinish,
-        status: 'completed',
-        finishedAt: sessionToFinish.finishedAt || finishTime,
-      };
-      const newPRs = detectSessionPRs(finishedSnapshot, historicalPRs);
-      summaryPayload = { session: finishedSnapshot, newPRs };
-    }
-
+    let result: ReturnType<typeof finishGymSession> | null = null;
     onUpdateState((draft) => {
-      const s = draft.gym.sessions.find((x) => x.id === sessionId);
-      if (s) {
-        s.status = 'completed';
-        s.finishedAt = finishTime;
-      }
-      draft.gym.activeTimer = null;
+      result = finishGymSession(draft.gym, sessionId, { finishedAt: finishTime });
     });
-    playSound('success');
-    if (summaryPayload) {
-      setCompletedSummarySession(summaryPayload);
-    } else {
-      showToast('🎉 ¡Entrenamiento completado con éxito!');
+    if (result?.status === 'no_completed_sets') {
+      showToast('Completá al menos una serie antes de finalizar, o descartá la sesión.', 'error');
+      return;
     }
+    if (result?.status !== 'completed' || !sessionToFinish) return;
+
+    const historicalPRs = calcDetailedPRs(state.gym.sessions, sessionId);
+    const finishedSnapshot: GymSession = {
+      ...sessionToFinish,
+      status: 'completed',
+      finishedAt: finishTime,
+    };
+    const summaryPayload = {
+      session: finishedSnapshot,
+      newPRs: detectSessionPRs(finishedSnapshot, historicalPRs),
+    };
+    playSound('success');
+    setCompletedSummarySession(summaryPayload);
   };
 
   const handleAddSession = (overrideWeek?: string) => {
+    let result: ReturnType<typeof startGymSession> | null = null;
     onUpdateState((draft) => {
-      draft.gym.sessions.unshift({
-        id: uid(),
+      result = startGymSession(draft.gym, {
         date: sessionDate || todayISO(),
         weekLabel: overrideWeek || sessionWeekLabel.trim() || undefined,
-        status: 'completed',
-        exercises: [],
+        startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        sessionId: uid(),
       });
     });
     setSessionWeekLabel('');
-    showToast('Sesión creada.');
+    showToast(result?.created ? 'Sesión iniciada.' : 'Ya existe una sesión activa; se reanudó esa sesión.');
   };
 
   const handleEditSessionWeek = (sessionId: string, weekLabel: string) => {
     onUpdateState((draft) => {
-      const s = draft.gym.sessions.find((x) => x.id === sessionId);
-      if (s) s.weekLabel = weekLabel.trim() || undefined;
+      updateGymSession(draft.gym, sessionId, { weekLabel });
     });
   };
 
   const handleEditSessionDate = (sessionId: string, date: string) => {
     onUpdateState((draft) => {
-      const s = draft.gym.sessions.find((x) => x.id === sessionId);
-      if (s) s.date = date;
+      updateGymSession(draft.gym, sessionId, { date });
     });
   };
 
   const handleDeleteSession = (id: string) => {
+    const session = state.gym.sessions.find((candidate) => candidate.id === id);
+    if (!session || !requestGymSessionDeletion(session, (message) => window.confirm(message))) return;
     onUpdateState((draft) => {
-      draft.gym.sessions = draft.gym.sessions.filter((s) => s.id !== id);
+      deleteGymSession(draft.gym, id);
     });
     showToast('Sesión eliminada.', 'info');
   };
@@ -405,64 +413,24 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
     initialReps = 10
   ) => {
     if (!exName.trim()) return;
-    const name = exName.trim();
-    const inferred = inferExerciseEquipment(name);
-    const eq = equipment || inferred.equipment;
-    const barW = eq === 'barra' ? (barWeight !== undefined ? barWeight : inferred.barWeight) : 0;
-    const group = muscleGroup || inferMuscleGroup(name);
-
-    // Si existe historial previo del ejercicio, utilizar las series y pesos reales
-    const ghost = getExerciseGhostValues(state.gym.sessions, name, sessionId);
-    const startW = ghost && ghost.sets[0] ? ghost.sets[0].weight : initialWeight;
-    const startR = ghost && ghost.sets[0] ? ghost.sets[0].reps : initialReps;
-    const newSets: GymSet[] = ghost && ghost.sets.length > 0
-      ? ghost.sets.map((gs) => ({
-          id: uid(),
-          weight: gs.weight,
-          reps: gs.reps,
-          completed: false,
-        }))
-      : [
-          { id: uid(), weight: startW, reps: startR, completed: false },
-          { id: uid(), weight: startW, reps: startR, completed: false },
-          { id: uid(), weight: startW, reps: startR, completed: false },
-        ];
-
     onUpdateState((draft) => {
-      const s = draft.gym.sessions.find((x) => x.id === sessionId);
-      if (s) {
-        s.exercises.push({
-          id: uid(),
-          name,
-          equipment: eq,
-          muscleGroup: group,
-          barWeight: barW,
-          restSeconds: 90,
-          timerEnabled: true,
-          sets: newSets,
-          weight: startW,
-        });
-      }
+      addExerciseToGymSession(draft.gym, sessionId, {
+        name: exName,
+        muscleGroup,
+        equipment,
+        barWeight,
+        initialWeight,
+        initialReps,
+      });
     });
-    showToast(`Ejercicio agregado: ${name}`);
+    showToast(`Ejercicio agregado: ${exName.trim()}`);
   };
 
   const handleAddSet = (sessionId: string, exerciseIndex: number) => {
     onUpdateState((draft) => {
       const s = draft.gym.sessions.find((x) => x.id === sessionId);
-      if (s && s.exercises[exerciseIndex]) {
-        const ex = s.exercises[exerciseIndex];
-        if (!ex.sets) ex.sets = [];
-        const lastSet = ex.sets[ex.sets.length - 1];
-        const prevWeight = lastSet ? lastSet.weight : Number(ex.weight) || 20;
-        const prevReps = lastSet ? lastSet.reps : 10;
-        ex.sets.push({
-          id: uid(),
-          weight: prevWeight,
-          reps: prevReps,
-          completed: false,
-        });
-      }
+      const ex = s?.exercises[exerciseIndex];
+      addSetToGymSession(draft.gym, sessionId, { exerciseId: ex?.id, exerciseIndex });
     });
   };
 
@@ -474,31 +442,22 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   ) => {
     onUpdateState((draft) => {
       const s = draft.gym.sessions.find((x) => x.id === sessionId);
-      if (s && s.exercises[exerciseIndex] && s.exercises[exerciseIndex].sets[setIndex]) {
-        const ex = s.exercises[exerciseIndex];
-        const targetSet = ex.sets[setIndex];
-        const wasCompleted = targetSet.completed;
-
-        Object.assign(targetSet, updates);
-
-        if (updates.weight != null) {
-          ex.weight = updates.weight;
-        }
-
-        if (!wasCompleted && updates.completed === true) {
-          targetSet.completedAt = new Date().toISOString();
+      const ex = s?.exercises[exerciseIndex];
+      const result = updateGymSessionSet(draft.gym, sessionId, { exerciseId: ex?.id, exerciseIndex }, setIndex, updates);
+      if (result.justCompleted) {
+          const targetEx = s?.exercises[exerciseIndex];
+          const targetSet = targetEx?.sets[setIndex];
           playSound('success');
-          if (ex.timerEnabled !== false) {
-            const durationSeconds = ex.restSeconds || 90;
+          if (s && targetEx && targetSet && targetEx.timerEnabled !== false) {
+            const durationSeconds = targetEx.restSeconds || 90;
             draft.gym.activeTimer = {
               endsAt: Date.now() + durationSeconds * 1000,
               durationSeconds,
               sessionId: s.id,
-              exerciseId: ex.id,
+              exerciseId: targetEx.id,
               setId: targetSet.id,
             };
           }
-        }
       }
     });
   };
@@ -506,27 +465,24 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   const handleDeleteSet = (sessionId: string, exerciseIndex: number, setIndex: number) => {
     onUpdateState((draft) => {
       const s = draft.gym.sessions.find((x) => x.id === sessionId);
-      if (s && s.exercises[exerciseIndex]) {
-        s.exercises[exerciseIndex].sets.splice(setIndex, 1);
-      }
+      const ex = s?.exercises[exerciseIndex];
+      deleteGymSessionSet(draft.gym, sessionId, { exerciseId: ex?.id, exerciseIndex }, setIndex);
     });
   };
 
   const handleDeleteExercise = (sessionId: string, exerciseIndex: number) => {
     onUpdateState((draft) => {
       const s = draft.gym.sessions.find((x) => x.id === sessionId);
-      if (s) {
-        s.exercises.splice(exerciseIndex, 1);
-      }
+      const ex = s?.exercises[exerciseIndex];
+      deleteGymSessionExercise(draft.gym, sessionId, { exerciseId: ex?.id, exerciseIndex });
     });
   };
 
   const handleUpdateExerciseBar = (sessionId: string, exerciseIndex: number, barWeight: number) => {
     onUpdateState((draft) => {
       const s = draft.gym.sessions.find((x) => x.id === sessionId);
-      if (s && s.exercises[exerciseIndex]) {
-        s.exercises[exerciseIndex].barWeight = barWeight;
-      }
+      const ex = s?.exercises[exerciseIndex];
+      updateGymSessionExercise(draft.gym, sessionId, { exerciseId: ex?.id, exerciseIndex }, { barWeight });
     });
   };
 
@@ -538,11 +494,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   ) => {
     onUpdateState((draft) => {
       const s = draft.gym.sessions.find((x) => x.id === sessionId);
-      if (s && s.exercises[exerciseIndex]) {
-        const ex = s.exercises[exerciseIndex];
-        ex.equipment = equipment;
-        ex.barWeight = equipment === 'barra' ? (barWeight !== undefined ? barWeight : (ex.barWeight && ex.barWeight > 0 ? ex.barWeight : 20)) : 0;
-      }
+      const ex = s?.exercises[exerciseIndex];
+      updateGymSessionExercise(draft.gym, sessionId, { exerciseId: ex?.id, exerciseIndex }, { equipment, barWeight });
     });
   };
 
@@ -562,8 +515,10 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
   };
 
   const handleDeleteTemplate = (id: string) => {
+    const template = state.gym.routineTemplates.find((candidate) => candidate.id === id);
+    if (!template || !window.confirm(`¿Eliminar la plantilla "${template.name}"? El historial no se eliminará.`)) return;
     onUpdateState((draft) => {
-      draft.gym.routineTemplates = draft.gym.routineTemplates.filter((t) => t.id !== id);
+      deleteGymTemplate(draft.gym, id);
     });
     if (editingTemplateId === id) setEditingTemplateId(null);
     showToast('Plantilla eliminada.', 'info');
@@ -671,56 +626,56 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
       showToast('La plantilla no contiene ejercicios para propagar.', 'info');
       return;
     }
-    let totalAffected = 0;
+    const preview = previewTemplateHistoryPropagation(state.gym, templateId);
+    if (preview.affectedSessionIds.length === 0) {
+      showToast('El historial completado ya utiliza esta configuración.', 'info');
+      return;
+    }
+    if (!window.confirm(
+      `Se actualizarán ${preview.affectedExerciseCount} ejercicios en ${preview.affectedSessionIds.length} sesiones completadas. ¿Continuar?`
+    )) return;
     onUpdateState((draft) => {
-      let currentSessions = draft.gym.sessions;
-      let currentTemplates = draft.gym.routineTemplates;
-      for (const ex of tmpl.exercises) {
-        const eq = ex.equipment || inferExerciseEquipment(ex.name).equipment;
-        const barW = eq === 'barra' ? (ex.barWeight ?? 20) : 0;
-        const res = propagateExerciseConfiguration(
-          currentSessions,
-          currentTemplates,
-          ex.name,
-          {
-            equipment: eq,
-            barWeight: barW,
-            muscleGroup: ex.muscleGroup,
-          }
-        );
-        currentSessions = res.updatedSessions;
-        currentTemplates = res.updatedTemplates;
-        totalAffected += res.affectedSessions;
-      }
-      draft.gym.sessions = currentSessions;
-      draft.gym.routineTemplates = currentTemplates;
+      const current = previewTemplateHistoryPropagation(draft.gym, templateId);
+      draft.gym.sessions = current.updatedSessions;
+      draft.gym.routineTemplates = current.updatedTemplates;
     });
-    showToast(`⚡ Plantilla "${tmpl.name}" propagada: ${totalAffected} sesiones históricas actualizadas.`);
+    showToast(`⚡ Plantilla "${tmpl.name}" propagada: ${preview.affectedSessionIds.length} sesiones actualizadas.`);
   };
 
   const handleNormalizeAllHistory = () => {
+    const preview = previewNormalizeGymHistory(state.gym);
+    if (preview.affectedSessionIds.length === 0) {
+      showToast('El historial completado ya está normalizado.', 'info');
+      return;
+    }
+    if (!window.confirm(
+      `Se corregirán ${preview.affectedExerciseCount} ejercicios en ${preview.affectedSessionIds.length} sesiones completadas. ¿Continuar?`
+    )) return;
     onUpdateState((draft) => {
-      const res = normalizeAllGymSessions(draft.gym.sessions, draft.gym.routineTemplates);
-      draft.gym.sessions = res.updatedSessions;
-      showToast(`🪄 Historial normalizado: ${res.affectedCount} ejercicios corregidos en todas las sesiones pasadas.`);
+      const current = previewNormalizeGymHistory(draft.gym);
+      draft.gym.sessions = current.updatedSessions;
     });
+    showToast(`🪄 Historial normalizado: ${preview.affectedExerciseCount} ejercicios corregidos.`);
   };
 
   const handlePropagateExerciseToHistory = (
     exerciseName: string,
     config: { equipment: ExerciseEquipment; barWeight: number; muscleGroup?: MuscleGroup | string }
   ) => {
+    const preview = previewExerciseHistoryPropagation(state.gym, exerciseName, config);
+    if (preview.affectedSessionIds.length === 0) {
+      showToast(`El historial completado de "${exerciseName}" ya usa esta configuración.`, 'info');
+      return;
+    }
+    if (!window.confirm(
+      `Se actualizará "${exerciseName}" en ${preview.affectedSessionIds.length} sesiones completadas. ¿Continuar?`
+    )) return;
     onUpdateState((draft) => {
-      const res = propagateExerciseConfiguration(
-        draft.gym.sessions,
-        draft.gym.routineTemplates,
-        exerciseName,
-        config
-      );
-      draft.gym.sessions = res.updatedSessions;
-      draft.gym.routineTemplates = res.updatedTemplates;
-      showToast(`⚡ "${exerciseName}" propagado a ${res.affectedSessions} sesiones históricas.`);
+      const current = previewExerciseHistoryPropagation(draft.gym, exerciseName, config);
+      draft.gym.sessions = current.updatedSessions;
+      draft.gym.routineTemplates = current.updatedTemplates;
     });
+    showToast(`⚡ "${exerciseName}" propagado a ${preview.affectedSessionIds.length} sesiones históricas.`);
   };
 
   const gymHistory = useMemo(() => {
@@ -885,7 +840,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                     <p className="text-xs text-[var(--text)] mt-0.5">
                       Volumen acumulado:{' '}
                       <strong className="font-mono text-emerald-600 dark:text-emerald-400">
-                        {sessionVolume(activeWorkoutSession)} kg
+                        {getPerformedGymVolume(activeWorkoutSession)} kg
                       </strong>
                     </p>
                   </div>
@@ -1301,8 +1256,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({ state, onUpdateState
                   onEditSessionDate={(d) => handleEditSessionDate(activeWorkoutSession.id, d)}
                   onEditSessionWeek={(w) => handleEditSessionWeek(activeWorkoutSession.id, w)}
                   onSaveAsTemplate={() => handleSaveSessionAsTemplate(activeWorkoutSession)}
-                  onAddExercise={(name, muscle, barW, w, r) =>
-                    handleAddExerciseToSession(activeWorkoutSession.id, name, muscle, barW, w, r)
+                  onAddExercise={(name, muscle, equipment, barW, w, r) =>
+                    handleAddExerciseToSession(activeWorkoutSession.id, name, muscle, equipment, barW, w, r)
                   }
                   onDeleteExercise={(exIdx) => handleDeleteExercise(activeWorkoutSession.id, exIdx)}
                   onAddSet={(exIdx) => handleAddSet(activeWorkoutSession.id, exIdx)}
@@ -2314,7 +2269,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
   const [isEditingHeader, setIsEditingHeader] = useState(false);
 
   const isActive = session.status === 'active';
-  const totalVol = sessionVolume(session);
+  const totalVol = getPerformedGymVolume(session);
   const setsCount = session.exercises.reduce((s, e) => s + (e.sets?.length || 0), 0);
   const completedCount = session.exercises.reduce(
     (s, e) => s + (e.sets ? e.sets.filter((x) => x.completed).length : 0),

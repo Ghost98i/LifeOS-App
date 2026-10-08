@@ -31,6 +31,7 @@ import {
   getUnblockedCountIfCompleted,
 } from './taskDependencies';
 import { isModuleEnabled } from './moduleVisibility';
+import { getPerformedGymVolume, isPerformedGymSession } from './gymFlows';
 import {
   calculateRealAvailable,
   evaluateCushionStatus,
@@ -557,7 +558,7 @@ export function imcCategory(imc: number | null): { label: string; color: 'blue' 
 
 
 export function trainedDatesSet(state: LifeOSState): Set<string> {
-  return new Set((state.gym?.sessions || []).map((s) => s.date));
+  return new Set((state.gym?.sessions || []).filter(isPerformedGymSession).map((s) => s.date));
 }
 
 export interface GymStreakDetails {
@@ -572,7 +573,7 @@ export interface GymStreakDetails {
 }
 
 export function calcGymStreakDetails(state: LifeOSState): GymStreakDetails {
-  const sessions = state.gym.sessions || [];
+  const sessions = (state.gym.sessions || []).filter(isPerformedGymSession);
   if (sessions.length === 0) {
     return {
       streakDays: 0,
@@ -721,14 +722,14 @@ export interface PRInfo {
 
 export function calcPRs(state: LifeOSState): Record<string, PRInfo> {
   const prs: Record<string, PRInfo> = {};
-  (state.gym.sessions || []).forEach((s) => {
+  (state.gym.sessions || []).filter(isPerformedGymSession).forEach((s) => {
     (s.exercises || []).forEach((ex) => {
       const exerciseName = (ex.name || '').trim();
       if (!exerciseName) return;
 
       const sets = ex.sets || [];
       if (sets.length > 0) {
-        sets.forEach((set) => {
+        sets.filter((set) => set.completed === true).forEach((set) => {
           const w = Number(set.weight) || 0;
           const r = Number(set.reps) || 0;
           if (w <= 0 && r <= 0) return;
@@ -1028,7 +1029,7 @@ export interface TodayGymStatus {
 
 export function todayGymStatus(state: LifeOSState, dateIso = todayISO()): TodayGymStatus {
   const streakDetails = calcGymStreakDetails(state);
-  const session = state.gym.sessions.find((s) => s.date === dateIso) || null;
+  const session = state.gym.sessions.find((s) => s.date === dateIso && isPerformedGymSession(s)) || null;
   const isRestDay = (state.gym.restDays || []).includes(dateIso) || Boolean(state.checkoutLog[dateIso]?.trainedSkipped);
 
   let totalSets = 0;
@@ -1040,7 +1041,9 @@ export function todayGymStatus(state: LifeOSState, dateIso = todayISO()): TodayG
       (ex.sets || []).forEach((set) => {
         totalSets++;
         if (set.completed) completedSets++;
-        totalVolume += (Number(set.weight) || 0) * (Number(set.reps) || 0);
+        if (set.completed === true) {
+          totalVolume += (Number(set.weight) || 0) * (Number(set.reps) || 0);
+        }
       });
     });
   }
@@ -1058,7 +1061,7 @@ export function todayGymStatus(state: LifeOSState, dateIso = todayISO()): TodayG
     totalSetsCount: totalSets,
     streakDays: streakDetails.streakDays,
     weeksStreak: streakDetails.weeksStreak,
-    totalVolume,
+    totalVolume: session ? getPerformedGymVolume(session) : totalVolume,
   };
 }
 

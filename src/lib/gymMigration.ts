@@ -137,14 +137,16 @@ export function parseLegacyReps(value: unknown): ParsedLegacyReps {
   return { reps: [], legacyReps: original };
 }
 
-function normalizeSet(value: unknown, fallbackId: string): GymSet | null {
+function normalizeSet(value: unknown, fallbackId: string, defaultCompleted = false): GymSet | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const candidate = value as Record<string, unknown>;
   const reps = numeric(candidate.reps);
   if (reps <= 0) return null;
   const completed = typeof candidate.completed === 'boolean'
     ? candidate.completed
-    : Boolean(candidate.completedAt);
+    : candidate.completedAt
+      ? true
+      : defaultCompleted;
   return {
     id: stablePart(candidate.id, fallbackId),
     weight: numeric(candidate.weight),
@@ -155,12 +157,17 @@ function normalizeSet(value: unknown, fallbackId: string): GymSet | null {
   };
 }
 
-export function migrateExercise(value: unknown, ownerId: string, exerciseIndex: number): Exercise {
+export function migrateExercise(
+  value: unknown,
+  ownerId: string,
+  exerciseIndex: number,
+  defaultCompleted = false
+): Exercise {
   const legacy = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as LegacyExercise;
   const exerciseId = stablePart(legacy.id, `${stablePart(ownerId, 'gym')}-ex-${exerciseIndex}`);
   const existingSets = Array.isArray(legacy.sets)
     ? legacy.sets.flatMap((set, setIndex) => {
-      const normalized = normalizeSet(set, stableSetId(ownerId, exerciseIndex, setIndex));
+      const normalized = normalizeSet(set, stableSetId(ownerId, exerciseIndex, setIndex), defaultCompleted);
       return normalized ? [normalized] : [];
     })
     : [];
@@ -173,6 +180,7 @@ export function migrateExercise(value: unknown, ownerId: string, exerciseIndex: 
       weight,
       reps,
       completedAt: null,
+      completed: defaultCompleted,
     }));
   let muscleGroup = MUSCLE_GROUPS.includes(legacy.muscleGroup as MuscleGroup)
     ? legacy.muscleGroup as MuscleGroup
@@ -220,14 +228,17 @@ export function migrateExercise(value: unknown, ownerId: string, exerciseIndex: 
 function migrateSession(value: unknown, index: number): GymSession {
   const legacy = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as LegacySession;
   const id = stablePart(legacy.id, `session-${index}`);
+  const status = legacy.status === 'active' ? 'active' : 'completed';
   const exercises = Array.isArray(legacy.exercises)
-    ? legacy.exercises.map((exercise, exerciseIndex) => migrateExercise(exercise, id, exerciseIndex))
+    ? legacy.exercises.map((exercise, exerciseIndex) =>
+        migrateExercise(exercise, id, exerciseIndex, status === 'completed')
+      )
     : [];
   return {
     id,
     date: typeof legacy.date === 'string' ? legacy.date : '',
     weekLabel: typeof legacy.weekLabel === 'string' ? legacy.weekLabel : undefined,
-    status: legacy.status === 'active' ? 'active' : 'completed',
+    status,
     startedAt: typeof legacy.startedAt === 'string' ? legacy.startedAt : null,
     finishedAt: typeof legacy.finishedAt === 'string' ? legacy.finishedAt : null,
     exercises,
@@ -250,12 +261,6 @@ function migrateTemplate(value: unknown, index: number): RoutineTemplate {
 export function migrateGym(value: unknown): Gym {
   const gym = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
   const sessions = Array.isArray(gym.sessions) ? gym.sessions.map(migrateSession) : [];
-  let activeSeen = false;
-  sessions.forEach((session) => {
-    if (session.status !== 'active') return;
-    if (activeSeen) session.status = 'completed';
-    activeSeen = true;
-  });
   sessions.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const timer = gym.activeTimer && typeof gym.activeTimer === 'object' && !Array.isArray(gym.activeTimer)
     ? gym.activeTimer as Record<string, unknown>
@@ -279,7 +284,10 @@ export function migrateGym(value: unknown): Gym {
 }
 
 export function exerciseVolume(exercise: Exercise): number {
-  return exercise.sets.reduce((sum, set) => sum + set.weight * set.reps, 0);
+  return exercise.sets.reduce(
+    (sum, set) => sum + (set.completed === true ? set.weight * set.reps : 0),
+    0
+  );
 }
 
 export function sessionVolume(session: GymSession): number {

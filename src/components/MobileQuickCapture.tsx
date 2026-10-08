@@ -13,7 +13,7 @@ import {
 } from '../lib/quickCapture';
 import { parseQuickFinance } from '../utils/quickFinanceParser';
 import { todayISO, uid, dayKeyFromDate, fmtDate } from '../lib/storage';
-import { applyHistoryToTemplateExercises } from '../lib/gymMetrics';
+import { startGymSession } from '../lib/gymFlows';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
 import { getActiveCategories } from '../lib/financeCategories';
@@ -255,30 +255,12 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
 
   const handleStartWorkout = (templateId?: string) => {
     try {
-      const template = (state.gym?.routineTemplates || []).find((t) => t.id === templateId) || null;
-      const newSessionId = uid();
-      const exercises = template
-        ? applyHistoryToTemplateExercises(template.exercises, state.gym?.sessions || [])
-        : [];
-
       onUpdateState((draft) => {
-        if (!draft.gym) draft.gym = { sessions: [], exercises: [], routineTemplates: [], weight: [] } as any;
-        if (!draft.gym.sessions) draft.gym.sessions = [];
-        // mark any previous active session as completed
-        draft.gym.sessions.forEach((s) => {
-          if (s.status === 'active') {
-            s.status = 'completed';
-            if (!s.finishedAt) s.finishedAt = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          }
-        });
-        draft.gym.sessions.unshift({
-          id: newSessionId,
+        startGymSession(draft.gym, {
+          templateId,
           date: todayISO(),
-          weekLabel: template?.name || undefined,
           startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          finishedAt: null,
-          status: 'active',
-          exercises,
+          sessionId: uid(),
         });
       });
 

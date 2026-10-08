@@ -54,14 +54,36 @@ test('la migración v7 es idempotente y conserva texto no interpretable', () => 
   assert.equal(second.sessions[0].exercises[0].legacyReps, 'a fallo');
 });
 
-test('sólo conserva una sesión activa', () => {
+test('conserva sesiones activas legacy sin convertirlas en historial realizado', () => {
   const gym = migrateGym({
     sessions: [
       { id: 'a', date: '2026-08-20', status: 'active', exercises: [] },
       { id: 'b', date: '2026-08-20', status: 'active', exercises: [] },
     ],
   });
-  assert.deepEqual(gym.sessions.map((session) => session.status), ['active', 'completed']);
+  assert.deepEqual(gym.sessions.map((session) => session.status), ['active', 'active']);
+});
+
+test('una sesión activa de un día anterior sobrevive a migración y reapertura', () => {
+  const first = migrateGym({
+    sessions: [{ id: 'overnight', date: '2026-10-06', status: 'active', exercises: [] }],
+  });
+  const reopened = migrateGym(first);
+  assert.equal(reopened.sessions[0].id, 'overnight');
+  assert.equal(reopened.sessions[0].date, '2026-10-06');
+  assert.equal(reopened.sessions[0].status, 'active');
+  assert.equal(reopened.sessions[0].finishedAt, null);
+});
+
+test('sesiones completadas legacy conservan su volumen, pero planes activos no cuentan como realizados', () => {
+  const gym = migrateGym({
+    sessions: [
+      { id: 'done', date: '2026-08-20', status: 'completed', exercises: [{ name: 'Curl', weight: 20, reps: '3x10' }] },
+      { id: 'planned', date: '2026-08-21', status: 'active', exercises: [{ name: 'Curl', weight: 20, reps: '3x10' }] },
+    ],
+  });
+  assert.equal(sessionVolume(gym.sessions.find((session) => session.id === 'done')!), 600);
+  assert.equal(sessionVolume(gym.sessions.find((session) => session.id === 'planned')!), 0);
 });
 
 test('el temporizador queda opt-in al migrar ejercicios', () => {

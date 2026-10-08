@@ -130,7 +130,8 @@ export function getExerciseGhostValues(
     return st.completed !== false;
   });
 
-  const finalSets = candidateSets.length > 0 ? candidateSets : setsToProcess;
+  if (candidateSets.length === 0) return null;
+  const finalSets = candidateSets;
 
   const validSets: ExerciseGhostSet[] = finalSets.map((set, idx) => ({
     setIndex: idx,
@@ -258,6 +259,7 @@ export function calcDetailedPRs(
 
   const sortedSessions = [...(sessions || [])]
     .filter((s) => {
+      if (s.status === 'active') return false;
       if (excludeSessionId && s.id === excludeSessionId) return false;
       if (upToDate && s.date && s.date > upToDate) return false;
       if (!upToDate && s.date && s.date > today) return false;
