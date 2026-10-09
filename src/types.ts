@@ -322,6 +322,8 @@ export interface MeasurementPoint {
   waist: number;
 }
 
+export type GymSetType = 'normal' | 'warmup';
+
 export interface GymSet {
   id: string;
   weight: number;
@@ -329,6 +331,7 @@ export interface GymSet {
   completedAt?: string | null;
   completed?: boolean;
   rpe?: number;
+  type?: GymSetType;
 }
 
 export type ExerciseEquipment = 'barra' | 'mancuerna' | 'polea' | 'maquina' | 'corporal';

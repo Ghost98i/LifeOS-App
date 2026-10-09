@@ -24,9 +24,10 @@ import {
   updateGymTemplateExercise,
   updateGymSessionExercise,
   updateGymSessionSet,
+  updateGymSession,
 } from './gymFlows';
 import { defaultState } from './storage';
-import { getExerciseGhostValues } from './gymMetrics';
+import { getExerciseGhostValues, calculateSessionDuration } from './gymMetrics';
 
 function emptyGym(overrides: Partial<Gym> = {}): Gym {
   return {
@@ -560,5 +561,38 @@ test('desmarcar una serie limpia completedAt y mantiene coherencia del estado re
   assert.equal(result.updated, true);
   assert.equal(completedSession.exercises[0].sets[0].completed, false);
   assert.equal(completedSession.exercises[0].sets[0].completedAt, null);
+});
+
+test('edición manual de hora de inicio y fin recalcula duración correctamente', () => {
+  const s = session({
+    id: 'edit-times-session',
+    startedAt: '10:00',
+    finishedAt: '11:00',
+  });
+  const gym = emptyGym({ sessions: [s] });
+
+  const ok = updateGymSession(gym, s.id, { startedAt: '12:00', finishedAt: '13:07' });
+  assert.equal(ok, true);
+  assert.equal(s.startedAt, '12:00');
+  assert.equal(s.finishedAt, '13:07');
+
+  const dur = calculateSessionDuration(s.startedAt, s.finishedAt);
+  assert.equal(dur.minutes, 67);
+  assert.equal(dur.formatted, '1 h 07 min');
+});
+
+test('rango horario inválido se rechaza y no altera sesión', () => {
+  const s = session({
+    id: 'invalid-times-session',
+    startedAt: '12:00',
+    finishedAt: '13:00',
+  });
+  const gym = emptyGym({ sessions: [s] });
+
+  // 13:00 a 12:00 es inválido en el mismo día
+  const ok = updateGymSession(gym, s.id, { startedAt: '13:00', finishedAt: '12:00' });
+  assert.equal(ok, false);
+  assert.equal(s.startedAt, '12:00');
+  assert.equal(s.finishedAt, '13:00');
 });
 

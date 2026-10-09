@@ -222,14 +222,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </header>
 
-      <BentoCommandBar
-        state={state}
-        onUpdateState={onUpdateState}
-        onNavigate={onNavigate}
-        onOpenSearch={onOpenSearch}
-        onOpenCapture={onOpenCapture}
-        onQuickAction={onQuickAction}
-      />
+      <div className="hidden sm:block">
+        <BentoCommandBar
+          state={state}
+          onUpdateState={onUpdateState}
+          onNavigate={onNavigate}
+          onOpenSearch={onOpenSearch}
+          onOpenCapture={onOpenCapture}
+          onQuickAction={onQuickAction}
+        />
+      </div>
 
       {showAttention && (
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 shadow-[var(--card-shadow)]" aria-labelledby="today-attention-title">

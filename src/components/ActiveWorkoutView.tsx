@@ -52,6 +52,7 @@ interface ActiveWorkoutViewProps {
   onSaveAsTemplate: () => void;
   onEditSessionDate: (date: string) => void;
   onEditSessionWeek: (weekLabel: string) => void;
+  onEditSessionTimes?: (startedAt: string | null, finishedAt: string | null) => void;
 }
 
 const controlClass =
@@ -109,6 +110,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
   onSaveAsTemplate,
   onEditSessionDate,
   onEditSessionWeek,
+  onEditSessionTimes,
 }) => {
   const [newExerciseName, setNewExerciseName] = useState('');
   const [newExerciseMuscle, setNewExerciseMuscle] = useState<MuscleGroup>('Pecho');
@@ -283,7 +285,25 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
             <main data-active-set-editor className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xs sm:p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-[var(--text-soft)]">Serie {safeSetIndex + 1} de {sets.length}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-semibold text-[var(--text-soft)]">Serie {safeSetIndex + 1} de {sets.length}</p>
+                    {currentSet && (
+                      <button
+                        type="button"
+                        onClick={() => onUpdateCurrentSet({
+                          type: currentSet.type === 'warmup' ? 'normal' : 'warmup',
+                        })}
+                        className={`min-h-11 inline-flex items-center px-3 py-1 text-xs font-extrabold uppercase rounded-xl transition-colors cursor-pointer border ${
+                          currentSet.type === 'warmup'
+                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                            : 'bg-[var(--surface-muted)] text-[var(--text-faint)] border-[var(--border)] hover:text-[var(--text)]'
+                        }`}
+                        title={currentSet.type === 'warmup' ? 'Serie de aproximación · Clic para hacerla efectiva' : 'Serie efectiva · Clic para marcar como aproximación'}
+                      >
+                        {currentSet.type === 'warmup' ? 'Aproximación' : 'Efectiva'}
+                      </button>
+                    )}
+                  </div>
                   <p className="mt-1 text-xs text-[var(--text-faint)]">
                     {plateDescription(equipment, Number(currentSet?.weight) || 0, barWeight)}
                   </p>
@@ -437,7 +457,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                             : 'border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)]'
                       }`}
                     >
-                      Serie {index + 1} · {set.weight} × {set.reps} {set.completed ? '· Hecha' : ''}
+                      {set.type === 'warmup' ? 'Aprox' : `Serie ${index + 1}`} · {set.weight} × {set.reps} {set.completed ? '· Hecha' : ''}
                     </button>
                   ))}
                 </div>
@@ -507,6 +527,24 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     <label className="space-y-1 text-xs text-[var(--text-soft)]">
                       Etiqueta
                       <input value={session.weekLabel || ''} onChange={(event) => onEditSessionWeek(event.target.value)} placeholder="Semana o rutina" className={`${controlClass} w-full`} />
+                    </label>
+                    <label className="space-y-1 text-xs text-[var(--text-soft)]">
+                      Inicio
+                      <input
+                        type="time"
+                        value={session.startedAt || ''}
+                        onChange={(event) => onEditSessionTimes?.(event.target.value || null, session.finishedAt || null)}
+                        className={`${controlClass} w-full`}
+                      />
+                    </label>
+                    <label className="space-y-1 text-xs text-[var(--text-soft)]">
+                      Fin
+                      <input
+                        type="time"
+                        value={session.finishedAt || ''}
+                        onChange={(event) => onEditSessionTimes?.(session.startedAt || null, event.target.value || null)}
+                        className={`${controlClass} w-full`}
+                      />
                     </label>
                   </div>
 

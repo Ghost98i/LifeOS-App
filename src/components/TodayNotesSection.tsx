@@ -17,7 +17,7 @@ const noteTitle = (note: Postit): string =>
 export const TodayNotesSection: React.FC<TodayNotesSectionProps> = ({
   pinnedNotes,
   recentNotes,
-  privacyMode,
+  privacyMode: _privacyMode,
   onNavigate,
   onAddNote,
 }) => {
@@ -79,7 +79,8 @@ export const TodayNotesSection: React.FC<TodayNotesSectionProps> = ({
     return () => window.clearInterval(timer);
   }, [isPaused, pinnedNotes.length, prefersReducedMotion, showNext, transitionFrom]);
 
-  const privacyClass = privacyMode ? 'privacy-sensitive' : '';
+  // Stream Guard: notas no protegidas por defecto
+  const privacyClass = '';
 
   return (
     <section

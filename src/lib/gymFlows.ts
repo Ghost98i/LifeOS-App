@@ -14,12 +14,16 @@ import { uid } from './storage';
 import {
   applyHistoryToTemplateExercises,
   getExerciseGhostValues,
+  getExerciseInitialSuggestion,
   hasPerformedGymWork,
+  isLogicalTimeRangeValid,
 } from './gymMetrics';
 export {
   getCompletedGymSets,
+  getExerciseInitialSuggestion,
   getPerformedGymVolume,
   hasPerformedGymWork,
+  isLogicalTimeRangeValid,
   isPerformedGymSession,
 } from './gymMetrics';
 import {
@@ -106,12 +110,24 @@ export const discardGymSession = deleteGymSession;
 export function updateGymSession(
   gym: Gym,
   sessionId: string,
-  updates: Pick<Partial<GymSession>, 'date' | 'weekLabel'>
+  updates: Partial<Pick<GymSession, 'date' | 'weekLabel' | 'startedAt' | 'finishedAt'>>
 ): boolean {
   const session = gym.sessions.find((candidate) => candidate.id === sessionId);
   if (!session) return false;
+
+  const nextStartedAt = updates.startedAt !== undefined ? updates.startedAt : session.startedAt;
+  const nextFinishedAt = updates.finishedAt !== undefined ? updates.finishedAt : session.finishedAt;
+
+  if (updates.startedAt !== undefined || updates.finishedAt !== undefined) {
+    if (!isLogicalTimeRangeValid(nextStartedAt, nextFinishedAt)) {
+      return false;
+    }
+  }
+
   if (updates.date !== undefined) session.date = updates.date;
   if (updates.weekLabel !== undefined) session.weekLabel = updates.weekLabel.trim() || undefined;
+  if (updates.startedAt !== undefined) session.startedAt = updates.startedAt;
+  if (updates.finishedAt !== undefined) session.finishedAt = updates.finishedAt;
   return true;
 }
 
@@ -288,12 +304,19 @@ export function addExerciseToGymSession(
     ? (input.barWeight ?? inferred.barWeight)
     : 0;
   const ghost = getExerciseGhostValues(gym.sessions, { exerciseName: name }, sessionId);
+  const suggestion = getExerciseInitialSuggestion(gym.sessions, { exerciseName: name }, { excludeSessionId: sessionId });
   const initialWeight = input.initialWeight ?? 20;
   const initialReps = input.initialReps ?? 10;
-  const startWeight = ghost?.sets[0]?.weight ?? initialWeight;
-  const startReps = ghost?.sets[0]?.reps ?? initialReps;
+  const startWeight = suggestion?.weight ?? ghost?.sets[0]?.weight ?? initialWeight;
+  const startReps = suggestion?.reps ?? ghost?.sets[0]?.reps ?? initialReps;
   const sets: GymSet[] = ghost?.sets.length
-    ? ghost.sets.map((set) => ({ id: uid(), weight: set.weight, reps: set.reps, completed: false }))
+    ? ghost.sets.map((set) => ({
+        id: uid(),
+        weight: set.weight,
+        reps: set.reps,
+        completed: false,
+        type: set.type,
+      }))
     : Array.from({ length: 3 }, () => ({
         id: uid(),
         weight: startWeight,

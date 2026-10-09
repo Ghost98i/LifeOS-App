@@ -33,6 +33,7 @@ import {
   detectSessionPRs,
   getExerciseHistory,
   getGymProgressMetrics,
+  calculateSessionDuration,
   NewPRRecord,
 } from '../lib/gymMetrics';
 import type { ExerciseMetricTarget } from '../lib/gymMetrics';
@@ -150,6 +151,9 @@ function getPreviousExerciseStats(
     { exerciseId, exerciseName },
     currentSessionId
   );
+  if (previous?.initialSuggestion) {
+    return `${previous.initialSuggestion.weight} kg × ${previous.initialSuggestion.reps}`;
+  }
   return previous?.bestSet
     ? `${previous.bestSet.weight} kg × ${previous.bestSet.reps}`
     : null;
@@ -414,6 +418,16 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     onUpdateState((draft) => {
       updateGymSession(draft.gym, sessionId, { date });
     });
+  };
+
+  const handleEditSessionTimes = (sessionId: string, startedAt: string | null, finishedAt: string | null) => {
+    let success = false;
+    onUpdateState((draft) => {
+      success = updateGymSession(draft.gym, sessionId, { startedAt, finishedAt });
+    });
+    if (!success) {
+      showToast('Horario no válido: la hora de fin no puede ser anterior a la de inicio.', 'error');
+    }
   };
 
   const handleDeleteSession = (id: string) => {
@@ -945,6 +959,9 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
               onSaveAsTemplate={() => handleSaveSessionAsTemplate(activeWorkoutSession)}
               onEditSessionDate={(date) => handleEditSessionDate(activeWorkoutSession.id, date)}
               onEditSessionWeek={(weekLabel) => handleEditSessionWeek(activeWorkoutSession.id, weekLabel)}
+              onEditSessionTimes={(startedAt, finishedAt) =>
+                handleEditSessionTimes(activeWorkoutSession.id, startedAt, finishedAt)
+              }
             />
           ) : (
             /* NO ACTIVE WORKOUT: TODAY LAUNCHER */
@@ -1486,6 +1503,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                       })
                     }
                     onOpenHistory={setHistoryExercise}
+                    onEditSessionTimes={(s, f) => handleEditSessionTimes(latestSession.id, s, f)}
                   />
                 </section>
               )}
@@ -1622,6 +1640,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                         })
                       }
                       onOpenHistory={setHistoryExercise}
+                      onEditSessionTimes={(s, f) => handleEditSessionTimes(session.id, s, f)}
                     />
                   ))}
                 </div>
@@ -1691,6 +1710,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                           })
                         }
                         onOpenHistory={setHistoryExercise}
+                        onEditSessionTimes={(s, f) => handleEditSessionTimes(session.id, s, f)}
                       />
                     ))}
                   </div>
@@ -2151,6 +2171,7 @@ interface WorkoutSessionCardProps {
     barWeight: number
   ) => void;
   onOpenHistory?: (target: ExerciseMetricTarget) => void;
+  onEditSessionTimes?: (startedAt: string | null, finishedAt: string | null) => void;
   showSessionActions?: boolean;
 }
 
@@ -2161,6 +2182,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
   onDeleteSession,
   onEditSessionDate,
   onEditSessionWeek,
+  onEditSessionTimes,
   onSaveAsTemplate,
   onAddExercise,
   onDeleteExercise,
@@ -2184,6 +2206,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
 
   const isActive = session.status === 'active';
   const totalVol = getPerformedGymVolume(session);
+  const duration = calculateSessionDuration(session.startedAt, session.finishedAt);
   const setsCount = session.exercises.reduce((s, e) => s + (e.sets?.length || 0), 0);
   const completedCount = session.exercises.reduce(
     (s, e) => s + (e.sets ? e.sets.filter((x) => x.completed).length : 0),
@@ -2231,6 +2254,20 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                 placeholder="Semana (ej: Semana 1)"
                 className="w-28 px-2 py-1 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
               />
+              <input
+                type="time"
+                value={session.startedAt || ''}
+                onChange={(e) => onEditSessionTimes?.(e.target.value || null, session.finishedAt || null)}
+                className="px-2 py-1 text-xs font-mono font-bold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
+                title="Hora de inicio"
+              />
+              <input
+                type="time"
+                value={session.finishedAt || ''}
+                onChange={(e) => onEditSessionTimes?.(session.startedAt || null, e.target.value || null)}
+                className="px-2 py-1 text-xs font-mono font-bold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
+                title="Hora de fin"
+              />
               <button
                 type="button"
                 onClick={() => setIsEditingHeader(false)}
@@ -2249,6 +2286,11 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                   {session.weekLabel}
                 </span>
               )}
+              {duration.minutes > 0 && (
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-[var(--surface-muted)] text-[var(--text-soft)] border border-[var(--border)] font-mono">
+                  {duration.formatted}
+                </span>
+              )}
               {isActive ? (
                 <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase rounded-md bg-emerald-500/15 text-emerald-600 border border-emerald-500/30 animate-pulse">
                   ● En curso
@@ -2262,7 +2304,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                 type="button"
                 onClick={() => setIsEditingHeader(true)}
                 className="text-[var(--text-faint)] hover:text-[var(--blue)] text-xs p-1 cursor-pointer"
-                title="Editar fecha o semana"
+                title="Editar fecha, semana u horarios"
               >
                 ✏️
               </button>
@@ -2449,7 +2491,26 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                     return (
                       <div key={set.id || setIdx} className="rounded-xl bg-[var(--card)] p-3">
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-xs font-semibold text-[var(--text-soft)]">Serie {setIdx + 1}</span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-semibold text-[var(--text-soft)]">
+                              {set.type === 'warmup' ? 'Aprox' : `Serie ${setIdx + 1}`}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextType = set.type === 'warmup' ? 'normal' : 'warmup';
+                                onUpdateSet(exIdx, setIdx, { type: nextType });
+                              }}
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase transition-colors ${
+                                set.type === 'warmup'
+                                  ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30'
+                                  : 'bg-[var(--surface-muted)] text-[var(--text-faint)] hover:text-[var(--text)]'
+                              }`}
+                              title="Alternar entre serie de aproximación y serie efectiva"
+                            >
+                              {set.type === 'warmup' ? 'Aprox' : 'Efectiva'}
+                            </button>
+                          </div>
                           <button
                             type="button"
                             onClick={() => onUpdateSet(exIdx, setIdx, { completed: !set.completed })}
@@ -2540,7 +2601,24 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                             }`}
                           >
                             <td className="py-1.5 font-mono text-[var(--text-soft)]">
-                              <div className="font-bold">#{setIdx + 1}</div>
+                              <div className="flex items-center gap-1">
+                                <span className="font-bold">#{setIdx + 1}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const nextType = set.type === 'warmup' ? 'normal' : 'warmup';
+                                    onUpdateSet(exIdx, setIdx, { type: nextType });
+                                  }}
+                                  className={`rounded px-1 py-0.5 text-[9px] font-extrabold uppercase transition-colors ${
+                                    set.type === 'warmup'
+                                      ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30'
+                                      : 'bg-[var(--surface-muted)] text-[var(--text-faint)] hover:text-[var(--text)]'
+                                  }`}
+                                  title="Alternar entre serie de aproximación y serie efectiva"
+                                >
+                                  {set.type === 'warmup' ? 'Aprox' : 'Ef'}
+                                </button>
+                              </div>
                               {ghostSet && (
                                 <div
                                   className="text-[10px] text-[var(--text-faint)] leading-tight whitespace-nowrap"
@@ -3059,7 +3137,13 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
                         key={set.id || setIndex}
                         className="grid min-h-11 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-3 hover:bg-[var(--surface-muted)]"
                       >
-                        <span className="text-[11px] font-semibold text-[var(--text-faint)]">Serie {setIndex + 1}</span>
+                        <span className="text-[11px] font-semibold text-[var(--text-faint)]">
+                          {set.type === 'warmup' ? (
+                            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">Aprox</span>
+                          ) : (
+                            `Serie ${setIndex + 1}`
+                          )}
+                        </span>
                         <span className="text-right font-mono text-base font-black tabular-nums text-[var(--text)]">
                           {Number(set.weight) || 0} kg × {Number(set.reps) || 0}
                         </span>

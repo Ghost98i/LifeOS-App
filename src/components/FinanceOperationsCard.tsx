@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { LifeOSState } from '../types';
 import { addTransfer, deleteReconciliation, deleteTransfer, reconcileAccount, updateReconciliation } from '../lib/financeFlows';
 import { fmtDate, fmtMoney, todayISO } from '../lib/storage';
+import { PrivacyAmount } from './PrivacyAmount';
 
 interface FinanceOperationsCardProps {
   state: LifeOSState;
@@ -92,12 +93,12 @@ export const FinanceOperationsCard: React.FC<FinanceOperationsCardProps> = ({ st
       )}
 
       {message && <p className="mt-3 text-xs font-bold text-[var(--text-soft)]">{message}</p>}
-      {mode === 'transfer' && state.finance.transfers.length > 0 && <div className="mt-4 divide-y divide-[var(--border)] border-t border-[var(--border)]">{[...state.finance.transfers].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5).map((transfer) => <div key={transfer.id} className="flex items-center gap-3 py-2.5 text-xs"><span className="font-bold text-[var(--text)]">{accounts.find((a) => a.id === transfer.fromAccountId)?.name || 'Cuenta'} → {accounts.find((a) => a.id === transfer.toAccountId)?.name || 'Cuenta'}</span><span className="ml-auto font-mono font-bold">{fmtMoney(transfer.amount)}</span><span className="text-[var(--text-faint)]">{fmtDate(transfer.date)}</span><button onClick={() => onUpdateState((draft) => deleteTransfer(draft, transfer.id))} className="text-[var(--text-faint)] hover:text-red-500">✕</button></div>)}</div>}
+      {mode === 'transfer' && state.finance.transfers.length > 0 && <div className="mt-4 divide-y divide-[var(--border)] border-t border-[var(--border)]">{[...state.finance.transfers].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5).map((transfer) => <div key={transfer.id} className="flex items-center gap-3 py-2.5 text-xs"><span className="font-bold text-[var(--text)]">{accounts.find((a) => a.id === transfer.fromAccountId)?.name || 'Cuenta'} → {accounts.find((a) => a.id === transfer.toAccountId)?.name || 'Cuenta'}</span><span className="ml-auto font-mono font-bold"><PrivacyAmount>{fmtMoney(transfer.amount)}</PrivacyAmount></span><span className="text-[var(--text-faint)]">{fmtDate(transfer.date)}</span><button onClick={() => onUpdateState((draft) => deleteTransfer(draft, transfer.id))} className="text-[var(--text-faint)] hover:text-red-500">✕</button></div>)}</div>}
       {mode === 'reconcile' && state.finance.reconciliations.length > 0 && <div className="finance-divider mt-4 space-y-2 border-t pt-3">
         <div><h3 className="text-xs font-extrabold text-[var(--text)]">Conciliaciones guardadas</h3><p className="text-[10px] text-[var(--text-soft)]">Podés corregir o limpiar duplicados. Eliminar una conciliación no mueve tu saldo actual.</p></div>
         {[...state.finance.reconciliations].sort((a, b) => b.date.localeCompare(a.date)).map((item) => <div key={item.id} className="finance-surface-subtle flex flex-wrap items-center gap-2 rounded-xl p-2.5 text-xs">
           <span className="font-bold text-[var(--text)]">{accounts.find((account) => account.id === item.accountId)?.name || 'Cuenta'}</span>
-          <span className="font-mono font-bold">{fmtMoney(item.actualBalance)}</span>
+          <PrivacyAmount as="span" className="font-mono font-bold">{fmtMoney(item.actualBalance)}</PrivacyAmount>
           <span className="text-[var(--text-faint)]">{fmtDate(item.date)}</span>
           {item.note && <span className="min-w-0 flex-1 truncate text-[var(--text-soft)]">{item.note}</span>}
           <div className="ml-auto flex gap-1.5"><button type="button" onClick={() => { setEditingReconciliationId(item.id); setAccountId(item.accountId); setActualBalance(String(item.actualBalance)); setDate(item.date); setNote(item.note || ''); }} className="finance-control rounded-lg px-2 py-1 text-[10px] font-bold text-[var(--blue)]">Editar</button><button type="button" onClick={() => { if (confirm('¿Eliminar esta conciliación? El saldo actual se conservará.')) onUpdateState((draft) => deleteReconciliation(draft, item.id)); }} className="rounded-lg border border-rose-500/20 px-2 py-1 text-[10px] font-bold text-rose-500">Eliminar</button></div>

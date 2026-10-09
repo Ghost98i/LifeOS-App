@@ -4,11 +4,16 @@ import type { Exercise, GymSession } from '../types';
 import {
   calculate1RM,
   getExerciseGhostValues,
+  getExerciseInitialSuggestion,
   applyHistoryToTemplateExercises,
   calcDetailedPRs,
   detectSessionPRs,
   getExerciseHistory,
   calculateSessionDuration,
+  isLogicalTimeRangeValid,
+  getPerformedGymVolume,
+  getTotalGymVolume,
+  selectBestPerformedSet,
   getExerciseProgressMetrics,
   getGymFrequencyMetrics,
   getGymProgressMetrics,
@@ -414,16 +419,22 @@ test('getExerciseHistory: extracts chronological sessions and limits recent to 5
 // ── 6. Session Duration Calculation ─────────────────────────────────────────
 
 test('calculateSessionDuration: handles HH:MM same day and midnight crossings', () => {
-  // Same day: 18:30 to 19:45 -> 75 min (1h 15m)
+  // Same day: 18:30 to 19:45 -> 75 min (1 h 15 min)
   assert.deepEqual(calculateSessionDuration('18:30', '19:45'), {
     minutes: 75,
-    formatted: '1h 15m',
+    formatted: '1 h 15 min',
   });
 
-  // Exactly 60 min -> 1h
+  // User case: 12:00 to 13:07 -> 67 min (1 h 07 min)
+  assert.deepEqual(calculateSessionDuration('12:00', '13:07'), {
+    minutes: 67,
+    formatted: '1 h 07 min',
+  });
+
+  // Exactly 60 min -> 1 h
   assert.deepEqual(calculateSessionDuration('10:00', '11:00'), {
     minutes: 60,
-    formatted: '1h',
+    formatted: '1 h',
   });
 
   // Less than 60 min
@@ -444,12 +455,23 @@ test('calculateSessionDuration: handles HH:MM same day and midnight crossings', 
     formatted: '0 min',
   });
 
+  // Invalid range: finish before start on same date returns 0 min
+  assert.deepEqual(calculateSessionDuration('13:07', '12:00'), {
+    minutes: 0,
+    formatted: '0 min',
+  });
+
+  // Logical range validation helper
+  assert.equal(isLogicalTimeRangeValid('12:00', '13:07'), true);
+  assert.equal(isLogicalTimeRangeValid('13:07', '12:00'), false);
+  assert.equal(isLogicalTimeRangeValid('23:00', '01:00'), true);
+
   // Cross-format: ISO startedAt with local HH:MM finishedAt
   const isoStart = new Date();
   isoStart.setHours(14, 0, 0, 0);
   assert.deepEqual(calculateSessionDuration(isoStart.toISOString(), '15:15'), {
     minutes: 75,
-    formatted: '1h 15m',
+    formatted: '1 h 15 min',
   });
 });
 
@@ -702,4 +724,146 @@ test('comparación reciente queda insufficient_data si falta cualquiera de los d
   );
   assert.equal(result.state, 'insufficient_data');
   assert.equal(result.previousSessionCount, 0);
+});
+
+// ── 9. Functional Tests: Initial Suggestions & Warmup Series ─────────────────
+
+test('historial 70x9 / 80x4 / 70x8 -> próxima sugerencia 70x9 (primer set efectivo, no PR ni max)', () => {
+  const sessions: GymSession[] = [
+    {
+      id: 'session-prev',
+      date: '2026-10-01',
+      status: 'completed',
+      exercises: [
+        {
+          id: 'bench-1',
+          name: 'Press banca',
+          sets: [
+            { id: 's1', weight: 70, reps: 9, completed: true },
+            { id: 's2', weight: 80, reps: 4, completed: true },
+            { id: 's3', weight: 70, reps: 8, completed: true },
+          ],
+        },
+      ],
+    },
+  ];
+
+  const suggestion = getExerciseInitialSuggestion(sessions, { exerciseId: 'bench-1', exerciseName: 'Press banca' });
+  assert.ok(suggestion);
+  assert.equal(suggestion.weight, 70);
+  assert.equal(suggestion.reps, 9);
+  assert.equal(suggestion.type, 'normal');
+});
+
+test('set de aproximación primero + set efectivo después -> sugerencia usa primer set efectivo', () => {
+  const sessions: GymSession[] = [
+    {
+      id: 'session-prev',
+      date: '2026-10-01',
+      status: 'completed',
+      exercises: [
+        {
+          id: 'bench-1',
+          name: 'Press banca',
+          sets: [
+            { id: 'w1', weight: 40, reps: 10, completed: true, type: 'warmup' },
+            { id: 's1', weight: 70, reps: 9, completed: true, type: 'normal' },
+            { id: 's2', weight: 80, reps: 4, completed: true, type: 'normal' },
+          ],
+        },
+      ],
+    },
+  ];
+
+  const suggestion = getExerciseInitialSuggestion(sessions, { exerciseId: 'bench-1', exerciseName: 'Press banca' });
+  assert.ok(suggestion);
+  assert.equal(suggestion.weight, 70);
+  assert.equal(suggestion.reps, 9);
+  assert.equal(suggestion.type, 'normal');
+});
+
+test('aproximación no cuenta como PR', () => {
+  const sessions: GymSession[] = [
+    {
+      id: 'session-1',
+      date: '2026-10-01',
+      status: 'completed',
+      exercises: [
+        {
+          name: 'Sentadilla',
+          sets: [
+            // Calentamiento pesado que no debe ser PR
+            { id: 'w1', weight: 150, reps: 10, completed: true, type: 'warmup' },
+            // Set efectivo real
+            { id: 'e1', weight: 100, reps: 5, completed: true, type: 'normal' },
+          ],
+        },
+      ],
+    },
+  ];
+
+  const prs = calcDetailedPRs(sessions);
+  const squatPR = prs['sentadilla'];
+  assert.ok(squatPR);
+  // Max peso efectivo debe ser 100, NO 150
+  assert.equal(squatPR.maxWeight?.value, 100);
+  assert.equal(squatPR.maxReps?.value, 5);
+});
+
+test('aproximación no cuenta como mejor serie ni contamina volumen efectivo', () => {
+  const session: GymSession = {
+    id: 's1',
+    date: '2026-10-01',
+    status: 'completed',
+    exercises: [
+      {
+        name: 'Peso muerto',
+        sets: [
+          { id: 'w1', weight: 120, reps: 5, completed: true, type: 'warmup' },
+          { id: 'e1', weight: 100, reps: 8, completed: true, type: 'normal' },
+        ],
+      },
+    ],
+  };
+
+  const bestSet = selectBestPerformedSet(session.exercises[0].sets || []);
+  assert.ok(bestSet);
+  assert.equal(bestSet.weight, 100);
+  assert.equal(bestSet.reps, 8);
+
+  const effectiveVol = getPerformedGymVolume(session);
+  // 100 * 8 = 800, excluded 120 * 5 = 600
+  assert.equal(effectiveVol, 800);
+
+  const totalVol = getTotalGymVolume(session);
+  // 800 + 600 = 1400
+  assert.equal(totalVol, 1400);
+});
+
+test('legacy sin metadata sigue siendo set efectivo normal', () => {
+  const sessions: GymSession[] = [
+    {
+      id: 'session-legacy',
+      date: '2026-09-15',
+      status: 'completed',
+      exercises: [
+        {
+          name: 'Press militar',
+          // Sin campo type
+          sets: [
+            { id: 'leg-1', weight: 50, reps: 8, completed: true },
+          ],
+        },
+      ],
+    },
+  ];
+
+  const suggestion = getExerciseInitialSuggestion(sessions, { exerciseName: 'Press militar' });
+  assert.ok(suggestion);
+  assert.equal(suggestion.weight, 50);
+  assert.equal(suggestion.reps, 8);
+  assert.equal(suggestion.type, 'normal');
+
+  const prs = calcDetailedPRs(sessions);
+  assert.equal(prs['press militar']?.maxWeight?.value, 50);
 });

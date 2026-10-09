@@ -366,3 +366,23 @@ test('modern exercises with the same name and different ids never merge by name'
   const exercises = mergeGymModule(a, b, base).sessions[0].exercises;
   assert.deepEqual(exercises.map((exercise) => exercise.id).sort(), ['curl-a', 'curl-b']);
 });
+
+test('mergeGymModule: sync preserves type field without breaking legacy sets', () => {
+  const base = baseGym();
+  const modern = mutate(base, 'device-a', (gym) => {
+    gym.sessions[0].exercises[0].sets[0].type = 'warmup';
+    gym.sessions[0].status = 'completed';
+    gym.sessions[0].startedAt = '12:00';
+    gym.sessions[0].finishedAt = '13:07';
+  });
+  const remote = mutate(base, 'device-b', (gym) => {
+    gym.sessions[0].exercises[0].sets[0].weight = 85;
+  });
+
+  const merged = mergeGymModule(modern, remote, base);
+  const set = merged.sessions[0].exercises[0].sets[0];
+  assert.equal(set.type, 'warmup');
+  assert.equal(set.weight, 85);
+  assert.equal(merged.sessions[0].startedAt, '12:00');
+  assert.equal(merged.sessions[0].finishedAt, '13:07');
+});

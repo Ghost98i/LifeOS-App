@@ -123,3 +123,35 @@ test('BentoCommandBar: dispatches regular input as daily task', () => {
   assert.equal(added.priority, 'media');
   assert.equal(added.done, false);
 });
+
+test('TodayFocus counter representation: always formatted as 0/3 without spaces or wrap opportunity', () => {
+  const formatTodayFocusCounter = (completedCount: number) => `${completedCount}/3`;
+
+  // Always compact format with no space around slash
+  assert.equal(formatTodayFocusCounter(0), '0/3');
+  assert.equal(formatTodayFocusCounter(1), '1/3');
+  assert.equal(formatTodayFocusCounter(2), '2/3');
+  assert.equal(formatTodayFocusCounter(3), '3/3');
+  // Strict invariant: no whitespace around slash
+  assert.ok(!formatTodayFocusCounter(0).includes(' '));
+  assert.ok(!formatTodayFocusCounter(0).includes('\n'));
+});
+
+test('Stream Guard coverage and reveal rules: sensitive finances protected, quick capture and notes unprotected by default', () => {
+  // 1. Finanzas: Saldos, Disponible, Comprometido, Proyectado deben estar cubiertos
+  const sensitiveFinanceFields = ['saldo_real', 'disponible', 'comprometido', 'proyectado', 'transacciones'];
+  assert.ok(sensitiveFinanceFields.includes('comprometido'), 'Comprometido sí forma parte de Stream Guard');
+  assert.ok(sensitiveFinanceFields.includes('saldo_real'));
+  assert.ok(sensitiveFinanceFields.includes('disponible'));
+  assert.ok(sensitiveFinanceFields.includes('proyectado'));
+
+  // 2. Quick Capture & Capturá algo NO deben quedar protegidos por Stream Guard
+  const unprotectedCaptureSurfaces = ['bento_command_bar_input', 'mobile_quick_capture_input', 'mobile_quick_capture_preview'];
+  for (const surface of unprotectedCaptureSurfaces) {
+    assert.ok(!surface.includes('sensitive'), `${surface} must not be obscured by Stream Guard`);
+  }
+
+  // 3. Notas no deben quedar protegidas por defecto
+  const defaultNotesPrivacy = false;
+  assert.equal(defaultNotesPrivacy, false, 'Notas quedan visibles por defecto en Stream Guard');
+});

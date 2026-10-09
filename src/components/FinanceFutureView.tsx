@@ -148,7 +148,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
             <div>
               <strong className="block font-bold">Riesgo de Déficit detectado</strong>
               <span>
-                Tu saldo proyecta caer a <strong className="font-mono">{fmtMoney(projection.minProjectedBalance)}</strong> el día <strong className="font-mono">{fmtDate(projection.minBalanceDate)}</strong>. Se sugiere diferir compromisos o ingresar fondos para evitar sobregiro.
+                Tu saldo proyecta caer a <PrivacyAmount as="strong" className="font-mono">{fmtMoney(projection.minProjectedBalance)}</PrivacyAmount> el día <strong className="font-mono">{fmtDate(projection.minBalanceDate)}</strong>. Se sugiere diferir compromisos o ingresar fondos para evitar sobregiro.
               </span>
             </div>
           </div>
@@ -157,7 +157,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
             <div className="flex items-center gap-2">
               <span className="text-base shrink-0">⚠️</span>
               <span>
-                El saldo caerá por debajo de tu colchón mínimo (<strong className="font-mono">{fmtMoney(projection.minProjectedBalance)}</strong> el {fmtDate(projection.minBalanceDate)}).
+                El saldo caerá por debajo de tu colchón mínimo (<PrivacyAmount as="strong" className="font-mono">{fmtMoney(projection.minProjectedBalance)}</PrivacyAmount> el {fmtDate(projection.minBalanceDate)}).
               </span>
             </div>
             <button type="button" onClick={onOpenCushionModal} className="text-[11px] font-bold underline cursor-pointer shrink-0">
@@ -231,7 +231,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                               )}
                             </div>
                             <p className="font-mono text-[var(--blue)] font-extrabold text-sm">
-                              Saldo estimado: {fmtMoney(pt.endingBalance)}
+                              Saldo estimado: <PrivacyAmount as="span">{fmtMoney(pt.endingBalance)}</PrivacyAmount>
                             </p>
                             {pt.netDayChange !== 0 && (
                               <p className={`font-mono text-[11px] font-bold ${
@@ -241,7 +241,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                                     ? 'text-rose-500'
                                     : 'text-[var(--text)]'
                               }`}>
-                                Flujo neto: {pt.netDayChange > 0 ? '+' : ''}{fmtMoney(pt.netDayChange)}
+                                Flujo neto: <PrivacyAmount as="span">{pt.netDayChange > 0 ? '+' : ''}{fmtMoney(pt.netDayChange)}</PrivacyAmount>
                               </p>
                             )}
                             {dayEvents.length > 0 && (
@@ -257,9 +257,9 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                                         {m ? <span>{m.icon}</span> : <span>•</span>}
                                         <span className="truncate">{ev.label}</span>
                                       </span>
-                                      <span className={`font-mono font-bold shrink-0 ${ev.type === 'income' ? 'text-emerald-500' : 'text-[var(--text)]'}`}>
+                                      <PrivacyAmount as="span" className={`font-mono font-bold shrink-0 ${ev.type === 'income' ? 'text-emerald-500' : 'text-[var(--text)]'}`}>
                                         {ev.type === 'income' ? '+' : '−'}{fmtMoney(ev.amount)}
-                                      </span>
+                                      </PrivacyAmount>
                                     </div>
                                   );
                                 })}
@@ -324,13 +324,14 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                         {item.label}
                       </span>
                     )}
-                    <span
+                    <PrivacyAmount
+                      as="span"
                       className={`font-mono font-bold text-[11px] ${
                         isIncome ? 'text-emerald-500' : 'text-[var(--text)]'
                       }`}
                     >
                       {isIncome ? '+' : '−'}{fmtMoney(item.amount)}
-                    </span>
+                    </PrivacyAmount>
                   </div>
                 );
               })}

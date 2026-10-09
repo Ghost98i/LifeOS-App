@@ -758,7 +758,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
                         <span className="text-xs shrink-0" title="Nota fijada">📌</span>
                       )}
                       {p.title && (
-                        <h3 className={`font-bold text-xs text-[var(--text)] truncate ${state.settings.privacyMode ? 'privacy-sensitive' : ''}`}>
+                        <h3 className="font-bold text-xs text-[var(--text)] truncate">
                           {p.title}
                         </h3>
                       )}
@@ -829,7 +829,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
 
                   {/* Content */}
                   <div className="flex-1">
-                    <p className={`text-[var(--text)] text-xs font-normal whitespace-pre-wrap leading-relaxed ${state.settings.privacyMode ? 'privacy-sensitive' : ''}`}>
+                    <p className="text-[var(--text)] text-xs font-normal whitespace-pre-wrap leading-relaxed">
                       {p.text}
                     </p>
                   </div>

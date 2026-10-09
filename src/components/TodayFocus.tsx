@@ -49,9 +49,9 @@ export const TodayFocus: React.FC<TodayFocusProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-[11px] font-semibold text-[var(--text-soft)]">
-            {completedCount} / 3
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="font-mono text-[11px] font-semibold text-[var(--text-soft)] whitespace-nowrap shrink-0">
+            {completedCount}/3
           </span>
           {sorted.length < 3 && !adding && (
             <div className="flex items-center gap-1.5">

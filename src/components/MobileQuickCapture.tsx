@@ -27,7 +27,6 @@ import {
   type CaptureDraft,
 } from '../lib/quickCaptureDrafts';
 import { DraftConfirmationTray } from './DraftConfirmationTray';
-import { PrivacyAmount } from './PrivacyAmount';
 
 interface MobileQuickCaptureProps {
   state: LifeOSState;
@@ -663,9 +662,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                       }
                     }}
                     placeholder="Ej: 1200 nafta, estudiar redes mañana..."
-                    className={`w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-3.5 px-4 text-sm font-medium outline-none focus:border-[var(--blue)] shadow-inner text-[var(--text)] ${
-                      state.settings.privacyMode ? 'privacy-sensitive' : ''
-                    }`}
+                    className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-3.5 px-4 text-sm font-medium outline-none focus:border-[var(--blue)] shadow-inner text-[var(--text)]"
                   />
                   <button
                     type="button"
@@ -901,9 +898,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                           value={financeInput}
                           onChange={(e) => setFinanceInput(e.target.value)}
                           placeholder="Monto, categoría o cuenta (ej: 500 super)..."
-                          className={`w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-3.5 px-4 text-sm font-medium outline-none focus:border-[var(--blue)] shadow-inner text-[var(--text)] ${
-                            state.settings.privacyMode ? 'privacy-sensitive' : ''
-                          }`}
+                          className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-3.5 px-4 text-sm font-medium outline-none focus:border-[var(--blue)] shadow-inner text-[var(--text)]"
                         />
                         <button
                           type="button"
@@ -930,9 +925,9 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                           <span
                             className={`text-xs font-mono font-bold block mt-0.5 truncate ${
                               parsedFinance.isValid ? 'text-emerald-500' : 'text-[var(--text-soft)]'
-                            } ${state.settings.privacyMode ? 'privacy-sensitive' : ''}`}
+                            }`}
                           >
-                            <PrivacyAmount>{parsedFinance.preview}</PrivacyAmount>
+                            <span>{parsedFinance.preview}</span>
                           </span>
                         </div>
                         {parsedFinance.isValid && (
@@ -991,9 +986,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                           value={manualAmount}
                           onChange={(e) => setManualAmount(e.target.value)}
                           placeholder="0"
-                          className={`w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-lg font-black outline-none focus:border-[var(--blue)] ${
-                            state.settings.privacyMode ? 'privacy-sensitive' : ''
-                          }`}
+                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-lg font-black outline-none focus:border-[var(--blue)]"
                         />
                       </label>
                       <label>

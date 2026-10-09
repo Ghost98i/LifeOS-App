@@ -38,6 +38,8 @@ import { FinanceAnalyticsView } from './FinanceAnalyticsView';
 import { FinanceFutureView } from './FinanceFutureView';
 import { FinanceCategoryModal } from './FinanceCategoryModal';
 import { FinanceReviewInbox } from './FinanceReviewInbox';
+import { FinanceTransferModal } from './FinanceTransferModal';
+import { FinanceReconcileModal } from './FinanceReconcileModal';
 import { setMonthlyCategoryLimit, setMonthlyGlobalLimit } from '../lib/financeBudget';
 import { getActiveCategories, getAllCategories, setCategoryBudget } from '../lib/financeCategories';
 import {
@@ -84,6 +86,9 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [txModalInitialType, setTxModalInitialType] = useState<'gasto' | 'ingreso'>('gasto');
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [isReconcileModalOpen, setIsReconcileModalOpen] = useState(false);
+  const [reconcileAccountId, setReconcileAccountId] = useState<string>('');
 
   // Projections Horizon & Memoized calculations
   const [projHorizon, setProjHorizon] = useState<30 | 60 | 90>(30);
@@ -737,15 +742,14 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         }
       />
 
-      {/* 2. Hero Editorial Asimétrico: Variante Completa en Resumen/Cuentas, Compacta en Análisis/Futuro */}
+      {/* 2. Cabecera Financiera Compacta y Compartida */}
       <FinanceHero
         state={state}
         cashFlow={cashFlow}
-        variant={activeTab === 'analisis' || activeTab === 'proyeccion' ? 'compact' : 'full'}
+        variant={activeTab === 'movimientos' ? 'full' : 'compact'}
         displayMode={financeCustomization.heroDisplayMode}
-        showCommitmentsStrip={financeCustomization.showCommitmentsStrip && financeCustomization.visibleSections.commitments !== false}
         onOpenNewTx={() => handleOpenNewTx('gasto')}
-        onOpenTransfer={() => setActiveTab('cuentas')}
+        onOpenTransfer={() => setIsTransferModalOpen(true)}
         onOpenCommitmentModal={() => {
           resetComForm();
           setIsCommitmentModalOpen(true);
@@ -828,7 +832,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         <div className="space-y-6 animate-in fade-in">
           {/* Warning if no accounts exist */}
           {state.finance.accounts.length === 0 && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs font-semibold text-red-600 dark:text-red-400 flex items-center justify-between">
+            <div className="p-3.5 bg-red-500/10 border border-red-500/20 rounded-2xl text-xs font-semibold text-red-600 dark:text-red-400 flex items-center justify-between">
               <span>⚠️ Creá al menos una cuenta bancaria antes de registrar movimientos.</span>
               <button
                 type="button"
@@ -840,66 +844,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
             </div>
           )}
 
-          {/* Quick Action Bar above table */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="finance-text-primary text-base sm:text-lg font-black tracking-tight">
-                  Libro Diario de Movimientos
-                </h2>
-              </div>
-              <p className="finance-text-secondary text-xs">
-                Registro histórico con filtros bajo demanda y conciliación instantánea
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setIsCategoryModalOpen(true)}
-                className="finance-control px-2.5 py-1.5 text-xs font-semibold rounded-xl border flex items-center gap-1.5 cursor-pointer transition-all"
-                title="Administrar categorías"
-              >
-                <AppIcon name="settings" className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Categorías</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleOpenNewTx('ingreso')}
-                className="px-3 py-1.5 text-xs font-bold rounded-xl text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 bg-emerald-500/5 hover:bg-emerald-500/10 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                title="Registrar ingreso directo"
-              >
-                <AppIcon name="plus" className="h-3.5 w-3.5" />
-                <span>+ Ingreso</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleOpenNewTx('gasto')}
-                className="px-3 py-1.5 text-xs font-bold rounded-xl text-rose-600 dark:text-rose-400 border border-rose-500/25 bg-rose-500/5 hover:bg-rose-500/10 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                title="Registrar gasto directo"
-              >
-                <AppIcon name="plus" className="h-3.5 w-3.5" />
-                <span>+ Gasto</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Monthly Budgets Progress */}
-          {financeCustomization.visibleSections.budgets !== false && (
-            <FinanceBudgetProgress
-              state={state}
-              categories={state.finance.categories}
-              catSpent={catSpent}
-              budgets={state.finance.budgets}
-              onSetBudget={handleSetBudget}
-              onSetGlobalBudget={handleSetGlobalBudget}
-              onOpenCategoryManager={() => setIsCategoryModalOpen(true)}
-            />
-          )}
-
-          {/* Review Inbox (Fase 2.2 & 2.3) */}
+          {/* Review Inbox (Sólo si existen excepciones reales, cero superficie si limpia) */}
           <FinanceReviewInbox
             state={state}
             onMarkReviewed={handleMarkReviewed}
@@ -911,6 +856,50 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
             onUpdateTx={handleQuickUpdateTx}
             onPayCommitment={openPayCommitment}
           />
+
+          {/* Quick Action Bar above table */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <div>
+              <h2 className="finance-text-primary text-base sm:text-lg font-black tracking-tight">
+                Movimientos recientes
+              </h2>
+              <p className="finance-text-secondary text-xs">
+                Búsqueda, filtros y registro contable al día
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCategoryModalOpen(true)}
+                className="finance-control px-2.5 py-1.5 text-xs font-semibold rounded-xl border flex items-center gap-1.5 cursor-pointer transition-all min-h-[38px]"
+                title="Administrar categorías"
+              >
+                <AppIcon name="settings" className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Categorías</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleOpenNewTx('ingreso')}
+                className="px-3 py-1.5 text-xs font-bold rounded-xl text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 bg-emerald-500/5 hover:bg-emerald-500/10 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs min-h-[38px]"
+                title="Registrar ingreso directo"
+              >
+                <AppIcon name="plus" className="h-3.5 w-3.5" />
+                <span>+ Ingreso</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleOpenNewTx('gasto')}
+                className="px-3 py-1.5 text-xs font-bold rounded-xl text-rose-600 dark:text-rose-400 border border-rose-500/25 bg-rose-500/5 hover:bg-rose-500/10 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs min-h-[38px]"
+                title="Registrar gasto directo"
+              >
+                <AppIcon name="plus" className="h-3.5 w-3.5" />
+                <span>+ Gasto</span>
+              </button>
+            </div>
+          </div>
 
           {/* Transaction History Clean Table with 1-Click Filters */}
           {financeCustomization.visibleSections.transactions !== false && (
@@ -939,26 +928,46 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
           onDeleteDebt={handleDeleteDebt}
           onAddInvestment={handleAddInvestment}
           onDeleteInvestment={handleDeleteInvestment}
+          onOpenTransfer={() => setIsTransferModalOpen(true)}
+          onOpenReconcile={(accId) => {
+            setReconcileAccountId(accId);
+            setIsReconcileModalOpen(true);
+          }}
         />
       )}
 
-      {/* AREA 3: ANÁLISIS & EVOLUCIÓN */}
+      {/* AREA 3: ANÁLISIS & EVOLUCIÓN (INCLUYE PRESUPUESTOS) */}
       {activeTab === 'analisis' && (
-        <FinanceAnalyticsView
-          state={state}
-          ingresoMes={ingreso}
-          gastadoMes={gastado}
-          balanceMes={balance}
-          patrimonioNeto={patrimonio}
-          fijoMes={fijoMes}
-          gastoVariable={gastoVariable}
-          totalGastadoAnio={totalGastadoAnio}
-          gananciaReventa={rstats.gananciaTotal}
-          catSpentThisMonth={catSpent}
-          catSpentAllTime={allTimeSpent}
-          monthlyEvolutionData={monthlyEvolutionData}
-          cmp={cmp}
-        />
+        <div className="space-y-6 animate-in fade-in">
+          {/* Monthly Budgets Progress (Reubicado desde Resumen a Análisis) */}
+          {financeCustomization.visibleSections.budgets !== false && (
+            <FinanceBudgetProgress
+              state={state}
+              categories={state.finance.categories}
+              catSpent={catSpent}
+              budgets={state.finance.budgets}
+              onSetBudget={handleSetBudget}
+              onSetGlobalBudget={handleSetGlobalBudget}
+              onOpenCategoryManager={() => setIsCategoryModalOpen(true)}
+            />
+          )}
+
+          <FinanceAnalyticsView
+            state={state}
+            ingresoMes={ingreso}
+            gastadoMes={gastado}
+            balanceMes={balance}
+            patrimonioNeto={patrimonio}
+            fijoMes={fijoMes}
+            gastoVariable={gastoVariable}
+            totalGastadoAnio={totalGastadoAnio}
+            gananciaReventa={rstats.gananciaTotal}
+            catSpentThisMonth={catSpent}
+            catSpentAllTime={allTimeSpent}
+            monthlyEvolutionData={monthlyEvolutionData}
+            cmp={cmp}
+          />
+        </div>
       )}
 
       {/* AREA 4: FUTURO & PROYECCIONES */}
@@ -1646,6 +1655,23 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
           saveFinanceCustomization(newCfg);
           setFinanceCustomization(newCfg);
         }}
+      />
+
+      {/* MODAL 8: Transfer between own accounts */}
+      <FinanceTransferModal
+        open={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+        state={state}
+        onUpdateState={onUpdateState}
+      />
+
+      {/* MODAL 9: Contextual account reconciliation */}
+      <FinanceReconcileModal
+        open={isReconcileModalOpen}
+        onClose={() => setIsReconcileModalOpen(false)}
+        state={state}
+        onUpdateState={onUpdateState}
+        accountId={reconcileAccountId}
       />
     </div>
   );

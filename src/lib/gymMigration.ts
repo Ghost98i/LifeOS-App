@@ -158,7 +158,8 @@ function normalizeSet(value: unknown, fallbackId: string, defaultCompleted = fal
     : candidate.completedAt
       ? true
       : defaultCompleted;
-  return {
+  const isWarmup = candidate.isWarmup === true || candidate.type === 'warmup';
+  const set: GymSet = {
     id: stablePart(candidate.id, fallbackId),
     weight: numeric(candidate.weight),
     reps,
@@ -166,6 +167,10 @@ function normalizeSet(value: unknown, fallbackId: string, defaultCompleted = fal
     completedAt: typeof candidate.completedAt === 'string' ? candidate.completedAt : null,
     rpe: typeof candidate.rpe === 'number' && !Number.isNaN(candidate.rpe) ? candidate.rpe : undefined,
   };
+  if (isWarmup) {
+    set.type = 'warmup';
+  }
+  return set;
 }
 
 export function migrateExercise(

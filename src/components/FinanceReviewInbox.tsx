@@ -42,34 +42,28 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
   const attentionCount = totalItems + reviewInbox.attentionCommitments.length;
 
   if (attentionCount === 0) {
-    return (
-      <div className="finance-surface-subtle border border-[var(--border)] rounded-2xl px-4 py-3 flex items-center justify-between text-xs text-[var(--text-soft)]">
-        <div className="flex items-center gap-2">
-          <span className="text-emerald-500 font-bold">✓</span>
-          <span className="font-semibold text-[var(--text)]">Bandeja de Revisión al día</span>
-          <span>· No hay movimientos con excepciones pendientes.</span>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   return (
-    <div className="finance-surface border border-[var(--border)] rounded-2xl p-4 sm:p-5 space-y-4">
+    <div className="finance-surface border border-[var(--finance-border)] rounded-2xl p-4 sm:p-5 space-y-4 animate-in fade-in">
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400 font-bold text-xs">
+          <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400 font-bold text-xs shrink-0">
             <AppIcon name="inbox" className="h-4 w-4" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-black text-sm text-[var(--text)]">Bandeja de Revisión</h3>
+              <h3 className="font-extrabold text-sm text-[var(--finance-text-primary)]">
+                Atención requerida
+              </h3>
               <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300">
-                {totalItems} pendiente{totalItems === 1 ? '' : 's'}
+                {attentionCount} pendiente{attentionCount === 1 ? '' : 's'}
               </span>
             </div>
-            <p className="text-[11px] text-[var(--text-soft)]">
-              Revisá excepciones reales: categorías dudosas, posibles duplicados y compromisos compatibles
+            <p className="text-xs text-[var(--finance-text-muted)]">
+              Movimientos o compromisos que requieren confirmación manual
             </p>
           </div>
         </div>
@@ -116,7 +110,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                   {att.kind === 'overdue' ? '⚠️ Vencido:' : att.kind === 'compatible_movement' ? '🔗 Compatible:' : '⏰ Próximo:'}
                 </span>
                 <span className="font-semibold">{att.commitment.name}</span>
-                <span className="font-mono font-bold">({fmtMoney(att.commitment.amount)})</span>
+                <PrivacyAmount as="span" className="font-mono font-bold">({fmtMoney(att.commitment.amount)})</PrivacyAmount>
                 <span className="text-[11px] opacity-80">· {att.label}</span>
               </div>
 
@@ -322,9 +316,9 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-[var(--text)]">{cand.name}</span>
                               <span className="text-[var(--text-faint)]">·</span>
-                              <span className="font-mono font-bold text-[var(--text)]">
+                              <PrivacyAmount as="span" className="font-mono font-bold text-[var(--text)]">
                                 {cand.currency === 'USD' ? 'U$S ' : '$U '}{fmtMoney(cand.amount)}
-                              </span>
+                              </PrivacyAmount>
                               <span className="text-[var(--text-faint)]">·</span>
                               <span className="text-[11px] text-[var(--text-soft)]">{cand.cycleLabel}</span>
                             </div>

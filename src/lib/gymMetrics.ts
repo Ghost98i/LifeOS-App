@@ -1,4 +1,4 @@
-import type { Exercise, ExerciseEquipment, GymSession, GymSet, MuscleGroup } from '../types';
+import type { Exercise, ExerciseEquipment, GymSession, GymSet, GymSetType, MuscleGroup } from '../types';
 import { inferMuscleGroup, inferExerciseEquipment } from './gymMigration';
 
 /**
@@ -127,7 +127,15 @@ function exerciseMatchesTarget(exercise: Exercise, target: ExerciseMetricTarget)
     if (exercise.id) return exercise.id === target.exerciseId;
     return normalizeExerciseName(exercise.name) === normalizeExerciseName(target.exerciseName);
   }
-  return !exercise.id && normalizeExerciseName(exercise.name) === normalizeExerciseName(target.exerciseName);
+  return normalizeExerciseName(exercise.name) === normalizeExerciseName(target.exerciseName);
+}
+
+export function isWarmupSet(set?: { type?: GymSetType | string } | null): boolean {
+  return set?.type === 'warmup';
+}
+
+export function isEffectiveSet(set?: { type?: GymSetType | string } | null): boolean {
+  return !isWarmupSet(set);
 }
 
 function validPerformedSet(set: GymSet): boolean {
@@ -167,7 +175,22 @@ export function isPerformedGymSession(session: GymSession): boolean {
   return session.status !== 'active' && hasPerformedGymWork(session);
 }
 
+/**
+ * Volumen de entrenamiento/progreso = sólo series efectivas.
+ */
 export function getPerformedGymVolume(session: GymSession): number {
+  return getCompletedGymSets(session)
+    .filter(isEffectiveSet)
+    .reduce(
+      (total, set) => total + (Number(set.weight) || 0) * (Number(set.reps) || 0),
+      0
+    );
+}
+
+/**
+ * Volumen total derivado explícitamente incluyendo series de aproximación.
+ */
+export function getTotalGymVolume(session: GymSession): number {
   return getCompletedGymSets(session).reduce(
     (total, set) => total + (Number(set.weight) || 0) * (Number(set.reps) || 0),
     0
@@ -181,7 +204,7 @@ function comparePerformedSets(a: PerformedSetMetric, b: PerformedSetMetric): num
 export function selectBestPerformedSet(sets: GymSet[]): PerformedSetMetric | null {
   let best: PerformedSetMetric | null = null;
   for (const set of sets) {
-    if (!validPerformedSet(set)) continue;
+    if (!validPerformedSet(set) || isWarmupSet(set)) continue;
     const candidate = {
       setId: set.id,
       weight: Number(set.weight) || 0,
@@ -203,10 +226,12 @@ function toExecutionMetric(session: GymSession, exercise: Exercise): ExerciseExe
     exerciseName: exercise.name,
     sets,
     bestSet: selectBestPerformedSet(sets),
-    volume: sets.reduce(
-      (total, set) => total + (Number(set.weight) || 0) * (Number(set.reps) || 0),
-      0
-    ),
+    volume: sets
+      .filter(isEffectiveSet)
+      .reduce(
+        (total, set) => total + (Number(set.weight) || 0) * (Number(set.reps) || 0),
+        0
+      ),
   };
 }
 
@@ -254,6 +279,13 @@ export interface ExerciseGhostSet {
   reps: number;
   completed?: boolean;
   rpe?: number;
+  type?: 'normal' | 'warmup';
+}
+
+export interface ExerciseRecommendation {
+  weight: number;
+  reps: number;
+  type?: 'normal' | 'warmup';
 }
 
 export interface ExerciseGhostData {
@@ -262,6 +294,7 @@ export interface ExerciseGhostData {
   exerciseName: string;
   sets: ExerciseGhostSet[];
   bestSet?: { weight: number; reps: number; e1RM: number };
+  initialSuggestion?: ExerciseRecommendation;
   totalVolume: number;
 }
 
@@ -294,6 +327,53 @@ export function getExerciseExecutions(
 }
 
 /**
+ * Obtiene la sugerencia / recomendación inicial para un ejercicio basándose estrictamente
+ * en el PRIMER set efectivo completado de la última sesión realizada de ese ejercicio.
+ *
+ * Reglas:
+ * - Última sesión realmente realizada del ejercicio.
+ * - Priorizar el primer set efectivo completado (ignora series de aproximación / warmup).
+ * - Identidad moderna por exerciseId; fallback legacy por nombre si falta ID.
+ * - Si no hay sets efectivos completados en el historial, retorna null (para que el llamador use fallback).
+ */
+export function getExerciseInitialSuggestion(
+  sessions: GymSession[],
+  targetValue: string | ExerciseMetricTarget,
+  options: { excludeSessionId?: string; upToDate?: string } = {}
+): ExerciseRecommendation | null {
+  const executions = getExerciseExecutions(sessions, targetValue, options);
+  const previous = executions[0];
+  if (!previous) return null;
+
+  // Priorizar el primer set efectivo completado
+  const firstEffective = previous.sets.find((set) =>
+    (set.completed !== false) && validPerformedSet(set) && isEffectiveSet(set)
+  );
+
+  if (firstEffective) {
+    return {
+      weight: Number(firstEffective.weight) || 0,
+      reps: Number(firstEffective.reps) || 0,
+      type: 'normal',
+    };
+  }
+
+  // Fallback si no hay sets marcados explícitamente como efectivos: primer set completado
+  const firstCompleted = previous.sets.find((set) =>
+    (set.completed !== false) && validPerformedSet(set)
+  );
+  if (firstCompleted) {
+    return {
+      weight: Number(firstCompleted.weight) || 0,
+      reps: Number(firstCompleted.reps) || 0,
+      type: isWarmupSet(firstCompleted) ? 'warmup' : 'normal',
+    };
+  }
+
+  return null;
+}
+
+/**
  * Encuentra los Ghost Values (valores de la sesión real anterior más reciente)
  * para un ejercicio específico, excluyendo la sesión actual.
  */
@@ -315,7 +395,13 @@ export function getExerciseGhostValues(
     reps: Number(set.reps) || 0,
     completed: Boolean(set.completed),
     rpe: typeof set.rpe === 'number' ? set.rpe : undefined,
+    type: isWarmupSet(set) ? 'warmup' : 'normal',
   }));
+
+  const initialSuggestion = getExerciseInitialSuggestion(sessions, targetValue, {
+    excludeSessionId: currentSessionId,
+    upToDate: beforeDate,
+  });
 
   return {
     previousSessionId: previous.sessionId,
@@ -327,6 +413,7 @@ export function getExerciseGhostValues(
       reps: previous.bestSet.reps,
       e1RM: previous.bestSet.e1RM,
     } : undefined,
+    initialSuggestion: initialSuggestion || undefined,
     totalVolume: previous.volume,
   };
 }
@@ -334,6 +421,7 @@ export function getExerciseGhostValues(
 /**
  * Aplica el historial real de cada ejercicio a la estructura de una rutina / template,
  * preservando estrictamente la cantidad de series y configuración del template sin modificarlo.
+ * Prioriza series efectivas para series regulares del template.
  */
 export function applyHistoryToTemplateExercises(
   templateExercises: Exercise[],
@@ -353,39 +441,62 @@ export function applyHistoryToTemplateExercises(
           { id: 'def-3', weight: Number(templateEx.weight) || 20, reps: 10, completed: false },
         ];
 
+    const ghostEffectiveSets = ghost ? ghost.sets.filter(isEffectiveSet) : [];
+    const ghostWarmupSets = ghost ? ghost.sets.filter(isWarmupSet) : [];
+
+    let effectiveIndex = 0;
+    let warmupIndex = 0;
+
     // Mantener exactamente la cantidad de series que dicta el template
     const mappedSets: GymSet[] = templateSets.map((tSet, idx) => {
-      if (ghost && ghost.sets[idx]) {
-        const hSet = ghost.sets[idx];
+      const isWarmup = isWarmupSet(tSet);
+      let matchedGhostSet: ExerciseGhostSet | undefined;
+
+      if (isWarmup) {
+        matchedGhostSet = ghostWarmupSets[warmupIndex++];
+      } else {
+        matchedGhostSet = ghostEffectiveSets[effectiveIndex++];
+      }
+
+      if (!matchedGhostSet && ghost && ghost.sets[idx] && isWarmupSet(ghost.sets[idx]) === isWarmup) {
+        matchedGhostSet = ghost.sets[idx];
+      }
+
+      if (matchedGhostSet) {
         return {
           id: `set-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
-          weight: hSet.weight,
-          reps: hSet.reps,
+          weight: matchedGhostSet.weight,
+          reps: matchedGhostSet.reps,
           completed: false,
+          type: (isWarmup || isWarmupSet(matchedGhostSet)) ? 'warmup' : 'normal',
         };
       }
 
-      // Si el template tiene más series que el historial, usar el fallback del template
-      // o el último valor conocido del historial
-      const fallbackWeight = ghost && ghost.sets.length > 0
-        ? ghost.sets[ghost.sets.length - 1].weight
-        : Number(tSet.weight) || Number(templateEx.weight) || 20;
-      const fallbackReps = ghost && ghost.sets.length > 0
-        ? ghost.sets[ghost.sets.length - 1].reps
-        : Number(tSet.reps) || 10;
+      // Si el template tiene más series que el historial, usar sugerencia inicial,
+      // el último valor conocido del historial, o fallback del template
+      const fallbackWeight = ghost?.initialSuggestion?.weight
+        ?? (ghost && ghost.sets.length > 0 ? ghost.sets[ghost.sets.length - 1].weight : (Number(tSet.weight) || Number(templateEx.weight) || 20));
+      const fallbackReps = ghost?.initialSuggestion?.reps
+        ?? (ghost && ghost.sets.length > 0 ? ghost.sets[ghost.sets.length - 1].reps : (Number(tSet.reps) || 10));
 
       return {
         id: `set-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
         weight: fallbackWeight,
         reps: fallbackReps,
         completed: false,
+        type: isWarmup ? 'warmup' : 'normal',
       };
     });
+
+    const initialWeight = ghost?.initialSuggestion?.weight
+      ?? mappedSets.find(isEffectiveSet)?.weight
+      ?? mappedSets[0]?.weight
+      ?? (Number(templateEx.weight) || 20);
 
     return {
       ...templateEx,
       sets: mappedSets,
-      weight: mappedSets[0]?.weight ?? (Number(templateEx.weight) || 20),
+      weight: initialWeight,
     };
   });
 }
@@ -446,6 +557,7 @@ export function calcDetailedPRs(
       let sessionExVolume = 0;
 
       for (const set of sets) {
+        if (isWarmupSet(set)) continue;
         const w = Number(set.weight) || 0;
         const r = Number(set.reps) || 0;
 
@@ -552,6 +664,7 @@ export function detectSessionPRs(
     let sessionVolumeTotal = 0;
 
     for (const set of sets) {
+      if (isWarmupSet(set)) continue;
       const w = Number(set.weight) || 0;
       const r = Number(set.reps) || 0;
       if (w <= 0 && r <= 0) continue;
@@ -705,6 +818,7 @@ export function getExerciseHistory(
     let maxR = 0;
     let maxE1rm = 0;
     for (const set of execution.sets) {
+      if (isWarmupSet(set)) continue;
       const w = Number(set.weight) || 0;
       const r = Number(set.reps) || 0;
       if (r > maxR) maxR = r;
@@ -840,6 +954,46 @@ export function getGymProgressMetrics(
 }
 
 /**
+ * Valida si un rango horario startedAt -> finishedAt es lógicamente válido.
+ * Regla: finishedAt no puede ser anterior a startedAt, salvo cruces legítimos de medianoche.
+ */
+export function isLogicalTimeRangeValid(
+  startedAt?: string | null,
+  finishedAt?: string | null
+): boolean {
+  if (!startedAt || !finishedAt) return true;
+
+  if (startedAt.includes('T') && finishedAt.includes('T')) {
+    const s = new Date(startedAt).getTime();
+    const f = new Date(finishedAt).getTime();
+    if (Number.isFinite(s) && Number.isFinite(f)) {
+      return f >= s;
+    }
+  }
+
+  const toMinutes = (val: string): number | null => {
+    if (val.includes('T')) {
+      const d = new Date(val);
+      if (!Number.isNaN(d.getTime())) return d.getHours() * 60 + d.getMinutes();
+    }
+    const m = val.match(/(\d{1,2}):(\d{2})/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+
+  const startMin = toMinutes(startedAt);
+  const finishMin = toMinutes(finishedAt);
+
+  if (startMin !== null && finishMin !== null) {
+    if (finishMin < startMin) {
+      return startMin >= 18 * 60 && finishMin <= 6 * 60;
+    }
+    return true;
+  }
+
+  return true;
+}
+
+/**
  * Calcula la duración de una sesión a partir de startedAt y finishedAt.
  * Soporta formatos ISO o formato HH:MM, incluyendo cruce de medianoche y combinaciones mixtas.
  */
@@ -847,16 +1001,19 @@ export function calculateSessionDuration(
   startedAt?: string | null,
   finishedAt?: string | null
 ): { minutes: number; formatted: string } {
-  if (!startedAt) {
+  if (!startedAt || !finishedAt) {
     return { minutes: 0, formatted: '0 min' };
   }
 
   // Si ambos son ISO completos, la diferencia directa en ms es la más precisa
-  if (startedAt.includes('T') && finishedAt && finishedAt.includes('T')) {
+  if (startedAt.includes('T') && finishedAt.includes('T')) {
     const startMs = new Date(startedAt).getTime();
     const finishMs = new Date(finishedAt).getTime();
     if (Number.isFinite(startMs) && Number.isFinite(finishMs)) {
-      const diffMin = Math.max(0, Math.round((finishMs - startMs) / 60000));
+      if (finishMs < startMs) {
+        return { minutes: 0, formatted: '0 min' };
+      }
+      const diffMin = Math.round((finishMs - startMs) / 60000);
       return formatMinutes(diffMin);
     }
   }
@@ -877,11 +1034,17 @@ export function calculateSessionDuration(
   };
 
   const startMin = toLocalMinutesOfDay(startedAt);
-  const finishMin = finishedAt ? toLocalMinutesOfDay(finishedAt) : null;
+  const finishMin = toLocalMinutesOfDay(finishedAt);
 
   if (startMin != null && finishMin != null) {
     let diff = finishMin - startMin;
-    if (diff < 0) diff += 24 * 60; // Cruce de medianoche
+    if (diff < 0) {
+      if (startMin >= 18 * 60 && finishMin <= 6 * 60) {
+        diff += 24 * 60; // Cruce de medianoche
+      } else {
+        return { minutes: 0, formatted: '0 min' };
+      }
+    }
     return formatMinutes(diff);
   }
 
@@ -894,5 +1057,8 @@ function formatMinutes(mins: number): { minutes: number; formatted: string } {
   }
   const h = Math.floor(mins / 60);
   const m = mins % 60;
-  return { minutes: mins, formatted: m > 0 ? `${h}h ${m}m` : `${h}h` };
+  return {
+    minutes: mins,
+    formatted: m > 0 ? `${h} h ${String(m).padStart(2, '0')} min` : `${h} h`,
+  };
 }

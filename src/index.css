@@ -818,22 +818,16 @@ button:active {
   cursor: pointer;
 }
 
-/* Hover reveal on desktop */
-@media (hover: hover) {
-  .privacy-mode .privacy-amount:hover,
-  .privacy-mode .privacy-blur:hover {
-    filter: blur(0) !important;
-  }
-}
-
-/* Tap / focus / active / revealed class for touch screens & mobile */
-.privacy-mode .privacy-amount:active,
-.privacy-mode .privacy-amount:focus,
+/* Deliberate reveal via click/tap/keyboard toggle (.revealed class). Accidental hover does NOT reveal. */
 .privacy-mode .privacy-amount.revealed,
-.privacy-mode .privacy-blur:active,
-.privacy-mode .privacy-blur:focus,
 .privacy-mode .privacy-blur.revealed {
   filter: blur(0) !important;
+}
+
+.privacy-mode .privacy-amount:focus-visible,
+.privacy-mode .privacy-blur:focus-visible {
+  outline: 2px solid var(--accent, #4F46E5);
+  outline-offset: 2px;
 }
 
 .privacy-mode .privacy-sensitive {
@@ -844,11 +838,13 @@ button:active {
   cursor: pointer;
 }
 
-.privacy-mode .privacy-sensitive:hover,
-.privacy-mode .privacy-sensitive:active,
-.privacy-mode .privacy-sensitive:focus,
 .privacy-mode .privacy-sensitive.revealed {
   filter: blur(0) !important;
+}
+
+.privacy-mode .privacy-sensitive:focus-visible {
+  outline: 2px solid var(--accent, #4F46E5);
+  outline-offset: 2px;
 }
 
 .toast-enter {

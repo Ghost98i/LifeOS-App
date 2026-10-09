@@ -146,7 +146,7 @@ function recordSetChanges(before: GymSet[] = [], after: GymSet[] = [], ownerPath
   for (const [id, set] of afterMap) {
     const path = `${ownerPath}/set/${part(id)}`;
     recordFieldChanges(beforeMap.get(id) as unknown as Record<string, unknown> | undefined, set as unknown as Record<string, unknown>, path,
-      ['weight', 'reps', 'completed', 'completedAt', 'rpe'], changed);
+      ['weight', 'reps', 'completed', 'completedAt', 'rpe', 'type'], changed);
   }
   for (const id of beforeMap.keys()) if (!afterMap.has(id)) deleted.add(`${ownerPath}/set/${part(id)}`);
 }
@@ -313,7 +313,8 @@ function mergeCollection<T>(
 
 function mergeSet(local: GymSet, remote: GymSet, baseline: GymSet | undefined, path: string, context: MergeContext): GymSet {
   const completed = resolveField(`${path}/completed`, local.completed, remote.completed, baseline?.completed, context);
-  return {
+  const type = resolveField(`${path}/type`, local.type, remote.type, baseline?.type, context);
+  const merged: GymSet = {
     id: local.id || remote.id,
     weight: resolveField(`${path}/weight`, local.weight, remote.weight, baseline?.weight, context),
     reps: resolveField(`${path}/reps`, local.reps, remote.reps, baseline?.reps, context),
@@ -323,6 +324,8 @@ function mergeSet(local: GymSet, remote: GymSet, baseline: GymSet | undefined, p
       : null,
     rpe: resolveField(`${path}/rpe`, local.rpe, remote.rpe, baseline?.rpe, context),
   };
+  if (type !== undefined) merged.type = type;
+  return merged;
 }
 
 function buildExerciseAliases(collections: Exercise[][]): Map<string, string> {

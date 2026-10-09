@@ -337,7 +337,7 @@ const DraftCard: React.FC<DraftCardProps> = ({
           )}
 
           {(draft.kind === 'note' || draft.kind === 'idea' || draft.kind === 'inbox' || draft.kind === 'work') && (
-            <div className={`text-[var(--text)] ${state.settings.privacyMode && draft.kind === 'note' ? 'privacy-sensitive' : ''}`}>
+            <div className="text-[var(--text)]">
               {'text' in draft ? (draft as any).text : draft.rawText}
             </div>
           )}
@@ -357,7 +357,7 @@ const DraftCard: React.FC<DraftCardProps> = ({
           )}
 
           {draft.notes && (
-            <div className={`text-[11px] text-[var(--text-faint)] italic ${state.settings.privacyMode ? 'privacy-sensitive' : ''}`}>{draft.notes}</div>
+            <div className="text-[11px] text-[var(--text-faint)] italic">{draft.notes}</div>
           )}
         </div>
       )}
@@ -725,9 +725,7 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
           onChange={(e) =>
             onUpdateDraft({ ...draft, text: e.target.value } as any)
           }
-          className={`px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium outline-none resize-none ${
-            state.settings.privacyMode && draft.kind === 'note' ? 'privacy-sensitive' : ''
-          }`}
+          className="px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium outline-none resize-none"
         />
       </div>
 

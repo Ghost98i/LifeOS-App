@@ -207,7 +207,7 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
               placeholder={isFocused ? 'Ej. 1200 nafta, repasar física mañana, idea nueva...' : '✦ Capturá algo: gasto, tarea, examen, nota rápida...'}
               className={`flex-1 min-w-0 bg-transparent font-medium text-[var(--text)] placeholder:text-[var(--text-faint)] outline-none transition-all ${
                 isFocused || input.trim() ? 'text-sm sm:text-base' : 'text-xs sm:text-sm'
-              } ${state.settings.privacyMode ? 'privacy-sensitive' : ''}`}
+              }`}
             />
 
             {/* Desktop Quick Shortcuts (Search & Universal Modal) */}
