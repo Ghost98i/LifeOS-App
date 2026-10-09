@@ -202,7 +202,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   return (
     <div className="relative space-y-5 sm:space-y-6">
-      <header className="relative isolate flex min-h-[180px] overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--hero-bg)] px-5 py-6 shadow-[var(--card-shadow)] sm:min-h-[208px] sm:px-8 sm:py-8">
+      <header className="relative isolate flex min-h-[184px] overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--hero-bg)] px-5 py-6 shadow-[var(--card-shadow)] sm:min-h-[224px] lg:min-h-[236px] sm:px-8 sm:py-8">
         <AlpineDayCycleBackdrop forcePeriod={dayPeriod} compact />
         <div className="relative z-10 flex w-full flex-col justify-between gap-8 sm:flex-row sm:items-end">
           <div className="max-w-[72%] space-y-1.5 sm:max-w-[58%]">
@@ -368,7 +368,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
 export const DashboardSkeleton: React.FC = () => (
   <div className="space-y-6 animate-pulse">
-    <div className="h-48 rounded-3xl border border-[var(--border)] bg-[var(--hero-bg)]" />
+    <div className="h-[184px] sm:h-[224px] lg:h-[236px] rounded-3xl border border-[var(--border)] bg-[var(--hero-bg)]" />
     <div className="h-16 rounded-2xl border border-[var(--border)] bg-[var(--card)]" />
     <div className="flex flex-col gap-7 lg:flex-row lg:gap-8">
       <div className="space-y-7 lg:flex-[1.7]"><div className="h-64 border-y border-[var(--border)] bg-[var(--card)]/30" /><div className="h-72 border-y border-[var(--border)] bg-[var(--card)]/30" /></div>

@@ -62,15 +62,15 @@ export const AlpineDayCycleBackdrop: React.FC<AlpineDayCycleBackdropProps> = ({
           decoding="async"
           fetchPriority="high"
           onError={() => setFailedScene(resolvedScene)}
-          className="absolute inset-0 h-full w-full object-cover object-[62%_54%] opacity-80 saturate-[0.82] contrast-[1.03] transition-opacity duration-500 dark:opacity-95 dark:saturate-[0.88] sm:object-[68%_54%]"
+          className={`absolute inset-0 h-full w-full object-cover hero-scene-${period} opacity-92 saturate-[0.96] contrast-[1.02] transition-opacity duration-500 dark:opacity-96 dark:saturate-[0.95]`}
         />
       )}
 
       <div
-        className="absolute inset-0"
+        className="hero-scrim absolute inset-0"
         style={{
           background: sceneAvailable
-            ? 'linear-gradient(90deg, color-mix(in srgb, var(--hero-overlay) 88%, transparent) 0%, color-mix(in srgb, var(--hero-overlay) 58%, transparent) 35%, color-mix(in srgb, var(--hero-overlay) 10%, transparent) 72%, transparent 100%)'
+            ? undefined
             : `radial-gradient(ellipse at 78% 22%, ${config.skyTone.accentGlow} 0%, transparent 42%), radial-gradient(ellipse at 28% 8%, ${config.skyTone.ambientColor} 0%, transparent 58%), var(--hero-bg)`,
         }}
       />
@@ -79,7 +79,9 @@ export const AlpineDayCycleBackdrop: React.FC<AlpineDayCycleBackdropProps> = ({
         <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-[var(--hero-bg)] via-[var(--hero-bg)]/45 to-transparent" />
       )}
 
-      <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-[var(--hero-bg)] via-[var(--hero-bg)]/15 to-transparent opacity-65" />
+      {sceneAvailable && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-[var(--hero-bg)]/60 via-[var(--hero-bg)]/15 to-transparent opacity-50" />
+      )}
     </div>
   );
 };
