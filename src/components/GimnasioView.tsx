@@ -1883,7 +1883,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                           ? 'Mejorando'
                           : activeExerciseMetric.state === 'stable'
                             ? 'Estable'
-                            : 'Faltan datos'}
+                            : 'Aún sin tendencia'}
                       </span>
                     </div>
                     <p className="mt-2 text-4xl font-black tracking-tight tabular-nums text-[var(--text)] sm:text-5xl">

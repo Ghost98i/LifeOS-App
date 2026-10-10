@@ -323,7 +323,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
           </nav>
 
           {restTimer && (
-            <div className="lg:hidden">
+            <div className="w-full">
               {restTimer}
             </div>
           )}
@@ -628,11 +628,6 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
             </main>
 
             <aside className="min-w-0 space-y-3">
-              {restTimer && (
-                <div className="hidden lg:block">
-                  {restTimer}
-                </div>
-              )}
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
                 <div className="flex items-center justify-between gap-2">
                   <div>

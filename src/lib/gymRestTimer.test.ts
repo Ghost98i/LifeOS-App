@@ -10,7 +10,6 @@ import {
   isExerciseCompleted,
   resolveNextRestTimer,
   skipGymRestTimer,
-  startGymSession,
   updateGymSessionSet,
 } from './gymFlows';
 import { migrateGym } from './gymMigration';
