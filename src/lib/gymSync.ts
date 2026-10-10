@@ -440,6 +440,20 @@ function mergeDatePoints<T extends { date: string }>(
   }) as T, context).sort((a, b) => a.date.localeCompare(b.date));
 }
 
+function mergeGymSettings(local?: Gym['settings'], remote?: Gym['settings'], baseline?: Gym['settings']): Gym['settings'] {
+  return {
+    restBetweenSetsSeconds: remote?.restBetweenSetsSeconds !== undefined && remote.restBetweenSetsSeconds !== baseline?.restBetweenSetsSeconds
+      ? remote.restBetweenSetsSeconds
+      : (local?.restBetweenSetsSeconds ?? 120),
+    restBetweenExercisesSeconds: remote?.restBetweenExercisesSeconds !== undefined && remote.restBetweenExercisesSeconds !== baseline?.restBetweenExercisesSeconds
+      ? remote.restBetweenExercisesSeconds
+      : (local?.restBetweenExercisesSeconds ?? 180),
+    autoTimerEnabled: remote?.autoTimerEnabled !== undefined && remote.autoTimerEnabled !== baseline?.autoTimerEnabled
+      ? remote.autoTimerEnabled
+      : (local?.autoTimerEnabled ?? true),
+  };
+}
+
 /** Pure ACI join. It never reads time and never creates a revision. */
 export function mergeGymState(
   local: Gym,
@@ -464,6 +478,7 @@ export function mergeGymState(
     routineTemplates: templates,
     restDays: mergeRestDays(local.restDays || [], remote.restDays || [], baseline?.restDays || [], context),
     activeTimer: null,
+    settings: mergeGymSettings(local.settings, remote.settings, baseline?.settings),
     ...(mergedMeta ? { _sync: mergedMeta } : {}),
   };
 }

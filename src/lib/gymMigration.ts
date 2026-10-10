@@ -295,6 +295,20 @@ export function migrateGym(value: unknown): Gym {
     ? gym.activeTimer as Record<string, unknown>
     : null;
   const syncMetadata = normalizeGymSyncMetadata(gym._sync);
+  const rawSettings = gym.settings && typeof gym.settings === 'object' && !Array.isArray(gym.settings)
+    ? gym.settings as Record<string, unknown>
+    : null;
+  const settings: Gym['settings'] = {
+    restBetweenSetsSeconds: typeof rawSettings?.restBetweenSetsSeconds === 'number' && rawSettings.restBetweenSetsSeconds > 0
+      ? Math.min(600, Math.max(15, Math.round(rawSettings.restBetweenSetsSeconds)))
+      : 120,
+    restBetweenExercisesSeconds: typeof rawSettings?.restBetweenExercisesSeconds === 'number' && rawSettings.restBetweenExercisesSeconds > 0
+      ? Math.min(600, Math.max(15, Math.round(rawSettings.restBetweenExercisesSeconds)))
+      : 180,
+    autoTimerEnabled: rawSettings?.autoTimerEnabled !== undefined
+      ? Boolean(rawSettings.autoTimerEnabled)
+      : true,
+  };
   return {
     weight: Array.isArray(gym.weight) ? gym.weight as Gym['weight'] : [],
     measurements: Array.isArray(gym.measurements) ? gym.measurements as Gym['measurements'] : [],
@@ -308,8 +322,13 @@ export function migrateGym(value: unknown): Gym {
         sessionId: timer.sessionId,
         exerciseId: typeof timer.exerciseId === 'string' ? timer.exerciseId : null,
         setId: typeof timer.setId === 'string' ? timer.setId : null,
+        kind: timer.kind === 'exercise' ? 'exercise' : 'set',
+        exerciseIndex: typeof timer.exerciseIndex === 'number' ? timer.exerciseIndex : undefined,
+        targetExerciseIndex: typeof timer.targetExerciseIndex === 'number' ? timer.targetExerciseIndex : undefined,
+        minimized: timer.minimized === true,
       }
       : null,
+    settings,
     ...(syncMetadata ? { _sync: syncMetadata } : {}),
   };
 }

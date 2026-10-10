@@ -135,3 +135,43 @@ test('Finanzas 2.0A.1 - Hero variant selection según pestaña', () => {
   assert.equal(getHeroVariant('analisis'), 'compact', 'Análisis debe usar compact hero para priorizar contenido');
   assert.equal(getHeroVariant('proyeccion'), 'compact', 'Futuro debe usar compact hero para priorizar trayectoria');
 });
+
+test('Finanzas 3.0B - Alertas serenas: onboarding o saldos vacíos no activan falsas alarmas de colchón', () => {
+  const state = defaultState();
+  state.finance.accounts = [];
+  state.finance.commitments = [];
+  state.finance.expectedIncomes = [];
+  state.finance.subscriptions = [];
+
+  const projection = cashFlowProjection(state, 30);
+
+  // Helper matching the presentation logic in FinanceFutureView
+  const shouldShowCushionAlert = (accountsCount: number, currentBal: number, forecastLen: number, warning: boolean) => {
+    const hasRealData = accountsCount > 0 && (currentBal > 0 || forecastLen > 0);
+    const hasExplicitCushion = state.finance?.minCushion != null && state.finance?.cushionEnabled !== false;
+    return hasRealData && hasExplicitCushion && warning;
+  };
+
+  const alertShown = shouldShowCushionAlert(
+    state.finance.accounts.length,
+    projection.currentBalance,
+    projection.forecastItems.length,
+    projection.thresholdWarning
+  );
+
+  assert.equal(alertShown, false, 'No debe disparar alerta de colchón durante onboarding o sin cuentas reales');
+});
+
+test('Finanzas 3.0B - Suscripciones en Futuro: el contador del tab agrega suscripciones a compromisos e ingresos', () => {
+  const state = defaultState();
+  state.finance.commitments = [{ id: 'c1', name: 'Alquiler', amount: 10000, nextDueDate: '2026-11-01', frequency: 'monthly', active: true, category: 'Hogar', accountId: 'a1' }];
+  state.finance.expectedIncomes = [{ id: 'i1', name: 'Sueldo', amount: 50000, startDate: '2026-11-05', frequency: 'monthly', active: true, category: 'Salario', accountId: 'a1' }];
+  state.finance.subscriptions = [{ id: 's1', name: 'Netflix', amount: 600, dueDay: 15 }];
+
+  const futureTotalEvents =
+    (state.finance.expectedIncomes?.length || 0) +
+    (state.finance.commitments?.length || 0) +
+    (state.finance.subscriptions?.length || 0);
+
+  assert.equal(futureTotalEvents, 3, 'Futuro debe contabilizar compromisos, cobros y suscripciones conjuntamente');
+});

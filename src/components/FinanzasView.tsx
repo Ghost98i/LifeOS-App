@@ -32,7 +32,6 @@ import {
 import { FinanceHero } from './FinanceHero';
 import { FinanceTransactionModal } from './FinanceTransactionModal';
 import { FinanceTransactionTable } from './FinanceTransactionTable';
-import { FinanceBudgetProgress } from './FinanceBudgetProgress';
 import { FinanceAccountsView } from './FinanceAccountsView';
 import { FinanceAnalyticsView } from './FinanceAnalyticsView';
 import { FinanceFutureView } from './FinanceFutureView';
@@ -819,9 +818,9 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         >
           <AppIcon name="trendingUp" className="h-4 w-4" />
           <span>Futuro</span>
-          {(state.finance.expectedIncomes?.length || 0) + (state.finance.commitments?.length || 0) > 0 && (
+          {(state.finance.expectedIncomes?.length || 0) + (state.finance.commitments?.length || 0) + (state.finance.subscriptions?.length || 0) > 0 && (
             <span className="finance-surface-subtle hidden sm:inline-block rounded-full px-2 py-0.5 font-mono text-[10px] text-[var(--finance-text-secondary)]">
-              {(state.finance.expectedIncomes?.length || 0) + (state.finance.commitments?.length || 0)}
+              {(state.finance.expectedIncomes?.length || 0) + (state.finance.commitments?.length || 0) + (state.finance.subscriptions?.length || 0)}
             </span>
           )}
         </button>
@@ -922,8 +921,6 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
           onUpdateState={onUpdateState}
           onAddAccount={handleAddAccount}
           onDeleteAccount={handleDeleteAccount}
-          onAddSubscription={handleAddSubscription}
-          onDeleteSubscription={handleDeleteSubscription}
           onAddDebt={handleAddDebt}
           onDeleteDebt={handleDeleteDebt}
           onAddInvestment={handleAddInvestment}
@@ -936,38 +933,26 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         />
       )}
 
-      {/* AREA 3: ANÁLISIS & EVOLUCIÓN (INCLUYE PRESUPUESTOS) */}
+      {/* AREA 3: ANÁLISIS & EVOLUCIÓN (INCLUYE PRESUPUESTOS INTEGRADOS) */}
       {activeTab === 'analisis' && (
-        <div className="space-y-6 animate-in fade-in">
-          {/* Monthly Budgets Progress (Reubicado desde Resumen a Análisis) */}
-          {financeCustomization.visibleSections.budgets !== false && (
-            <FinanceBudgetProgress
-              state={state}
-              categories={state.finance.categories}
-              catSpent={catSpent}
-              budgets={state.finance.budgets}
-              onSetBudget={handleSetBudget}
-              onSetGlobalBudget={handleSetGlobalBudget}
-              onOpenCategoryManager={() => setIsCategoryModalOpen(true)}
-            />
-          )}
-
-          <FinanceAnalyticsView
-            state={state}
-            ingresoMes={ingreso}
-            gastadoMes={gastado}
-            balanceMes={balance}
-            patrimonioNeto={patrimonio}
-            fijoMes={fijoMes}
-            gastoVariable={gastoVariable}
-            totalGastadoAnio={totalGastadoAnio}
-            gananciaReventa={rstats.gananciaTotal}
-            catSpentThisMonth={catSpent}
-            catSpentAllTime={allTimeSpent}
-            monthlyEvolutionData={monthlyEvolutionData}
-            cmp={cmp}
-          />
-        </div>
+        <FinanceAnalyticsView
+          state={state}
+          ingresoMes={ingreso}
+          gastadoMes={gastado}
+          balanceMes={balance}
+          patrimonioNeto={patrimonio}
+          fijoMes={fijoMes}
+          gastoVariable={gastoVariable}
+          totalGastadoAnio={totalGastadoAnio}
+          gananciaReventa={rstats.gananciaTotal}
+          catSpentThisMonth={catSpent}
+          catSpentAllTime={allTimeSpent}
+          monthlyEvolutionData={monthlyEvolutionData}
+          cmp={cmp}
+          onSetBudget={handleSetBudget}
+          onSetGlobalBudget={handleSetGlobalBudget}
+          onOpenCategoryManager={() => setIsCategoryModalOpen(true)}
+        />
       )}
 
       {/* AREA 4: FUTURO & PROYECCIONES */}
@@ -998,6 +983,8 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
           onEditIncome={beginEditExpectedIncome}
           onToggleIncome={handleToggleExpectedIncome}
           onDeleteIncome={handleDeleteExpectedIncome}
+          onAddSubscription={handleAddSubscription}
+          onDeleteSubscription={handleDeleteSubscription}
         />
       )}
 

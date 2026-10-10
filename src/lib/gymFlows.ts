@@ -3,7 +3,9 @@ import type {
   Exercise,
   ExerciseEquipment,
   Gym,
+  GymActiveTimer,
   GymSession,
+  GymSettings,
   GymSet,
   MuscleGroup,
   RoutineAppearance,
@@ -408,7 +410,12 @@ export function updateGymSessionSet(
   Object.assign(set, updates);
   if (updates.weight != null) exercise.weight = updates.weight;
   if (justCompleted) set.completedAt = completedAt;
-  if (updates.completed === false) set.completedAt = null;
+  if (updates.completed === false) {
+    set.completedAt = null;
+    if (gym.activeTimer?.sessionId === sessionId && gym.activeTimer?.setId === set.id) {
+      gym.activeTimer = null;
+    }
+  }
   return { updated: true, justCompleted };
 }
 
@@ -421,7 +428,11 @@ export function deleteGymSessionSet(
   const session = gym.sessions.find((s) => s.id === sessionId);
   const found = findSessionExercise(session, exerciseTarget);
   const exercise = found?.exercise;
-  if (!exercise?.sets[setIndex]) return false;
+  const targetSet = exercise?.sets[setIndex];
+  if (!targetSet) return false;
+  if (gym.activeTimer?.sessionId === sessionId && gym.activeTimer?.setId === targetSet.id) {
+    gym.activeTimer = null;
+  }
   exercise.sets.splice(setIndex, 1);
   return true;
 }
@@ -434,8 +445,152 @@ export function deleteGymSessionExercise(
   const session = gym.sessions.find((candidate) => candidate.id === sessionId);
   const found = findSessionExercise(session, exerciseTarget);
   if (!session || !found) return false;
+  if (gym.activeTimer?.sessionId === sessionId && (gym.activeTimer?.exerciseId === found.exercise.id || gym.activeTimer?.exerciseIndex === found.index)) {
+    gym.activeTimer = null;
+  }
   session.exercises.splice(found.index, 1);
   return true;
+}
+
+export const DEFAULT_GYM_SETTINGS: Required<GymSettings> = {
+  restBetweenSetsSeconds: 120,
+  restBetweenExercisesSeconds: 180,
+  autoTimerEnabled: true,
+};
+
+export function getGymSettings(gym?: Gym | null): Required<GymSettings> {
+  const settings = gym?.settings;
+  return {
+    restBetweenSetsSeconds: typeof settings?.restBetweenSetsSeconds === 'number' && settings.restBetweenSetsSeconds > 0
+      ? settings.restBetweenSetsSeconds
+      : DEFAULT_GYM_SETTINGS.restBetweenSetsSeconds,
+    restBetweenExercisesSeconds: typeof settings?.restBetweenExercisesSeconds === 'number' && settings.restBetweenExercisesSeconds > 0
+      ? settings.restBetweenExercisesSeconds
+      : DEFAULT_GYM_SETTINGS.restBetweenExercisesSeconds,
+    autoTimerEnabled: settings?.autoTimerEnabled !== undefined
+      ? Boolean(settings.autoTimerEnabled)
+      : DEFAULT_GYM_SETTINGS.autoTimerEnabled,
+  };
+}
+
+export function isExerciseCompleted(exercise: Exercise): boolean {
+  if (!exercise || !Array.isArray(exercise.sets) || exercise.sets.length === 0) return false;
+  const effectiveSets = exercise.sets.filter((s) => s.type !== 'warmup');
+  if (effectiveSets.length > 0) {
+    return effectiveSets.every((s) => s.completed === true);
+  }
+  return exercise.sets.every((s) => s.completed === true);
+}
+
+export function resolveNextRestTimer(
+  gym: Gym,
+  sessionId: string,
+  exerciseTarget: number | string | { exerciseId?: string; exerciseIndex?: number },
+  completedSetIndex: number,
+  now = Date.now()
+): GymActiveTimer | null {
+  const session = gym.sessions.find((s) => s.id === sessionId);
+  if (!session || session.status === 'completed') return null;
+
+  const found = findSessionExercise(session, exerciseTarget);
+  const exercise = found?.exercise;
+  if (!exercise) return null;
+
+  const settings = getGymSettings(gym);
+  if (!settings.autoTimerEnabled || exercise.timerEnabled === false) {
+    return null;
+  }
+
+  const completedSet = exercise.sets[completedSetIndex];
+  const exerciseDone = isExerciseCompleted(exercise);
+  const exerciseIndex = found.index;
+
+  if (exerciseDone) {
+    const durationSeconds = settings.restBetweenExercisesSeconds;
+    const targetExerciseIndex = exerciseIndex + 1 < session.exercises.length ? exerciseIndex + 1 : undefined;
+    return {
+      endsAt: now + durationSeconds * 1000,
+      durationSeconds,
+      sessionId,
+      exerciseId: exercise.id || null,
+      setId: completedSet?.id || null,
+      kind: 'exercise',
+      exerciseIndex,
+      targetExerciseIndex,
+    };
+  }
+
+  const durationSeconds = typeof exercise.restSeconds === 'number' && exercise.restSeconds > 0
+    ? exercise.restSeconds
+    : settings.restBetweenSetsSeconds;
+
+  return {
+    endsAt: now + durationSeconds * 1000,
+    durationSeconds,
+    sessionId,
+    exerciseId: exercise.id || null,
+    setId: completedSet?.id || null,
+    kind: 'set',
+    exerciseIndex,
+  };
+}
+
+export function applyGymRestTimerAdjustment(
+  timer: GymActiveTimer,
+  deltaSeconds: number,
+  now = Date.now()
+): { timer: GymActiveTimer | null; completed: boolean } {
+  if (deltaSeconds > 0) {
+    return {
+      timer: {
+        ...timer,
+        endsAt: timer.endsAt + deltaSeconds * 1000,
+        durationSeconds: timer.durationSeconds + deltaSeconds,
+      },
+      completed: false,
+    };
+  }
+
+  const remainingMs = timer.endsAt - now;
+  const deltaMs = Math.abs(deltaSeconds) * 1000;
+
+  if (remainingMs <= deltaMs) {
+    return {
+      timer: null,
+      completed: true,
+    };
+  }
+
+  return {
+    timer: {
+      ...timer,
+      endsAt: timer.endsAt + deltaSeconds * 1000,
+      durationSeconds: Math.max(1, timer.durationSeconds + deltaSeconds),
+    },
+    completed: false,
+  };
+}
+
+export function completeGymRestTimer(
+  gym: Gym,
+  timer: GymActiveTimer
+): { nextExerciseIndex?: number; autoAdvanced: boolean } {
+  gym.activeTimer = null;
+  if (timer.kind === 'exercise' && typeof timer.targetExerciseIndex === 'number') {
+    const session = gym.sessions.find((s) => s.id === timer.sessionId);
+    if (session && timer.targetExerciseIndex < session.exercises.length) {
+      return {
+        nextExerciseIndex: timer.targetExerciseIndex,
+        autoAdvanced: true,
+      };
+    }
+  }
+  return { autoAdvanced: false };
+}
+
+export function skipGymRestTimer(gym: Gym): { nextExerciseIndex?: number; autoAdvanced: boolean } {
+  if (!gym.activeTimer) return { autoAdvanced: false };
+  return completeGymRestTimer(gym, gym.activeTimer);
 }
 
 export function updateGymSessionExercise(

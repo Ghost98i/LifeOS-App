@@ -3,15 +3,13 @@ import { LifeOSState } from '../types';
 import { fmtDate, fmtMoney } from '../lib/storage';
 import { AppIcon } from './AppIcon';
 import { PrivacyAmount } from './PrivacyAmount';
-import { calcDebtsTotal, calcInvestmentsTotal, calcSubscriptionsTotal } from '../lib/calculations';
+import { calcDebtsTotal, calcInvestmentsTotal } from '../lib/calculations';
 
 interface FinanceAccountsViewProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => void;
   onAddAccount: (name: string, balance: number) => void;
   onDeleteAccount: (id: string) => void;
-  onAddSubscription?: (name: string, amount: number, dueDay: number | null) => void;
-  onDeleteSubscription?: (id: string) => void;
   onAddDebt: (name: string, amount: number, monthlyPayment: number, dueDate: string | null) => void;
   onDeleteDebt: (id: string) => void;
   onAddInvestment: (name: string, amount: number) => void;
@@ -24,8 +22,6 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
   state,
   onAddAccount,
   onDeleteAccount,
-  onAddSubscription,
-  onDeleteSubscription,
   onAddDebt,
   onDeleteDebt,
   onAddInvestment,
@@ -37,11 +33,6 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
   const [accName, setAccName] = useState('');
   const [accBalance, setAccBalance] = useState('');
-
-  const [isAddSubOpen, setIsAddSubOpen] = useState(false);
-  const [subName, setSubName] = useState('');
-  const [subAmount, setSubAmount] = useState('');
-  const [subDueDay, setSubDueDay] = useState('');
 
   const [isAddDebtOpen, setIsAddDebtOpen] = useState(false);
   const [debtName, setDebtName] = useState('');
@@ -57,12 +48,10 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
   const accounts = state.finance?.accounts || [];
   const debts = state.finance?.debts || [];
   const investments = state.finance?.investments || [];
-  const subscriptions = state.finance?.subscriptions || [];
 
   const totalEnCuentas = accounts.reduce((acc, a) => acc + Number(a.balance || 0), 0);
   const totalDebts = calcDebtsTotal(state);
   const totalInvs = calcInvestmentsTotal(state);
-  const totalSubs = calcSubscriptionsTotal(state);
   const patrimonioNeto = totalEnCuentas + totalInvs - totalDebts;
 
   const handleCreateAccount = (e: React.FormEvent) => {
@@ -97,22 +86,6 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
     setInvName('');
     setInvAmount('');
     setIsAddInvOpen(false);
-  };
-
-  const handleCreateSub = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!subName.trim() || !Number(subAmount)) return;
-    if (onAddSubscription) {
-      onAddSubscription(
-        subName.trim(),
-        Number(subAmount),
-        subDueDay ? Math.min(31, Math.max(1, Number(subDueDay))) : null
-      );
-    }
-    setSubName('');
-    setSubAmount('');
-    setSubDueDay('');
-    setIsAddSubOpen(false);
   };
 
   return (
@@ -296,7 +269,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 pt-1">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
           {/* Deudas & Préstamos */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
@@ -414,74 +387,6 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
               </div>
             )}
           </div>
-
-          {/* Suscripciones Recurrentes (Acceso discreto hasta 3.0B) */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-extrabold text-[var(--finance-text-primary)]">
-                  Suscripciones
-                </span>
-                {totalSubs > 0 && (
-                  <span className="text-[10px] font-mono text-rose-500 font-bold">
-                    (−<PrivacyAmount as="span">{fmtMoney(totalSubs)}</PrivacyAmount>/m)
-                  </span>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsAddSubOpen(true)}
-                className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-              >
-                + Registrar suscripción
-              </button>
-            </div>
-
-            {subscriptions.length === 0 ? (
-              <div className="p-3 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] flex items-center justify-between text-xs text-[var(--finance-text-muted)]">
-                <span>Sin suscripciones registradas</span>
-                <button
-                  type="button"
-                  onClick={() => setIsAddSubOpen(true)}
-                  className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                >
-                  + Agregar
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {subscriptions.map((sub) => (
-                  <div
-                    key={sub.id}
-                    className="p-3 rounded-xl border border-[var(--finance-border)] bg-[var(--finance-surface-subtle)] flex items-center justify-between text-xs"
-                  >
-                    <div>
-                      <span className="font-semibold text-[var(--finance-text-primary)] block truncate">{sub.name}</span>
-                      <span className="text-[10px] text-[var(--finance-text-muted)]">
-                        {sub.dueDay ? `Día ${sub.dueDay} de cada mes` : 'Mensual'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <PrivacyAmount as="span" className="font-mono font-bold text-rose-500">
-                        −{fmtMoney(sub.amount)}
-                      </PrivacyAmount>
-                      {onDeleteSubscription && (
-                        <button
-                          type="button"
-                          onClick={() => onDeleteSubscription(sub.id)}
-                          className="text-[var(--finance-text-muted)] hover:text-rose-500 px-1 cursor-pointer"
-                          title="Eliminar suscripción"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
       </section>
 
@@ -545,79 +450,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
         </div>
       )}
 
-      {/* Modal: Add Subscription */}
-      {isAddSubOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
-          onClick={() => setIsAddSubOpen(false)}
-        >
-          <div
-            className="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="font-extrabold text-sm text-[var(--text)]">Nueva suscripción</h3>
-              <button
-                type="button"
-                onClick={() => setIsAddSubOpen(false)}
-                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg"
-              >
-                ✕
-              </button>
-            </div>
-            <form onSubmit={handleCreateSub} className="space-y-3">
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                  Servicio
-                </label>
-                <input
-                  required
-                  autoFocus
-                  type="text"
-                  value={subName}
-                  onChange={(e) => setSubName(e.target.value)}
-                  placeholder="Ej. Netflix, Spotify, Gimnasio..."
-                  className="w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500 font-medium"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                  Costo mensual
-                </label>
-                <input
-                  required
-                  type="number"
-                  step="any"
-                  value={subAmount}
-                  onChange={(e) => setSubAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full p-2.5 text-xs font-mono font-bold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                  Día de cobro en el mes (opcional)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="31"
-                  value={subDueDay}
-                  onChange={(e) => setSubDueDay(e.target.value)}
-                  placeholder="Ej. 15"
-                  className="w-full p-2.5 text-xs font-mono font-bold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer shadow-xs active:scale-95 transition-all min-h-[44px]"
-              >
-                Guardar suscripción
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+
 
       {/* Modal: Add Debt */}
       {isAddDebtOpen && (
@@ -763,80 +596,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
         </div>
       )}
 
-      {/* Modal: Add Subscription (Acceso discreto hasta 3.0B) */}
-      {isAddSubOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
-          onClick={() => setIsAddSubOpen(false)}
-        >
-          <div
-            className="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="font-extrabold text-sm text-[var(--text)]">Registrar suscripción recurrente</h3>
-              <button
-                type="button"
-                onClick={() => setIsAddSubOpen(false)}
-                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg"
-              >
-                ✕
-              </button>
-            </div>
-            <form onSubmit={handleCreateSub} className="space-y-3">
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                  Nombre del servicio
-                </label>
-                <input
-                  required
-                  autoFocus
-                  type="text"
-                  value={subName}
-                  onChange={(e) => setSubName(e.target.value)}
-                  placeholder="Ej. Netflix, Spotify, iCloud..."
-                  className="w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500 font-medium"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                  Costo mensual (UYU)
-                </label>
-                <input
-                  required
-                  type="number"
-                  step="any"
-                  min="0.01"
-                  value={subAmount}
-                  onChange={(e) => setSubAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full p-2.5 text-xs font-mono font-bold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                  Día de cobro en el mes (opcional)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="31"
-                  value={subDueDay}
-                  onChange={(e) => setSubDueDay(e.target.value)}
-                  placeholder="1 - 31"
-                  className="w-full p-2.5 text-xs font-mono rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
-                />
-              </div>
-              <button
-                type="submit"
-                className="w-full py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer shadow-xs active:scale-95 transition-all min-h-[44px]"
-              >
-                Guardar suscripción
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 };

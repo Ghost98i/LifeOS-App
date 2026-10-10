@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -66,11 +66,13 @@ import {
   getActiveGymSession,
   getPerformedGymVolume,
   duplicateGymTemplate,
+  getGymSettings,
   isPerformedGymSession,
   previewExerciseHistoryPropagation,
   previewNormalizeGymHistory,
   reorderGymTemplateExercise,
   requestGymSessionDeletion,
+  resolveNextRestTimer,
   startGymSession,
   updateGymTemplate,
   updateGymTemplateExercise,
@@ -78,6 +80,7 @@ import {
   updateGymSession,
   updateGymSessionSet,
 } from '../lib/gymFlows';
+import { GymRestSettingsModal } from './GymRestSettingsModal';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
 import {
@@ -179,8 +182,48 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(initialEditingTemplateId);
 
   // Live Workout Mobile Navigation State
-  const [liveExIdx, setLiveExIdx] = useState<number>(0);
-  const [liveSetIdx, setLiveSetIdx] = useState<number>(0);
+  const [liveExIdx, setLiveExIdx] = useState<number>(() => {
+    const active = getActiveGymSession(state.gym);
+    if (!active || !active.exercises || active.exercises.length === 0) return 0;
+    const firstIncompleteIdx = active.exercises.findIndex((ex) =>
+      (ex.sets || []).some((s) => !s.completed)
+    );
+    return firstIncompleteIdx >= 0 ? firstIncompleteIdx : 0;
+  });
+  const [liveSetIdx, setLiveSetIdx] = useState<number>(() => {
+    const active = getActiveGymSession(state.gym);
+    if (!active || !active.exercises || active.exercises.length === 0) return 0;
+    const firstIncompleteIdx = active.exercises.findIndex((ex) =>
+      (ex.sets || []).some((s) => !s.completed)
+    );
+    const ex = active.exercises[firstIncompleteIdx >= 0 ? firstIncompleteIdx : 0];
+    const setIdx = ex?.sets?.findIndex((s) => !s.completed) ?? 0;
+    return setIdx >= 0 ? setIdx : 0;
+  });
+
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+
+  const handleRestTimerFinish = useCallback(() => {
+    const timer = state.gym.activeTimer;
+    if (!timer) return;
+    if (timer.kind === 'exercise') {
+      const activeSession = getActiveGymSession(state.gym);
+      if (activeSession) {
+        const nextIdx = typeof timer.targetExerciseIndex === 'number'
+          ? timer.targetExerciseIndex
+          : (typeof timer.exerciseIndex === 'number' ? timer.exerciseIndex + 1 : liveExIdx + 1);
+        if (nextIdx < activeSession.exercises.length) {
+          const nextEx = activeSession.exercises[nextIdx];
+          const firstIncomplete = nextEx?.sets?.findIndex((s) => !s.completed) ?? -1;
+          setLiveExIdx(nextIdx);
+          setLiveSetIdx(firstIncomplete >= 0 ? firstIncomplete : 0);
+        }
+      }
+    }
+    onUpdateState((draft) => {
+      draft.gym.activeTimer = null;
+    });
+  }, [state.gym, liveExIdx, onUpdateState]);
 
   // Plate Calculator Modal state
   const [calculatorTarget, setCalculatorTarget] = useState<{
@@ -482,19 +525,17 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
       const ex = s?.exercises[exerciseIndex];
       const result = updateGymSessionSet(draft.gym, sessionId, { exerciseId: ex?.id, exerciseIndex }, setIndex, updates);
       if (result.justCompleted) {
-          const targetEx = s?.exercises[exerciseIndex];
-          const targetSet = targetEx?.sets[setIndex];
-          playSound('success');
-          if (s && targetEx && targetSet && targetEx.timerEnabled !== false) {
-            const durationSeconds = targetEx.restSeconds || 90;
-            draft.gym.activeTimer = {
-              endsAt: Date.now() + durationSeconds * 1000,
-              durationSeconds,
-              sessionId: s.id,
-              exerciseId: targetEx.id,
-              setId: targetSet.id,
-            };
-          }
+        playSound('success');
+        const nextTimer = resolveNextRestTimer(
+          draft.gym,
+          sessionId,
+          { exerciseId: ex?.id, exerciseIndex },
+          setIndex,
+          Date.now()
+        );
+        if (nextTimer) {
+          draft.gym.activeTimer = nextTimer;
+        }
       }
     });
   };
@@ -886,6 +927,9 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
         <GymRestTimerBar
           state={state}
           onUpdateState={onUpdateState}
+          onComplete={handleRestTimerFinish}
+          onSkip={handleRestTimerFinish}
+          onOpenSettings={() => setIsSettingsModalOpen(true)}
         />
       )}
 
@@ -900,15 +944,29 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
               setIndex={liveSafeSetIdx}
               previousSet={livePreviousSet}
               previousSessionBest={livePreviousSessionBest}
+              previousGhostSets={liveGhost?.sets || null}
               exerciseSuggestions={COMMON_EXERCISE_SUGGESTIONS}
               restTimer={
                 state.gym.activeTimer ? (
                   <GymRestTimerBar
                     state={state}
                     onUpdateState={onUpdateState}
+                    onComplete={handleRestTimerFinish}
+                    onSkip={handleRestTimerFinish}
+                    onOpenSettings={() => setIsSettingsModalOpen(true)}
+                    nextExerciseName={
+                      state.gym.activeTimer.kind === 'exercise' && activeWorkoutSession
+                        ? activeWorkoutSession.exercises[
+                            typeof state.gym.activeTimer.targetExerciseIndex === 'number'
+                              ? state.gym.activeTimer.targetExerciseIndex
+                              : liveSafeExIdx + 1
+                          ]?.name || null
+                        : null
+                    }
                   />
                 ) : undefined
               }
+              onOpenSettings={() => setIsSettingsModalOpen(true)}
               onSelectExercise={setLiveExIdx}
               onSelectSet={setLiveSetIdx}
               onAdjustWeight={handleLiveAdjustWeight}
@@ -917,6 +975,18 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                 handleUpdateSet(activeWorkoutSession.id, liveSafeExIdx, liveSafeSetIdx, updates)
               }
               onToggleCurrentSet={handleLiveCompleteCurrentSet}
+              onToggleSet={(sIdx) => {
+                if (!activeWorkoutSession || !liveCurrentEx?.sets[sIdx]) return;
+                const targetSet = liveCurrentEx.sets[sIdx];
+                const nextCompleted = !targetSet.completed;
+                handleUpdateSet(activeWorkoutSession.id, liveSafeExIdx, sIdx, { completed: nextCompleted });
+                if (nextCompleted && liveSets.length > sIdx + 1 && sIdx === liveSafeSetIdx) {
+                  setLiveSetIdx(sIdx + 1);
+                }
+              }}
+              onUpdateSetByIndex={(sIdx, updates) =>
+                handleUpdateSet(activeWorkoutSession.id, liveSafeExIdx, sIdx, updates)
+              }
               onAddSet={(exerciseIndex) => handleAddSet(activeWorkoutSession.id, exerciseIndex)}
               onDeleteSet={(exerciseIndex, setIndex) =>
                 handleDeleteSet(activeWorkoutSession.id, exerciseIndex, setIndex)
@@ -1082,14 +1152,25 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                       </p>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowTemplates((v) => !v)}
-                    className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--surface-muted)]"
-                  >
-                    <AppIcon name={showTemplates ? 'x' : 'plus'} className="h-4 w-4" />
-                    {showTemplates ? 'Cancelar' : 'Nueva rutina'}
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsSettingsModalOpen(true)}
+                      className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-bold text-[var(--text-soft)] transition-colors hover:border-[var(--blue)] hover:text-[var(--text)]"
+                      title="Configurar descansos automáticos"
+                    >
+                      <AppIcon name="clock" className="h-4 w-4" />
+                      <span>Descansos</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowTemplates((v) => !v)}
+                      className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--surface-muted)]"
+                    >
+                      <AppIcon name={showTemplates ? 'x' : 'plus'} className="h-4 w-4" />
+                      {showTemplates ? 'Cancelar' : 'Nueva rutina'}
+                    </button>
+                  </div>
                 </div>
 
                 {showTemplates && (
@@ -2006,6 +2087,18 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
           onClose={() => setHistoryExercise(null)}
         />
       )}
+
+      {/* Gym Rest Timer Settings Modal */}
+      <GymRestSettingsModal
+        settings={getGymSettings(state.gym)}
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        onSave={(nextSettings) => {
+          onUpdateState((draft) => {
+            draft.gym.settings = nextSettings;
+          });
+        }}
+      />
     </div>
   );
 };
@@ -3023,12 +3116,12 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
     <article
       data-latest-session-summary
       data-history-session-summary
-      className="overflow-visible rounded-3xl bg-[var(--card)] shadow-sm ring-1 ring-inset ring-[var(--border)]"
+      className="overflow-visible rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xs transition-all hover:border-[var(--border-strong)]"
     >
-      <div className="p-4 sm:p-6">
+      <div className="p-3.5 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-500/10 text-[var(--blue)]">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-[var(--blue)]">
               <AppIcon name="calendar" className="h-5 w-5" />
             </span>
             <div className="min-w-0">
@@ -3040,63 +3133,83 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
                   <AppIcon name="check" className="h-3 w-3" />
                   Completada
                 </span>
+                {presentation.durationLabel && (
+                  <span className="text-[10px] font-semibold text-[var(--text-faint)]">
+                    · {presentation.durationLabel}
+                  </span>
+                )}
+                {presentation.prExerciseCount > 0 && (
+                  <span className="text-[10px] font-bold text-amber-600 dark:text-amber-300">
+                    · {presentation.prExerciseCount} PR{presentation.prExerciseCount === 1 ? '' : 's'}
+                  </span>
+                )}
               </div>
-              <h3 className="mt-1 truncate text-lg font-black tracking-tight text-[var(--text)] sm:text-xl">
+              <h3 className="mt-0.5 truncate text-base font-black tracking-tight text-[var(--text)] sm:text-lg">
                 {presentation.name}
               </h3>
+              {session.exercises.length > 0 && (
+                <p className="mt-0.5 truncate text-xs text-[var(--text-faint)]">
+                  {session.exercises.map((e) => e.name).join(' · ')}
+                </p>
+              )}
             </div>
           </div>
           {secondaryActions}
         </div>
 
-        <dl className="mt-5 grid grid-cols-2 gap-x-5 gap-y-4 sm:grid-cols-[1.4fr_repeat(4,minmax(0,1fr))] sm:items-end">
+        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--border)]/70 pt-3 sm:grid-cols-[1.2fr_repeat(4,minmax(0,1fr))] sm:items-end">
           <div className="col-span-2 sm:col-span-1">
-            <dt className="text-[11px] font-semibold text-[var(--text-faint)]">Volumen</dt>
-            <dd className="mt-1 text-3xl font-black tracking-tight tabular-nums text-[var(--text)]">
+            <dt className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Volumen</dt>
+            <dd className="mt-0.5 text-2xl font-black tracking-tight tabular-nums text-[var(--text)]">
               {presentation.volumeKg.toLocaleString('es-UY')}
               <span className="ml-1 text-xs font-semibold text-[var(--text-soft)]">kg</span>
             </dd>
           </div>
           <div>
-            <dt className="text-[11px] text-[var(--text-faint)]">Series realizadas</dt>
-            <dd className="mt-1 text-lg font-black tabular-nums text-[var(--text)]">{presentation.completedSetCount}</dd>
+            <dt className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Series realizadas</dt>
+            <dd className="mt-0.5 text-base font-black tabular-nums text-[var(--text)]">{presentation.completedSetCount}</dd>
           </div>
           <div>
-            <dt className="text-[11px] text-[var(--text-faint)]">Ejercicios</dt>
-            <dd className="mt-1 text-lg font-black tabular-nums text-[var(--text)]">{presentation.exerciseCount}</dd>
+            <dt className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Ejercicios</dt>
+            <dd className="mt-0.5 text-base font-black tabular-nums text-[var(--text)]">{presentation.exerciseCount}</dd>
           </div>
           {presentation.durationLabel && (
             <div>
-              <dt className="text-[11px] text-[var(--text-faint)]">Duración</dt>
-              <dd className="mt-1 text-lg font-black tabular-nums text-[var(--text)]">{presentation.durationLabel}</dd>
+              <dt className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Duración</dt>
+              <dd className="mt-0.5 text-base font-black tabular-nums text-[var(--text)]">{presentation.durationLabel}</dd>
             </div>
           )}
           {presentation.prExerciseCount > 0 && (
             <div>
-              <dt className="text-[11px] text-[var(--text-faint)]">Mejores marcas</dt>
-              <dd className="mt-1 text-lg font-black tabular-nums text-amber-600 dark:text-amber-300">
+              <dt className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Mejores marcas</dt>
+              <dd className="mt-0.5 text-base font-black tabular-nums text-amber-600 dark:text-amber-300">
                 {presentation.prExerciseCount} PR{presentation.prExerciseCount === 1 ? '' : 's'}
               </dd>
             </div>
           )}
         </dl>
 
-        <div className="mt-5 flex flex-col gap-3 rounded-2xl bg-[var(--surface-muted)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-3.5 flex flex-col gap-2 rounded-xl bg-[var(--surface-muted)] px-3.5 py-2.5 sm:flex-row sm:items-center sm:justify-between">
           <p className="min-w-0 text-xs text-[var(--text-soft)]">
             {presentation.bestSet ? (
               <>
-                <span className="block font-semibold text-[var(--text-faint)]">Mejor serie</span>
-                <span className="mt-0.5 block truncate text-sm text-[var(--text)]">
-                  {presentation.bestSet.exerciseName} · <strong className="font-mono text-base">{presentation.bestSet.weight} kg × {presentation.bestSet.reps}</strong>
+                <span className="font-bold text-[var(--text-faint)]">Mejor serie: </span>
+                <span className="font-semibold text-[var(--text)]">
+                  {presentation.bestSet.exerciseName} · <strong className="font-mono">{presentation.bestSet.weight} kg × {presentation.bestSet.reps}</strong>
                 </span>
               </>
-            ) : 'Sin una mejor serie registrada.'}
+            ) : (
+              <>
+                <span className="font-bold text-[var(--text-faint)]">Mejor serie: </span>
+                <span>Sin una mejor serie registrada.</span>
+              </>
+            )}
           </p>
           <button
             type="button"
             aria-expanded={isExpanded}
             onClick={() => setIsExpanded((value) => !value)}
-            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--card)]"
+            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3 text-xs font-bold text-[var(--blue)] transition-colors hover:bg-[var(--card)]"
           >
             {isExpanded ? 'Ocultar detalle' : 'Ver detalle'}
             <AppIcon name={isExpanded ? 'chevronUp' : 'chevronDown'} className="h-4 w-4" />
@@ -3105,7 +3218,7 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
       </div>
 
       {isExpanded && (
-        <div data-latest-session-detail className="border-t border-[var(--border)] bg-[var(--card-subtle)] px-4 py-5 sm:px-6">
+        <div data-latest-session-detail className="border-t border-[var(--border)] bg-[var(--card-subtle)] px-4 py-4 sm:px-5">
           <div className="divide-y divide-[var(--border)]">
             {session.exercises.map((exercise, exerciseIndex) => {
               const inferred = inferExerciseEquipment(exercise.name);
@@ -3113,13 +3226,13 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
                 (exercise.barWeight && exercise.barWeight > 0 ? 'barra' : inferred.equipment);
               const previousBest = getPreviousExerciseStats(allSessions, session.id, exercise.name, exercise.id);
               return (
-                <section key={exercise.id || exerciseIndex} className="py-5 first:pt-0 last:pb-0">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                    <div className="flex items-center gap-3">
+                <section key={exercise.id || exerciseIndex} className="py-4 first:pt-0 last:pb-0">
+                  <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                    <div className="flex items-center gap-2.5">
                       <RoutineIdentityMark exercises={[exercise]} compact />
                       <div>
-                        <h4 className="text-sm font-black text-[var(--text)]">{exercise.name}</h4>
-                        <p className="mt-0.5 text-xs text-[var(--text-soft)]">
+                        <h4 className="text-sm font-bold text-[var(--text)]">{exercise.name}</h4>
+                        <p className="text-xs text-[var(--text-soft)]">
                           {[exercise.muscleGroup, EQUIPMENT_LABELS[equipment]].filter(Boolean).join(' · ')}
                         </p>
                       </div>
@@ -3131,24 +3244,24 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
                     )}
                   </div>
 
-                  <div className="mt-4 space-y-1">
+                  <div className="mt-3 space-y-1">
                     {(exercise.sets || []).map((set, setIndex) => (
                       <div
                         key={set.id || setIndex}
-                        className="grid min-h-11 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-3 hover:bg-[var(--surface-muted)]"
+                        className="grid min-h-11 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-2.5 hover:bg-[var(--surface-muted)]"
                       >
                         <span className="text-[11px] font-semibold text-[var(--text-faint)]">
                           {set.type === 'warmup' ? (
-                            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300">Aprox</span>
+                            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300 border border-amber-500/20">Aprox</span>
                           ) : (
                             `Serie ${setIndex + 1}`
                           )}
                         </span>
-                        <span className="text-right font-mono text-base font-black tabular-nums text-[var(--text)]">
+                        <span className="text-right font-mono text-sm font-black tabular-nums text-[var(--text)]">
                           {Number(set.weight) || 0} kg × {Number(set.reps) || 0}
                         </span>
                         {set.completed ? (
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/70" aria-label="Serie realizada" />
+                          <span className="h-2 w-2 rounded-full bg-emerald-500/80" aria-label="Serie realizada" />
                         ) : (
                           <span className="text-[10px] font-semibold text-[var(--text-faint)]">No realizada</span>
                         )}
@@ -3160,13 +3273,13 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
             })}
           </div>
 
-          <div className="mt-4 flex justify-end border-t border-[var(--border)] pt-4">
+          <div className="mt-4 flex justify-end border-t border-[var(--border)] pt-3">
             <button
               type="button"
               onClick={() => setIsEditing(true)}
-              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold text-[var(--text)] transition-colors hover:border-[var(--blue)]"
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-xs font-bold text-[var(--text)] transition-colors hover:border-[var(--blue)]"
             >
-              <AppIcon name="edit" className="h-4 w-4 text-[var(--blue)]" />
+              <AppIcon name="edit" className="h-3.5 w-3.5 text-[var(--blue)]" />
               Editar sesión
             </button>
           </div>

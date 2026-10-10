@@ -16,6 +16,7 @@ function remainingSeconds(endsAt?: number): number {
 export const GymRestOverlay: React.FC<GymRestOverlayProps> = ({ state, onUpdateState, onOpenGym }) => {
   const timer = state.gym.activeTimer;
   const timerEndsAt = timer?.endsAt;
+  const isExerciseRest = timer?.kind === 'exercise';
   const [left, setLeft] = useState(() => remainingSeconds(timer?.endsAt));
   const [announcedEnd, setAnnouncedEnd] = useState(false);
 
@@ -39,22 +40,67 @@ export const GymRestOverlay: React.FC<GymRestOverlayProps> = ({ state, onUpdateS
 
   const minutes = Math.floor(left / 60);
   const seconds = left % 60;
-  const change = (delta: number) => onUpdateState((draft) => {
-    if (!draft.gym.activeTimer) return;
-    draft.gym.activeTimer.endsAt = Math.max(Date.now(), draft.gym.activeTimer.endsAt + delta * 1000);
-    draft.gym.activeTimer.durationSeconds = Math.max(1, draft.gym.activeTimer.durationSeconds + delta);
-  });
+
+  const change = (delta: number) => {
+    if (!timer) return;
+    const now = Date.now();
+    const remainingMs = timer.endsAt - now;
+    if (delta < 0 && remainingMs <= Math.abs(delta) * 1000) {
+      playSound('beep');
+      onUpdateState((draft) => { draft.gym.activeTimer = null; });
+      return;
+    }
+    onUpdateState((draft) => {
+      if (!draft.gym.activeTimer) return;
+      draft.gym.activeTimer.endsAt = Math.max(now, draft.gym.activeTimer.endsAt + delta * 1000);
+      draft.gym.activeTimer.durationSeconds = Math.max(1, draft.gym.activeTimer.durationSeconds + delta);
+    });
+  };
 
   return (
-    <aside className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] left-3 right-3 z-[65] overflow-hidden rounded-2xl border border-blue-400/30 bg-slate-950/95 text-white shadow-2xl backdrop-blur-md sm:bottom-5 sm:left-auto sm:right-5 sm:w-[360px]">
-      <div className="h-1 bg-white/10"><div className="h-full bg-blue-400 transition-all" style={{ width: `${progress}%` }} /></div>
-      <div className="flex items-center gap-3 p-3">
-        <button onClick={onOpenGym} className="min-w-0 flex-1 text-left">
-          <span className="block text-[10px] font-black uppercase tracking-widest text-blue-300">Descanso</span>
-          <strong className="font-mono text-2xl">{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}</strong>
+    <aside
+      aria-label="Temporizador de descanso en segundo plano"
+      className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] left-3 right-3 z-[65] overflow-hidden rounded-2xl border border-blue-400/30 bg-slate-950/95 text-white shadow-2xl backdrop-blur-md sm:bottom-5 sm:left-auto sm:right-5 sm:w-[380px]"
+    >
+      <div className="h-1 bg-white/10">
+        <div
+          className={`h-full transition-all ${isExerciseRest ? 'bg-amber-400' : 'bg-blue-400'}`}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 p-3">
+        <button type="button" onClick={onOpenGym} className="min-w-0 flex-1 text-left cursor-pointer">
+          <span className={`block text-[10px] font-black uppercase tracking-widest ${isExerciseRest ? 'text-amber-300' : 'text-blue-300'}`}>
+            {isExerciseRest ? 'Descanso ejercicios' : 'Descanso series'}
+          </span>
+          <strong className="font-mono text-2xl font-bold tabular-nums">
+            {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+          </strong>
         </button>
-        <button onClick={() => change(30)} className="h-10 rounded-xl bg-white/10 px-3 text-xs font-black">+30 s</button>
-        <button onClick={() => onUpdateState((draft) => { draft.gym.activeTimer = null; })} className="h-10 rounded-xl bg-rose-500/20 px-3 text-xs font-black text-rose-200">Detener</button>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => change(-30)}
+            className="min-h-10 rounded-xl bg-white/10 px-2.5 text-xs font-black transition-colors hover:bg-white/20 active:scale-95"
+          >
+            −30s
+          </button>
+          <button
+            type="button"
+            onClick={() => change(30)}
+            className="min-h-10 rounded-xl bg-white/10 px-2.5 text-xs font-black transition-colors hover:bg-white/20 active:scale-95"
+          >
+            +30s
+          </button>
+          <button
+            type="button"
+            onClick={() => onUpdateState((draft) => { draft.gym.activeTimer = null; })}
+            className="min-h-10 rounded-xl bg-[var(--blue)] px-3 text-xs font-bold text-white transition-colors hover:bg-[var(--blue-hover)] active:scale-95"
+          >
+            Saltar
+          </button>
+        </div>
       </div>
     </aside>
   );

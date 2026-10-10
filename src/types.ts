@@ -413,13 +413,34 @@ export interface GymSyncMetadata {
   tombstones: Record<string, GymRevision>;
 }
 
+export type GymTimerKind = 'set' | 'exercise';
+
+export interface GymActiveTimer {
+  endsAt: number;
+  durationSeconds: number;
+  sessionId?: string;
+  exerciseId?: string | null;
+  setId?: string | null;
+  kind?: GymTimerKind;
+  exerciseIndex?: number;
+  targetExerciseIndex?: number;
+  minimized?: boolean;
+}
+
+export interface GymSettings {
+  restBetweenSetsSeconds?: number;
+  restBetweenExercisesSeconds?: number;
+  autoTimerEnabled?: boolean;
+}
+
 export interface Gym {
   weight: WeightPoint[];
   measurements: MeasurementPoint[];
   sessions: GymSession[];
   routineTemplates: RoutineTemplate[];
   restDays?: string[];
-  activeTimer?: any;
+  activeTimer?: GymActiveTimer | null;
+  settings?: GymSettings;
   _sync?: GymSyncMetadata;
 }
 

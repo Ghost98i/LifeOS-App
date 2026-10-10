@@ -25,6 +25,7 @@ interface ActiveWorkoutViewProps {
   setIndex: number;
   previousSet?: PreviousSetReference | null;
   previousSessionBest?: string | null;
+  previousGhostSets?: Array<{ weight: number; reps: number }> | null;
   restTimer?: React.ReactNode;
   exerciseSuggestions: string[];
   onSelectExercise: (exerciseIndex: number) => void;
@@ -33,6 +34,8 @@ interface ActiveWorkoutViewProps {
   onAdjustReps: (delta: number) => void;
   onUpdateCurrentSet: (updates: Partial<GymSet>) => void;
   onToggleCurrentSet: () => void;
+  onToggleSet?: (setIndex: number) => void;
+  onUpdateSetByIndex?: (setIndex: number, updates: Partial<GymSet>) => void;
   onAddSet: (exerciseIndex: number) => void;
   onDeleteSet: (exerciseIndex: number, setIndex: number) => void;
   onAddExercise: (payload: AddExercisePayload) => void;
@@ -47,6 +50,7 @@ interface ActiveWorkoutViewProps {
   onOpenHistory: (target: ExerciseMetricTarget) => void;
   onOpenHistoryTab: () => void;
   onOpenProgressTab: () => void;
+  onOpenSettings?: () => void;
   onFinish: () => void;
   onDeleteSession: () => void;
   onSaveAsTemplate: () => void;
@@ -86,6 +90,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
   setIndex,
   previousSet,
   previousSessionBest,
+  previousGhostSets,
   restTimer,
   exerciseSuggestions,
   onSelectExercise,
@@ -94,6 +99,8 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
   onAdjustReps,
   onUpdateCurrentSet,
   onToggleCurrentSet,
+  onToggleSet,
+  onUpdateSetByIndex,
   onAddSet,
   onDeleteSet,
   onAddExercise,
@@ -105,6 +112,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
   onOpenHistory,
   onOpenHistoryTab,
   onOpenProgressTab,
+  onOpenSettings,
   onFinish,
   onDeleteSession,
   onSaveAsTemplate,
@@ -156,6 +164,9 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
     setNewExerciseName('');
   };
 
+  const progressPercent = progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0;
+  const remainingExercises = session.exercises.length - 1 - safeExerciseIndex;
+
   return (
     <section data-active-workout-view className="mx-auto w-full min-w-0 max-w-[1180px] space-y-4 overflow-x-hidden">
       <header className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
@@ -180,53 +191,82 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
             <AppIcon name="more" className="h-5 w-5" />
           </summary>
           <div className="absolute right-0 top-12 z-30 w-56 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-xl">
+            {onOpenSettings && (
               <button
                 type="button"
-                onClick={onOpenHistoryTab}
+                onClick={onOpenSettings}
                 className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]"
               >
-                <AppIcon name="calendar" className="h-4 w-4 text-[var(--text-soft)]" />
-                Abrir historial
+                <AppIcon name="clock" className="h-4 w-4 text-[var(--text-soft)]" />
+                Ajustes de descanso
               </button>
-              <button
-                type="button"
-                onClick={onOpenProgressTab}
-                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]"
-              >
-                <AppIcon name="activity" className="h-4 w-4 text-[var(--text-soft)]" />
-                Ver progreso
-              </button>
-              <button
-                type="button"
-                onClick={onFinish}
-                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]"
-              >
-                <AppIcon name="checkCircle" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                Finalizar sesión
-              </button>
-              <button
-                type="button"
-                onClick={onSaveAsTemplate}
-                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]"
-              >
-                <AppIcon name="note" className="h-4 w-4 text-[var(--text-soft)]" />
-                Guardar como plantilla
-              </button>
-              <button
-                type="button"
-                onClick={onDeleteSession}
-                className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-rose-600 hover:bg-rose-500/10 dark:text-rose-300"
-              >
-                <AppIcon name="trash" className="h-4 w-4" />
-                Eliminar sesión
-              </button>
+            )}
+            <button
+              type="button"
+              onClick={onOpenHistoryTab}
+              className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]"
+            >
+              <AppIcon name="calendar" className="h-4 w-4 text-[var(--text-soft)]" />
+              Abrir historial
+            </button>
+            <button
+              type="button"
+              onClick={onOpenProgressTab}
+              className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]"
+            >
+              <AppIcon name="activity" className="h-4 w-4 text-[var(--text-soft)]" />
+              Ver progreso
+            </button>
+            <button
+              type="button"
+              onClick={onFinish}
+              className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]"
+            >
+              <AppIcon name="checkCircle" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              Finalizar sesión
+            </button>
+            <button
+              type="button"
+              onClick={onSaveAsTemplate}
+              className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]"
+            >
+              <AppIcon name="note" className="h-4 w-4 text-[var(--text-soft)]" />
+              Guardar como plantilla
+            </button>
+            <button
+              type="button"
+              onClick={onDeleteSession}
+              className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-rose-600 hover:bg-rose-500/10 dark:text-rose-300"
+            >
+              <AppIcon name="trash" className="h-4 w-4" />
+              Eliminar sesión
+            </button>
           </div>
         </details>
       </header>
 
       {exercise ? (
         <>
-          <nav aria-label="Ejercicios de la sesión" className="space-y-2">
+          {/* Navegación y progreso de sesión */}
+          <nav aria-label="Ejercicios de la sesión" className="space-y-2.5">
+            {/* Indicador de progreso lineal */}
+            <div className="flex items-center justify-between gap-3 text-xs text-[var(--text-soft)]">
+              <span className="font-semibold text-[var(--text)]">
+                Ejercicio {safeExerciseIndex + 1} de {session.exercises.length}
+              </span>
+              <span className="tabular-nums">
+                {progress.completed}/{progress.total} series ({progressPercent}%)
+                {remainingExercises > 0 ? ` · ${remainingExercises} restante${remainingExercises === 1 ? '' : 's'}` : ' · Último ejercicio'}
+              </span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]">
+              <div
+                className="h-full bg-[var(--blue)] transition-all duration-300"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+
+            {/* Selector anterior / siguiente con nombre de ejercicio */}
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -255,7 +295,8 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
               </button>
             </div>
 
-            <div className="no-scrollbar hidden gap-2 overflow-x-auto pb-1 sm:flex">
+            {/* Carrusel horizontal de ejercicios accesible en mobile y desktop */}
+            <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1" aria-label="Lista horizontal de ejercicios">
               {session.exercises.map((item, index) => {
                 const done = item.sets?.filter((set) => set.completed).length || 0;
                 const total = item.sets?.length || 0;
@@ -266,9 +307,9 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     key={item.id || `${item.name}-${index}`}
                     type="button"
                     onClick={() => selectExercise(index)}
-                    className={`min-h-11 shrink-0 rounded-xl border px-3 text-sm font-semibold transition-colors ${
+                    className={`min-h-11 shrink-0 rounded-xl border px-3 text-xs font-bold transition-colors ${
                       selected
-                        ? 'border-[var(--blue)] bg-[var(--blue)] text-white'
+                        ? 'border-[var(--blue)] bg-[var(--blue)] text-white shadow-xs'
                         : allDone
                           ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                           : 'border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)]'
@@ -281,12 +322,22 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
             </div>
           </nav>
 
+          {restTimer && (
+            <div className="lg:hidden">
+              {restTimer}
+            </div>
+          )}
+
           <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,820px)_minmax(260px,1fr)]">
-            <main data-active-set-editor className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xs sm:p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-semibold text-[var(--text-soft)]">Serie {safeSetIndex + 1} de {sets.length}</p>
+            <main data-active-set-editor className="min-w-0 space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xs sm:p-5">
+              {/* Encabezado del ejercicio actual */}
+              <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] pb-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-bold text-[var(--text)]">Serie {safeSetIndex + 1} de {sets.length}</p>
+                    <span className="rounded-lg bg-[var(--surface-muted)] px-2 py-0.5 text-xs font-medium text-[var(--text-soft)]">
+                      {exercise.muscleGroup || 'General'}
+                    </span>
                     {currentSet && (
                       <button
                         type="button"
@@ -308,24 +359,42 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     {plateDescription(equipment, Number(currentSet?.weight) || 0, barWeight)}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onOpenHistory({ exerciseId: exercise.id, exerciseName: exercise.name })}
-                  className="min-h-11 rounded-xl border border-[var(--border)] px-3 text-xs font-semibold text-[var(--text-soft)] transition-colors hover:text-[var(--blue)]"
-                >
-                  Historial
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {equipment === 'barra' && currentSet && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenCalculator(safeExerciseIndex, safeSetIndex, Number(currentSet.weight) || 40, barWeight)}
+                      className="min-h-11 rounded-xl border border-[var(--border)] px-2.5 text-xs font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--blue-soft)]"
+                      title="Calcular discos"
+                    >
+                      Discos
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onOpenHistory({ exerciseId: exercise.id, exerciseName: exercise.name })}
+                    className="min-h-11 rounded-xl border border-[var(--border)] px-3 text-xs font-semibold text-[var(--text-soft)] transition-colors hover:text-[var(--blue)]"
+                  >
+                    Historial
+                  </button>
+                </div>
               </div>
 
+              {/* Referencia útil y compacta de la última sesión */}
               {previousSet && (
-                <div className="mt-3 flex min-h-12 items-center justify-between gap-3 rounded-xl bg-[var(--surface-muted)] px-3 py-2.5">
-                  <div className="min-w-0">
+                <div className="flex min-h-12 items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/70 px-3.5 py-2.5">
+                  <div className="min-w-0 space-y-0.5">
+                    {previousGhostSets && previousGhostSets.length > 0 && (
+                      <p className="text-xs font-semibold text-[var(--text-soft)] truncate">
+                        Última vez: {previousGhostSets.map((s) => `${s.weight}×${s.reps}`).join(' · ')}
+                      </p>
+                    )}
                     <p className="text-xs text-[var(--text-faint)]">Última vez · serie {safeSetIndex + 1}</p>
                     <p className="font-mono text-sm font-bold text-[var(--text)]">
                       {previousSet.weight} kg × {previousSet.reps} reps
                     </p>
                     {previousSessionBest && (
-                      <p className="mt-0.5 text-[11px] text-[var(--text-soft)]">
+                      <p className="text-[11px] text-[var(--text-soft)]">
                         Mejor serie de esa sesión: {previousSessionBest}
                       </p>
                     )}
@@ -340,10 +409,125 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                 </div>
               )}
 
+              {/* Lista operativa de series del ejercicio */}
+              {sets.length > 0 && (
+                <div className="space-y-2 pt-1" aria-label="Series del ejercicio">
+                  <div className="flex items-center justify-between px-1 text-xs font-semibold text-[var(--text-faint)]">
+                    <span>Series ({sets.length})</span>
+                    <span>Toca una fila para editarla</span>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {sets.map((set, index) => {
+                      const isSelected = index === safeSetIndex;
+                      const isWarmup = set.type === 'warmup';
+                      const ghostItem = previousGhostSets?.[index];
+
+                      return (
+                        <div
+                          key={set.id || index}
+                          onClick={() => onSelectSet(index)}
+                          className={`flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-xl border px-3 py-1.5 transition-all ${
+                            isSelected
+                              ? 'border-[var(--blue)] bg-[var(--blue)]/[0.07] ring-1 ring-[var(--blue)]/30'
+                              : set.completed
+                                ? 'border-emerald-500/25 bg-emerald-500/[0.04]'
+                                : 'border-[var(--border)] bg-[var(--card)] hover:border-[var(--border-strong)]'
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-2.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const nextType = isWarmup ? 'normal' : 'warmup';
+                                if (index === safeSetIndex) {
+                                  onUpdateCurrentSet({ type: nextType });
+                                } else if (onUpdateSetByIndex) {
+                                  onUpdateSetByIndex(index, { type: nextType });
+                                }
+                              }}
+                              title={isWarmup ? 'Serie de aproximación · Clic para hacerla efectiva' : 'Serie efectiva · Clic para hacerla de aproximación'}
+                              className={`min-h-11 shrink-0 rounded-lg px-2.5 text-[11px] font-black uppercase transition-colors ${
+                                isWarmup
+                                  ? 'border border-amber-500/30 bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                                  : isSelected
+                                    ? 'border border-[var(--blue)]/40 bg-[var(--blue)]/10 text-[var(--blue)]'
+                                    : 'border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)]'
+                              }`}
+                            >
+                              {isWarmup ? 'Aprox' : `S${index + 1}`}
+                            </button>
+
+                            <div className="min-w-0">
+                              <span className="font-mono text-sm font-bold tabular-nums text-[var(--text)]">
+                                {set.weight} <span className="text-xs font-normal text-[var(--text-soft)]">kg</span> × {set.reps} <span className="text-xs font-normal text-[var(--text-soft)]">reps</span>
+                              </span>
+                              {ghostItem && (
+                                <span className="ml-2 font-mono text-[11px] text-[var(--text-faint)]">
+                                  ({ghostItem.weight}×{ghostItem.reps})
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex shrink-0 items-center gap-2">
+                            <button
+                              type="button"
+                              aria-label={set.completed ? `Desmarcar serie ${index + 1}` : `Marcar serie ${index + 1} como hecha`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (index === safeSetIndex) {
+                                  onToggleCurrentSet();
+                                } else if (onToggleSet) {
+                                  onToggleSet(index);
+                                } else if (onUpdateSetByIndex) {
+                                  onUpdateSetByIndex(index, { completed: !set.completed });
+                                }
+                              }}
+                              className={`flex h-11 w-11 items-center justify-center rounded-xl transition-all ${
+                                set.completed
+                                  ? 'border border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                                  : 'border border-[var(--border)] text-[var(--text-faint)] hover:border-[var(--blue)] hover:text-[var(--blue)]'
+                              }`}
+                            >
+                              <AppIcon name={set.completed ? 'checkCircle' : 'check'} className="h-5 w-5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => onAddSet(safeExerciseIndex)}
+                    className="flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-muted)] px-3 text-xs font-bold text-[var(--text-soft)] transition-colors hover:border-[var(--blue)] hover:text-[var(--blue)]"
+                  >
+                    <AppIcon name="plus" className="h-4 w-4" />
+                    <span>Agregar serie a este ejercicio</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Cockpit de registro del set actual */}
               {currentSet ? (
-                <div className="mt-4 space-y-4">
+                <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)]/40 p-4 sm:p-5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-soft)]">
+                      Valores para serie {safeSetIndex + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteSet(safeExerciseIndex, safeSetIndex)}
+                      className="min-h-11 rounded-xl px-2 text-xs font-semibold text-rose-500 hover:bg-rose-500/10 dark:text-rose-400"
+                    >
+                      Eliminar serie
+                    </button>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-3">
-                    <fieldset className="min-w-0 rounded-xl bg-[var(--surface-muted)] p-2.5">
+                    <fieldset className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-2.5 shadow-2xs">
                       <legend className="px-1 text-xs font-semibold text-[var(--text-soft)]">Peso · kg</legend>
                       <input
                         aria-label="Peso en kilogramos"
@@ -353,14 +537,14 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                         inputMode="decimal"
                         value={currentSet.weight}
                         onChange={(event) => onUpdateCurrentSet({ weight: Math.max(0, Number(event.target.value) || 0) })}
-                        className="mt-1 h-12 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--card)] px-2 text-center font-mono text-xl font-bold text-[var(--text)] outline-none focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-soft)]"
+                        className="mt-1 h-12 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 text-center font-mono text-xl font-bold text-[var(--text)] outline-none focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-soft)]"
                       />
                       <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                         <button
                           type="button"
                           aria-label="Restar 2,5 kg"
                           onClick={() => onAdjustWeight(-2.5)}
-                          className="min-h-11 rounded-xl border border-[var(--border)] bg-[var(--card)] text-sm font-bold text-[var(--text)] transition-colors hover:border-[var(--blue)]"
+                          className="min-h-11 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-sm font-bold text-[var(--text)] transition-colors hover:border-[var(--blue)] active:scale-[0.98]"
                         >
                           −2,5
                         </button>
@@ -368,14 +552,14 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                           type="button"
                           aria-label="Sumar 2,5 kg"
                           onClick={() => onAdjustWeight(2.5)}
-                          className="min-h-11 rounded-xl border border-[var(--border)] bg-[var(--card)] text-sm font-bold text-[var(--text)] transition-colors hover:border-[var(--blue)]"
+                          className="min-h-11 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-sm font-bold text-[var(--text)] transition-colors hover:border-[var(--blue)] active:scale-[0.98]"
                         >
                           +2,5
                         </button>
                       </div>
                     </fieldset>
 
-                    <fieldset className="min-w-0 rounded-xl bg-[var(--surface-muted)] p-2.5">
+                    <fieldset className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-2.5 shadow-2xs">
                       <legend className="px-1 text-xs font-semibold text-[var(--text-soft)]">Repeticiones</legend>
                       <input
                         aria-label="Repeticiones"
@@ -385,14 +569,14 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                         inputMode="numeric"
                         value={currentSet.reps}
                         onChange={(event) => onUpdateCurrentSet({ reps: Math.max(1, Number(event.target.value) || 1) })}
-                        className="mt-1 h-12 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--card)] px-2 text-center font-mono text-xl font-bold text-[var(--text)] outline-none focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-soft)]"
+                        className="mt-1 h-12 w-full rounded-xl border border-[var(--border-strong)] bg-[var(--bg-elevated)] px-2 text-center font-mono text-xl font-bold text-[var(--text)] outline-none focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-soft)]"
                       />
                       <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                         <button
                           type="button"
                           aria-label="Restar una repetición"
                           onClick={() => onAdjustReps(-1)}
-                          className="min-h-11 rounded-xl border border-[var(--border)] bg-[var(--card)] text-sm font-bold text-[var(--text)] transition-colors hover:border-[var(--blue)]"
+                          className="min-h-11 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-sm font-bold text-[var(--text)] transition-colors hover:border-[var(--blue)] active:scale-[0.98]"
                         >
                           −1
                         </button>
@@ -400,7 +584,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                           type="button"
                           aria-label="Sumar una repetición"
                           onClick={() => onAdjustReps(1)}
-                          className="min-h-11 rounded-xl border border-[var(--border)] bg-[var(--card)] text-sm font-bold text-[var(--text)] transition-colors hover:border-[var(--blue)]"
+                          className="min-h-11 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-sm font-bold text-[var(--text)] transition-colors hover:border-[var(--blue)] active:scale-[0.98]"
                         >
                           +1
                         </button>
@@ -441,31 +625,14 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                   </button>
                 </div>
               )}
-
-              {sets.length > 0 && (
-                <div className="no-scrollbar mt-4 flex gap-2 overflow-x-auto pb-1" aria-label="Series del ejercicio">
-                  {sets.map((set, index) => (
-                    <button
-                      key={set.id || index}
-                      type="button"
-                      onClick={() => onSelectSet(index)}
-                      className={`min-h-11 shrink-0 rounded-xl border px-3 text-sm font-semibold transition-colors ${
-                        index === safeSetIndex
-                          ? 'border-[var(--text)] bg-[var(--text)] text-[var(--bg-elevated)]'
-                          : set.completed
-                            ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                            : 'border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)]'
-                      }`}
-                    >
-                      {set.type === 'warmup' ? 'Aprox' : `Serie ${index + 1}`} · {set.weight} × {set.reps} {set.completed ? '· Hecha' : ''}
-                    </button>
-                  ))}
-                </div>
-              )}
             </main>
 
             <aside className="min-w-0 space-y-3">
-              {restTimer}
+              {restTimer && (
+                <div className="hidden lg:block">
+                  {restTimer}
+                </div>
+              )}
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
                 <div className="flex items-center justify-between gap-2">
                   <div>
@@ -512,9 +679,13 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                 </details>
               </div>
 
+              {/* Ajustes contextuales del ejercicio y sesión: reducida su competencia visual */}
               <details className="group rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-semibold text-[var(--text)]">
-                  Ajustes y mantenimiento
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-semibold text-[var(--text-soft)] hover:text-[var(--text)]">
+                  <span className="flex items-center gap-2">
+                    <AppIcon name="settings" className="h-4 w-4 text-[var(--text-faint)]" />
+                    <span>Configurar ejercicio y sesión</span>
+                  </span>
                   <AppIcon name="chevronDown" className="h-4 w-4 transition-transform group-open:rotate-180" />
                 </summary>
 
