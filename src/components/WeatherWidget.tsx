@@ -179,7 +179,7 @@ export const WeatherWidget: React.FC = () => {
               </button>
             </div>
             <div className="flex items-baseline gap-1.5 mt-0.5">
-              <span className="text-xl font-black font-mono text-[var(--text)] tracking-tight tabular-nums">
+              <span className="text-xl font-black text-[var(--text)] tracking-tight tabular-nums">
                 {weather ? `${weather.temp}°C` : '—'}
               </span>
               <span className="text-[11px] text-[var(--text-soft)] font-medium truncate">
@@ -192,7 +192,7 @@ export const WeatherWidget: React.FC = () => {
         {/* Right info: Max / Min & subtle location trigger */}
         <div className="text-right flex flex-col items-end gap-1 shrink-0">
           {weather?.maxTemp != null && weather?.minTemp != null && (
-            <div className="flex items-center gap-1 font-mono text-[10px] tabular-nums">
+            <div className="flex items-center gap-1 text-[10px] tabular-nums">
               <span className="px-1.5 py-0.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold rounded-md border border-rose-500/20">
                 ↑{weather.maxTemp}°
               </span>

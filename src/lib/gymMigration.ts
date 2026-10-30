@@ -3,6 +3,7 @@ import {
   type DayKey,
   type Exercise,
   type ExerciseEquipment,
+  type GymExerciseRestMode,
   type Gym,
   type GymSession,
   type GymSet,
@@ -21,6 +22,7 @@ interface LegacyExercise {
   sets?: unknown;
   muscleGroup?: unknown;
   restSeconds?: unknown;
+  restSecondsMode?: unknown;
   timerEnabled?: unknown;
   legacyReps?: unknown;
 }
@@ -227,6 +229,18 @@ export function migrateExercise(
     barWeight = 0;
   }
 
+  const rawRestSeconds = Number.isFinite(Number(legacy.restSeconds)) && Number(legacy.restSeconds) > 0
+    ? Math.min(600, Math.max(15, Math.round(Number(legacy.restSeconds))))
+    : undefined;
+  const restSecondsMode: GymExerciseRestMode = legacy.restSecondsMode === 'custom' || legacy.restSecondsMode === 'inherit' || legacy.restSecondsMode === 'disabled'
+    ? legacy.restSecondsMode
+    : rawRestSeconds !== undefined && rawRestSeconds !== 90
+      ? 'custom'
+      : 'inherit';
+
+  const isExplicitlyDisabled = restSecondsMode === 'disabled' || rawRestSeconds === 0;
+  const timerEnabled = isExplicitlyDisabled ? false : legacy.timerEnabled !== false;
+
   return {
     id: exerciseId,
     name: exerciseName,
@@ -235,8 +249,9 @@ export function migrateExercise(
     barWeight,
     sets: migratedSets,
     muscleGroup,
-    restSeconds: Math.min(600, Math.max(15, numeric(legacy.restSeconds) || 90)),
-    timerEnabled: legacy.timerEnabled === true,
+    ...(rawRestSeconds !== undefined ? { restSeconds: rawRestSeconds } : {}),
+    restSecondsMode,
+    timerEnabled,
     legacyReps: typeof legacy.legacyReps === 'string' ? legacy.legacyReps : parsed.legacyReps,
   };
 }
@@ -250,6 +265,19 @@ function migrateSession(value: unknown, index: number): GymSession {
         migrateExercise(exercise, id, exerciseIndex, status === 'completed')
       )
     : [];
+
+  // Solo sanar sesiones activas si sufrieron el artefacto uniforme de timerEnabled: false.
+  // Las sesiones completadas se conservan como registro histórico inmutable sin alterar historiales.
+  if (status === 'active' && exercises.length > 0) {
+    const allUniformlyFalse = exercises.every((ex) => ex.timerEnabled === false);
+    const noneExplicitlyDisabled = exercises.every((ex) => ex.restSecondsMode !== 'disabled' && ex.restSeconds !== 0);
+    if (allUniformlyFalse && noneExplicitlyDisabled) {
+      for (const ex of exercises) {
+        ex.timerEnabled = true;
+      }
+    }
+  }
+
   return {
     id,
     date: typeof legacy.date === 'string' ? legacy.date : '',
@@ -261,6 +289,24 @@ function migrateSession(value: unknown, index: number): GymSession {
   };
 }
 
+/**
+ * AMBIGÜEDAD HISTÓRICA DE `timerEnabled: false`:
+ * 
+ * Contexto:
+ * Antes del commit 8ac97c9, los ejercicios de las rutinas no persistían el campo `timerEnabled` (era `undefined`),
+ * por lo que dependían exclusivamente de la preferencia global de la aplicación (`settings.autoTimerEnabled`).
+ * Dicho commit introdujo la asignación estricta `timerEnabled: legacy.timerEnabled === true`, lo cual transformó
+ * involuntariamente todos los ejercicios sin preferencia explícita en `timerEnabled: false` de manera persistente.
+ * 
+ * Distinción implementada para no sobrescribir preferencias intencionales:
+ * 1. Intencional: El ejercicio tiene `restSecondsMode: 'disabled'`, o `restSeconds: 0`, o existe una configuración
+ *    selectiva dentro de la misma rutina (por ejemplo, algunos ejercicios en `true` y otros en `false`).
+ * 2. Artefacto heredado del bug: Todos los ejercicios de la plantilla tienen `timerEnabled: false`, ninguno
+ *    está en modo `disabled` ni tiene `0s`, y poseen descansos válidos configurados (ej. 90s, 120s).
+ * 
+ * En el caso de artefacto uniforme, la rutina se auto-sana a `true`. Las desactivaciones explícitas o selectivas
+ * se respetan sin excepción, y las sesiones históricas completadas permanecen inmutables.
+ */
 function migrateTemplate(value: unknown, index: number): RoutineTemplate {
   const legacy = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as LegacySession & {
     name?: unknown;
@@ -273,13 +319,26 @@ function migrateTemplate(value: unknown, index: number): RoutineTemplate {
     : null;
   const rawIcon = typeof rawAppearance?.icon === 'string' ? rawAppearance.icon.trim() : undefined;
   const icon = isRoutineIconName(rawIcon) ? rawIcon : undefined;
+  const rawExercises = Array.isArray(legacy.exercises)
+    ? legacy.exercises.map((exercise, exerciseIndex) => migrateExercise(exercise, id, exerciseIndex))
+    : [];
+
+  // Recuperación segura de rutinas históricas: si todos los ejercicios de la plantilla tienen timerEnabled: false
+  // como artefacto de la versión anterior y ninguno fue desactivado de forma explícita ('disabled' o 0s),
+  // se recupera timerEnabled: true. Si el usuario configuró selecciones mixtas, se respetan estrictamente.
+  const allUniformlyFalse = rawExercises.length > 0 && rawExercises.every((ex) => ex.timerEnabled === false);
+  const noneExplicitlyDisabled = rawExercises.every((ex) => ex.restSecondsMode !== 'disabled' && ex.restSeconds !== 0);
+  if (allUniformlyFalse && noneExplicitlyDisabled) {
+    for (const ex of rawExercises) {
+      ex.timerEnabled = true;
+    }
+  }
+
   const template: RoutineTemplate = {
     id,
     name: String(legacy.name || '').trim() || `Rutina ${index + 1}`,
     days: Array.isArray(legacy.days) ? legacy.days.filter((day): day is DayKey => DAYS.includes(day as DayKey)) : [],
-    exercises: Array.isArray(legacy.exercises)
-      ? legacy.exercises.map((exercise, exerciseIndex) => migrateExercise(exercise, id, exerciseIndex))
-      : [],
+    exercises: rawExercises,
   };
   if (icon) {
     template.appearance = { icon };
@@ -308,6 +367,12 @@ export function migrateGym(value: unknown): Gym {
     autoTimerEnabled: rawSettings?.autoTimerEnabled !== undefined
       ? Boolean(rawSettings.autoTimerEnabled)
       : true,
+    showQuickRestAdjustments: rawSettings?.showQuickRestAdjustments !== undefined
+      ? Boolean(rawSettings.showQuickRestAdjustments)
+      : true,
+    allowManualRestEditing: rawSettings?.allowManualRestEditing !== undefined
+      ? Boolean(rawSettings.allowManualRestEditing)
+      : false,
   };
   return {
     weight: Array.isArray(gym.weight) ? gym.weight as Gym['weight'] : [],

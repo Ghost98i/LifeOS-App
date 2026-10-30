@@ -98,9 +98,9 @@ export const QuickNoteModal: React.FC<QuickNoteModalProps> = ({
 
           {/* Footer Controls */}
           <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-1">
-            <div className="text-[11px] font-mono text-[var(--text-faint)]">
+            <div className="text-[11px] text-[var(--text-faint)]">
               <span className="hidden sm:inline">Ctrl+Enter para guardar · Esc para cerrar</span>
-              <span className="sm:hidden">{snippet.length} caracteres</span>
+              <span className="sm:hidden tabular-nums">{snippet.length} caracteres</span>
             </div>
 
             <div className="flex items-center justify-end gap-2">

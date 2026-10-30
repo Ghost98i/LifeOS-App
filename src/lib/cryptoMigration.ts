@@ -15,11 +15,14 @@
  *    - Persists WrappedKeyEnvelope locally and sets cryptoSession to unlocked.
  */
 
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDocFromServer, setDoc } from 'firebase/firestore';
 import type { LifeOSState } from '../types';
 import { saveRecoveryState } from './storage';
 import {
   SYNC_MODULES,
+  extractPureModuleData,
+  syncDataFingerprint,
+  syncModuleData,
   type SyncModuleKey,
 } from './syncModel';
 import {
@@ -42,7 +45,9 @@ export type { AccountSyncCapability };
 import {
   cloudSyncConfigured,
   writeCloudModulesAsync,
+  writeCloudMigrationModule,
   loadCloudRevisions,
+  saveCloudRevisions,
   getOrCreateDeviceId,
   getFirestoreDb,
 } from './cloudSync';
@@ -75,7 +80,20 @@ export interface CapabilityStorageHandlers {
   setCapability: (userId: string, capability: AccountSyncCapability) => Promise<void>;
   getKeyEnvelope?: (userId: string) => Promise<WrappedKeyEnvelope | null>;
   setKeyEnvelope?: (userId: string, envelope: WrappedKeyEnvelope) => Promise<void>;
-  getModule?: (userId: string, module: string) => Promise<{ isEncrypted: boolean; data: any } | null>;
+  getModule?: (userId: string, module: string) => Promise<{ isEncrypted: boolean; data: any; revision?: string } | null>;
+}
+
+/**
+ * Strict safety guard: synthetic test fallbacks are ONLY permitted in local development
+ * or local preview test runners (localhost/127.0.0.1). They are strictly disabled in
+ * any public/production client domain to prevent capability simulation or client spoofing.
+ */
+export function isSyntheticTestingAllowed(): boolean {
+  if (typeof window === 'undefined') return false;
+  const hostname = window.location.hostname || '';
+  const isLocalHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+  const isDev = Boolean(import.meta.env?.DEV);
+  return isLocalHost || isDev;
 }
 
 /**
@@ -91,10 +109,13 @@ export async function fetchCloudKeyEnvelope(
   if (handlers?.getKeyEnvelope) {
     return handlers.getKeyEnvelope(userId);
   }
+  if (isSyntheticTestingAllowed() && (window as any).__LIFEOS_SYNTHETIC_CLOUD_ENVELOPE__?.[userId]) {
+    return (window as any).__LIFEOS_SYNTHETIC_CLOUD_ENVELOPE__[userId];
+  }
   const db = customDb || getDbInstance();
   try {
     const envelopeRef = doc(db, 'users', userId, 'lifeosAccount', 'keyEnvelope');
-    const snap = await getDoc(envelopeRef);
+    const snap = await getDocFromServer(envelopeRef);
     if (!snap.exists()) return null;
     const data = snap.data();
     if (isWrappedKeyEnvelope(data)) {
@@ -150,10 +171,13 @@ export async function fetchAccountCapability(
   if (handlers) {
     return handlers.getCapability(userId);
   }
+  if (isSyntheticTestingAllowed() && (window as any).__LIFEOS_SYNTHETIC_CAPABILITY__?.[userId]) {
+    return (window as any).__LIFEOS_SYNTHETIC_CAPABILITY__[userId];
+  }
   const db = customDb || getDbInstance();
   try {
     const capabilityRef = doc(db, 'users', userId, 'lifeosAccount', 'capability');
-    const snap = await getDoc(capabilityRef);
+    const snap = await getDocFromServer(capabilityRef);
     if (!snap.exists()) return null;
     const data = snap.data();
     if (isAccountSyncCapability(data)) {
@@ -214,16 +238,17 @@ export async function executeE2EEMigration(
   if (!sessionMdek) throw new Error('Clave maestra MDEK requerida para cifrar módulos.');
 
   // 1. Safety First: Local emergency snapshot before any remote change
-  saveRecoveryState(
+  const recoverySaved = saveRecoveryState(
     currentState,
     userId,
     'manual_snapshot',
     'Snapshot preventivo automático previo a migración E2EE'
   );
+  if (!recoverySaved) throw new Error('No se pudo guardar la copia preventiva. Liberá espacio antes de reanudar el cifrado.');
 
   const handlers = options?.capabilityHandlers;
   const db = options?.customDb || (handlers ? null : getDbInstance());
-  const writer = options?.customWriter || writeCloudModulesAsync;
+  const writer = options?.customWriter || writeCloudMigrationModule;
   const deviceId = getOrCreateDeviceId();
   const baseRevisions = loadCloudRevisions(userId);
 
@@ -284,39 +309,30 @@ export async function executeE2EEMigration(
       });
     }
 
-    // Idempotency check: if already recorded in capability and remotely encrypted, we can verify and skip
+    // Checkpoints are hints, not proof. Re-read and decrypt even completed modules.
+    // A network/integrity failure must stop migration, never overwrite remote data.
     let alreadyEncrypted = completedSet.has(mod);
-
-    if (!alreadyEncrypted) {
-      if (handlers?.getModule) {
-        try {
-          const modData = await handlers.getModule(userId, mod);
-          if (modData?.isEncrypted && isCryptoEnvelope(modData.data)) {
-            await decryptSyncModule(modData.data, sessionMdek, mod, userId);
-            alreadyEncrypted = true;
-            completedSet.add(mod);
-          }
-        } catch {
-          alreadyEncrypted = false;
+    if (handlers?.getModule || db) {
+      const remote = handlers?.getModule
+        ? await handlers.getModule(userId, mod)
+        : await getDocFromServer(doc(db, 'users', userId, 'lifeosModules', mod))
+          .then(snapshot => snapshot.exists() ? snapshot.data() : null);
+      alreadyEncrypted = false;
+      if (remote) {
+        if (typeof remote.revision === 'string') baseRevisions[mod] = remote.revision;
+        else delete baseRevisions[mod];
+        if (remote.isEncrypted) {
+          if (!isCryptoEnvelope(remote.data)) throw new Error(`El módulo ${mod} tiene un formato cifrado inválido. La copia remota se conserva.`);
+          await decryptSyncModule(remote.data, sessionMdek, mod, userId);
+          alreadyEncrypted = true;
+          completedSet.add(mod);
+          saveCloudRevisions(userId, baseRevisions);
+        } else if (syncDataFingerprint(extractPureModuleData(remote.data)) !== syncDataFingerprint(syncModuleData(currentState, mod))) {
+          throw new Error(`El módulo ${mod} tiene cambios remotos pendientes. Sincronizá antes de reanudar el cifrado.`);
         }
-      } else if (db) {
-        // Check if remote is already encrypted in Firestore
-        try {
-          const modDocRef = doc(db, 'users', userId, 'lifeosModules', mod);
-          const modSnap = await getDoc(modDocRef);
-          if (modSnap.exists()) {
-            const modData = modSnap.data();
-            if (modData.isEncrypted && isCryptoEnvelope(modData.data)) {
-              // Verify that our sessionMdek can decrypt it cleanly
-              await decryptSyncModule(modData.data, sessionMdek, mod, userId);
-              alreadyEncrypted = true;
-              completedSet.add(mod);
-            }
-          }
-        } catch {
-          // Fallback to encrypting and uploading
-          alreadyEncrypted = false;
-        }
+      } else {
+        delete baseRevisions[mod];
+        if (completedSet.has(mod)) throw new Error(`No se encontró el módulo cifrado ${mod}. La migración se detuvo para conservar los datos.`);
       }
     }
 
@@ -332,6 +348,10 @@ export async function executeE2EEMigration(
         sessionMdek
       );
       await batch.completion;
+      if (batch.writes[0]?.revision) {
+        baseRevisions[mod] = batch.writes[0].revision;
+        saveCloudRevisions(userId, baseRevisions);
+      }
 
       completedSet.add(mod);
 

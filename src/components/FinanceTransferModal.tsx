@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 import type { LifeOSState } from '../types';
 import { addTransfer, deleteTransfer } from '../lib/financeFlows';
-import { fmtDate, fmtMoney, todayISO } from '../lib/storage';
+import { fmtDate, formatMoney, parseDecimalInput, todayISO } from '../lib/storage';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
 import { AppIcon } from './AppIcon';
@@ -11,7 +12,7 @@ interface FinanceTransferModalProps {
   open: boolean;
   onClose: () => void;
   state: LifeOSState;
-  onUpdateState: (updater: (draft: LifeOSState) => void) => void;
+  onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
   preselectedFromId?: string;
 }
 
@@ -29,6 +30,8 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
   const [date, setDate] = useState(todayISO());
   const [note, setNote] = useState('');
   const [showRecent, setShowRecent] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(open, dialogRef, onClose, '#finance-movement-trigger');
 
   useEffect(() => {
     if (open) {
@@ -61,9 +64,15 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
     setToId(temp);
   };
 
+  const fromAccount = accounts.find((a) => a.id === fromId);
+  const toAccount = accounts.find((a) => a.id === toId);
+  const fromCurrency = (fromAccount?.currency || 'UYU').toUpperCase();
+  const toCurrency = (toAccount?.currency || 'UYU').toUpperCase();
+  const isCrossCurrency = Boolean(fromAccount && toAccount && fromCurrency !== toCurrency);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const numAmount = Number(amount);
+    const parsed = parseDecimalInput(amount);
     if (!fromId || !toId) {
       showToast('Seleccioná ambas cuentas.', 'error');
       return;
@@ -72,13 +81,18 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
       showToast('Las cuentas de origen y destino deben ser distintas.', 'error');
       return;
     }
-    if (isNaN(numAmount) || numAmount <= 0) {
-      showToast('Ingresá un monto mayor a cero.', 'error');
+    if (isCrossCurrency) {
+      showToast(`No se permiten transferencias entre monedas distintas (${fromCurrency} → ${toCurrency}).`, 'error');
       return;
     }
+    if (parsed.error || parsed.value === null || parsed.value <= 0) {
+      showToast(parsed.error || 'Ingresá un monto mayor a cero.', 'error');
+      return;
+    }
+    const numAmount = parsed.value;
 
     try {
-      onUpdateState((draft) => {
+      const saved = onUpdateState((draft) => {
         addTransfer(draft, {
           fromAccountId: fromId,
           toAccountId: toId,
@@ -87,6 +101,7 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
           note: note.trim() || undefined,
         });
       });
+      if (saved === false) return;
       playSound('coins');
       showToast('Transferencia guardada sin alterar ingresos ni gastos.');
       onClose();
@@ -97,17 +112,16 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
 
   const handleDeleteTransfer = (id: string) => {
     try {
-      onUpdateState((draft) => {
+      const saved = onUpdateState((draft) => {
         deleteTransfer(draft, id);
       });
+      if (saved === false) return;
       showToast('Transferencia eliminada.');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Error al eliminar.', 'error');
     }
   };
 
-  const fromAccount = accounts.find((a) => a.id === fromId);
-  const toAccount = accounts.find((a) => a.id === toId);
   const recentTransfers = [...(state.finance.transfers || [])]
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, 5);
@@ -118,7 +132,11 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl overflow-hidden"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="finance-transfer-title"
+        className="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -128,7 +146,7 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
               <AppIcon name="repeat" className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="font-extrabold text-sm text-[var(--text)]">
+              <h3 id="finance-transfer-title" className="font-extrabold text-sm text-[var(--text)]">
                 Transferir entre cuentas
               </h3>
               <p className="text-xs text-[var(--text-soft)]">
@@ -148,31 +166,31 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
 
         {accounts.length < 2 ? (
           <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-200 space-y-2">
-            <p className="font-semibold">Se necesitan al menos dos cuentas para realizar una transferencia.</p>
-            <p className="text-[11px] opacity-80">Creá otra cuenta desde la pestaña Cuentas para habilitar transferencias.</p>
+            <p className="font-semibold">Sumá otra cuenta para habilitar transferencias.</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Accounts selector with Swap button */}
             <div className="grid grid-cols-1 sm:grid-cols-[1fr,auto,1fr] gap-2 items-center">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
+                <label htmlFor="finance-transfer-from" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Origen
                 </label>
                 <select
+                  id="finance-transfer-from"
                   value={fromId}
                   onChange={(e) => setFromId(e.target.value)}
                   className="w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500 font-medium"
                 >
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.name}
+                      {a.name} ({(a.currency || 'UYU').toUpperCase()})
                     </option>
                   ))}
                 </select>
                 {fromAccount && (
                   <span className="text-[10px] text-[var(--text-soft)] mt-1 block truncate">
-                    Saldo: <PrivacyAmount as="span">{fmtMoney(fromAccount.balance)}</PrivacyAmount>
+                    Saldo: <PrivacyAmount as="span">{formatMoney(fromAccount.balance, fromCurrency)}</PrivacyAmount>
                   </span>
                 )}
               </div>
@@ -189,52 +207,67 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
               </div>
 
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
+                <label htmlFor="finance-transfer-to" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Destino
                 </label>
                 <select
+                  id="finance-transfer-to"
                   value={toId}
                   onChange={(e) => setToId(e.target.value)}
                   className="w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500 font-medium"
                 >
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.name}
+                      {a.name} ({(a.currency || 'UYU').toUpperCase()})
                     </option>
                   ))}
                 </select>
                 {toAccount && (
                   <span className="text-[10px] text-[var(--text-soft)] mt-1 block truncate">
-                    Saldo: <PrivacyAmount as="span">{fmtMoney(toAccount.balance)}</PrivacyAmount>
+                    Saldo: <PrivacyAmount as="span">{formatMoney(toAccount.balance, toCurrency)}</PrivacyAmount>
                   </span>
                 )}
               </div>
             </div>
 
+            {/* Cross-currency warning */}
+            {isCrossCurrency && (
+              <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2.5">
+                <AppIcon name="shield" className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <p className="font-bold">Transferencia entre monedas distintas no permitida</p>
+                  <p className="text-[11px] opacity-90">
+                    No es posible transferir directamente entre cuentas con monedas distintas ({fromCurrency} → {toCurrency}). Celestian LifeOS no convierte monedas automáticamente.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Amount & Date */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
+                <label htmlFor="finance-transfer-amount" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Monto a transferir
                 </label>
                 <input
+                  id="finance-transfer-amount"
                   required
                   autoFocus
-                  type="number"
-                  step="any"
-                  min="0.01"
+                  type="text"
+                  inputMode="decimal"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full p-2.5 text-sm font-mono font-bold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
+                  placeholder="0,00"
+                  className="w-full p-2.5 text-sm font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
+                <label htmlFor="finance-transfer-date" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Fecha
                 </label>
                 <input
+                  id="finance-transfer-date"
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
@@ -245,10 +278,11 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
 
             {/* Note */}
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
+              <label htmlFor="finance-transfer-note" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                 Nota opcional
               </label>
               <input
+                id="finance-transfer-note"
                 type="text"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
@@ -260,7 +294,8 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
             {/* CTA */}
             <button
               type="submit"
-              className="w-full py-3 px-4 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer shadow-xs active:scale-98 transition-all min-h-[44px]"
+              disabled={isCrossCurrency}
+              className="w-full py-3 px-4 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white cursor-pointer shadow-xs active:scale-98 transition-all min-h-[44px]"
             >
               Confirmar transferencia
             </button>
@@ -295,8 +330,8 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
                         </span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <PrivacyAmount as="span" className="font-mono font-bold text-[var(--text)]">
-                          {fmtMoney(t.amount)}
+                        <PrivacyAmount as="span" className="font-bold tabular-nums text-[var(--text)]">
+                          {formatMoney(t.amount, fromAcc?.currency || 'UYU')}
                         </PrivacyAmount>
                         <button
                           type="button"

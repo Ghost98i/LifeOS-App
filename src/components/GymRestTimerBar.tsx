@@ -1,7 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { LifeOSState } from '../types';
+import type { GymActiveTimer, LifeOSState } from '../types';
 import { AppIcon } from './AppIcon';
 import { playTimerCountdownTone } from '../lib/audio';
+import {
+  applyGymRestTimerAdjustment,
+  getGymSettings,
+  setGymRestTimerRemaining,
+  toggleGymRestTimerPause,
+} from '../lib/gymFlows';
 
 interface GymRestTimerBarProps {
   state: LifeOSState;
@@ -12,9 +18,16 @@ interface GymRestTimerBarProps {
   nextExerciseName?: string | null;
 }
 
-function remainingSeconds(endsAt?: number): number {
-  return endsAt ? Math.max(0, Math.ceil((endsAt - Date.now()) / 1000)) : 0;
+function remainingSeconds(timer?: GymActiveTimer | null): number {
+  if (!timer?.endsAt) return 0;
+  if (timer.pausedAt) {
+    return timer.remainingSecondsWhenPaused ?? Math.max(0, Math.ceil((timer.endsAt - timer.pausedAt) / 1000));
+  }
+  return Math.max(0, Math.ceil((timer.endsAt - Date.now()) / 1000));
 }
+
+const RING_RADIUS = 62;
+const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
 export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
   state,
@@ -26,334 +39,225 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
 }) => {
   const timer = state.gym.activeTimer;
   const timerEndsAt = timer?.endsAt;
+  const isPaused = Boolean(timer?.pausedAt);
   const isExerciseRest = timer?.kind === 'exercise';
-  const [left, setLeft] = useState(() => remainingSeconds(timerEndsAt));
-  const [isPaused, setIsPaused] = useState(false);
-  const [pausedLeft, setPausedLeft] = useState<number | null>(null);
+  const [left, setLeft] = useState(() => remainingSeconds(timer));
   const [isMinimized, setIsMinimized] = useState(() => Boolean(timer?.minimized));
-
+  const [isManualEditorOpen, setIsManualEditorOpen] = useState(false);
+  const [manualSeconds, setManualSeconds] = useState(60);
   const lastChimeSecondRef = useRef<number | null>(null);
   const hasFinishedRef = useRef(false);
 
   useEffect(() => {
     hasFinishedRef.current = false;
-  }, [timerEndsAt, timer?.setId, timer?.exerciseId]);
+    lastChimeSecondRef.current = null;
+    setIsMinimized(Boolean(timer?.minimized));
+  }, [timerEndsAt, timer?.setId, timer?.exerciseId, timer?.minimized, isPaused]);
 
   const triggerFinish = useCallback(() => {
     if (hasFinishedRef.current) return;
     hasFinishedRef.current = true;
-    if (onComplete) {
-      onComplete();
-    } else {
-      onUpdateState((draft) => {
-        draft.gym.activeTimer = null;
-      });
-    }
+    if (onComplete) onComplete();
+    else onUpdateState((draft) => { draft.gym.activeTimer = null; });
   }, [onComplete, onUpdateState]);
 
   const handleSkip = () => {
     if (hasFinishedRef.current) return;
     hasFinishedRef.current = true;
-    if (onSkip) {
-      onSkip();
-    } else if (onComplete) {
-      onComplete();
-    } else {
-      onUpdateState((draft) => {
-        draft.gym.activeTimer = null;
-      });
-    }
-  };
-
-  // Sync timer with actual timestamps and handle tab wake-up
-  useEffect(() => {
-    if (isPaused) return;
-    const initialRem = remainingSeconds(timerEndsAt);
-    setLeft(initialRem);
-    if (!timerEndsAt) return;
-
-    const tick = () => {
-      const rem = remainingSeconds(timerEndsAt);
-      setLeft(rem);
-
-      // Subtle audio & vibration countdown feedback at 3s, 2s, 1s, 0s
-      if (rem <= 3 && rem >= 0 && lastChimeSecondRef.current !== rem) {
-        lastChimeSecondRef.current = rem;
-        playTimerCountdownTone(rem);
-      }
-
-      if (rem <= 0) {
-        triggerFinish();
-      }
-    };
-
-    const interval = window.setInterval(tick, 250);
-
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        tick();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibility);
-    window.addEventListener('focus', handleVisibility);
-
-    return () => {
-      window.clearInterval(interval);
-      document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('focus', handleVisibility);
-    };
-  }, [timerEndsAt, isPaused, triggerFinish]);
-
-  const progress = useMemo(() => {
-    if (!timer || timer.durationSeconds <= 0) return 0;
-    const current = isPaused && pausedLeft !== null ? pausedLeft : left;
-    return Math.max(0, Math.min(100, (current / timer.durationSeconds) * 100));
-  }, [left, timer, isPaused, pausedLeft]);
-
-  const adjustTimer = (deltaSeconds: number) => {
-    lastChimeSecondRef.current = null;
-    if (isPaused && pausedLeft !== null) {
-      const next = pausedLeft + deltaSeconds;
-      if (next <= 0) {
-        setIsPaused(false);
-        setPausedLeft(null);
-        triggerFinish();
-        return;
-      }
-      setPausedLeft(next);
-      return;
-    }
-
-    if (!timer) return;
-    const now = Date.now();
-    const remainingMs = timer.endsAt - now;
-    const deltaMs = deltaSeconds * 1000;
-
-    if (deltaSeconds < 0 && remainingMs + deltaMs <= 0) {
-      triggerFinish();
-      return;
-    }
-
-    onUpdateState((draft) => {
-      if (!draft.gym.activeTimer) return;
-      draft.gym.activeTimer.endsAt = Math.max(now, draft.gym.activeTimer.endsAt + deltaMs);
-      draft.gym.activeTimer.durationSeconds = Math.max(1, draft.gym.activeTimer.durationSeconds + deltaSeconds);
-    });
+    if (onSkip) onSkip();
+    else if (onComplete) onComplete();
+    else onUpdateState((draft) => { draft.gym.activeTimer = null; });
   };
 
   const togglePause = () => {
+    onUpdateState((draft) => {
+      if (draft.gym.activeTimer) {
+        draft.gym.activeTimer = toggleGymRestTimerPause(draft.gym.activeTimer);
+      }
+    });
+  };
+
+  // The display is derived from the persisted timestamp on every tick and wake-up.
+  // The SVG only visualizes that value; it is never used as a second clock.
+  useEffect(() => {
+    const tick = () => {
+      const remaining = remainingSeconds(timer);
+      setLeft(remaining);
+      if (!isPaused && remaining <= 3 && remaining >= 0 && lastChimeSecondRef.current !== remaining) {
+        lastChimeSecondRef.current = remaining;
+        playTimerCountdownTone(remaining);
+      }
+      if (!isPaused && timerEndsAt && remaining <= 0) triggerFinish();
+    };
+
+    tick();
+    if (!timerEndsAt || isPaused) return;
+    const interval = window.setInterval(tick, 250);
+    const handleWake = () => {
+      if (document.visibilityState === 'visible') tick();
+    };
+    document.addEventListener('visibilitychange', handleWake);
+    window.addEventListener('focus', handleWake);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleWake);
+      window.removeEventListener('focus', handleWake);
+    };
+  }, [timerEndsAt, isPaused, timer, triggerFinish]);
+
+  const progress = useMemo(() => {
+    if (!timer || timer.durationSeconds <= 0) return 0;
+    return Math.max(0, Math.min(1, left / timer.durationSeconds));
+  }, [left, timer]);
+  const settings = getGymSettings(state.gym);
+
+  const adjustTimer = (deltaSeconds: number) => {
     if (!timer) return;
-    if (isPaused) {
-      const remaining = pausedLeft ?? left;
-      setIsPaused(false);
-      setPausedLeft(null);
-      lastChimeSecondRef.current = null;
-      onUpdateState((draft) => {
-        if (draft.gym.activeTimer) {
-          draft.gym.activeTimer.endsAt = Date.now() + remaining * 1000;
-        }
-      });
-    } else {
-      setPausedLeft(left);
-      setIsPaused(true);
-    }
+    lastChimeSecondRef.current = null;
+    onUpdateState((draft) => {
+      if (!draft.gym.activeTimer) return;
+      const res = applyGymRestTimerAdjustment(draft.gym.activeTimer, deltaSeconds);
+      if (res.completed) {
+        triggerFinish();
+      } else if (res.timer) {
+        draft.gym.activeTimer = res.timer;
+      }
+    });
   };
 
   const toggleMinimize = () => {
-    setIsMinimized((prev) => {
-      const next = !prev;
+    setIsMinimized((current) => {
+      const next = !current;
       onUpdateState((draft) => {
-        if (draft.gym.activeTimer) {
-          draft.gym.activeTimer.minimized = next;
-        }
+        if (draft.gym.activeTimer) draft.gym.activeTimer.minimized = next;
       });
       return next;
     });
   };
 
-  const isRunning = Boolean(timer && (left > 0 || (isPaused && pausedLeft !== null)));
-  const displaySeconds = isPaused && pausedLeft !== null ? pausedLeft : left;
-  const minutes = Math.floor(displaySeconds / 60);
-  const seconds = displaySeconds % 60;
+  const openManualEditor = () => {
+    setManualSeconds(Math.max(1, left));
+    setIsManualEditorOpen(true);
+  };
 
-  if (!isRunning) return null;
+  const applyManualEdit = () => {
+    const nextSeconds = Math.max(1, Math.round(manualSeconds) || 1);
+    onUpdateState((draft) => {
+      if (!draft.gym.activeTimer) return;
+      draft.gym.activeTimer = setGymRestTimerRemaining(draft.gym.activeTimer, nextSeconds, Date.now());
+    });
+    setIsManualEditorOpen(false);
+  };
+
+  if (!timer || left <= 0) return null;
+
+  const minutes = Math.floor(left / 60);
+  const seconds = left % 60;
+  const formatted = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  const dashOffset = RING_CIRCUMFERENCE * (1 - progress);
+  const urgency = left <= 5 ? 'critical' : left <= 15 ? 'ending' : isExerciseRest ? 'long' : 'normal';
+  const manualEditor = isManualEditorOpen ? (
+    <div role="dialog" aria-modal="true" aria-labelledby="gym-manual-rest-title" className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" onClick={() => setIsManualEditorOpen(false)}>
+      <div className="w-full max-w-xs space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div>
+          <h3 id="gym-manual-rest-title" className="text-base font-black text-[var(--text)]">Editar descanso en curso</h3>
+          <p className="mt-1 text-xs text-[var(--text-soft)]">Define el tiempo restante. El deadline se actualizará desde ahora.</p>
+        </div>
+        <label className="block text-xs font-bold text-[var(--text-soft)]">
+          Segundos restantes
+          <input
+            autoFocus
+            type="number"
+            min={1}
+            step={1}
+            inputMode="numeric"
+            value={manualSeconds}
+            onChange={(event) => setManualSeconds(Math.max(1, Number(event.target.value) || 1))}
+            className="mt-1 min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-lg font-black tabular-nums text-[var(--text)] outline-none focus:border-[var(--blue)]"
+          />
+        </label>
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={() => setIsManualEditorOpen(false)} className="min-h-11 rounded-xl px-3 text-xs font-bold text-[var(--text-soft)]">Cancelar</button>
+          <button type="button" onClick={applyManualEdit} className="min-h-11 rounded-xl bg-[var(--blue)] px-4 text-xs font-bold text-white">Aplicar</button>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   if (isMinimized) {
     return (
-      <section
-        aria-label="Temporizador de descanso minimizado"
-        className="w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 shadow-xs"
-      >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={toggleMinimize}
-            className="flex min-w-0 items-center gap-2 text-left cursor-pointer"
-            title="Expandir timer"
-          >
-            <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-              isExerciseRest ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : 'bg-[var(--blue-soft)] text-[var(--blue)]'
-            }`}>
-              <AppIcon name="clock" className="h-4 w-4" />
+      <>
+      <section aria-label="Temporizador de descanso minimizado" className="gym-rest-mini">
+        <button type="button" onClick={toggleMinimize} className="gym-rest-mini-main" title="Expandir temporizador">
+          <span className={`gym-rest-mini-ring gym-rest-${urgency}`} aria-hidden="true">
+            <svg viewBox="0 0 44 44">
+              <circle cx="22" cy="22" r="18" className="gym-rest-track" />
+              <circle cx="22" cy="22" r="18" className="gym-rest-progress" pathLength="100" strokeDasharray="100" strokeDashoffset={100 * (1 - progress)} />
+            </svg>
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[10px] font-black uppercase tracking-[0.16em] text-[var(--text-faint)]">
+              {isExerciseRest ? 'Cambio de ejercicio' : 'Recuperación'}
             </span>
-            <div className="min-w-0">
-              <span className="block text-[11px] font-semibold text-[var(--text-soft)] truncate">
-                {isExerciseRest ? 'Entre ejercicios' : 'Entre series'}
-              </span>
-              <strong className="block font-mono text-base font-bold tabular-nums text-[var(--text)]">
-                {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
-              </strong>
-            </div>
-          </button>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={() => adjustTimer(-30)}
-              className="min-h-11 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 text-xs font-bold text-[var(--text)] transition-colors hover:border-[var(--blue)] active:scale-95"
-            >
-              −30s
-            </button>
-            <button
-              type="button"
-              onClick={() => adjustTimer(30)}
-              className="min-h-11 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2.5 text-xs font-bold text-[var(--text)] transition-colors hover:border-[var(--blue)] active:scale-95"
-            >
-              +30s
-            </button>
-            <button
-              type="button"
-              onClick={handleSkip}
-              className="min-h-11 rounded-lg bg-[var(--blue)] px-3 text-xs font-bold text-white transition-colors hover:bg-[var(--blue-hover)] active:scale-95"
-            >
-              Saltar
-            </button>
-            <button
-              type="button"
-              onClick={toggleMinimize}
-              aria-label="Expandir temporizador"
-              className="flex min-h-11 w-11 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)]"
-            >
-              <AppIcon name="chevronDown" className="h-4 w-4" />
-            </button>
-          </div>
+            <strong className="block text-lg font-black tabular-nums tracking-tight text-[var(--text)]">{formatted}</strong>
+          </span>
+        </button>
+        <div className="flex items-center gap-1.5">
+          <button type="button" onClick={togglePause} className="gym-rest-mini-action" aria-label={isPaused ? 'Reanudar' : 'Pausar'}>{isPaused ? 'Seguir' : 'Pausa'}</button>
+          {settings.showQuickRestAdjustments && <button type="button" onClick={() => adjustTimer(-30)} className="gym-rest-mini-action">−30</button>}
+          {settings.showQuickRestAdjustments && <button type="button" onClick={() => adjustTimer(30)} className="gym-rest-mini-action">+30</button>}
+          {settings.allowManualRestEditing && <button type="button" onClick={openManualEditor} className="gym-rest-mini-action">Editar</button>}
+          <button type="button" onClick={handleSkip} className="gym-rest-mini-skip">Saltar</button>
         </div>
       </section>
+      {manualEditor}
+      </>
     );
   }
 
   return (
-    <section
-      aria-label={isExerciseRest ? 'Descanso entre ejercicios' : 'Descanso entre series'}
-      className="w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-xs"
-    >
-      <div className="h-1.5 bg-[var(--border)]">
-        <div
-          className={`h-full transition-[width] duration-300 ${
-            displaySeconds <= 5
-              ? 'bg-rose-500'
-              : displaySeconds <= 10
-              ? 'bg-amber-500'
-              : isExerciseRest
-              ? 'bg-amber-500'
-              : 'bg-[var(--blue)]'
-          }`}
-          style={{ width: `${progress}%` }}
-        />
+    <>
+    <section aria-label={isExerciseRest ? 'Descanso largo entre ejercicios' : 'Descanso entre series'} className={`gym-rest-card gym-rest-${urgency}`}>
+      <div className="gym-rest-copy">
+        <div className="flex items-center gap-2">
+          <span className="gym-rest-kicker"><AppIcon name="stopwatch" className="h-4 w-4" />{isExerciseRest ? 'Descanso largo' : 'Descanso'}</span>
+          {isExerciseRest && <span className="gym-rest-badge">Cambio</span>}
+        </div>
+        <h3 className="mt-3 text-xl font-black tracking-tight text-[var(--text)]">{isExerciseRest ? 'Cambiá de estación' : 'Recuperá el aire'}</h3>
+        <p className="mt-1 max-w-sm text-sm leading-5 text-[var(--text-soft)]">
+          {isExerciseRest && nextExerciseName
+            ? <>Después sigue <strong className="text-[var(--text)]">{nextExerciseName}</strong>.</>
+            : 'El tiempo se mantiene sincronizado aunque salgas de Gimnasio.'}
+        </p>
+        {settings.showQuickRestAdjustments && <div className="mt-4 hidden items-center gap-2 sm:flex">
+          <button type="button" onClick={() => adjustTimer(-30)} className="gym-rest-action">−30 s</button>
+          <button type="button" onClick={() => adjustTimer(30)} className="gym-rest-action">+30 s</button>
+        </div>}
       </div>
 
-      <div className="p-3.5 space-y-3">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${
-              isExerciseRest
-                ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                : 'bg-[var(--blue-soft)] text-[var(--blue)]'
-            }`}>
-              <AppIcon name="clock" className="h-6 w-6" />
-            </span>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs font-bold text-[var(--text-soft)]">
-                  {isPaused
-                    ? 'Descanso en pausa'
-                    : isExerciseRest
-                    ? 'Descanso entre ejercicios'
-                    : 'Descanso entre series'}
-                </span>
-                {isExerciseRest && (
-                  <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-black uppercase text-amber-600 dark:text-amber-400">
-                    Cambio
-                  </span>
-                )}
-              </div>
-              <strong className="block font-mono text-3xl font-extrabold tabular-nums tracking-tight text-[var(--text)]">
-                {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
-              </strong>
-              {isExerciseRest && nextExerciseName && (
-                <p className="text-xs text-[var(--text-soft)] truncate mt-0.5">
-                  Siguiente: <span className="font-semibold text-[var(--text)]">{nextExerciseName}</span>
-                </p>
-              )}
-            </div>
-          </div>
+      <div className="gym-rest-dial" aria-live="polite" aria-atomic="true">
+        <svg viewBox="0 0 148 148" aria-hidden="true">
+          <circle cx="74" cy="74" r={RING_RADIUS} className="gym-rest-track" />
+          <circle cx="74" cy="74" r={RING_RADIUS} className="gym-rest-progress" strokeDasharray={RING_CIRCUMFERENCE} strokeDashoffset={dashOffset} />
+        </svg>
+        <div className="gym-rest-time"><strong>{formatted}</strong><span>restante</span></div>
+      </div>
 
-          <div className="flex items-center gap-1 shrink-0">
-            {onOpenSettings && (
-              <button
-                type="button"
-                onClick={onOpenSettings}
-                aria-label="Ajustar tiempos de descanso"
-                title="Configurar descansos"
-                className="flex min-h-11 w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)] transition-colors hover:text-[var(--text)]"
-              >
-                <AppIcon name="clock" className="h-4 w-4" />
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={toggleMinimize}
-              aria-label="Minimizar temporizador"
-              title="Continuar en segundo plano"
-              className="flex min-h-11 w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)] transition-colors hover:text-[var(--text)]"
-            >
-              <AppIcon name="chevronUp" className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <button
-            type="button"
-            onClick={() => adjustTimer(-30)}
-            className="flex-1 sm:flex-none min-h-11 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 text-xs font-bold text-[var(--text)] transition-colors hover:border-[var(--blue)] active:scale-95"
-          >
-            −30 s
-          </button>
-          <button
-            type="button"
-            onClick={() => adjustTimer(30)}
-            className="flex-1 sm:flex-none min-h-11 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 text-xs font-bold text-[var(--text)] transition-colors hover:border-[var(--blue)] active:scale-95"
-          >
-            +30 s
-          </button>
-          <button
-            type="button"
-            onClick={togglePause}
-            className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 text-xs font-semibold text-[var(--text)] transition-colors hover:border-[var(--blue)]"
-          >
-            {isPaused ? <><AppIcon name="play" className="h-4 w-4" /> Reanudar</> : <><AppIcon name="pause" className="h-4 w-4" /> Pausa</>}
-          </button>
-          <button
-            type="button"
-            onClick={handleSkip}
-            className="flex-1 min-h-11 rounded-xl bg-[var(--blue)] px-4 text-xs font-bold text-white shadow-xs transition-colors hover:bg-[var(--blue-hover)] active:scale-95"
-          >
-            Saltar descanso
-          </button>
+      <div className="gym-rest-controls">
+        {settings.showQuickRestAdjustments && <div className="grid grid-cols-2 gap-2 sm:hidden">
+          <button type="button" onClick={() => adjustTimer(-30)} className="gym-rest-action">−30 s</button>
+          <button type="button" onClick={() => adjustTimer(30)} className="gym-rest-action">+30 s</button>
+        </div>}
+        <button type="button" onClick={handleSkip} className="gym-rest-skip">Saltar descanso<AppIcon name="arrowRight" className="h-4 w-4" /></button>
+        <div className="flex items-center justify-center gap-1">
+          <button type="button" onClick={togglePause} className="gym-rest-quiet-action font-bold text-[var(--blue)]">{isPaused ? 'Reanudar' : 'Pausar'}</button>
+          {onOpenSettings && <button type="button" onClick={onOpenSettings} className="gym-rest-quiet-action">Ajustes</button>}
+          {settings.allowManualRestEditing && <button type="button" onClick={openManualEditor} className="gym-rest-quiet-action">Editar tiempo</button>}
+          <button type="button" onClick={toggleMinimize} className="gym-rest-quiet-action">Minimizar</button>
         </div>
       </div>
     </section>
+    {manualEditor}
+    </>
   );
 };

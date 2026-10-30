@@ -1,3 +1,5 @@
+import type { CommercialSet } from './lib/commercialContract';
+
 export type DayKey = 'lunes' | 'martes' | 'miercoles' | 'jueves' | 'viernes' | 'sabado' | 'domingo';
 
 export type EffortLevel = 'baja' | 'media' | 'alta' | 'low' | 'medium' | 'high';
@@ -27,6 +29,8 @@ export interface TaskRecurring {
   freq: 'daily' | '2-3x' | 'weekly';
   days?: DayKey[];
   effort?: EffortLevel;
+  /** Optional local time for agenda presentation. Older routines remain untimed. */
+  time?: string;
 }
 
 export interface TodayExtra {
@@ -54,13 +58,41 @@ export interface DailyPriority {
   reasons?: string[];
 }
 
+export type SleepQualityLevel = 1 | 2 | 3 | 4 | 5;
+
+export type PerceivedStressLevel = 'bajo' | 'moderado' | 'alto';
+
+export type PhysicalDiscomfortLevel = 'leve' | 'moderada' | 'alta';
+
+export type ContextOptionalFactorKey = 'stress' | 'physicalDiscomfort' | 'connection' | 'note';
+
+export interface DailyContextMorningSnapshot {
+  sleepHours?: number | null;
+  sleepQuality?: SleepQualityLevel | null;
+  energy?: number | null;
+  mood?: number | null;
+  stress?: PerceivedStressLevel | null;
+  physicalDiscomfort?: PhysicalDiscomfortLevel | null;
+  connection?: number | string | null;
+  capturedAt?: string;
+}
+
 export interface DailyContextEntry {
   date: string;
   sleepHours: number | null;
+  sleepQuality?: SleepQualityLevel | null;
   energy: number | null;
   mood: number | null;
   connection: number | string | null;
+  stress?: PerceivedStressLevel | null;
+  physicalDiscomfort?: PhysicalDiscomfortLevel | null;
   note?: string;
+  /** Preserves the initial morning check-in values when a field is edited later in the same day. */
+  morningSnapshot?: DailyContextMorningSnapshot | null;
+  recordedAt?: string;
+  updatedAt?: string;
+  /** Key of a contextual recommendation explicitly dismissed by the user for this date. */
+  dismissedRecommendationKey?: string | null;
 }
 
 export type TransactionReviewStatus = 'pending' | 'reviewed' | 'ignored';
@@ -69,19 +101,24 @@ export interface Transaction {
   id: string;
   effectiveOrder?: string;
   revisionOrder?: string;
+  /** Instante original de registro; no cambia al editar el movimiento. */
+  createdAt?: string;
   type: 'gasto' | 'ingreso';
   amount: number;
   category: string;
   fixed: 'variable' | 'fijo';
   date: string;
+  /** Hora local de la operación, cuando el usuario la conoce (HH:mm). */
+  operationTime?: string | null;
   note?: string;
   accountId?: string | null;
-  origin?: 'manual' | 'adjustment' | 'reventa' | 'quick-capture' | 'quick' | 'resale_purchase' | 'resale_sale' | 'import' | 'commitment';
+  origin?: 'manual' | 'adjustment' | 'reventa' | 'quick-capture' | 'quick' | 'resale_purchase' | 'resale_sale' | 'import' | 'commitment' | 'debt_payment';
   reviewStatus?: TransactionReviewStatus;
   reviewed?: boolean;
   currency?: string;
   commitmentId?: string | null;
   expectedIncomeId?: string | null;
+  agreementId?: string | null;
   matchedCycle?: string | null;
   rejectedMatchIds?: string[];
 }
@@ -185,6 +222,73 @@ export interface FinancialCommitment {
   updatedAt?: string;
 }
 
+export type InstallmentFrequency = 'monthly' | 'biweekly' | 'weekly';
+
+export interface InstallmentSchedule {
+  /** Cantidad total de cuotas acordadas (ej. 6) */
+  totalInstallments: number;
+  /** Importe contractual de cada cuota regular */
+  installmentAmount: number;
+  /** Fecha de vencimiento de la primera cuota (YYYY-MM-DD) */
+  firstDueDate: string;
+  /** Día del mes pactado como ancla (1-31) para evitar desplazamientos por meses cortos */
+  dueDay: number;
+  /** Periodicidad (mensual por defecto) */
+  frequency: InstallmentFrequency;
+}
+
+export type InstallmentStatus = 'paid' | 'partial' | 'pending' | 'overdue';
+
+export interface DerivedInstallment {
+  installmentNumber: number;
+  totalInstallments: number;
+  dueDate: string; // YYYY-MM-DD
+  requiredAmount: number;
+  allocatedPaid: number;
+  remainingDue: number;
+  status: InstallmentStatus;
+  isOverdue: boolean;
+}
+
+export interface AgreementScheduleBreakdown {
+  agreementId: string;
+  totalAgreed: number;
+  totalPaid: number;
+  remainingBalance: number;
+  installments: DerivedInstallment[];
+  nextDueInstallment: DerivedInstallment | null;
+  completedInstallmentsCount: number;
+}
+
+export interface FinancedAcquisition {
+  /** Fecha real en que se realizó la compra o adquisición (YYYY-MM-DD) */
+  acquisitionDate: string;
+  /** Categoría del bien o servicio adquirido (ej. 'Hogar', 'Tecnología') */
+  category: string;
+  /** Importe total convenido de la compra financiada */
+  totalPurchaseAmount: number;
+}
+
+export interface FinancingAgreement {
+  id: string;
+  title: string;
+  creditorName: string;
+  currency: 'UYU' | 'USD';
+  initialRemainingBalance: number;
+  initialReferenceDate: string; // ISO date YYYY-MM-DD
+  originalPrincipal?: number | null;
+  priorPaidAmount?: number | null;
+  notes?: string | null;
+  status: 'active' | 'settled' | 'cancelled';
+  settledAt?: string | null;
+  linkedLegacyDebtId?: string | null;
+  schedule?: InstallmentSchedule | null;
+  acquisition?: FinancedAcquisition | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+}
+
 export interface CashFlowCommitment {
   id: string;
   sourceId: string;
@@ -214,6 +318,10 @@ export interface CashFlowForecastItem {
   accountId?: string | null;
   sourceId: string;
   isOverdue?: boolean;
+  installmentNumber?: number;
+  totalInstallments?: number;
+  agreementId?: string;
+  isFinancing?: boolean;
 }
 
 export interface FinanceCategory {
@@ -247,6 +355,10 @@ export interface CashflowEventItem {
   sourceId: string;
   isOverdue?: boolean;
   kind?: 'commitment' | 'subscription' | 'debt' | 'expected_income';
+  installmentNumber?: number;
+  totalInstallments?: number;
+  agreementId?: string;
+  isFinancing?: boolean;
 }
 
 export interface CashflowCurrencySummary {
@@ -305,6 +417,7 @@ export interface Finance {
   subscriptions: Subscription[];
   expectedIncomes?: ExpectedIncome[];
   commitments?: FinancialCommitment[];
+  agreements?: FinancingAgreement[];
   minCushion?: number | null;
   cushionEnabled?: boolean;
   heroDisplayMode?: FinanceHeroDisplayMode;
@@ -335,6 +448,7 @@ export interface GymSet {
 }
 
 export type ExerciseEquipment = 'barra' | 'mancuerna' | 'polea' | 'maquina' | 'corporal';
+export type GymExerciseRestMode = 'inherit' | 'custom' | 'disabled';
 
 export interface Exercise {
   id?: string;
@@ -346,6 +460,8 @@ export interface Exercise {
   muscleGroup?: MuscleGroup | string;
   sets: GymSet[];
   restSeconds?: number;
+  /** `custom` is the only explicit per-exercise override; otherwise Gym settings are inherited. */
+  restSecondsMode?: GymExerciseRestMode;
   timerEnabled?: boolean;
   legacyReps?: string | null;
 }
@@ -360,7 +476,15 @@ export type RoutineIconName =
   | 'target'
   | 'shield'
   | 'trophy'
-  | 'scale';
+  | 'scale'
+  | 'gym-bench-press'
+  | 'gym-lat-pulldown'
+  | 'gym-leg-press'
+  | 'gym-dumbbell'
+  | 'gym-shoulder-press'
+  | 'gym-yoga-mat'
+  | 'gym-bike'
+  | 'gym-rest';
 
 export const ROUTINE_ICON_NAMES: readonly RoutineIconName[] = [
   'dumbbell',
@@ -373,6 +497,14 @@ export const ROUTINE_ICON_NAMES: readonly RoutineIconName[] = [
   'shield',
   'trophy',
   'scale',
+  'gym-bench-press',
+  'gym-lat-pulldown',
+  'gym-leg-press',
+  'gym-dumbbell',
+  'gym-shoulder-press',
+  'gym-yoga-mat',
+  'gym-bike',
+  'gym-rest',
 ] as const;
 
 export function isRoutineIconName(value: unknown): value is RoutineIconName {
@@ -425,12 +557,16 @@ export interface GymActiveTimer {
   exerciseIndex?: number;
   targetExerciseIndex?: number;
   minimized?: boolean;
+  pausedAt?: number | null;
+  remainingSecondsWhenPaused?: number | null;
 }
 
 export interface GymSettings {
   restBetweenSetsSeconds?: number;
   restBetweenExercisesSeconds?: number;
   autoTimerEnabled?: boolean;
+  showQuickRestAdjustments?: boolean;
+  allowManualRestEditing?: boolean;
 }
 
 export interface Gym {
@@ -447,13 +583,20 @@ export interface Gym {
 export interface Subject {
   id: string;
   name: string;
+  updatedAt?: number;
+  createdAt?: number;
 }
 
 export interface Exam {
   id: string;
-  subjectId: string;
+  title?: string;
+  subjectId?: string | null;
   date: string;
+  time?: string | null;
   status: 'pendiente' | 'aprobado' | 'desaprobado';
+  grade?: string | null;
+  updatedAt?: number;
+  createdAt?: number;
 }
 
 export interface StudyLog {
@@ -461,12 +604,38 @@ export interface StudyLog {
   date: string;
   minutes: number;
   subjectId?: string | null;
+  subjectName?: string | null;
+  sessionId?: string | null;
+  updatedAt?: number;
+  createdAt?: number;
+}
+
+export type StudySessionPhase = 'focus' | 'short_break' | 'long_break';
+
+export interface StudyActiveSession {
+  id: string;
+  targetSubjectId?: string | null;
+  targetSubjectName?: string | null;
+  plannedMinutes: number;
+  startedAt: number;
+  status: 'running' | 'paused' | 'completed_pending_review';
+  endsAt?: number | null;
+  remainingSeconds: number;
+  lastTickAt: number;
+  elapsedMinutes?: number;
+  phase?: StudySessionPhase;
+  cycle?: number;
+  totalCycles?: number;
+  focusMinutes?: number;
+  shortBreakMinutes?: number;
+  longBreakMinutes?: number;
 }
 
 export interface Study {
   subjects: Subject[];
   exams: Exam[];
   studyLog: StudyLog[];
+  activeSession?: StudyActiveSession | null;
 }
 
 export interface StreamSession {
@@ -507,11 +676,20 @@ export interface JobOpportunity {
   status: 'nueva' | 'aplicada' | 'descartada';
 }
 
+export type JobApplicationType = 'convencional' | 'concurso';
+
+export type JobApplicationStatus =
+  | 'cv_enviado' | 'pendiente' | 'entrevista' | 'oferta' | 'rechazado' | 'contratado'
+  | 'pendiente_inscripcion' | 'inscripto' | 'sorteo_preseleccion' | 'prueba_evaluacion'
+  | 'esperando_resultados' | 'lista_prelacion' | 'ingreso_confirmado' | 'no_seleccionado';
+
 export interface JobApplication {
   id: string;
+  /** Missing on legacy records; those are treated as conventional employment. */
+  tipo?: JobApplicationType;
   empresa: string;
   puesto: string;
-  estado: 'cv_enviado' | 'pendiente' | 'entrevista' | 'oferta' | 'rechazado';
+  estado: JobApplicationStatus;
   fecha: string;
   reclutador?: string;
   notas?: string;
@@ -540,8 +718,12 @@ export interface ResaleItem {
   id: string;
   item: string;
   buyPrice: number;
+  /** Currency captured when buying; absent on legacy items unless linked transaction proves it. */
+  purchaseCurrency?: string;
   buyDate: string;
   sellPrice?: number | null;
+  /** Currency captured when selling; never inferred from the current account currency. */
+  saleCurrency?: string;
   sellDate?: string | null;
   status: 'comprado' | 'vendido';
   financeTxId?: string | null;
@@ -561,6 +743,7 @@ export interface ResaleItem {
 export interface Resale {
   opportunities: ResaleOpportunity[];
   inventory: ResaleItem[];
+  commercial?: CommercialSet;
 }
 
 export interface Idea {
@@ -574,7 +757,9 @@ export interface CalendarEvent {
   id: string;
   name: string;
   date: string;
-  type: 'cumpleanos' | 'estreno' | 'importante' | 'otro';
+  /** Optional local time. Existing all-day events remain untimed. */
+  time?: string;
+  type: 'cumpleanos' | 'estreno' | 'importante' | 'otro' | 'aniversario' | 'reunion' | 'cita' | 'tramite' | 'viaje' | 'recordatorio';
   recurring: boolean;
   linkedTaskId?: string;
   linkedType?: 'task' | 'study' | 'gym' | 'custom';
@@ -666,6 +851,13 @@ export interface Notes {
   possessions: PossessionItem[];
 }
 
+export type AttentionDismissalStatus = 'dismissed' | 'active';
+
+export interface AttentionDismissalRecord {
+  status: AttentionDismissalStatus;
+  updatedAt: number;
+}
+
 export interface Settings {
   darkMode: boolean;
   lastBackupAt?: string | null;
@@ -673,6 +865,9 @@ export interface Settings {
   lastWeeklyReviewAt?: string | null;
   privacyMode?: boolean;
   onboardingCompleted?: boolean;
+  contextOptionalFactors?: ContextOptionalFactorKey[];
+  dismissedAttentionKeys?: string[];
+  attentionDismissals?: Record<string, AttentionDismissalRecord>;
 }
 
 export interface CheckoutLogDay {
@@ -681,6 +876,7 @@ export interface CheckoutLogDay {
   expensesSkipped?: boolean;
   closedAt?: string;
   dailyNote?: string;
+  reflectionPostitId?: string;
   sleepHours?: number;
   energyLevel?: number;
 }

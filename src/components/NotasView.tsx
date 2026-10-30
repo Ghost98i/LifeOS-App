@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { LifeOSState, Goal, Postit } from '../types';
 import {
   todayISO,
@@ -24,17 +24,99 @@ import {
   formatRelativeTime,
 } from '../lib/notesFlows';
 import { showToast } from '../lib/toast';
-import { PageHeader } from './PageHeader';
 import { ProjectsManager } from './ProjectsManager';
 import { AppIcon } from './AppIcon';
+import { addGymPlacement, GYM_NOTE_PLACEMENTS_ENABLED, loadPlacements, placementStorageKey, removePlacement, savePlacements } from '../lib/notePlacements';
+
+const TagEditor: React.FC<{ value: string; onChange: (value: string) => void }> = ({ value, onChange }) => {
+  const [input, setInput] = useState('');
+  const tags = value.split(',').map((tag) => tag.trim()).filter(Boolean);
+  const add = () => {
+    const tag = input.trim().replace(/^#/, '').toLocaleLowerCase('es');
+    if (!tag) return;
+    if (!tags.some((existing) => existing.toLocaleLowerCase('es') === tag)) onChange([...tags, tag].join(', '));
+    setInput('');
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-2.5 focus-within:border-[var(--blue)]">
+      {tags.map((tag) => (
+        <span key={tag} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2 text-sm text-[var(--text)]">
+          #{tag}
+          <button type="button" onClick={() => onChange(tags.filter((item) => item !== tag).join(', '))} aria-label={`Quitar etiqueta ${tag}`} className="ml-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-soft)] hover:bg-[var(--card)] hover:text-rose-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--blue)] cursor-pointer">×</button>
+        </span>
+      ))}
+      <input type="text" value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ',') { event.preventDefault(); add(); }
+      }} placeholder="Agregar etiqueta…" aria-label="Agregar etiqueta" className="min-h-10 min-w-32 flex-1 bg-transparent px-1 text-sm text-[var(--text)] outline-none" />
+      <button type="button" onClick={add} disabled={!input.trim()} className="min-h-10 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold text-[var(--text-soft)] hover:bg-[var(--card)] disabled:opacity-40 cursor-pointer">Agregar</button>
+    </div>
+  );
+};
 
 interface NotasViewProps {
   state: LifeOSState;
-  onUpdateState: (updater: (draft: LifeOSState) => void) => void;
+  onUpdateState: (updater: (draft: LifeOSState) => void) => boolean;
+  initialNoteId?: string | null;
+  initialTab?: 'notas' | 'proyectos' | 'streaming' | null;
+  initialFocusId?: string | null;
+  focusNonce?: number;
+  storageUserId: string | null;
+  onOpenGym: () => void;
 }
 
-export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) => {
-  const [activeTab, setActiveTab] = useState<'notas' | 'proyectos' | 'streaming'>('notas');
+export const NotasView: React.FC<NotasViewProps> = ({
+  state,
+  onUpdateState,
+  initialNoteId,
+  initialTab,
+  initialFocusId,
+  focusNonce,
+  storageUserId,
+  onOpenGym,
+}) => {
+  const initialNote = initialNoteId ? (state.notes?.postits || []).find((note) => note.id === initialNoteId) || null : null;
+  type NotesSection = 'notas' | 'herramientas' | 'proyectos' | 'streaming' | 'cosas' | 'compras' | 'links';
+  const [activeTab, setActiveTab] = useState<NotesSection>(initialTab || 'notas');
+  const [toolMessage, setToolMessage] = useState('');
+  const [projectView, setProjectView] = useState<'projects' | 'goals'>('projects');
+  const [openNoteMenuId, setOpenNoteMenuId] = useState<string | null>(null);
+  const [placements, setPlacements] = useState(() => loadPlacements(storageUserId));
+  const [placementOwner, setPlacementOwner] = useState(() => placementStorageKey(storageUserId));
+  const currentPlacements = placementOwner === placementStorageKey(storageUserId) ? placements : [];
+  React.useEffect(() => { setPlacements(loadPlacements(storageUserId)); setPlacementOwner(placementStorageKey(storageUserId)); }, [storageUserId]);
+  React.useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === placementStorageKey(storageUserId)) setPlacements(loadPlacements(storageUserId));
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [storageUserId]);
+
+  React.useEffect(() => {
+    if (!openNoteMenuId) return;
+    const closeOnOutside = (event: PointerEvent) => {
+      if (!(event.target as Element).closest('[data-note-menu]')) setOpenNoteMenuId(null);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpenNoteMenuId(null);
+        document.getElementById(`note-menu-trigger-${openNoteMenuId}`)?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', closeOnOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [openNoteMenuId]);
+
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+      if (initialTab === 'proyectos') setProjectView('projects');
+    }
+  }, [initialTab, focusNonce]);
   const [streamDate, setStreamDate] = useState(todayISO());
   const [streamHours, setStreamHours] = useState('');
   const [checklistLabel, setChecklistLabel] = useState('');
@@ -52,15 +134,23 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
   const [notePinned, setNotePinned] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [noteSearch, setNoteSearch] = useState('');
+  const [noteOrder, setNoteOrder] = useState<'pinned' | 'recent'>('recent');
+  const [noteError, setNoteError] = useState('');
+  const editorRef = React.useRef<HTMLDivElement>(null);
   const [noteFilter, setNoteFilter] = useState<'activas' | 'fijadas' | 'archivadas'>('activas');
+  const [noteWindow, setNoteWindow] = useState({ query: '', filter: 'activas', order: 'recent', count: 50 });
+  React.useEffect(() => {
+    setNoteWindow(previous => previous.query === noteSearch && previous.filter === noteFilter && previous.order === noteOrder
+      ? previous : { query: noteSearch, filter: noteFilter, order: noteOrder, count: 50 });
+  }, [noteSearch, noteFilter, noteOrder]);
 
   // Edit note modal state
-  const [editingNote, setEditingNote] = useState<Postit | null>(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [editText, setEditText] = useState('');
-  const [editTags, setEditTags] = useState('');
-  const [editPinned, setEditPinned] = useState(false);
-  const [editArchived, setEditArchived] = useState(false);
+  const [editingNote, setEditingNote] = useState<Postit | null>(initialNote);
+  const [editTitle, setEditTitle] = useState(initialNote?.title || '');
+  const [editText, setEditText] = useState(initialNote?.text || '');
+  const [editTags, setEditTags] = useState(initialNote?.tags?.join(', ') || '');
+  const [editPinned, setEditPinned] = useState(Boolean(initialNote?.pinned));
+  const [editArchived, setEditArchived] = useState(Boolean(initialNote?.archived));
 
   const [shopItem, setShopItem] = useState('');
 
@@ -85,42 +175,52 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
     { id: 'published', label: 'Publicado' },
   ] as const;
 
-  const activeProjectsCount = (state.projects || []).filter((p) => p.status === 'activo').length;
   const pendingShopCount = (state.notes?.shopping || []).filter((s) => !s.done).length;
+
+  const saveToolChange = (updater: (draft: LifeOSState) => void) => {
+    try {
+      if (onUpdateState(updater)) { setToolMessage('Guardado.'); return true; }
+    } catch { /* Keep the form available after a persistence failure. */ }
+    setToolMessage('No se pudo guardar. Conservá el formulario y volvé a intentarlo.');
+    return false;
+  };
 
   const handleAddStream = (e: React.FormEvent) => {
     e.preventDefault();
     const hours = Number(streamHours);
     if (!hours) return;
-    onUpdateState((draft) => {
+    const saved = saveToolChange((draft) => {
       const date = streamDate || todayISO();
       if (!draft.streaming) draft.streaming = { sessions: [], monthlyGoal: 12, preStreamChecklist: [], contentPipeline: [] };
       if (!draft.streaming.sessions) draft.streaming.sessions = [];
       draft.streaming.sessions = draft.streaming.sessions.filter((s) => s.date !== date);
       draft.streaming.sessions.push({ id: uid(), date, hours });
     });
+    if (!saved) return;
     setStreamHours('');
   };
 
   const handleAddChecklistItem = (event: React.FormEvent) => {
     event.preventDefault();
     if (!checklistLabel.trim()) return;
-    onUpdateState((draft) => {
+    const saved = saveToolChange((draft) => {
       if (!draft.streaming) draft.streaming = { sessions: [], monthlyGoal: 12, preStreamChecklist: [], contentPipeline: [] };
       if (!draft.streaming.preStreamChecklist) draft.streaming.preStreamChecklist = [];
       draft.streaming.preStreamChecklist.push({ id: uid(), label: checklistLabel.trim(), done: false });
     });
+    if (!saved) return;
     setChecklistLabel('');
   };
 
   const handleAddContent = (event: React.FormEvent) => {
     event.preventDefault();
     if (!contentTitle.trim()) return;
-    onUpdateState((draft) => {
+    const saved = saveToolChange((draft) => {
       if (!draft.streaming) draft.streaming = { sessions: [], monthlyGoal: 12, preStreamChecklist: [], contentPipeline: [] };
       if (!draft.streaming.contentPipeline) draft.streaming.contentPipeline = [];
       draft.streaming.contentPipeline.push({ id: uid(), title: contentTitle.trim(), status: 'idea', note: '', updatedAt: new Date().toISOString() });
     });
+    if (!saved) return;
     setContentTitle('');
   };
 
@@ -129,7 +229,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
     if (!goalName.trim()) return;
     const initial = Number(goalInitial) || 0;
     const target = Number(goalTarget) || 0;
-    onUpdateState((draft) => {
+    const saved = saveToolChange((draft) => {
       if (!draft.goals) draft.goals = [];
       draft.goals.push({
         id: uid(),
@@ -140,6 +240,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
         linked: goalLinked,
       });
     });
+    if (!saved) return;
     setGoalName('');
     setGoalInitial('');
     setGoalTarget('');
@@ -149,7 +250,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
     const val = prompt(`Nuevo valor actual para "${g.name}":`, String(g.current));
     if (val === null) return;
     const num = Number(val);
-    onUpdateState((draft) => {
+    saveToolChange((draft) => {
       if (!draft.goals) draft.goals = [];
       const targetGoal = draft.goals.find((x) => x.id === g.id);
       if (targetGoal) targetGoal.current = !isNaN(num) ? num : targetGoal.current;
@@ -157,18 +258,49 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
   };
 
   const handleDeleteGoal = (id: string) => {
-    onUpdateState((draft) => {
+    saveToolChange((draft) => {
       if (!draft.goals) draft.goals = [];
       draft.goals = draft.goals.filter((g) => g.id !== id);
     });
   };
+
+  const saveNoteChange = (updater: (draft: LifeOSState) => void) => {
+    setNoteError('');
+    try {
+      if (onUpdateState(updater)) return true;
+      setNoteError('No se pudo guardar. El contenido sigue acá para que puedas reintentar.');
+    } catch (error) { setNoteError(error instanceof Error ? error.message : 'No se pudo guardar la nota.'); }
+    return false;
+  };
+  const closeEditor = () => {
+    if (editingNote && (editTitle !== (editingNote.title || '') || editText !== editingNote.text
+      || editTags !== (editingNote.tags?.join(', ') || '') || editPinned !== Boolean(editingNote.pinned)
+      || editArchived !== Boolean(editingNote.archived))
+      && !window.confirm('Hay cambios sin guardar. ¿Descartarlos y cerrar?')) return;
+    setEditingNote(null); setNoteError('');
+  };
+  React.useEffect(() => {
+    if (!editingNote) return;
+    const previous = document.activeElement as HTMLElement | null;
+    editorRef.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus();
+    return () => previous?.focus();
+  }, [editingNote]);
+  React.useEffect(() => {
+    const pending = Boolean((showAddForm && (noteContent || noteTitle)) || (editingNote &&
+      (editText !== editingNote.text || editTitle !== (editingNote.title || '') || editTags !== (editingNote.tags?.join(', ') || '')
+       || editPinned !== Boolean(editingNote.pinned) || editArchived !== Boolean(editingNote.archived))));
+    if (!pending) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [showAddForm, noteContent, noteTitle, editingNote, editText, editTitle, editTags, editPinned, editArchived]);
 
   const handleAddPostit = (e: React.FormEvent) => {
     e.preventDefault();
     const content = noteContent.trim() || postitText.trim();
     if (!content) return;
     const rawTags = noteTags.split(',').map((t) => t.trim()).filter(Boolean);
-    onUpdateState((draft) => {
+    const saved = saveNoteChange((draft) => {
       addNote(draft, {
         title: noteTitle.trim() || undefined,
         text: content,
@@ -176,6 +308,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
         pinned: notePinned,
       });
     });
+    if (!saved) return;
     setPostitText('');
     setNoteTitle('');
     setNoteContent('');
@@ -186,7 +319,8 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
   };
 
   const handleStartEdit = (note: Postit) => {
-    setEditingNote(note);
+    setNoteError('');
+    setEditingNote(structuredClone(note));
     setEditTitle(note.title || '');
     setEditText(note.text);
     setEditTags(note.tags ? note.tags.join(', ') : '');
@@ -198,51 +332,83 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
     e.preventDefault();
     if (!editingNote || !editText.trim()) return;
     const rawTags = editTags.split(',').map((t) => t.trim()).filter(Boolean);
-    onUpdateState((draft) => {
+    const saved = saveNoteChange((draft) => {
       updateNote(draft, editingNote.id, {
-        title: editTitle.trim() || undefined,
+        title: editTitle.trim(),
         text: editText.trim(),
-        tags: rawTags.length > 0 ? rawTags : undefined,
+        tags: rawTags,
         pinned: editPinned,
         archived: editArchived,
-      });
+      }, editingNote);
     });
+    if (!saved) return;
     setEditingNote(null);
     showToast('Nota actualizada', 'success');
   };
 
   const handleTogglePin = (id: string, currentlyPinned: boolean) => {
-    onUpdateState((draft) => {
+    const saved = saveNoteChange((draft) => {
       togglePinNote(draft, id);
     });
+    if (!saved) return;
     showToast(currentlyPinned ? 'Nota desfijada' : 'Nota fijada arriba', 'info');
   };
 
   const handleToggleArchive = (id: string, currentlyArchived: boolean) => {
-    onUpdateState((draft) => {
+    const saved = saveNoteChange((draft) => {
       toggleArchiveNote(draft, id);
     });
+    if (!saved) return;
     showToast(currentlyArchived ? 'Nota restaurada a activas' : 'Nota archivada', 'info');
   };
 
   const handleConvertToTask = (id: string) => {
-    onUpdateState((draft) => {
+    const saved = saveNoteChange((draft) => {
       convertNoteToTask(draft, id, todayISO());
     });
+    if (!saved) return;
     showToast('Nota convertida en tarea para Hoy', 'success');
   };
 
   const handleDeletePostit = (id: string) => {
-    onUpdateState((draft) => {
+    const note = state.notes?.postits.find((item) => item.id === id);
+    const placed = currentPlacements.some((p) => p.noteId === id);
+    if ((note?.pinned || placed) && !window.confirm(placed
+      ? `Eliminar esta nota${note?.pinned ? ' fijada' : ''} también retirará su colocación local en Gimnasio. ¿Continuar?`
+      : 'Esta nota está fijada. ¿Querés eliminarla definitivamente?')) return;
+    const saved = saveNoteChange((draft) => {
       deleteNote(draft, id);
     });
+    if (!saved) return;
+    if (placed) {
+      const next = removePlacement(currentPlacements, id);
+      if (!savePlacements(storageUserId, next)) { showToast('No se pudo actualizar la ubicación local', 'error'); return; }
+      setPlacements(next);
+    }
+    setOpenNoteMenuId(null);
     showToast('Nota eliminada', 'info');
+  };
+
+  const handlePlaceInGym = (noteId: string) => {
+    const next = addGymPlacement(currentPlacements, noteId, uid());
+    if (next === currentPlacements) { showToast('No hay espacio disponible para otra nota en Gimnasio', 'error'); return; }
+    if (!savePlacements(storageUserId, next)) { showToast('No se pudo guardar la ubicación local', 'error'); return; }
+    setPlacements(next);
+    setOpenNoteMenuId(null);
+    showToast('Nota colocada en Gimnasio solo en este dispositivo', 'success');
+  };
+
+  const handleRemoveFromGym = (noteId: string) => {
+    const next = removePlacement(currentPlacements, noteId);
+    if (!savePlacements(storageUserId, next)) { showToast('No se pudo actualizar la ubicación local', 'error'); return; }
+    setPlacements(next);
+    setOpenNoteMenuId(null);
   };
 
   const handleAddShop = (e: React.FormEvent) => {
     e.preventDefault();
     if (!shopItem.trim()) return;
-    onUpdateState((draft) => {
+    const saved = saveToolChange((draft) => {
       if (!draft.notes) draft.notes = { postits: [], shopping: [], links: [], possessions: [] };
       if (!draft.notes.shopping) draft.notes.shopping = [];
       draft.notes.shopping.push({
@@ -251,11 +417,12 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
         done: false,
       });
     });
+    if (!saved) return;
     setShopItem('');
   };
 
   const handleToggleShop = (id: string) => {
-    onUpdateState((draft) => {
+    saveToolChange((draft) => {
       if (!draft.notes?.shopping) return;
       const item = draft.notes.shopping.find((s) => s.id === id);
       if (item) item.done = !item.done;
@@ -263,7 +430,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
   };
 
   const handleDeleteShop = (id: string) => {
-    onUpdateState((draft) => {
+    saveToolChange((draft) => {
       if (!draft.notes?.shopping) return;
       draft.notes.shopping = draft.notes.shopping.filter((s) => s.id !== id);
     });
@@ -274,7 +441,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
     if (!linkName.trim() || !linkUrl.trim()) return;
     let url = linkUrl.trim();
     if (!/^https?:\/\//.test(url)) url = 'https://' + url;
-    onUpdateState((draft) => {
+    const saved = saveToolChange((draft) => {
       if (!draft.notes) draft.notes = { postits: [], shopping: [], links: [], possessions: [] };
       if (!draft.notes.links) draft.notes.links = [];
       draft.notes.links.push({
@@ -283,12 +450,13 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
         url,
       });
     });
+    if (!saved) return;
     setLinkName('');
     setLinkUrl('');
   };
 
   const handleDeleteLink = (id: string) => {
-    onUpdateState((draft) => {
+    saveToolChange((draft) => {
       if (!draft.notes?.links) return;
       draft.notes.links = draft.notes.links.filter((l) => l.id !== id);
     });
@@ -297,7 +465,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
   const handleAddPossession = (event: React.FormEvent) => {
     event.preventDefault();
     if (!possessionName.trim()) return;
-    onUpdateState((draft) => {
+    const saved = saveToolChange((draft) => {
       if (!draft.notes) draft.notes = { postits: [], shopping: [], links: [], possessions: [] };
       if (!draft.notes.possessions) draft.notes.possessions = [];
       draft.notes.possessions.push({
@@ -305,6 +473,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
         location: possessionLocation.trim(), receivedAt: possessionDate || null, note: possessionNote.trim(),
       });
     });
+    if (!saved) return;
     setPossessionName('');
     setPossessionLocation('');
     setPossessionNote('');
@@ -313,112 +482,82 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
   const possessionQuery = possessionSearch.trim().toLocaleLowerCase('es');
   const visiblePossessions = (state.notes?.possessions || []).filter((item) => !possessionQuery || [item.name, item.category, item.location, item.note].some((value) => String(value || '').toLocaleLowerCase('es').includes(possessionQuery)));
 
-  const allNotes = state.notes?.postits || [];
+  const allNotes = useMemo(() => state.notes?.postits || [], [state.notes?.postits]);
   const totalActiveNotes = allNotes.filter((n) => !n.archived).length;
   const totalPinnedNotes = allNotes.filter((n) => !n.archived && n.pinned).length;
   const totalArchivedNotes = allNotes.filter((n) => n.archived).length;
 
-  const filteredNotes = allNotes.filter((note) => {
-    if (noteFilter === 'activas' && note.archived) return false;
-    if (noteFilter === 'fijadas' && (note.archived || !note.pinned)) return false;
-    if (noteFilter === 'archivadas' && !note.archived) return false;
+  const displayedNotes = useMemo(() => getSortedNotes(allNotes, {
+    filter: noteFilter === 'archivadas' ? 'archived' : 'active', searchQuery: noteSearch, order: noteOrder,
+  }).filter((note) => noteFilter !== 'fijadas' || note.pinned), [allNotes, noteFilter, noteSearch, noteOrder]);
+  const visibleNoteCount = noteWindow.query === noteSearch && noteWindow.filter === noteFilter && noteWindow.order === noteOrder ? noteWindow.count : 50;
+  const renderedNotes = displayedNotes.slice(0, visibleNoteCount);
+  const expandNotes = (count: number) => setNoteWindow({ query: noteSearch, filter: noteFilter, order: noteOrder, count });
+  const navigationNotes = React.useRef({ notes: allNotes, order: noteOrder });
+  navigationNotes.current = { notes: allNotes, order: noteOrder };
+  const pendingNoteFocus = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!initialFocusId?.startsWith('note-')) return;
+    const { notes, order } = navigationNotes.current;
+    const note = notes.find(note => `note-${note.id}` === initialFocusId);
+    if (!note) return;
+    // An explicit search result must remain reachable even outside the first batch.
+    // This changes only presentation, never the note or an open editor's draft.
+    setActiveTab('notas'); setNoteSearch('');
+    const filter = note.archived ? 'archivadas' : 'activas';
+    setNoteFilter(filter);
+    setNoteWindow({ query: '', filter, order, count: notes.length });
+    pendingNoteFocus.current = initialFocusId;
+  }, [initialFocusId, focusNonce]);
+  React.useEffect(() => {
+    const target = pendingNoteFocus.current && document.getElementById(pendingNoteFocus.current);
+    if (!target) return;
+    target.scrollIntoView({ block: 'center', behavior: 'auto' });
+    target.querySelector<HTMLButtonElement>('button')?.focus({ preventScroll: true });
+    pendingNoteFocus.current = null;
+  }, [renderedNotes.length, initialFocusId, focusNonce]);
+  const inTools = activeTab !== 'notas';
 
-    const q = noteSearch.trim().toLowerCase();
-    if (!q) return true;
-
-    const matchesTitle = note.title ? note.title.toLowerCase().includes(q) : false;
-    const matchesText = note.text.toLowerCase().includes(q);
-    const matchesTags = note.tags ? note.tags.some((t) => t.toLowerCase().includes(q)) : false;
-    const matchesDate = note.date.includes(q);
-
-    return matchesTitle || matchesText || matchesTags || matchesDate;
-  });
-
-  const displayedNotes = getSortedNotes(filteredNotes, { includeArchived: true });
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="Notas & Proyectos"
-        subtitle="Proyectos con próximos pasos, metas anuales, notas rápidas, inventario y creación de contenido."
-      />
-
-      {/* Subtab navigation */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-2">
-        <button
-          type="button"
-          onClick={() => setActiveTab('notas')}
-          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-            activeTab === 'notas'
-              ? 'bg-[var(--text)] text-[var(--bg-elevated)] shadow-sm'
-              : 'text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--card)]'
-          }`}
-        >
-          <span>📝 Notas Rápidas</span>
-          {totalActiveNotes > 0 && (
-            <span
-              className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                activeTab === 'notas'
-                  ? 'bg-amber-500 text-white'
-                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-              }`}
-            >
-              {totalActiveNotes}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('proyectos')}
-          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-            activeTab === 'proyectos'
-              ? 'bg-[var(--text)] text-[var(--bg-elevated)] shadow-sm'
-              : 'text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--card)]'
-          }`}
-        >
-          <span>🎯 Proyectos & Metas</span>
-          {activeProjectsCount > 0 && (
-            <span
-              className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                activeTab === 'proyectos'
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
-              }`}
-            >
-              {activeProjectsCount}
-            </span>
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('streaming')}
-          className={`flex items-center gap-2 px-3.5 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-            activeTab === 'streaming'
-              ? 'bg-[var(--text)] text-[var(--bg-elevated)] shadow-sm'
-              : 'text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--card)]'
-          }`}
-        >
-          <span>🎥 Streaming & Contenido</span>
-          {status.live && (
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          )}
-        </button>
+    <div className="notes-refinement space-y-5">
+      {noteError && !editingNote && <p role="alert" className="text-sm text-rose-600">{noteError}</p>}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold tracking-tight text-[var(--text)]">Notas y herramientas</h1>
+          {activeTab === 'notas' && <p className="mt-0.5 text-sm text-[var(--text-soft)]">{totalActiveNotes} {totalActiveNotes === 1 ? 'nota activa' : 'notas activas'}</p>}
+        </div>
+        <div className="flex items-center">
+          {activeTab === 'notas' && <button type="button" onClick={() => setShowAddForm(!showAddForm)} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-3.5 text-sm font-semibold text-white hover:bg-[#4338CA] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] cursor-pointer"><AppIcon name="plus" className="h-4 w-4" />{showAddForm ? 'Cerrar' : 'Nueva nota'}</button>}
+        </div>
       </div>
+
+      <nav aria-label="Secciones de Notas" className="flex gap-1 border-b border-[var(--border)]">
+        <button type="button" onClick={() => setActiveTab('notas')} aria-current={!inTools ? 'page' : undefined} className={`min-h-11 border-b-2 px-4 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--blue)] cursor-pointer ${!inTools ? 'border-[#4F46E5] text-[var(--text)]' : 'border-transparent text-[var(--text-soft)] hover:text-[var(--text)]'}`}>Mis notas</button>
+        <button type="button" onClick={() => setActiveTab('proyectos')} aria-current={inTools ? 'page' : undefined} className={`min-h-11 border-b-2 px-4 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--blue)] cursor-pointer ${inTools ? 'border-[#4F46E5] text-[var(--text)]' : 'border-transparent text-[var(--text-soft)] hover:text-[var(--text)]'}`}>Herramientas<span className="hidden sm:inline font-normal ml-2 text-[var(--text-soft)]">Proyectos, listas y enlaces</span></button>
+      </nav>
+
+      {inTools && toolMessage && <p role="status" className="text-sm text-[var(--text)]">{toolMessage}</p>}
+      {inTools && <nav aria-label="Herramientas personales" className="flex flex-wrap gap-2">
+        {([['proyectos', 'Proyectos y objetivos'], ['streaming', 'Streaming y contenido'], ['cosas', 'Objetos y regalos'], ['compras', 'Lista de compras'], ['links', 'Enlaces']] as const).map(([section, label]) =>
+          <button key={section} type="button" aria-current={activeTab === section ? 'page' : undefined} onClick={() => setActiveTab(section)} className={`min-h-11 rounded-xl border px-3 text-sm font-semibold ${activeTab === section ? 'border-[var(--blue)] text-[var(--blue)]' : 'border-[var(--border)] text-[var(--text-soft)]'}`}>{label}</button>)}
+      </nav>}
 
       {/* Tab: Proyectos & Metas */}
       {activeTab === 'proyectos' && (
         <div className="space-y-8">
-          {/* Projects Manager */}
-          <ProjectsManager state={state} onUpdateState={onUpdateState} />
+          <div className="flex flex-wrap gap-2 border-b border-[var(--border)] pb-3" role="group" aria-label="Tipo de seguimiento">
+            <button type="button" aria-pressed={projectView === 'projects'} onClick={() => setProjectView('projects')} className="min-h-11 rounded-xl border border-[var(--border)] px-3 text-sm">Proyectos · tareas y próximo paso</button>
+            <button type="button" aria-pressed={projectView === 'goals'} onClick={() => setProjectView('goals')} className="min-h-11 rounded-xl border border-[var(--border)] px-3 text-sm">Objetivos · avance numérico</button>
+          </div>
+          <div hidden={projectView !== 'projects'}><ProjectsManager state={state} onUpdateState={saveToolChange} initialFocusId={projectView === 'projects' ? initialFocusId : null} focusNonce={focusNonce} /></div>
 
           {/* Quantitative Goals */}
-          <div className="space-y-3 pt-4 border-t border-[var(--border)]">
+          <div hidden={projectView !== 'goals'} className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-bold text-[var(--text)]">Metas Cuantificables 📊</h2>
-                <p className="text-xs text-[var(--text-faint)]">Objetivos numéricos vinculados a tu peso, ahorro disponible o seguimiento manual.</p>
+                <h2 className="text-sm font-bold text-[var(--text)]">Objetivos con progreso</h2>
+                <p className="text-xs text-[var(--text-faint)]">Un valor actual y una meta. Actualizalos manualmente o vinculalos a tus registros.</p>
               </div>
             </div>
 
@@ -427,9 +566,9 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
             <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Nombre</label>
             <input
               type="text"
-              value={goalName}
+              aria-label="Nombre del objetivo" value={goalName}
               onChange={(e) => setGoalName(e.target.value)}
-              placeholder="Ej: Bajar de peso"
+              placeholder="Ej.: Leer 8 capítulos"
               className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
             />
           </div>
@@ -437,26 +576,26 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
             <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Valor inicial</label>
             <input
               type="number"
-              value={goalInitial}
+              aria-label="Valor inicial" value={goalInitial}
               onChange={(e) => setGoalInitial(e.target.value)}
-              placeholder="80"
-              className="w-24 px-2.5 py-1.5 text-xs font-mono rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
+              placeholder="0"
+              className="w-24 px-2.5 py-1.5 text-xs tabular-nums rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
             />
           </div>
           <div>
             <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Meta</label>
             <input
               type="number"
-              value={goalTarget}
+              aria-label="Meta" value={goalTarget}
               onChange={(e) => setGoalTarget(e.target.value)}
-              placeholder="72"
-              className="w-24 px-2.5 py-1.5 text-xs font-mono rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
+              placeholder="8"
+              className="w-24 px-2.5 py-1.5 text-xs tabular-nums rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
             />
           </div>
           <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Vincular a</label>
+            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Actualizar desde</label>
             <select
-              value={goalLinked || ''}
+              aria-label="Origen del avance" value={goalLinked || ''}
               onChange={(e) => setGoalLinked((e.target.value as any) || null)}
               className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
             >
@@ -479,7 +618,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {(state.goals || []).length === 0 ? (
-            <p className="text-center py-6 text-xs text-[var(--text-faint)] col-span-3">
+            <p className="text-center py-6 text-xs text-[var(--text-faint)] col-span-full">
               Todavía no creaste objetivos.
             </p>
           ) : (
@@ -489,6 +628,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
               const isFinancial = g.linked === 'available' || g.linked === 'net_worth' || g.linked === 'resale_profit';
 
               const fmtVal = (val: number) => {
+                if (!Number.isFinite(val)) return 'No comparable';
                 if (isFinancial) return fmtMoney(val);
                 if (g.linked === 'study_hours') return `${Number(val).toFixed(1)}h`;
                 if (g.linked === 'weight') return `${Number(val).toFixed(1)} kg`;
@@ -514,14 +654,14 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
                   <div className="flex items-start justify-between">
                     <span className="font-bold text-sm text-[var(--text)]">{g.name}</span>
                     <button
-                      onClick={() => handleDeleteGoal(g.id)}
+                      aria-label={`Eliminar objetivo ${g.name}`} onClick={() => handleDeleteGoal(g.id)}
                       className="text-xs text-[var(--text-faint)] hover:text-red-500 px-1"
                     >
                       ✕
                     </button>
                   </div>
 
-                  <div className="font-mono text-2xl font-extrabold text-[var(--text)]">
+                  <div className="tabular-nums text-2xl font-extrabold text-[var(--text)]">
                     {fmtVal(cur)}
                     <span className="text-xs font-normal text-[var(--text-faint)] ml-1">
                       / {fmtVal(g.target)}
@@ -556,40 +696,18 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
 
   {/* Tab: Notas & Personal */}
   {activeTab === 'notas' && (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Post-its / Notas Grid */}
       <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-bold text-[var(--text)] flex items-center gap-2">
-              <span>Notas & Post-its</span>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                {totalActiveNotes} {totalActiveNotes === 1 ? 'activa' : 'activas'}
-              </span>
-            </h2>
-            <p className="text-xs text-[var(--text-faint)]">
-              Capturas rápidas, ideas, recordatorios y apuntes inmediatos.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold transition shadow-2xs cursor-pointer self-start sm:self-auto"
-          >
-            <AppIcon name="plus" className="h-3.5 w-3.5 text-white" />
-            <span>{showAddForm ? 'Cerrar formulario' : 'Nueva nota'}</span>
-          </button>
-        </div>
 
         {/* Quick Add / Form */}
         {showAddForm && (
           <form
             onSubmit={handleAddPostit}
-            className="p-4 bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-sm space-y-3 animate-in fade-in duration-150"
+            className="p-4 sm:p-5 bg-[var(--surface-muted)]/45 border border-[var(--border)] rounded-2xl space-y-3 animate-in fade-in duration-150"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[var(--text)]">Crear nota</span>
+              <span className="text-sm font-semibold text-[var(--text)]">Nueva nota</span>
               <label className="flex items-center gap-1.5 text-xs text-[var(--text-soft)] cursor-pointer select-none">
                 <input
                   type="checkbox"
@@ -603,29 +721,26 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
 
             <input
               type="text"
+              aria-label="Título de la nueva nota"
               value={noteTitle}
               onChange={(e) => setNoteTitle(e.target.value)}
               placeholder="Título (opcional)..."
-              className="w-full px-3 py-2 text-xs font-semibold rounded-xl bg-[var(--bg)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)]"
+              className="w-full px-3 py-2.5 text-sm font-semibold rounded-xl bg-[var(--card)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)]"
             />
 
             <textarea
+              aria-label="Contenido de la nueva nota"
+              autoFocus
               value={noteContent}
               onChange={(e) => setNoteContent(e.target.value)}
               placeholder="Escribí el contenido de la nota..."
               rows={3}
-              className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)] resize-y"
+              className="w-full px-3 py-3 text-sm leading-6 rounded-xl bg-[var(--card)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)] resize-y"
               required
             />
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-              <input
-                type="text"
-                value={noteTags}
-                onChange={(e) => setNoteTags(e.target.value)}
-                placeholder="Etiquetas (separadas por comas, ej: ideas, estudio)..."
-                className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-[var(--bg)] border border-[var(--border)] text-[var(--text)]"
-              />
+              <div className="w-full sm:flex-1"><TagEditor value={noteTags} onChange={setNoteTags} /></div>
               <div className="flex items-center gap-2 self-end sm:self-auto">
                 <button
                   type="button"
@@ -657,8 +772,9 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
               type="text"
               value={noteSearch}
               onChange={(e) => setNoteSearch(e.target.value)}
-              placeholder="Buscar notas por título, texto o etiqueta..."
-              className="w-full pl-8 pr-8 py-1.5 text-xs rounded-xl bg-[var(--card)] border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-faint)] focus:border-[var(--blue)] outline-none transition"
+              aria-label="Buscar notas"
+              placeholder="Buscar por título, texto o etiqueta"
+              className="w-full pl-8 pr-8 py-2.5 text-sm rounded-xl bg-[var(--card)] border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-faint)] focus:border-[var(--blue)] outline-none transition"
             />
             {noteSearch && (
               <button
@@ -673,7 +789,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
           </div>
 
           {/* Filter Tabs */}
-          <div className="flex items-center gap-1 bg-[var(--surface-muted)] p-1 rounded-xl border border-[var(--border)] text-xs font-bold">
+          <div className="flex items-center gap-1 overflow-x-auto bg-[var(--surface-muted)] p-1 rounded-xl border border-[var(--border)] text-xs font-bold">
             <button
               type="button"
               onClick={() => setNoteFilter('activas')}
@@ -710,8 +826,16 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
           </div>
         </div>
 
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-soft)]">
+          <span role="status">{displayedNotes.length} {displayedNotes.length === 1 ? 'nota' : 'notas'}{noteSearch ? ' encontradas' : ''}</span>
+          <label className="flex items-center gap-2">Ordenar
+            <select aria-label="Ordenar notas" value={noteOrder} onChange={(event) => setNoteOrder(event.target.value as 'recent' | 'pinned')} className="min-h-11 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-[var(--text)]">
+              <option value="recent">Más recientes</option><option value="pinned">Fijadas primero</option>
+            </select>
+          </label>
+        </div>
         {/* Notes Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div id="notes-grid" className="grid grid-cols-1 items-start md:grid-cols-2 2xl:grid-cols-3 gap-4">
           {displayedNotes.length === 0 ? (
             <div className="py-12 text-center col-span-full bg-[var(--surface-muted)]/40 rounded-2xl border border-dashed border-[var(--border)] p-6">
               <p className="text-xs text-[var(--text-faint)] font-medium">
@@ -735,7 +859,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
               )}
             </div>
           ) : (
-            displayedNotes.map((p) => {
+            renderedNotes.map((p) => {
               const relative = formatRelativeTime(p.updatedAt || p.date);
               const isPinned = Boolean(p.pinned);
               const isArchived = Boolean(p.archived);
@@ -743,99 +867,55 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
               return (
                 <div
                   key={p.id}
-                  className={`p-4 rounded-2xl border text-xs space-y-3 flex flex-col justify-between transition-all group ${
+                  id={`note-${p.id}`}
+                  className={`relative p-4 sm:p-5 rounded-2xl border flex flex-col gap-3 transition-[border-color,box-shadow] shadow-[0_8px_24px_-20px_rgba(17,24,39,0.35)] dark:shadow-[0_8px_24px_-20px_rgba(0,0,0,0.75)] ${openNoteMenuId === p.id ? 'z-20' : ''} ${
                     isPinned
-                      ? 'bg-amber-500/10 border-amber-500/30 shadow-2xs'
+                      ? 'bg-[#4F46E5]/[0.075] dark:bg-[#4F46E5]/[0.16] border-[#4F46E5]/30 dark:border-[#8B84FF]/40 hover:border-[#4F46E5]/55'
                       : isArchived
-                      ? 'bg-[var(--surface-muted)]/50 border-[var(--border)] opacity-75'
-                      : 'bg-[var(--card)] border-[var(--border)] hover:border-[var(--blue)]/40 shadow-2xs'
+                      ? 'bg-[var(--surface-muted)]/45 border-[var(--border)]'
+                      : 'bg-[var(--card)] border-[var(--border)] hover:border-[#4F46E5]/30'
                   }`}
                 >
-                  {/* Top Header */}
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      {isPinned && (
-                        <span className="text-xs shrink-0" title="Nota fijada">📌</span>
-                      )}
-                      {p.title && (
-                        <h3 className="font-bold text-xs text-[var(--text)] truncate">
-                          {p.title}
-                        </h3>
-                      )}
+                    <div className="flex min-w-0 flex-1 items-start gap-2">
+                      {isPinned && <AppIcon name="pin" aria-label="Nota fijada" className="mt-0.5 h-4 w-4 shrink-0 text-[#4F46E5] dark:text-[#A5A0FF]" />}
+                      {p.title && <button type="button" onClick={() => handleStartEdit(p)} className="min-w-0 flex-1 text-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--blue)]" aria-label={`Abrir nota ${p.title}`}><h3 className="font-semibold text-base leading-snug tracking-[-0.01em] text-[var(--text)] break-words">{p.title}</h3></button>}
                     </div>
-
-                    {/* Action buttons */}
-                    <div className="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
-                      {/* Pin Toggle */}
-                      <button
-                        type="button"
-                        onClick={() => handleTogglePin(p.id, isPinned)}
-                        className={`p-1 rounded-lg transition cursor-pointer ${
-                          isPinned
-                            ? 'text-amber-600 hover:bg-amber-500/20'
-                            : 'text-[var(--text-faint)] hover:text-amber-600 hover:bg-[var(--surface-muted)]'
-                        }`}
-                        title={isPinned ? 'Desfijar' : 'Fijar arriba'}
-                        aria-label={isPinned ? 'Desfijar' : 'Fijar arriba'}
-                      >
-                        <span className="text-[11px] leading-none">📌</span>
-                      </button>
-
-                      {/* Convert to Task */}
-                      <button
-                        type="button"
-                        onClick={() => handleConvertToTask(p.id)}
-                        className="p-1 rounded-lg text-[var(--text-faint)] hover:text-emerald-600 hover:bg-emerald-500/10 transition cursor-pointer"
-                        title="Convertir en tarea de Hoy"
-                        aria-label="Convertir en tarea de Hoy"
-                      >
-                        <AppIcon name="check" className="h-3 w-3" />
-                      </button>
-
-                      {/* Archive Toggle */}
-                      <button
-                        type="button"
-                        onClick={() => handleToggleArchive(p.id, isArchived)}
-                        className="p-1 rounded-lg text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] transition cursor-pointer"
-                        title={isArchived ? 'Desarchivar' : 'Archivar'}
-                        aria-label={isArchived ? 'Desarchivar' : 'Archivar'}
-                      >
-                        <span className="text-[10px] leading-none">{isArchived ? '📤' : '📥'}</span>
-                      </button>
-
-                      {/* Edit */}
-                      <button
-                        type="button"
-                        onClick={() => handleStartEdit(p)}
-                        className="p-1 rounded-lg text-[var(--text-faint)] hover:text-[var(--blue)] hover:bg-blue-500/10 transition cursor-pointer"
-                        title="Editar nota"
-                        aria-label="Editar nota"
-                      >
-                        <AppIcon name="edit" className="h-3 w-3" />
-                      </button>
-
-                      {/* Delete */}
-                      <button
-                        type="button"
-                        onClick={() => handleDeletePostit(p.id)}
-                        className="p-1 rounded-lg text-[var(--text-faint)] hover:text-rose-600 hover:bg-rose-500/10 transition cursor-pointer"
-                        title="Eliminar nota"
-                        aria-label="Eliminar nota"
-                      >
-                        <AppIcon name="trash" className="h-3 w-3" />
-                      </button>
+                    <div className="relative shrink-0" data-note-menu onBlur={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget)) setOpenNoteMenuId(null);
+                    }}>
+                      <button id={`note-menu-trigger-${p.id}`} type="button" onClick={() => setOpenNoteMenuId(openNoteMenuId === p.id ? null : p.id)} aria-label={`Acciones de la nota ${p.title || p.text.slice(0, 45)}`} aria-haspopup="menu" aria-expanded={openNoteMenuId === p.id} className="flex h-10 w-10 items-center justify-center rounded-lg text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--blue)] cursor-pointer"><svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+                      {openNoteMenuId === p.id && (
+                        <div role="menu" aria-label="Acciones de nota" onKeyDown={(event) => {
+                          if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+                          event.preventDefault();
+                          const items = Array.from(event.currentTarget.querySelectorAll('[role="menuitem"]')) as HTMLButtonElement[];
+                          const current = items.indexOf(document.activeElement as HTMLButtonElement);
+                          const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : event.key === 'ArrowDown' ? (current + 1) % items.length : (current - 1 + items.length) % items.length;
+                          items[next]?.focus();
+                        }} className="absolute right-0 top-full z-30 mt-1 w-48 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-lg">
+                          <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleStartEdit(p); }} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer">Editar</button>
+                          <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleTogglePin(p.id, isPinned); }} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer">{isPinned ? 'Desfijar' : 'Fijar'}</button>
+                          <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleConvertToTask(p.id); }} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer">Convertir a tarea</button>
+                          {GYM_NOTE_PLACEMENTS_ENABLED && (currentPlacements.some((placement) => placement.noteId === p.id) ? (
+                            <>
+                              <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); onOpenGym(); }} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer">Ver en Gimnasio</button>
+                              <button role="menuitem" type="button" onClick={() => handleRemoveFromGym(p.id)} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer">Retirar de Gimnasio</button>
+                            </>
+                          ) : <button role="menuitem" type="button" onClick={() => handlePlaceInGym(p.id)} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer">Colocar en… Gimnasio</button>)}
+                          <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleToggleArchive(p.id, isArchived); }} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer">{isArchived ? 'Restaurar' : 'Archivar'}</button>
+                          <button role="menuitem" type="button" onClick={() => handleDeletePostit(p.id)} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-rose-600 hover:bg-[var(--surface-muted)] cursor-pointer">Eliminar</button>
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Content */}
-                  <div className="flex-1">
-                    <p className="text-[var(--text)] text-xs font-normal whitespace-pre-wrap leading-relaxed">
-                      {p.text}
-                    </p>
-                  </div>
+                  <button type="button" onClick={() => handleStartEdit(p)} className="min-w-0 text-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--blue)]" aria-label={`Abrir contenido de la nota ${p.title || p.text.slice(0, 45)}`}>
+                    <span className="line-clamp-5 text-[var(--text)] text-sm leading-6 whitespace-pre-wrap break-words">{p.text}</span>
+                  </button>
 
                   {/* Footer: Tags and Relative Date */}
-                  <div className="pt-2 border-t border-[var(--border)]/60 flex flex-wrap items-center justify-between gap-1.5 text-[10px]">
+                  <div className="pt-3 border-t border-[var(--border)]/60 flex flex-wrap items-end justify-between gap-2 text-xs">
                     {p.tags && p.tags.length > 0 ? (
                       <div className="flex flex-wrap items-center gap-1">
                         {p.tags.map((tag) => (
@@ -843,7 +923,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
                             key={tag}
                             type="button"
                             onClick={() => setNoteSearch(tag)}
-                            className="px-1.5 py-0.5 rounded font-medium bg-[var(--surface-muted)] hover:bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)] border border-[var(--border)] transition cursor-pointer"
+                            className="min-h-8 px-2 rounded-lg font-medium bg-[var(--surface-muted)] hover:bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)] border border-[var(--border)] transition cursor-pointer"
                             title={`Filtrar por #${tag}`}
                           >
                             #{tag}
@@ -854,13 +934,14 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
                       <div />
                     )}
 
-                    <div className="flex items-center gap-1.5 font-mono text-[var(--text-faint)] shrink-0 ml-auto">
+                    <div className="flex items-center gap-1.5 tabular-nums text-[var(--text-faint)] shrink-0 ml-auto">
+                      {isPinned && <span className="font-medium text-[#4F46E5] dark:text-[#A5A0FF]">Fijada ·</span>}
                       {isArchived && (
-                        <span className="px-1.5 py-0.2 rounded bg-[var(--surface-muted)] text-[9px] font-sans font-semibold">
+                        <span className="px-2 py-1 rounded bg-[var(--surface-muted)] text-[11px] font-sans font-semibold">
                           Archivada
                         </span>
                       )}
-                      <span title={p.updatedAt ? `Modificada: ${p.updatedAt}` : `Creada: ${p.date}`}>
+                      <span className="text-xs" title={p.updatedAt ? `Modificada: ${p.updatedAt}` : `Creada: ${p.date}`}>
                         {relative}
                       </span>
                     </div>
@@ -870,17 +951,33 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
             })
           )}
         </div>
+        {renderedNotes.length < displayedNotes.length && <div className="flex flex-wrap items-center justify-center gap-3 pt-4">
+          <span role="status" className="text-sm text-[var(--text-soft)]">Mostrando {renderedNotes.length} de {displayedNotes.length} notas</span>
+          <button type="button" aria-controls="notes-grid" onClick={() => expandNotes(visibleNoteCount + 50)} className="min-h-11 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 text-sm font-semibold text-[var(--text)]">Cargar 50 más</button>
+          <button type="button" aria-controls="notes-grid" onClick={() => expandNotes(displayedNotes.length)} className="min-h-11 rounded-xl px-3 text-sm font-semibold text-[var(--text-soft)] underline">Ver todas</button>
+        </div>}
       </div>
 
       {/* Edit Note Modal */}
       {editingNote && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl bg-[var(--card)] border border-[var(--border)] p-5 shadow-2xl space-y-4">
+          <div ref={editorRef} role="dialog" aria-modal="true" aria-labelledby="note-editor-title"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') { event.stopPropagation(); closeEditor(); }
+              if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); editorRef.current?.querySelector('form')?.requestSubmit(); }
+              if (event.key === 'Tab') {
+                const controls = Array.from(editorRef.current?.querySelectorAll('button:not(:disabled), input, textarea, select') || []) as HTMLElement[];
+                const first = controls[0], last = controls[controls.length - 1];
+                if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+                if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+              }
+            }} className="w-full max-w-3xl max-h-[90dvh] overflow-y-auto rounded-2xl bg-[var(--card)] border border-[var(--border)] p-5 shadow-2xl space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-[var(--text)]">Editar nota</h3>
+              <h3 id="note-editor-title" className="text-base font-semibold text-[var(--text)]">Editar nota</h3>
               <button
                 type="button"
-                onClick={() => setEditingNote(null)}
+                onClick={closeEditor}
+                aria-label="Cerrar editor de nota"
                 className="p-1 rounded-lg text-[var(--text-faint)] hover:text-[var(--text)] transition cursor-pointer"
               >
                 ✕
@@ -888,43 +985,41 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
             </div>
 
             <form onSubmit={handleSaveEdit} className="space-y-3">
+              {noteError && <p role="alert" className="text-sm text-rose-600">{noteError}</p>}
+              <p className="text-xs text-[var(--text-soft)]">Guardado manual · Ctrl+Enter para guardar</p>
               <div>
-                <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
+                <label className="text-xs font-semibold text-[var(--text-soft)] block mb-1.5">
                   Título (opcional)
                 </label>
                 <input
                   type="text"
+                  aria-label="Título de la nota"
                   value={editTitle}
                   onChange={(e) => setEditTitle(e.target.value)}
                   placeholder="Título de la nota..."
-                  className="w-full px-3 py-2 text-xs font-semibold rounded-xl bg-[var(--bg)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)]"
+                  className="w-full px-3 py-2.5 text-sm font-semibold rounded-xl bg-[var(--bg)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)]"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
+                <label className="text-xs font-semibold text-[var(--text-soft)] block mb-1.5">
                   Contenido
                 </label>
                 <textarea
+                  aria-label="Contenido de la nota"
                   value={editText}
                   onChange={(e) => setEditText(e.target.value)}
-                  rows={5}
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)] resize-y"
+                  rows={12}
+                  className="w-full px-3 py-3 text-sm leading-6 rounded-xl bg-[var(--bg)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)] resize-y"
                   required
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
-                  Etiquetas (separadas por comas)
+                <label className="text-xs font-semibold text-[var(--text-soft)] block mb-1.5">
+                  Etiquetas
                 </label>
-                <input
-                  type="text"
-                  value={editTags}
-                  onChange={(e) => setEditTags(e.target.value)}
-                  placeholder="ideas, recordatorio, trabajo"
-                  className="w-full px-3 py-1.5 text-xs rounded-xl bg-[var(--bg)] border border-[var(--border)] text-[var(--text)]"
-                />
+                <TagEditor value={editTags} onChange={setEditTags} />
               </div>
 
               <div className="flex items-center gap-4 pt-1">
@@ -951,7 +1046,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border)]">
                 <button
                   type="button"
-                  onClick={() => setEditingNote(null)}
+                  onClick={closeEditor}
                   className="px-3.5 py-1.5 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] rounded-xl border border-[var(--border)] cursor-pointer"
                 >
                   Cancelar
@@ -969,12 +1064,16 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
         </div>
       )}
 
+    </div>
+  )}
+
       {/* Mis cosas */}
+      {activeTab === 'cosas' && (
       <section className="space-y-3 pt-4 border-t border-[var(--border)]">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h2 className="text-sm font-bold text-[var(--text)]">Mis cosas 🎁</h2>
-            <p className="text-xs text-[var(--text-soft)]">Registrá regalos y objetos que valorás, dónde están y qué te gusta de tenerlos.</p>
+            <h2 className="text-sm font-bold text-[var(--text)]">Objetos y regalos</h2>
+            <p className="text-xs text-[var(--text-soft)]">Guardá dónde está cada objeto y los detalles que quieras recordar.</p>
           </div>
           {(state.notes?.possessions || []).length > 4 && (
             <input
@@ -986,16 +1085,16 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
           )}
         </div>
         <form onSubmit={handleAddPossession} className="grid gap-2 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg)] p-3 sm:grid-cols-2 lg:grid-cols-[1.3fr_110px_1fr_135px_auto]">
-          <input value={possessionName} onChange={(event) => setPossessionName(event.target.value)} placeholder="Qué recibiste o querés recordar" className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />
-          <input value={possessionCategory} onChange={(event) => setPossessionCategory(event.target.value)} placeholder="Categoría" className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />
-          <input value={possessionLocation} onChange={(event) => setPossessionLocation(event.target.value)} placeholder="Dónde está (opcional)" className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />
-          <input type="date" max={todayISO()} value={possessionDate} onChange={(event) => setPossessionDate(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />
+          <input aria-label="Objeto o regalo" value={possessionName} onChange={(event) => setPossessionName(event.target.value)} placeholder="Qué recibiste o querés recordar" className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />
+          <input aria-label="Categoría" value={possessionCategory} onChange={(event) => setPossessionCategory(event.target.value)} placeholder="Categoría" className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />
+          <input aria-label="Ubicación (opcional)" value={possessionLocation} onChange={(event) => setPossessionLocation(event.target.value)} placeholder="Dónde está (opcional)" className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />
+          <input type="date" max={todayISO()} aria-label="Fecha del objeto" value={possessionDate} onChange={(event) => setPossessionDate(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />
           <button className="rounded-xl bg-[var(--blue)] px-4 py-2 text-xs font-extrabold text-white cursor-pointer">Guardar</button>
-          <textarea value={possessionNote} onChange={(event) => setPossessionNote(event.target.value)} placeholder="Qué te gusta, quién te lo regaló o por qué lo valorás…" rows={2} className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs sm:col-span-2 lg:col-span-5" />
+          <textarea aria-label="Detalles del objeto" value={possessionNote} onChange={(event) => setPossessionNote(event.target.value)} placeholder="Qué te gusta, quién te lo regaló o por qué lo valorás…" rows={2} className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs sm:col-span-2 lg:col-span-5" />
         </form>
         {visiblePossessions.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-[var(--border)] p-5 text-center text-xs text-[var(--text-faint)]">
-            {(state.notes?.possessions || []).length ? 'No encontré coincidencias.' : 'Todavía no guardaste nada acá.'}
+            {(state.notes?.possessions || []).length ? 'No encontré coincidencias.' : 'Agregá un objeto o regalo con el formulario.'}
           </div>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1007,7 +1106,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
                     <h3 className="font-extrabold text-[var(--text)]">{item.name}</h3>
                   </div>
                   <button
-                    onClick={() => onUpdateState((draft) => {
+                    onClick={() => saveToolChange((draft) => {
                       if (!draft.notes?.possessions) return;
                       draft.notes.possessions = draft.notes.possessions.filter((candidate) => candidate.id !== item.id);
                     })}
@@ -1027,13 +1126,16 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
           </div>
         )}
       </section>
+      )}
 
-      {/* Shopping List & Links (2-column layout) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-[var(--border)]">
+      {/* Shopping list and useful links keep their existing forms and records. */}
+      {(activeTab === 'compras' || activeTab === 'links') && (
+      <div className="pt-4 border-t border-[var(--border)]">
         {/* Shopping List */}
+        {activeTab === 'compras' && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-[var(--text)]">Lista de compras 🛒</h2>
+            <h2 className="text-sm font-bold text-[var(--text)]">Lista de compras</h2>
             {pendingShopCount > 0 && (
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                 {pendingShopCount} pendientes
@@ -1044,7 +1146,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
             <form onSubmit={handleAddShop} className="flex gap-2">
               <input
                 type="text"
-                value={shopItem}
+                aria-label="Artículo para comprar" value={shopItem}
                 onChange={(e) => setShopItem(e.target.value)}
                 placeholder="Ej: Leche, avena..."
                 className="flex-1 px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
@@ -1053,7 +1155,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
                 type="submit"
                 className="px-3 py-1.5 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold rounded-lg cursor-pointer"
               >
-                ＋
+                Agregar
               </button>
             </form>
 
@@ -1065,7 +1167,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
                   <div key={s.id} className="py-2 flex items-center gap-3 text-xs">
                     <button
                       type="button"
-                      onClick={() => handleToggleShop(s.id)}
+                      aria-label={`${s.done ? 'Marcar pendiente' : 'Marcar comprado'}: ${s.text}`} aria-pressed={s.done} onClick={() => handleToggleShop(s.id)}
                       className={`w-4 h-4 rounded-md border flex items-center justify-center text-[10px] cursor-pointer ${
                         s.done
                           ? 'bg-emerald-500 border-emerald-500 text-white'
@@ -1078,7 +1180,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
                       {s.text}
                     </span>
                     <button
-                      onClick={() => handleDeleteShop(s.id)}
+                      aria-label={`Eliminar ${s.text}`} onClick={() => handleDeleteShop(s.id)}
                       className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1 cursor-pointer"
                     >
                       ✕
@@ -1090,21 +1192,23 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
           </div>
         </div>
 
+        )}
         {/* Useful Links */}
+        {activeTab === 'links' && (
         <div className="space-y-3">
-          <h2 className="text-sm font-bold text-[var(--text)]">Links útiles 🔗</h2>
+          <h2 className="text-sm font-bold text-[var(--text)]">Enlaces</h2>
           <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
             <form onSubmit={handleAddLink} className="flex flex-wrap gap-2">
               <input
                 type="text"
-                value={linkName}
+                aria-label="Nombre del enlace" value={linkName}
                 onChange={(e) => setLinkName(e.target.value)}
                 placeholder="Nombre (ej: Campus)"
                 className="w-32 px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
               />
               <input
                 type="text"
-                value={linkUrl}
+                aria-label="Dirección del enlace" value={linkUrl}
                 onChange={(e) => setLinkUrl(e.target.value)}
                 placeholder="https://..."
                 className="flex-1 min-w-[140px] px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
@@ -1113,13 +1217,13 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
                 type="submit"
                 className="px-3 py-1.5 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold rounded-lg cursor-pointer"
               >
-                ＋
+                Agregar
               </button>
             </form>
 
             <div className="divide-y divide-[var(--border)] max-h-60 overflow-y-auto">
               {(state.notes?.links || []).length === 0 ? (
-                <p className="text-center py-4 text-xs text-[var(--text-faint)]">Sin links guardados.</p>
+                <p className="text-center py-4 text-xs text-[var(--text-faint)]">Guardá un enlace con su nombre y dirección.</p>
               ) : (
                 (state.notes?.links || []).map((l) => (
                   <div key={l.id} className="py-2 flex items-center justify-between text-xs">
@@ -1127,12 +1231,12 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
                       href={l.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-[var(--blue)] font-bold hover:underline truncate max-w-[200px] sm:max-w-[280px]"
+                      className="min-w-0 break-words text-[var(--blue)] font-bold hover:underline"
                     >
                       {l.name}
                     </a>
                     <button
-                      onClick={() => handleDeleteLink(l.id)}
+                      aria-label={`Eliminar enlace ${l.name}`} onClick={() => handleDeleteLink(l.id)}
                       className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1 cursor-pointer"
                     >
                       ✕
@@ -1143,9 +1247,9 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
             </div>
           </div>
         </div>
+        )}
       </div>
-    </div>
-  )}
+      )}
 
   {/* Tab: Streaming & Contenido */}
   {activeTab === 'streaming' && (
@@ -1154,9 +1258,9 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
         <div className="flex items-center justify-between">
           <div>
             <h3 className="text-base font-extrabold text-[var(--text)]">
-              {status.live ? `En directo hoy (${status.hours} h)` : 'Sin stream hoy'}
+              {status.live ? `En directo hoy (${status.hours} h)` : 'Sin directo registrado hoy'}
             </h3>
-            <p className="text-xs text-[var(--text-faint)]">Monitoreo mensual de directos y producción de contenido.</p>
+            <p className="text-xs text-[var(--text-faint)]">Sesiones del mes y contenido en preparación.</p>
           </div>
           <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
             {streamCount}/{streamGoal} este mes
@@ -1172,7 +1276,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
             <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Fecha</label>
             <input
               type="date"
-              value={streamDate}
+              aria-label="Fecha del directo" value={streamDate}
               onChange={(e) => setStreamDate(e.target.value)}
               className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
             />
@@ -1182,10 +1286,10 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
             <input
               type="number"
               step="0.1"
-              value={streamHours}
+              aria-label="Horas del directo" value={streamHours}
               onChange={(e) => setStreamHours(e.target.value)}
               placeholder="2.5"
-              className="w-20 px-2.5 py-1.5 text-xs font-mono rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
+              className="w-20 px-2.5 py-1.5 text-xs tabular-nums rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
             />
           </div>
           <button
@@ -1200,12 +1304,12 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
           <section className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
             <div className="flex items-center justify-between gap-2">
               <div>
-                <h3 className="text-xs font-extrabold text-[var(--text)]">Checklist pre-stream</h3>
-                <p className="text-[10px] text-[var(--text-faint)]">Un toque por punto; reinicialo antes del próximo directo.</p>
+                <h3 className="text-xs font-extrabold text-[var(--text)]">Antes del directo</h3>
+                <p className="text-[10px] text-[var(--text-faint)]">Marcá cada control y reiniciá la lista para el próximo directo.</p>
               </div>
               <button
                 type="button"
-                onClick={() => onUpdateState((draft) => (draft.streaming?.preStreamChecklist || []).forEach((item) => { item.done = false; }))}
+                onClick={() => saveToolChange((draft) => (draft.streaming?.preStreamChecklist || []).forEach((item) => { item.done = false; }))}
                 className="rounded-lg border border-[var(--border)] px-2 py-1 text-[10px] font-bold text-[var(--blue)] cursor-pointer"
               >
                 Reiniciar
@@ -1216,7 +1320,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
                 <div key={item.id} className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${item.done ? 'border-emerald-500/25 bg-emerald-500/10 opacity-70' : 'border-[var(--border)] bg-[var(--card)]'}`}>
                   <button
                     type="button"
-                    onClick={() => onUpdateState((draft) => { const target = (draft.streaming?.preStreamChecklist || []).find((candidate) => candidate.id === item.id); if (target) target.done = !target.done; })}
+                    onClick={() => saveToolChange((draft) => { const target = (draft.streaming?.preStreamChecklist || []).find((candidate) => candidate.id === item.id); if (target) target.done = !target.done; })}
                     className={`flex h-6 w-6 items-center justify-center rounded-md border-2 text-xs cursor-pointer ${item.done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-[var(--border)] text-transparent'}`}
                   >
                     ✓
@@ -1224,7 +1328,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
                   <span className={`min-w-0 flex-1 text-xs font-semibold ${item.done ? 'line-through' : ''}`}>{item.label}</span>
                   <button
                     type="button"
-                    onClick={() => onUpdateState((draft) => { if (draft.streaming?.preStreamChecklist) draft.streaming.preStreamChecklist = draft.streaming.preStreamChecklist.filter((candidate) => candidate.id !== item.id); })}
+                    onClick={() => saveToolChange((draft) => { if (draft.streaming?.preStreamChecklist) draft.streaming.preStreamChecklist = draft.streaming.preStreamChecklist.filter((candidate) => candidate.id !== item.id); })}
                     className="text-[10px] text-[var(--text-faint)] hover:text-rose-500 cursor-pointer"
                   >
                     ✕
@@ -1234,23 +1338,23 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
             </div>
             <form onSubmit={handleAddChecklistItem} className="mt-2 flex gap-1.5">
               <input
-                value={checklistLabel}
+                aria-label="Control antes del directo" value={checklistLabel}
                 onChange={(event) => setChecklistLabel(event.target.value)}
                 placeholder="Nuevo control…"
                 className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs"
               />
-              <button className="rounded-lg bg-[var(--text)] px-2.5 text-xs font-bold text-[var(--bg)] cursor-pointer">＋</button>
+              <button aria-label="Agregar control" className="rounded-lg bg-[var(--text)] px-2.5 text-xs font-bold text-[var(--bg)] cursor-pointer">Agregar</button>
             </form>
           </section>
 
           <section className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
             <div>
-              <h3 className="text-xs font-extrabold text-[var(--text)]">Pipeline de contenido</h3>
-              <p className="text-[10px] text-[var(--text-faint)]">De la idea a publicado sin abrir otra herramienta.</p>
+              <h3 className="text-xs font-extrabold text-[var(--text)]">Contenido en preparación</h3>
+              <p className="text-[10px] text-[var(--text-faint)]">Mové cada contenido según su avance.</p>
             </div>
             <form onSubmit={handleAddContent} className="mt-2 flex gap-1.5">
               <input
-                value={contentTitle}
+                aria-label="Título del contenido" value={contentTitle}
                 onChange={(event) => setContentTitle(event.target.value)}
                 placeholder="Nueva idea de contenido…"
                 className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs"
@@ -1274,7 +1378,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
                             <select
                               aria-label={`Estado de ${item.title}`}
                               value={item.status}
-                              onChange={(event) => onUpdateState((draft) => { const target = (draft.streaming?.contentPipeline || []).find((candidate) => candidate.id === item.id); if (target) { target.status = event.target.value as typeof item.status; target.updatedAt = new Date().toISOString(); } })}
+                              onChange={(event) => saveToolChange((draft) => { const target = (draft.streaming?.contentPipeline || []).find((candidate) => candidate.id === item.id); if (target) { target.status = event.target.value as typeof item.status; target.updatedAt = new Date().toISOString(); } })}
                               className="min-w-0 flex-1 rounded-md border border-[var(--border)] bg-[var(--card)] px-1 py-1 text-[9px]"
                             >
                               {pipelineStages.map((option) => (
@@ -1283,7 +1387,7 @@ export const NotasView: React.FC<NotasViewProps> = ({ state, onUpdateState }) =>
                             </select>
                             <button
                               type="button"
-                              onClick={() => onUpdateState((draft) => { if (draft.streaming?.contentPipeline) draft.streaming.contentPipeline = draft.streaming.contentPipeline.filter((candidate) => candidate.id !== item.id); })}
+                              onClick={() => saveToolChange((draft) => { if (draft.streaming?.contentPipeline) draft.streaming.contentPipeline = draft.streaming.contentPipeline.filter((candidate) => candidate.id !== item.id); })}
                               className="px-1 text-[10px] text-rose-500 cursor-pointer"
                             >
                               ✕

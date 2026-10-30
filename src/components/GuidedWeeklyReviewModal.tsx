@@ -288,7 +288,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
                       >
                         <div className="min-w-0 flex-1">
                           <p className="font-semibold text-[var(--text)] truncate">{t.text}</p>
-                          <span className="text-[10px] text-amber-500 font-mono">
+                          <span className="text-[10px] text-amber-500 tabular-nums">
                             Desde el {fmtDate(t.date)}
                           </span>
                         </div>
@@ -374,7 +374,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
                             {fmtDate(s.date)} • {s.setsCount} series
                           </span>
                         </div>
-                        <span className="text-xs font-mono font-bold text-amber-500">
+                        <span className="text-xs tabular-nums font-bold text-amber-500">
                           {s.volumeKg.toLocaleString()} kg
                         </span>
                       </div>
@@ -390,7 +390,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
               {reviewData.gym.currentWeight && (
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 flex items-center justify-between text-xs">
                   <span className="text-[var(--text-soft)]">Último peso registrado:</span>
-                  <strong className="text-[var(--text)] font-mono text-sm">
+                  <strong className="text-[var(--text)] tabular-nums text-sm">
                     {reviewData.gym.currentWeight} kg
                   </strong>
                 </div>
@@ -451,7 +451,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
                         className="flex items-center justify-between p-2.5 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] text-xs"
                       >
                         <span className="font-semibold text-[var(--text)]">{c.category}</span>
-                        <span className="font-mono font-bold text-rose-500">
+                        <span className="tabular-nums font-bold text-rose-500">
                           <PrivacyAmount>{fmtMoney(c.amount)}</PrivacyAmount>
                         </span>
                       </div>

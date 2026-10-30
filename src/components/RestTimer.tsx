@@ -42,7 +42,7 @@ export const RestTimer: React.FC = () => {
           ⏱️ Temporizador de Descanso entre Series
         </span>
         {isActive && (
-          <span className="text-xs font-mono font-bold text-emerald-500 animate-pulse">
+          <span className="text-xs font-bold text-emerald-500 animate-pulse">
             Descansando...
           </span>
         )}
@@ -67,7 +67,7 @@ export const RestTimer: React.FC = () => {
 
         {isActive ? (
           <div className="flex items-center gap-2">
-            <span className="text-xl font-mono font-extrabold text-[var(--text)] px-3 py-1 bg-[var(--bg)] rounded-xl border border-[var(--border)]">
+            <span className="text-xl tabular-nums font-extrabold text-[var(--text)] px-3 py-1 bg-[var(--bg)] rounded-xl border border-[var(--border)]">
               {timeLeft}s
             </span>
             <button

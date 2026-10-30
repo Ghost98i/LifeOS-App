@@ -1,4 +1,4 @@
-import { todayISO } from '../lib/storage';
+import { todayISO, formatMoney } from '../lib/storage';
 import type { Account, FinanceCategoryInput } from '../types';
 
 export interface QuickFinanceParserOptions {
@@ -244,8 +244,11 @@ export function parseMonetaryToken(str: string): ParsedMonetaryToken {
       return { amount: isNaN(num) ? null : num, isAmbiguous: isNaN(num), rawMatched: str };
     }
     if (decPart.length === 3 && intPart.length >= 1 && intPart.length <= 3) {
-      const num = parseFloat(intPart + decPart);
-      return { amount: isNaN(num) ? null : num, isAmbiguous: isNaN(num), rawMatched: str };
+      if (decPart === '000' || (decPart.endsWith('00') && intPart.length <= 3)) {
+        const num = parseFloat(intPart + decPart);
+        return { amount: isNaN(num) ? null : num, isAmbiguous: isNaN(num), rawMatched: str };
+      }
+      return { amount: null, isAmbiguous: true, rawMatched: str };
     }
     return { amount: null, isAmbiguous: true, rawMatched: str };
   }
@@ -258,8 +261,11 @@ export function parseMonetaryToken(str: string): ParsedMonetaryToken {
       return { amount: isNaN(num) ? null : num, isAmbiguous: isNaN(num), rawMatched: str };
     }
     if (decPart.length === 3 && intPart.length >= 1 && intPart.length <= 3) {
-      const num = parseFloat(intPart + decPart);
-      return { amount: isNaN(num) ? null : num, isAmbiguous: isNaN(num), rawMatched: str };
+      if (decPart === '000' || (decPart.endsWith('00') && intPart.length <= 3)) {
+        const num = parseFloat(intPart + decPart);
+        return { amount: isNaN(num) ? null : num, isAmbiguous: isNaN(num), rawMatched: str };
+      }
+      return { amount: null, isAmbiguous: true, rawMatched: str };
     }
     return { amount: null, isAmbiguous: true, rawMatched: str };
   }
@@ -299,9 +305,42 @@ export function parseQuickFinance(
   const normalizedRaw = raw.replace(/(?:\$U\s*)+/gi, '$U ').trim();
 
   // Detect whether it's an explicit past action vs future commitment
-  const isPastAction = /^(?:gast[eé]|pagu[eé]|compr[eé]|cobr[eé])\b/i.test(normalizedRaw);
-  const isFuturePayment = !isPastAction && (/^(?:pagar|pago\s+de)\b/i.test(normalizedRaw) || /\bcuota\s+\d+/i.test(normalizedRaw));
-  const isDebt = !isPastAction && !isFuturePayment && /\b(?:debo|le\s+debo|deuda(?:\s+de)?|adeudo|compromiso\s+de\s+pago)\b/i.test(normalizedRaw);
+  const isPastAction = /(?<![\wáéíóúñ])(?:gast[eé]|pagu[eé]|compr[eé]|cobr[eé]|gan[eé]|recib[ií]|me\s+pagaron)(?![\wáéíóúñ])/i.test(normalizedRaw);
+  const isFutureCommitment =
+    !isPastAction &&
+    (/^(?:pagar|pago\s+de|comprar|voy\s+a\s+comprar|tengo\s+que\s+comprar|tengo\s+que\s+pagar)(?![\wáéíóúñ])/i.test(normalizedRaw) ||
+      /(?<![\wáéíóúñ])(?:cuota\s+\d+|voy\s+a\s+comprar|tengo\s+que\s+comprar|tengo\s+que\s+pagar)(?![\wáéíóúñ])/i.test(normalizedRaw) ||
+      /(?<![\wáéíóúñ])(?:pagar|comprar)(?![\wáéíóúñ])/i.test(normalizedRaw));
+
+  // Non-transactional / Savings / Negations / Hypotheses / Desires guard
+  const isSavingsOrNonTx =
+    /(?<![\wáéíóúñ])(?:ahorro|ahorrar|ahorrando|ahorr[eé]|me\s+ahorr[eé]|reserva|reservar|reservando)(?![\wáéíóúñ])/i.test(normalizedRaw) ||
+    /(?<![\wáéíóúñ])no\s+(?:pagu[eé]|gast[eé]|compr[eé]|cobr[eé]|gan[eé]|recib[ií])(?![\wáéíóúñ])/i.test(normalizedRaw) ||
+    /(?<![\wáéíóúñ])(?:quiz[aá]s|tal\s+vez|si\s+(?:gastara|viajara|comprara|ganara)|cu[aá]nto\s+(?:gastar[ií]a|costar[ií]a))(?![\wáéíóúñ])/i.test(normalizedRaw) ||
+    /(?<![\wáéíóúñ])(?:quiero|deseo|quisiera|me\s+gustar[ií]a)\s+(?:ganar|ahorrar|gastar|cobrar)(?![\wáéíóúñ])/i.test(normalizedRaw) ||
+    /(?<![\wáéíóúñ])(?:ingres[eé]|transfer[ií]|deposit[eé])\s+.*?\s+a\s+(?:mi\s+cuenta|otra\s+cuenta)(?![\wáéíóúñ])/i.test(normalizedRaw);
+
+  if (isSavingsOrNonTx) {
+    return {
+      raw,
+      isValid: false,
+      amount: null,
+      type: 'gasto',
+      destination: 'commitment',
+      category: null,
+      categoryMatched: null,
+      accountId: null,
+      accountName: null,
+      date: today,
+      dateLabel: 'Hoy',
+      note: raw,
+      preview: 'Ahorro, meta o hipótesis (no es un gasto ni ingreso realizado)',
+      missing: ['amount'],
+      confidence: { amount: false, category: false, account: false },
+    };
+  }
+
+  const isDebt = !isPastAction && !isFutureCommitment && /\b(?:debo|le\s+debo|deuda(?:\s+de)?|adeudo|compromiso\s+de\s+pago)\b/i.test(normalizedRaw);
 
   if (isDebt) {
     return {
@@ -326,9 +365,8 @@ export function parseQuickFinance(
   // 1. Detect Currency
   let currency = 'UYU';
   let isCurrencyIncompatible = false;
-  if (/\b(?:usd|d[oó]lares?)\b/i.test(normalizedRaw)) {
+  if (/(?:US\$|U\$S|\b(?:usd|d[oó]lares?)\b)/i.test(normalizedRaw)) {
     currency = 'USD';
-    isCurrencyIncompatible = true;
   } else if (/\b(?:eur|euros?)\b/i.test(normalizedRaw)) {
     currency = 'EUR';
     isCurrencyIncompatible = true;
@@ -338,13 +376,16 @@ export function parseQuickFinance(
   let type: 'gasto' | 'ingreso' = 'gasto';
   let processed = normalizedRaw;
 
+  const incomeKeywordsRegex =
+    /(?<![\wáéíóúñ])(?:ingreso|cobro|cobr[eé]|cobramos|gan[eé]|ganamos|recib[ií]|recibimos|me\s+pagaron|nos\s+pagaron|me\s+transfirieron|me\s+depositaron|sueldo|salario|honorarios|ganancia)(?![\wáéíóúñ])/i;
+
   if (
     /^(\+U|\$U\s*\+|\+)/i.test(processed) ||
-    /\b(ingreso|cobro|cobr[eé]|sueldo|ganancia|honorarios)\b/i.test(processed)
+    incomeKeywordsRegex.test(processed)
   ) {
     type = 'ingreso';
     processed = processed.replace(/^(\+U|\$U\s*\+|\+)\s*/i, '');
-    processed = processed.replace(/\b(ingreso|cobro|cobr[eé]|sueldo|ganancia|honorarios)\b\s*/i, ' ');
+    processed = processed.replace(incomeKeywordsRegex, ' ');
   } else if (/^-/.test(processed)) {
     type = 'gasto';
     processed = processed.replace(/^-+\s*/, '');
@@ -438,7 +479,7 @@ export function parseQuickFinance(
         const refDate = new Date(today + 'T00:00:00');
         let curYear = refDate.getFullYear();
         let curMonth = refDate.getMonth();
-        if (day < refDate.getDate() && (isFuturePayment || currentInstallment !== undefined)) {
+        if (day < refDate.getDate() && (isFutureCommitment || currentInstallment !== undefined)) {
           curMonth += 1;
           if (curMonth > 11) {
             curYear += 1;
@@ -502,15 +543,15 @@ export function parseQuickFinance(
   let amount: number | null = null;
   let isAmbiguous = false;
 
-  // Regex to match candidate number strings (e.g. $U 1.200,50, $500, 1200.50, 500, 1200)
-  const numRegex = /(?:\$U|\$)?\s*([0-9]{1,3}(?:[.,][0-9]{1,3})+|[0-9]+(?:[.,][0-9]+)?)\b/gi;
+  // Regex to match candidate number strings (e.g. $U 1.200,50, US$ 19,99, U$S 12, $500, 1200.50, 500, 1200)
+  const numRegex = /(?:US\$|U\$S|\$U|\$)?\s*([0-9]{1,3}(?:[.,][0-9]{1,3})+|[0-9]+(?:[.,][0-9]+)?)\b/gi;
   let match: RegExpExecArray | null;
 
   while ((match = numRegex.exec(processed)) !== null) {
     const fullMatch = match[0];
-    const hasCurrencyPrefix = /(?:\$U|\$)/i.test(fullMatch);
+    const hasCurrencyPrefix = /(?:US\$|U\$S|\$U|\$)/i.test(fullMatch);
     const afterMatch = processed.slice(match.index + fullMatch.length);
-    const hasCurrencySuffix = /^\s*(?:usd|eur|uyu|\$)/i.test(afterMatch);
+    const hasCurrencySuffix = /^\s*(?:usd|eur|uyu|d[oó]lares?|pesos?|\$)/i.test(afterMatch);
 
     // If it has no currency prefix or suffix, and is followed by a measurement unit, it's not money
     if (!hasCurrencyPrefix && !hasCurrencySuffix && MEASUREMENT_UNITS_SUFFIX.test(afterMatch)) {
@@ -533,7 +574,7 @@ export function parseQuickFinance(
   }
 
   // Remove currency words from remaining processed note text
-  processed = processed.replace(/\b(?:usd|eur|uyu|d[oó]lares?|pesos?)\b/gi, ' ');
+  processed = processed.replace(/(?:US\$|U\$S|\b(?:usd|eur|uyu|d[oó]lares?|pesos?)\b)/gi, ' ');
 
   // 7. Extract Account
   let matchedAccountId: string | null = null;
@@ -585,7 +626,17 @@ export function parseQuickFinance(
     }
   }
 
-  // 7c. Fallback suggested account if provided
+  // 7c. Auto-suggest matching USD account if movement is in USD and no account matched
+  if (!matchedAccountId && currency === 'USD') {
+    const usdAcc = accounts.find((a) => (a.currency || 'UYU').toUpperCase() === 'USD');
+    if (usdAcc) {
+      matchedAccountId = usdAcc.id;
+      matchedAccountName = usdAcc.name;
+      isAccountSuggested = true;
+    }
+  }
+
+  // 7d. Fallback suggested account if provided
   if (!matchedAccountId && options.defaultAccountId) {
     const defAcc = accounts.find((a) => a.id === options.defaultAccountId);
     if (defAcc) {
@@ -650,15 +701,15 @@ export function parseQuickFinance(
 
   // 9. Remaining text becomes note
   const cleanNote = processed
-    .replace(/(?:\$U|\$)/gi, ' ')
-    .replace(/^(?:pagar|pagu[eé]|gast[eé]|compr[eé]|cobr[eé])\s+/gi, '')
+    .replace(/(?:US\$|U\$S|\$U|\$)/gi, ' ')
+    .replace(/^(?:pagar|pagu[eé]|gast[eé]|compr[eé]|comprar|cobr[eé]|gan[eé]|recib[ií]|me\s+pagaron)\s+/gi, '')
     .replace(/[,\-;:]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 
   // 10. Destination (transaction vs commitment)
   const destination: 'transaction' | 'commitment' =
-    isFuturePayment || currentInstallment !== undefined || totalInstallments !== undefined
+    isFutureCommitment || currentInstallment !== undefined || totalInstallments !== undefined
       ? 'commitment'
       : 'transaction';
 
@@ -668,11 +719,36 @@ export function parseQuickFinance(
   if (!matchedCategoryId) missing.push('category');
   if (destination === 'transaction' && !matchedAccountId && !matchedAccountName) missing.push('account');
 
+  // Currency compatibility check with matched/available accounts
+  if (currency === 'EUR') {
+    isCurrencyIncompatible = true;
+  } else if (currency === 'USD') {
+    if (matchedAccountId) {
+      const acc = accounts.find((a) => a.id === matchedAccountId);
+      const accCur = (acc?.currency || 'UYU').toUpperCase();
+      if (accCur !== 'USD') {
+        isCurrencyIncompatible = true;
+      }
+    } else {
+      const hasUsdAccount = accounts.some((a) => (a.currency || 'UYU').toUpperCase() === 'USD');
+      if (!hasUsdAccount) {
+        isCurrencyIncompatible = true;
+      }
+    }
+  } else if (currency === 'UYU') {
+    if (matchedAccountId) {
+      const acc = accounts.find((a) => a.id === matchedAccountId);
+      const accCur = (acc?.currency || 'UYU').toUpperCase();
+      if (accCur !== 'UYU') {
+        isCurrencyIncompatible = true;
+      }
+    }
+  }
+
   const formattedAmount =
     amount !== null
-      ? (currency === 'USD' ? 'USD ' : currency === 'EUR' ? 'EUR ' : '$U ') +
-        Math.round(amount).toLocaleString('es-UY')
-      : '$U ?';
+      ? formatMoney(amount, currency)
+      : (currency === 'USD' ? 'US$ ?' : '$U ?');
   const formattedCategory = matchedCategoryName || 'Categoría pendiente';
   const formattedAccount = matchedAccountName ? (isAccountSuggested ? `${matchedAccountName} (sugerida)` : matchedAccountName) : 'Cuenta no especificada';
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AppIcon, type AppIconName } from './AppIcon';
 import type { EffortLevel, LifeOSState, ViewType } from '../types';
 import {
   addQuickIdea,
@@ -14,6 +15,7 @@ import {
 import { parseQuickFinance } from '../utils/quickFinanceParser';
 import { todayISO, uid, dayKeyFromDate, fmtDate } from '../lib/storage';
 import { startGymSession } from '../lib/gymFlows';
+import { nowTimeHHmm } from '../lib/gymMetrics';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
 import { getActiveCategories } from '../lib/financeCategories';
@@ -27,6 +29,7 @@ import {
   type CaptureDraft,
 } from '../lib/quickCaptureDrafts';
 import { DraftConfirmationTray } from './DraftConfirmationTray';
+import { PrivacyAmount } from './PrivacyAmount';
 
 interface MobileQuickCaptureProps {
   state: LifeOSState;
@@ -39,15 +42,15 @@ interface MobileQuickCaptureProps {
 
 export type CaptureKind = 'universal' | 'tarea' | 'gasto' | 'nota' | 'entrenamiento' | 'inbox' | 'idea' | 'recordatorio';
 
-const captureOptions: { kind: CaptureKind; label: string; icon: string; desc: string; primary?: boolean }[] = [
-  { kind: 'universal', label: 'Universal', icon: '✨', desc: 'Auto-detectar', primary: true },
-  { kind: 'tarea', label: 'Tarea', icon: '✓', desc: 'Acción para hoy', primary: true },
-  { kind: 'gasto', label: 'Gasto', icon: '−', desc: 'Parser rápido', primary: true },
-  { kind: 'nota', label: 'Nota', icon: '✎', desc: 'Post-it o apunte', primary: true },
-  { kind: 'entrenamiento', label: 'Entrenar', icon: '⚡', desc: 'Iniciar sesión', primary: true },
-  { kind: 'inbox', label: 'Bandeja', icon: '📥', desc: 'Captura libre' },
-  { kind: 'idea', label: 'Idea', icon: '💡', desc: 'Nueva propuesta' },
-  { kind: 'recordatorio', label: 'Alerta', icon: '⏰', desc: 'Con hora/fecha' },
+const captureOptions: { kind: CaptureKind; label: string; icon: AppIconName; desc: string; primary?: boolean }[] = [
+  { kind: 'universal', label: 'Universal', icon: 'touchpad', desc: 'Auto-detectar', primary: true },
+  { kind: 'tarea', label: 'Tarea', icon: 'task', desc: 'Acción para hoy', primary: true },
+  { kind: 'gasto', label: 'Gasto', icon: 'expense', desc: 'Parser rápido', primary: true },
+  { kind: 'nota', label: 'Nota', icon: 'note', desc: 'Post-it o apunte', primary: true },
+  { kind: 'entrenamiento', label: 'Entrenar', icon: 'dumbbell', desc: 'Iniciar sesión', primary: true },
+  { kind: 'inbox', label: 'Bandeja', icon: 'inbox', desc: 'Captura libre' },
+  { kind: 'idea', label: 'Idea', icon: 'lightbulb', desc: 'Nueva propuesta' },
+  { kind: 'recordatorio', label: 'Alerta', icon: 'reminder', desc: 'Con hora/fecha' },
 ];
 
 export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
@@ -79,6 +82,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
   const [manualFinanceMode, setManualFinanceMode] = useState(false);
   const [manualAmount, setManualAmount] = useState('');
   const [manualAccountId, setManualAccountId] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const activeCategories = useMemo(
     () => getActiveCategories(state.finance?.categories),
@@ -258,7 +262,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
         startGymSession(draft.gym, {
           templateId,
           date: todayISO(),
-          startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          startedAt: nowTimeHHmm(),
           sessionId: uid(),
         });
       });
@@ -275,6 +279,8 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     try {
       if (kind === 'gasto') {
         if (manualFinanceMode) {
@@ -290,34 +296,54 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
               date,
             });
           });
+          playSound('coins');
+          setMessage('✓ Gasto registrado');
         } else {
           // Use parsed quick finance
           if (!parsedFinance.isValid || parsedFinance.amount === null) {
             throw new Error('Escribí un monto válido, ej: 500 comida banco');
           }
-          const chosenAccountId = parsedFinance.accountId || manualAccountId || fallbackAccountId;
-          onUpdateState((draft) => {
-            addQuickTransaction(draft, {
-              type: parsedFinance.type,
-              amount: parsedFinance.amount!,
-              accountId: chosenAccountId,
-              category: parsedFinance.category || 'Otros',
-              note: parsedFinance.note,
-              date: parsedFinance.date,
+          if (parsedFinance.destination === 'commitment') {
+            onUpdateState((draft) => {
+              addQuickTask(
+                draft,
+                parsedFinance.raw,
+                'media',
+                todayISO(),
+                'medium',
+                parsedFinance.date !== todayISO() ? parsedFinance.date : undefined
+              );
             });
-          });
+            playSound('success');
+            setMessage('✓ Obligación registrada como tarea');
+          } else {
+            const chosenAccountId = parsedFinance.accountId || manualAccountId || fallbackAccountId;
+            onUpdateState((draft) => {
+              addQuickTransaction(draft, {
+                type: parsedFinance.type,
+                amount: parsedFinance.amount!,
+                accountId: chosenAccountId,
+                category: parsedFinance.category || 'Otros',
+                note: parsedFinance.note,
+                date: parsedFinance.date,
+              });
+            });
+            playSound('coins');
+            setMessage('✓ Gasto registrado');
+          }
         }
-        playSound('coins');
       } else if (kind === 'inbox') {
         onUpdateState((draft) => {
           addQuickInbox(draft, text, 'quick-capture');
         });
         playSound('success');
+        setMessage('✓ Guardado al instante');
       } else if (kind === 'tarea') {
         onUpdateState((draft) => {
           addQuickTask(draft, text, priority, date, effort);
         });
         playSound('success');
+        setMessage('✓ Guardado al instante');
       } else if (kind === 'nota') {
         onUpdateState((draft) => {
           addQuickNote(draft, text, date, {
@@ -326,6 +352,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
           });
         });
         playSound('success');
+        setMessage('✓ Guardado al instante');
       } else if (kind === 'idea') {
         if (!isModuleEnabled(state.settings, 'ia')) {
           throw new Error('El módulo IA está desactivado.');
@@ -334,19 +361,24 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
           addQuickIdea(draft, text);
         });
         playSound('success');
+        setMessage('✓ Guardado al instante');
       } else if (kind === 'recordatorio') {
         onUpdateState((draft) => {
           addQuickReminder(draft, text, date, reminderTime);
         });
         playSound('success');
+        setMessage('✓ Guardado al instante');
       }
 
-      setMessage('✓ Guardado al instante');
       setText('');
       setFinanceInput('');
       setManualAmount('');
-      window.setTimeout(onClose, 400);
+      window.setTimeout(() => {
+        setIsSubmitting(false);
+        onClose();
+      }, 400);
     } catch (error) {
+      setIsSubmitting(false);
       setMessage(error instanceof Error ? error.message : 'No se pudo guardar.');
     }
   };
@@ -483,6 +515,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                   : 'text-[var(--text-soft)] hover:text-[var(--text)]'
               }`}
             >
+              <AppIcon name="touchpad" className="h-4 w-4" />
               <span>Captura</span>
             </button>
             <button
@@ -577,7 +610,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                     </div>
 
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[var(--border)]">
-                      <span className="text-[10px] text-[var(--text-faint)] font-mono">
+                      <span className="text-[10px] text-[var(--text-faint)] tabular-nums">
                         {fmtDate(item.createdAt.slice(0, 10))} • {item.createdAt.slice(11, 16)}
                       </span>
                       <div className="flex flex-wrap items-center gap-1.5">
@@ -632,11 +665,11 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                   }}
                   className={`flex-1 min-w-[52px] flex flex-col items-center justify-center rounded-xl py-2 px-1 text-[11px] font-bold transition cursor-pointer ${
                     kind === option.kind
-                      ? 'bg-[var(--card)] text-[var(--blue)] shadow-xs border border-[var(--border)]'
+                      ? 'bg-[var(--card)] text-[#4F46E5] dark:text-indigo-400 shadow-xs border border-[var(--border)]'
                       : 'text-[var(--text-soft)] hover:text-[var(--text)]'
                   }`}
                 >
-                  <span className="text-base leading-none mb-1">{option.icon}</span>
+                  <AppIcon name={option.icon} className="h-4 w-4 mb-1 shrink-0" />
                   <span className="truncate">{option.label}</span>
                 </button>
               ))}
@@ -923,11 +956,11 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                             Interpretación:
                           </span>
                           <span
-                            className={`text-xs font-mono font-bold block mt-0.5 truncate ${
+                            className={`text-xs tabular-nums font-bold block mt-0.5 truncate ${
                               parsedFinance.isValid ? 'text-emerald-500' : 'text-[var(--text-soft)]'
                             }`}
                           >
-                            <span>{parsedFinance.preview}</span>
+                            <PrivacyAmount>{parsedFinance.preview}</PrivacyAmount>
                           </span>
                         </div>
                         {parsedFinance.isValid && (
@@ -986,7 +1019,9 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                           value={manualAmount}
                           onChange={(e) => setManualAmount(e.target.value)}
                           placeholder="0"
-                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-lg font-black outline-none focus:border-[var(--blue)]"
+                          className={`w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-lg font-black outline-none focus:border-[var(--blue)] ${
+                            state.settings?.privacyMode ? 'privacy-sensitive' : ''
+                          }`}
                         />
                       </label>
                       <label>
@@ -1184,7 +1219,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                     type="time"
                     value={reminderTime}
                     onChange={(e) => setReminderTime(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs font-mono"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs tabular-nums"
                   />
                 </label>
                 <label>
@@ -1193,7 +1228,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                     type="date"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs font-mono"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs tabular-nums"
                   />
                 </label>
               </div>

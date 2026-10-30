@@ -5,10 +5,7 @@ import {
   MonthlyBudgetStatus,
 } from '../types';
 import { getAllCategories } from './financeCategories';
-
-function roundMoney(val: number): number {
-  return Math.round(val * 100) / 100;
-}
+import { roundMoney } from './storage';
 
 function resolveBudgetConfig(
   finance: Finance | undefined,
@@ -83,7 +80,7 @@ export function deriveMonthlyBudgetStatus(
   for (const t of state.finance?.transactions || []) {
     if (!t.date || t.date.slice(0, 7) !== month) continue;
     if (t.type !== 'gasto') continue;
-    if (t.origin === 'adjustment') continue; // Reconciliation balance adjustment is not expense
+    if (t.origin === 'adjustment' || t.origin === 'debt_payment' || Boolean(t.agreementId)) continue; // Reconciliation adjustments and debt principal amortizations are not operational expenses
 
     const txCur = (t.currency || (t.accountId ? accountCurrencyMap.get(t.accountId) : undefined) || 'UYU').toUpperCase();
     if (txCur !== cur) continue;

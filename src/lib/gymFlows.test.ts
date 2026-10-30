@@ -19,6 +19,11 @@ import {
   previewTemplateHistoryPropagation,
   requestGymSessionDeletion,
   reorderGymTemplateExercise,
+  resolveNextRestTimer,
+  pauseGymRestTimer,
+  resumeGymRestTimer,
+  toggleGymRestTimerPause,
+  applyGymRestTimerAdjustment,
   startGymSession,
   updateGymTemplate,
   updateGymTemplateExercise,
@@ -594,5 +599,214 @@ test('rango horario inválido se rechaza y no altera sesión', () => {
   assert.equal(ok, false);
   assert.equal(s.startedAt, '12:00');
   assert.equal(s.finishedAt, '13:00');
+});
+
+test('iniciar sesión desde plantilla histórica con timerEnabled: false por comportamiento anterior recupera el descanso en la sesión activa', () => {
+  const gym = emptyGym({
+    routineTemplates: [
+      {
+        id: 't-legacy-gym',
+        name: 'Rutina Empuje',
+        exercises: [
+          {
+            id: 'legacy-ex-1',
+            name: 'Press Banca',
+            timerEnabled: false,
+            restSecondsMode: 'inherit',
+            sets: [
+              { id: 's1', weight: 80, reps: 8, completed: false },
+              { id: 's2', weight: 80, reps: 8, completed: false },
+            ],
+          },
+          {
+            id: 'legacy-ex-2',
+            name: 'Press Militar',
+            timerEnabled: false,
+            restSecondsMode: 'custom',
+            restSeconds: 90,
+            sets: [
+              { id: 's3', weight: 50, reps: 10, completed: false },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+
+  const { session } = startGymSession(gym, {
+    templateId: 't-legacy-gym',
+    date: '2026-10-28',
+    startedAt: '12:00',
+  });
+
+  assert.equal(session.exercises[0].timerEnabled, true, 'La sesión activa debe tener descanso recuperado');
+  assert.equal(session.exercises[1].timerEnabled, true);
+
+  // Marcar primera serie completada
+  session.exercises[0].sets[0].completed = true;
+  const timer = resolveNextRestTimer(gym, session.id, 'legacy-ex-1', 0);
+  assert.ok(timer, 'El temporizador de descanso debe iniciar automáticamente tras completar la serie');
+  assert.equal(timer.exerciseIndex, 0);
+});
+
+test('resolveNextRestTimer: inicia descanso automáticamente con timerEnabled por defecto o true', () => {
+  const currentSession: GymSession = {
+    id: 's-timer-test',
+    date: '2026-10-28',
+    status: 'active',
+    exercises: [
+      {
+        id: 'ex-1',
+        name: 'Press Banca',
+        timerEnabled: true,
+        restSecondsMode: 'custom',
+        restSeconds: 120,
+        sets: [
+          { id: 'set-1', weight: 80, reps: 8, completed: true },
+          { id: 'set-2', weight: 80, reps: 8, completed: false },
+        ],
+      },
+      {
+        id: 'ex-2',
+        name: 'Remo con Barra',
+        timerEnabled: true,
+        restSecondsMode: 'inherit',
+        sets: [
+          { id: 'set-3', weight: 70, reps: 10, completed: false },
+        ],
+      },
+    ],
+  };
+  const gym = emptyGym({ sessions: [currentSession] });
+
+  const timer = resolveNextRestTimer(gym, 's-timer-test', 'ex-1', 0);
+  assert.ok(timer, 'El timer debe generarse');
+  assert.equal(timer.durationSeconds, 120);
+  assert.equal(timer.exerciseIndex, 0);
+  assert.equal(timer.kind, 'set');
+  assert.ok(timer.endsAt > Date.now());
+});
+
+test('resolveNextRestTimer: hereda tiempo por defecto de la rutina', () => {
+  const currentSession: GymSession = {
+    id: 's-timer-inherit',
+    date: '2026-10-28',
+    status: 'active',
+    exercises: [
+      {
+        id: 'ex-1',
+        name: 'Sentadilla',
+        // timerEnabled undefined -> default es habilitado
+        restSecondsMode: 'inherit',
+        sets: [
+          { id: 'set-1', weight: 100, reps: 5, completed: true },
+          { id: 'set-2', weight: 100, reps: 5, completed: false },
+        ],
+      },
+    ],
+  };
+  const gym = emptyGym({
+    sessions: [currentSession],
+    settings: {
+      restBetweenSetsSeconds: 150,
+      restBetweenExercisesSeconds: 180,
+      autoTimerEnabled: true,
+      showQuickRestAdjustments: true,
+      allowManualRestEditing: false,
+    },
+  });
+
+  const timer = resolveNextRestTimer(gym, 's-timer-inherit', 'ex-1', 0);
+  assert.ok(timer);
+  assert.equal(timer.durationSeconds, 150);
+});
+
+test('resolveNextRestTimer: no inicia descanso si timerEnabled es false', () => {
+  const currentSession: GymSession = {
+    id: 's-timer-disabled',
+    date: '2026-10-28',
+    status: 'active',
+    exercises: [
+      {
+        id: 'ex-1',
+        name: 'Abdominales',
+        timerEnabled: false,
+        sets: [
+          { id: 'set-1', weight: 0, reps: 20, completed: true },
+          { id: 'set-2', weight: 0, reps: 20, completed: false },
+        ],
+      },
+    ],
+  };
+  const gym = emptyGym({ sessions: [currentSession] });
+
+  const timer = resolveNextRestTimer(gym, 's-timer-disabled', 'ex-1', 0);
+  assert.equal(timer, null, 'No debe iniciar si timerEnabled es false');
+});
+
+test('resolveNextRestTimer: no inicia descanso tras completar la última serie del último ejercicio', () => {
+  const currentSession: GymSession = {
+    id: 's-timer-last',
+    date: '2026-10-28',
+    status: 'active',
+    exercises: [
+      {
+        id: 'ex-1',
+        name: 'Press Banca',
+        timerEnabled: true,
+        sets: [
+          { id: 'set-1', weight: 80, reps: 8, completed: true },
+        ],
+      },
+      {
+        id: 'ex-2',
+        name: 'Remo',
+        timerEnabled: true,
+        sets: [
+          { id: 'set-2', weight: 70, reps: 10, completed: true }, // última serie del último ejercicio
+        ],
+      },
+    ],
+  };
+  const gym = emptyGym({ sessions: [currentSession] });
+
+  // serie completada del último ejercicio (ex-2)
+  const timer = resolveNextRestTimer(gym, 's-timer-last', 'ex-2', 0);
+  assert.equal(timer, null, 'No debe iniciar descanso al finalizar el último ejercicio');
+});
+
+test('pausa, ajuste y reanudación del temporizador de descanso', () => {
+  const baseTimer = {
+    sessionId: 's1',
+    exerciseIndex: 0,
+    durationSeconds: 90,
+    endsAt: Date.now() + 60000, // restan 60s
+    kind: 'set' as const,
+  };
+
+  // 1. Pausar
+  const paused = pauseGymRestTimer(baseTimer);
+  assert.ok(paused.pausedAt);
+  assert.ok((paused.remainingSecondsWhenPaused ?? 0) <= 61);
+  assert.ok((paused.remainingSecondsWhenPaused ?? 0) >= 59);
+
+  // 2. Ajustar mientras está en pausa (+30s)
+  const initialRemaining = paused.remainingSecondsWhenPaused ?? 60;
+  const adjusted = applyGymRestTimerAdjustment(paused, 30);
+  assert.equal(adjusted.completed, false);
+  assert.ok(adjusted.timer);
+  assert.equal(adjusted.timer.remainingSecondsWhenPaused, initialRemaining + 30);
+
+  // 3. Reanudar
+  const resumed = resumeGymRestTimer(adjusted.timer);
+  assert.equal(resumed.pausedAt, null);
+  assert.equal(resumed.remainingSecondsWhenPaused, null);
+  assert.ok(resumed.endsAt > Date.now());
+
+  // 4. Toggle pause
+  const toggledPause = toggleGymRestTimerPause(resumed);
+  assert.ok(toggledPause.pausedAt);
+  const toggledResume = toggleGymRestTimerPause(toggledPause);
+  assert.equal(toggledResume.pausedAt, null);
 });
 

@@ -1,0 +1,89 @@
+/* Local presentation rules for Finanzas and Configuración only. */
+:is(.finance-refinement, .config-refinement) {
+  --blue: #4F46E5;
+  --blue-hover: #4338CA;
+  --blue-soft: rgb(79 70 229 / 0.14);
+  --accent: #4F46E5;
+  --color-indigo-600: #4F46E5;
+  min-width: 0;
+}
+
+:is(.finance-refinement, .config-refinement) :is(.text-xs, .text-\[9px\], .text-\[10px\], .text-\[11px\]) {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+:is(.finance-refinement, .config-refinement) .uppercase {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.dark :is(.finance-refinement, .config-refinement) .text-\[var\(--blue\)\] {
+  color: #A5A0FF;
+}
+
+.config-refinement :is(#config-account, #security-section, #config-backups, #config-preferences, #config-diagnostics) {
+  scroll-margin-top: 1rem;
+  min-width: 0;
+}
+
+.config-refinement [role="dialog"] {
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+
+.config-refinement #security-section .flex {
+  min-width: 0;
+}
+
+.finance-refinement .recharts-cartesian-axis-tick-value {
+  font-size: 13px;
+}
+
+:is(.finance-refinement, .config-refinement) details:not([open]) > summary {
+  margin-block: 0;
+}
+
+/* ContextualHelp uses a portal; scope its reading size to the active module. */
+:root:has(.finance-refinement, .config-refinement) [role="dialog"][aria-label^="Ayuda:"] {
+  font-size: 0.875rem;
+  line-height: 1.4rem;
+}
+
+:root:not(.dark) :is(.finance-refinement, .config-refinement) :is(.text-emerald-500, .text-emerald-600) {
+  color: #047857;
+}
+
+:root:not(.dark) :is(.finance-refinement, .config-refinement) :is(.text-rose-500, .text-rose-600) {
+  color: #BE123C;
+}
+
+:root:not(.dark) .config-refinement .text-red-600 {
+  color: #B91C1C;
+}
+
+:root:not(.dark) :is(.finance-refinement, .config-refinement) :is(.text-amber-500, .text-amber-600) {
+  color: #92400E;
+}
+
+:root:not(.dark) .finance-refinement {
+  --finance-text-muted: #4B5D78;
+}
+
+.finance-refinement :is(section, details).finance-surface {
+  box-shadow: none;
+}
+
+.finance-refinement .recharts-legend-item-text {
+  color: var(--finance-text-secondary) !important;
+  font-size: 14px;
+}
+
+.finance-refinement button {
+  box-shadow: none;
+}
+
+.finance-refinement button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}

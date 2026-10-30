@@ -159,3 +159,38 @@ test('parseQuickFinance detects foreign currency as incompatible', () => {
   assert.equal(resEur.isCurrencyIncompatible, true);
   assert.equal(resEur.isValid, false);
 });
+
+test('QC 2.2: parseQuickFinance correctly detects income verbs (gané, cobré, recibí) and commitment purchases', () => {
+  // Income: "gané 500 pesos por arbitrar un partido"
+  const resGane = parseQuickFinance('gané 500 pesos por arbitrar un partido', { accounts: mockAccounts });
+  assert.equal(resGane.type, 'ingreso', 'gané debe clasificarse como tipo ingreso');
+  assert.equal(resGane.amount, 500);
+  assert.equal(resGane.destination, 'transaction');
+
+  // Income: "cobré 1500 pesos por un trabajo"
+  const resCobre = parseQuickFinance('cobré 1500 pesos por un trabajo', { accounts: mockAccounts });
+  assert.equal(resCobre.type, 'ingreso');
+  assert.equal(resCobre.amount, 1500);
+
+  // Income: "recibí 800 pesos por un servicio"
+  const resRecibi = parseQuickFinance('recibí 800 pesos por un servicio', { accounts: mockAccounts });
+  assert.equal(resRecibi.type, 'ingreso');
+  assert.equal(resRecibi.amount, 800);
+
+  // Future commitment purchase: "comprar 250 pesos de manzana"
+  const resComprar = parseQuickFinance('comprar 250 pesos de manzana', { accounts: mockAccounts });
+  assert.equal(resComprar.destination, 'commitment', 'comprar debe tratarse como compromiso, no transacción inmediata');
+
+  // Savings: "ahorro de 1000 pesos en viaje a bolivia" -> non-transactional
+  const resAhorro = parseQuickFinance('ahorro de 1000 pesos en viaje a bolivia', { accounts: mockAccounts });
+  assert.equal(resAhorro.isValid, false, 'Ahorro no debe ser válido como gasto');
+  assert.equal(resAhorro.destination, 'commitment');
+
+  // Negation: "no pagué 500 pesos"
+  const resNoPague = parseQuickFinance('no pagué 500 pesos', { accounts: mockAccounts });
+  assert.equal(resNoPague.isValid, false);
+
+  // Desire: "quiero ganar 500 pesos"
+  const resQuieroGanar = parseQuickFinance('quiero ganar 500 pesos', { accounts: mockAccounts });
+  assert.equal(resQuieroGanar.isValid, false);
+});

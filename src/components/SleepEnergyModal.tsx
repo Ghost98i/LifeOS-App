@@ -113,7 +113,7 @@ export const SleepEnergyModal: React.FC<SleepEnergyModalProps> = ({
             <span className="text-xs font-bold text-[var(--text)] flex items-center gap-1.5">
               <span>💤</span> Horas de sueño anoche
             </span>
-            <span className="text-xs font-mono font-extrabold text-[var(--blue)]">
+            <span className="text-xs tabular-nums font-extrabold text-[var(--blue)]">
               {sleepHours !== '' ? `${sleepHours} hs` : 'Sin definir'}
             </span>
           </div>
@@ -142,7 +142,7 @@ export const SleepEnergyModal: React.FC<SleepEnergyModalProps> = ({
                 placeholder="Otro..."
                 value={sleepHours}
                 onChange={(e) => setSleepHours(e.target.value)}
-                className="w-20 px-2.5 py-1.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden text-center font-mono"
+                className="w-20 px-2.5 py-1.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden text-center tabular-nums"
               />
             </div>
           </div>

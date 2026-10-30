@@ -3,6 +3,7 @@ import type { AppIconName } from '../components/AppIcon';
 import { fmtMoney } from './storage';
 import { getCategoryName } from './financeCategories';
 import { isModuleEnabled } from './moduleVisibility';
+import { getJobApplicationType, getJobStageLabel } from './jobApplications';
 
 export type SearchCategoryKey =
   | 'actions'
@@ -294,22 +295,24 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
 
   // 5. Trabajo & Empleo (Módulo 'trabajo')
   if (isModuleEnabled(state, 'trabajo')) {
-    (state.jobs?.applications || []).forEach((item) =>
+    (state.jobs?.applications || []).forEach((item) => {
+      const type = getJobApplicationType(item);
+      const typeLabel = type === 'concurso' ? 'Concurso público' : 'Empleo convencional';
       consider(
         {
           id: `job-${item.id}`,
           icon: '💼',
           iconName: 'briefcase',
-          title: `${item.empresa} · ${item.puesto}`,
-          subtitle: `Postulación · Estado: ${item.estado}${item.nextAction ? ` · ${item.nextAction}` : ''}`,
+          title: `${typeLabel} · ${item.empresa} · ${item.puesto}`,
+          subtitle: `Estado: ${getJobStageLabel(type, item.estado)}${item.nextAction ? ` · ${item.nextAction}` : ''}`,
           view: 'trabajo',
           focusId: 'qa-focus-trabajo',
           category: 'jobs',
         },
-        [item.empresa, item.puesto, item.estado],
+        [item.empresa, item.puesto, item.estado, typeLabel, type === 'concurso' ? 'concurso llamado público' : 'empleo trabajo'],
         [item.notas, item.nextAction, item.reclutador]
-      )
-    );
+      );
+    });
 
     (state.jobs?.opportunities || []).forEach((item) =>
       consider(
@@ -348,18 +351,23 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
     );
 
     (state.study?.exams || []).forEach((item) => {
-      const subject = state.study?.subjects?.find((candidate) => candidate.id === item.subjectId);
+      const subject = item.subjectId ? state.study?.subjects?.find((candidate) => candidate.id === item.subjectId) : null;
+      const title = item.title?.trim()
+        ? (subject ? `${item.title.trim()} · ${subject.name}` : item.title.trim())
+        : (subject?.name || 'Examen');
+      const timeStr = item.time ? ` · ${item.time}` : '';
+      const gradeStr = item.grade ? ` · Nota: ${item.grade}` : '';
       consider(
         {
           id: `exam-${item.id}`,
           icon: '🧪',
           iconName: 'book',
-          title: subject?.name || 'Examen',
-          subtitle: `${item.status} · ${item.date}`,
+          title,
+          subtitle: `${item.status}${gradeStr} · ${item.date}${timeStr}`,
           view: 'estudios',
           category: 'study',
         },
-        ['examen', subject?.name, item.status],
+        ['examen', item.title, subject?.name, item.status, item.grade],
         [item.date]
       );
     });

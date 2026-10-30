@@ -8,6 +8,7 @@ interface TodayNotesSectionProps {
   recentNotes: Postit[];
   privacyMode?: boolean;
   onNavigate: () => void;
+  onOpenNote: (noteId: string) => void;
   onAddNote: () => void;
 }
 
@@ -17,195 +18,137 @@ const noteTitle = (note: Postit): string =>
 export const TodayNotesSection: React.FC<TodayNotesSectionProps> = ({
   pinnedNotes,
   recentNotes,
-  privacyMode: _privacyMode,
+  privacyMode,
   onNavigate,
+  onOpenNote,
   onAddNote,
 }) => {
   const [activeIndex, setActiveIndex] = useState(0);
-  const [isPaused, setIsPaused] = useState(false);
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-  const [transitionFrom, setTransitionFrom] = useState<Postit | null>(null);
-  const [direction, setDirection] = useState<'next' | 'previous'>('next');
-  const transitionTimerRef = useRef<number | null>(null);
+  const touchStartRef = useRef<number | null>(null);
   const activeNote = pinnedNotes[activeIndex] || pinnedNotes[0];
 
   useEffect(() => {
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const updatePreference = () => setPrefersReducedMotion(mediaQuery.matches);
-    updatePreference();
-    mediaQuery.addEventListener('change', updatePreference);
-    return () => mediaQuery.removeEventListener('change', updatePreference);
-  }, []);
-
-  useEffect(() => {
     setActiveIndex((current) => current < pinnedNotes.length ? current : 0);
-    setTransitionFrom(null);
   }, [pinnedNotes.length]);
 
-  useEffect(() => {
-    return () => {
-      if (transitionTimerRef.current != null) window.clearTimeout(transitionTimerRef.current);
-    };
-  }, []);
-
-  const navigateTo = useCallback((nextIndex: number, nextDirection: 'next' | 'previous') => {
-    if (!activeNote || nextIndex === activeIndex || transitionFrom) return;
-
-    if (prefersReducedMotion) {
-      setActiveIndex(nextIndex);
-      return;
-    }
-
-    setDirection(nextDirection);
-    setTransitionFrom(activeNote);
-    setActiveIndex(nextIndex);
-    transitionTimerRef.current = window.setTimeout(() => {
-      setTransitionFrom(null);
-      transitionTimerRef.current = null;
-    }, 340);
-  }, [activeIndex, activeNote, prefersReducedMotion, transitionFrom]);
-
   const showPrevious = useCallback(() => {
-    navigateTo((activeIndex - 1 + pinnedNotes.length) % pinnedNotes.length, 'previous');
-  }, [activeIndex, navigateTo, pinnedNotes.length]);
+    setActiveIndex((current) => (current - 1 + pinnedNotes.length) % pinnedNotes.length);
+  }, [pinnedNotes.length]);
 
   const showNext = useCallback(() => {
-    navigateTo((activeIndex + 1) % pinnedNotes.length, 'next');
-  }, [activeIndex, navigateTo, pinnedNotes.length]);
-
-  useEffect(() => {
-    if (pinnedNotes.length < 2 || isPaused || prefersReducedMotion || transitionFrom) return;
-    const timer = window.setInterval(showNext, 8000);
-    return () => window.clearInterval(timer);
-  }, [isPaused, pinnedNotes.length, prefersReducedMotion, showNext, transitionFrom]);
-
-  // Stream Guard: notas no protegidas por defecto
-  const privacyClass = '';
+    setActiveIndex((current) => (current + 1) % pinnedNotes.length);
+  }, [pinnedNotes.length]);
 
   return (
     <section
-      className="space-y-4"
+      className="space-y-2.5 sm:space-y-3"
       aria-labelledby="today-notes-title"
-      onMouseEnter={() => setIsPaused(true)}
-      onMouseLeave={() => setIsPaused(false)}
-      onFocusCapture={() => setIsPaused(true)}
-      onBlurCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsPaused(false);
-      }}
-      onTouchStart={() => setIsPaused(true)}
-      onTouchEnd={() => setIsPaused(false)}
-      onPointerDown={() => setIsPaused(true)}
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+          <span className="today-section-icon today-section-icon-notes">
             <AppIcon name="note" className="h-4 w-4" />
           </span>
-          <div>
-            <h2 id="today-notes-title" className="text-base font-bold text-[var(--text)]">Notas</h2>
-            <p className="text-[10px] text-[var(--text-faint)]">Memoria visible</p>
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 id="today-notes-title" className="text-sm sm:text-base font-bold tracking-[-0.025em] text-[var(--text)]">Notas</h2>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
             onClick={onAddNote}
-            className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 text-[10px] font-bold text-[var(--text-soft)] transition-colors hover:border-[var(--border-hover)] hover:text-[var(--text)]"
+            className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--card)]/70 px-2 text-[13px] font-medium text-[var(--text-soft)] transition-colors hover:border-amber-500/35 hover:text-[var(--text)] cursor-pointer"
           >
-            <AppIcon name="plus" className="h-3 w-3" />
-            Nota
+            <AppIcon name="plus" className="h-3 w-3 text-amber-500" />
+            <span>Nota</span>
           </button>
-          <button type="button" onClick={onNavigate} className="text-[11px] font-bold text-[var(--blue)] hover:underline">
-            Ver todas
+          <button type="button" onClick={onNavigate} className="inline-flex items-center gap-0.5 text-[13px] font-bold text-[var(--blue)] hover:underline cursor-pointer">
+            Ver todas <AppIcon name="arrowRight" className="h-3 w-3" />
           </button>
         </div>
       </div>
 
       {activeNote && (
-        <div className="space-y-2" role="region" aria-roledescription="carrusel" aria-label="Notas fijadas">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] font-semibold text-[var(--text-faint)]">Fijadas</p>
-            {pinnedNotes.length > 1 && (
-              <div className="flex items-center gap-1">
-                <button type="button" onClick={showPrevious} className="rounded-lg border border-[var(--border)] p-1.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text)]" aria-label="Nota fijada anterior">
-                  <AppIcon name="chevronLeft" className="h-3.5 w-3.5" />
-                </button>
-                <button type="button" onClick={showNext} className="rounded-lg border border-[var(--border)] p-1.5 text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text)]" aria-label="Nota fijada siguiente">
-                  <AppIcon name="chevronRight" className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="relative min-h-40 overflow-hidden rounded-xl sm:min-h-44">
-            {transitionFrom && (
-              <button
-                type="button"
-                tabIndex={-1}
-                aria-hidden="true"
-                onClick={onNavigate}
-                className={`absolute inset-0 flex w-full flex-col rounded-xl bg-[var(--card-subtle)] px-4 py-4 text-left pointer-events-none ${direction === 'next' ? 'note-carousel-exit-next' : 'note-carousel-exit-previous'}`}
-              >
-                <span className={`line-clamp-1 text-sm font-semibold leading-5 text-[var(--text)] ${privacyClass}`}>
-                  {noteTitle(transitionFrom)}
-                </span>
-                {transitionFrom.title && transitionFrom.text.trim() && (
-                  <span className={`mt-2 line-clamp-3 text-xs leading-5 text-[var(--text-soft)] ${privacyClass}`}>
-                    {transitionFrom.text.trim()}
-                  </span>
-                )}
-              </button>
-            )}
+        <div className="space-y-1.5" role="region" aria-roledescription="carrusel" aria-label="Notas fijadas">
+          <div
+            className="today-pinned-note relative rounded-xl border border-amber-500/30 bg-amber-500/[0.035] p-3 transition hover:border-amber-500/50 hover:bg-amber-500/[0.06] touch-pan-y"
+            tabIndex={pinnedNotes.length > 1 ? 0 : undefined}
+            onKeyDown={(event) => {
+              if (pinnedNotes.length < 2) return;
+              if (event.key === 'ArrowLeft') { event.preventDefault(); showPrevious(); }
+              if (event.key === 'ArrowRight') { event.preventDefault(); showNext(); }
+            }}
+            onTouchStart={(event) => { touchStartRef.current = event.touches[0]?.clientX ?? null; }}
+            onTouchEnd={(event) => {
+              if (touchStartRef.current == null || pinnedNotes.length < 2) return;
+              const delta = (event.changedTouches[0]?.clientX ?? touchStartRef.current) - touchStartRef.current;
+              touchStartRef.current = null;
+              if (Math.abs(delta) < 42) return;
+              if (delta < 0) showNext();
+              else showPrevious();
+            }}
+          >
+            <div className="flex items-center justify-between text-[13px] font-medium text-amber-700 dark:text-amber-300 mb-1">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" /> Fijada
+              </span>
+              {pinnedNotes.length > 1 && (
+                <div className="flex items-center gap-1 font-semibold text-[var(--text-faint)]">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); showPrevious(); }}
+                    className="today-carousel-control cursor-pointer"
+                    aria-label="Nota anterior"
+                  >
+                    <AppIcon name="chevronLeft" className="h-3 w-3" />
+                  </button>
+                  <span>{activeIndex + 1} / {pinnedNotes.length}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); showNext(); }}
+                    className="today-carousel-control cursor-pointer"
+                    aria-label="Nota siguiente"
+                  >
+                    <AppIcon name="chevronRight" className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+            </div>
 
             <button
+              key={activeNote.id}
               type="button"
-              onClick={onNavigate}
-              onAnimationEnd={() => {
-                if (transitionTimerRef.current != null) window.clearTimeout(transitionTimerRef.current);
-                transitionTimerRef.current = null;
-                setTransitionFrom(null);
-              }}
-              className={`absolute inset-0 flex w-full flex-col rounded-xl bg-[var(--card-subtle)] px-4 py-4 text-left ring-1 ring-inset ring-[var(--border)]/70 transition-colors hover:bg-[var(--surface-muted)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--border-focus)] ${transitionFrom ? (direction === 'next' ? 'note-carousel-enter-next' : 'note-carousel-enter-previous') : ''}`}
-              aria-label={`Abrir nota fijada ${activeIndex + 1} de ${pinnedNotes.length}: ${noteTitle(activeNote)}`}
+              onClick={() => onOpenNote(activeNote.id)}
+              className="today-note-enter block w-full text-left cursor-pointer"
             >
-              <span className={`line-clamp-1 text-sm font-semibold leading-5 text-[var(--text)] ${privacyClass}`}>
-                {noteTitle(activeNote)}
-              </span>
-              {activeNote.title && activeNote.text.trim() && (
-                <span className={`mt-2 line-clamp-3 text-xs leading-5 text-[var(--text-soft)] ${privacyClass}`}>
+              <h3 className="line-clamp-1 text-sm font-semibold text-[var(--text)]">
+                {privacyMode ? 'Nota fijada' : noteTitle(activeNote)}
+              </h3>
+              {!privacyMode && activeNote.title && activeNote.text.trim() && (
+                <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-[var(--text-soft)]">
                   {activeNote.text.trim()}
-                </span>
+                </p>
               )}
             </button>
           </div>
-
-          {pinnedNotes.length > 1 && (
-            <div className="flex justify-center gap-1.5" aria-label={`Nota ${activeIndex + 1} de ${pinnedNotes.length}`}>
-              {pinnedNotes.map((note, index) => (
-                <button
-                  key={note.id}
-                  type="button"
-                  onClick={() => navigateTo(index, index > activeIndex ? 'next' : 'previous')}
-                  className={`h-1.5 rounded-full transition-[width,background-color] motion-reduce:transition-none ${index === activeIndex ? 'w-4 bg-[var(--text-soft)]' : 'w-1.5 bg-[var(--border-hover)] hover:bg-[var(--text-faint)]'}`}
-                  aria-label={`Mostrar nota fijada ${index + 1}`}
-                  aria-current={index === activeIndex ? 'true' : undefined}
-                />
-              ))}
-            </div>
-          )}
         </div>
       )}
 
       {recentNotes.length > 0 && (
-        <div className="space-y-1.5">
-          <p className="text-[10px] font-semibold text-[var(--text-faint)]">Recientes</p>
-          <div className="divide-y divide-[var(--border)]/70">
-            {recentNotes.map((note) => (
-              <button key={note.id} type="button" onClick={onNavigate} className="group flex w-full items-center gap-3 rounded-lg px-1 py-2.5 text-left transition-colors hover:bg-[var(--surface-muted)]/50">
-                <span className={`min-w-0 flex-1 truncate text-xs font-medium text-[var(--text)] group-hover:text-[var(--blue)] ${privacyClass}`}>
-                  {noteTitle(note)}
+        <div className="space-y-1 pt-1 border-t border-[var(--border)]/50">
+          <span className="text-[13px] font-medium text-[var(--text-soft)]">Recientes</span>
+          <div className="divide-y divide-[var(--border)]/40">
+            {recentNotes.slice(0, 2).map((note) => (
+              <button
+                key={note.id}
+                type="button"
+                onClick={() => onOpenNote(note.id)}
+                className="flex w-full items-center justify-between py-1 px-1 text-left group hover:text-[var(--blue)] transition cursor-pointer"
+              >
+                <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-[var(--text)] group-hover:text-[var(--blue)] mr-2">
+                  {privacyMode ? 'Nota reciente' : noteTitle(note)}
                 </span>
-                <span className="shrink-0 text-[10px] text-[var(--text-faint)]">
+                <span className="shrink-0 text-[12px] text-[var(--text-soft)]">
                   {formatRelativeTime(note.updatedAt || note.createdAt || note.date)}
                 </span>
               </button>
@@ -218,13 +161,10 @@ export const TodayNotesSection: React.FC<TodayNotesSectionProps> = ({
         <button
           type="button"
           onClick={onAddNote}
-          className="flex w-full items-center justify-between rounded-xl border border-dashed border-[var(--border)] bg-[var(--card-subtle)] px-3 py-4 text-left transition hover:border-[var(--border-hover)]"
+          className="flex w-full items-center justify-between rounded-xl border border-dashed border-amber-500/25 bg-amber-500/[0.035] px-3 py-2.5 text-left transition hover:border-amber-500/45 cursor-pointer"
         >
-          <span>
-            <span className="block text-xs font-semibold text-[var(--text)]">Guardá algo que quieras tener presente</span>
-            <span className="mt-0.5 block text-[10px] text-[var(--text-faint)]">Tu primera nota aparecerá acá.</span>
-          </span>
-          <AppIcon name="plus" className="h-4 w-4 text-indigo-500" />
+          <span className="text-xs font-semibold text-[var(--text)]">Guardá tu primera nota</span>
+          <AppIcon name="plus" className="h-3.5 w-3.5 text-[var(--blue)]" />
         </button>
       )}
     </section>

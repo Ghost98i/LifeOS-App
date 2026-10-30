@@ -37,6 +37,22 @@ function createBaseState(): LifeOSState {
   return state;
 }
 
+test('La revisión incluye el tercer día local en zonas horarias al este de UTC', () => {
+  const previous = process.env.TZ;
+  try {
+    process.env.TZ = 'Pacific/Auckland';
+    const state = createBaseState();
+    state.finance.commitments = [{ id: 'boundary', name: 'Pago al tercer día', amount: 100, category: 'Otros', accountId: 'acc-main', active: true, frequency: 'once', nextDueDate: '2026-10-31' }];
+    const result = deriveFinanceReviewInbox(state, '2026-10-28');
+    assert.equal(result.attentionCommitments.length, 1);
+    assert.equal(result.attentionCommitments[0].daysDiff, 3);
+    assert.equal(result.attentionCommitments[0].kind, 'due_soon');
+  } finally {
+    if (previous === undefined) delete process.env.TZ;
+    else process.env.TZ = previous;
+  }
+});
+
 test('1. Movimiento nuevo vs reviewed: excepción entra al Inbox y marcar revisado lo retira', () => {
   const state = createBaseState();
 

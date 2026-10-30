@@ -77,7 +77,7 @@ test('getActivityTimeline: aggregates activities across finance, gym, study, tas
 
   // Second is 16:00 (gym session)
   assert.equal(timeline[1].module, 'gym');
-  assert.equal(timeline[1].title, 'Entrenamiento completado');
+  assert.equal(timeline[1].title, 'Gimnasio · Entrenamiento completado');
 
   // Third is 15:30 (finance expense)
   assert.equal(timeline[2].module, 'finance');
@@ -170,4 +170,130 @@ test('getActivityTimeline: resolves category ID to human name and never exposes 
   assert.ok(item2);
   assert.equal(item2.title, '-$500 · Sin categoría');
   assert.ok(!item2.title.includes('cat_deleted_or_orphan'));
+});
+
+test('getActivityTimeline: hideAmounts omits currency signs and amounts for privacy in dashboard', () => {
+  const state: LifeOSState = {
+    ...defaultState(),
+    finance: {
+      ...defaultState().finance,
+      categories: [
+        { id: 'cat_servicios', name: 'Servicios', active: true },
+      ],
+      transactions: [
+        {
+          id: 'tx-priv-1',
+          date: '2026-10-15T10:00:00Z',
+          amount: -1500,
+          type: 'gasto',
+          category: 'cat_servicios',
+          note: 'DirecTV',
+          fixed: 'variable',
+        },
+        {
+          id: 'tx-priv-2',
+          date: '2026-10-15T09:00:00Z',
+          amount: 5000,
+          type: 'ingreso',
+          category: 'cat_servicios',
+          note: 'Arbitraje',
+          fixed: 'variable',
+        },
+      ],
+    },
+    resale: {
+      opportunities: [],
+      inventory: [
+        {
+          id: 'r-priv-1',
+          item: 'Monitor',
+          buyPrice: 3000,
+          buyDate: '2026-10-14',
+          sellPrice: 4500,
+          sellDate: '2026-10-15T08:00:00Z',
+          status: 'vendido',
+        },
+      ],
+    },
+  };
+
+  const timeline = getActivityTimeline(state, 5, { hideAmounts: true });
+  assert.equal(timeline.length, 3);
+
+  // Expense
+  const expense = timeline.find((i) => i.id === 'fin-tx-priv-1');
+  assert.ok(expense);
+  assert.equal(expense.title, 'Gasto en DirecTV');
+  assert.equal(expense.subtitle, 'Servicios');
+  assert.ok(!expense.title.includes('$'));
+  assert.ok(!expense.title.includes('1500'));
+
+  // Income
+  const income = timeline.find((i) => i.id === 'fin-tx-priv-2');
+  assert.ok(income);
+  assert.equal(income.title, 'Ingreso de Arbitraje');
+  assert.equal(income.subtitle, 'Servicios');
+  assert.ok(!income.title.includes('$'));
+  assert.ok(!income.title.includes('5000'));
+
+  // Resale
+  const resale = timeline.find((i) => i.id === 'resale-sold-r-priv-1');
+  assert.ok(resale);
+  assert.equal(resale.title, 'Venta: Monitor');
+  assert.equal(resale.subtitle, 'Artículo vendido');
+  assert.ok(!resale.subtitle.includes('$'));
+});
+
+test('getActivityTimeline: uses a reliable gym label and only explicit rest days', () => {
+  const state = defaultState();
+  state.gym.sessions = [{ id: 'gym-custom', date: '2026-10-14', status: 'completed', weekLabel: 'Espalda y bíceps', exercises: [] }];
+  state.gym.restDays = ['2026-10-13', '2026-10-13'];
+
+  const timeline = getActivityTimeline(state, 10);
+  assert.equal(timeline.find((item) => item.id === 'gym-gym-custom')?.title, 'Gimnasio · Espalda y bíceps');
+  assert.equal(timeline.filter((item) => item.id === 'gym-rest-2026-10-13').length, 1);
+  assert.equal(timeline.some((item) => item.id === 'gym-rest-2026-10-12'), false);
+
+  const guarded = getActivityTimeline(state, 10, { privacyMode: true });
+  assert.equal(guarded.find((item) => item.id === 'gym-gym-custom')?.title, 'Gimnasio · Entrenamiento completado');
+});
+
+test('getActivityTimeline: includes job applications and opportunities from Trabajo', () => {
+  const state = defaultState();
+  state.jobs = {
+    applications: [
+      {
+        id: 'job-1',
+        empresa: 'Globant',
+        puesto: 'Frontend Engineer',
+        estado: 'cv_enviado',
+        fecha: '2026-10-23T10:00:00Z',
+      },
+    ],
+    opportunities: [
+      {
+        id: 'opp-1',
+        empresa: 'Mercado Libre',
+        puesto: 'React Developer',
+        status: 'nueva',
+        fecha: '2026-10-22T15:00:00Z',
+      },
+    ],
+  };
+
+  const timeline = getActivityTimeline(state, 5);
+  const app = timeline.find((item) => item.id === 'job-app-job-1');
+  assert.ok(app);
+  assert.equal(app.module, 'jobs');
+  assert.equal(app.title, 'Postulación: Globant');
+  assert.equal(app.subtitle, 'Frontend Engineer');
+  assert.equal(app.iconName, 'briefcase');
+
+  const opp = timeline.find((item) => item.id === 'job-opp-opp-1');
+  assert.ok(opp);
+  assert.equal(opp.module, 'jobs');
+  assert.equal(opp.title, 'Oportunidad: Mercado Libre');
+
+  const guarded = getActivityTimeline(state, 5, { privacyMode: true });
+  assert.equal(guarded.find((item) => item.id === 'job-app-job-1')?.title, 'Postulación laboral');
 });

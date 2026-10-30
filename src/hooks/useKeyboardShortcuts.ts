@@ -60,6 +60,7 @@ export function useKeyboardShortcuts({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       const {
         onNavigate,
         onOpenQuickCapture,
@@ -91,7 +92,7 @@ export function useKeyboardShortcuts({
       }
 
       // If a modal or palette is open, do not trigger background navigation or capture
-      if (isModalOpen) {
+      if (isModalOpen || document.querySelector('[role="dialog"][aria-modal="true"]')) {
         return;
       }
 

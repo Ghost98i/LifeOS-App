@@ -87,9 +87,87 @@ test('sesiones completadas legacy conservan su volumen, pero planes activos no c
   assert.equal(getPerformedGymVolume(gym.sessions.find((session) => session.id === 'planned')!), 0);
 });
 
-test('el temporizador queda opt-in al migrar ejercicios', () => {
+test('el temporizador está habilitado por defecto al migrar ejercicios a menos que sea explícitamente false', () => {
   const migrated = migrateGym({ sessions: [{ id: 'a', date: '2026-09-01', exercises: [{ name: 'Curl', reps: '3x10' }] }] });
-  assert.equal(migrated.sessions[0].exercises[0].timerEnabled, false);
-  const enabled = migrateGym({ sessions: [{ id: 'b', date: '2026-09-01', exercises: [{ name: 'Curl', reps: '3x10', timerEnabled: true }] }] });
-  assert.equal(enabled.sessions[0].exercises[0].timerEnabled, true);
+  assert.equal(migrated.sessions[0].exercises[0].timerEnabled, true);
+  const disabled = migrateGym({ sessions: [{ id: 'b', date: '2026-09-01', exercises: [{ name: 'Curl', reps: '3x10', timerEnabled: false }] }] });
+  assert.equal(disabled.sessions[0].exercises[0].timerEnabled, false);
+});
+
+test('rutina histórica normalizada con timerEnabled: false por comportamiento anterior recupera timerEnabled: true de forma segura', () => {
+  const gym = migrateGym({
+    routineTemplates: [
+      {
+        id: 't-legacy',
+        name: 'Rutina Empuje',
+        exercises: [
+          { name: 'Press Banca', reps: '4x8', timerEnabled: false, restSecondsMode: 'inherit' },
+          { name: 'Press Inclinado', reps: '3x10', timerEnabled: false, restSecondsMode: 'custom', restSeconds: 90 },
+          { name: 'Aperturas', reps: '3x12', timerEnabled: false, restSecondsMode: 'inherit' },
+        ],
+      },
+    ],
+  });
+
+  const template = gym.routineTemplates[0];
+  assert.ok(template);
+  assert.equal(template.exercises[0].timerEnabled, true);
+  assert.equal(template.exercises[1].timerEnabled, true);
+  assert.equal(template.exercises[2].timerEnabled, true);
+});
+
+test('rutina con desactivación selectiva intencional conserva timerEnabled: false en el ejercicio específico', () => {
+  const gym = migrateGym({
+    routineTemplates: [
+      {
+        id: 't-selective',
+        name: 'Fuerza + Core',
+        exercises: [
+          { name: 'Sentadilla', reps: '5x5', timerEnabled: true, restSecondsMode: 'custom', restSeconds: 180 },
+          { name: 'Plancha Abdominal', reps: '3x60', timerEnabled: false, restSecondsMode: 'inherit' },
+        ],
+      },
+    ],
+  });
+
+  const template = gym.routineTemplates[0];
+  assert.ok(template);
+  assert.equal(template.exercises[0].timerEnabled, true);
+  assert.equal(template.exercises[1].timerEnabled, false, 'La desactivación selectiva intencional debe respetarse');
+});
+
+test('ejercicio con restSecondsMode: disabled conserva timerEnabled: false', () => {
+  const gym = migrateGym({
+    routineTemplates: [
+      {
+        id: 't-disabled',
+        name: 'Circuito sin descanso',
+        exercises: [
+          { name: 'Burpees', reps: '3x15', restSecondsMode: 'disabled' },
+        ],
+      },
+    ],
+  });
+
+  const template = gym.routineTemplates[0];
+  assert.ok(template);
+  assert.equal(template.exercises[0].timerEnabled, false);
+  assert.equal(template.exercises[0].restSecondsMode, 'disabled');
+});
+
+test('sesiones históricas completadas conservan timerEnabled: false sin alterar historiales', () => {
+  const gym = migrateGym({
+    sessions: [
+      {
+        id: 's-hist',
+        date: '2026-10-15',
+        status: 'completed',
+        exercises: [
+          { name: 'Peso Muerto', reps: '3x5', timerEnabled: false, sets: [{ id: '1', weight: 140, reps: 5, completed: true }] },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(gym.sessions[0].exercises[0].timerEnabled, false, 'El historial completado debe mantenerse inmutable');
 });

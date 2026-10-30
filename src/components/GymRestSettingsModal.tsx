@@ -21,12 +21,16 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
   const [autoTimer, setAutoTimer] = useState(settings.autoTimerEnabled);
   const [setRest, setSetRest] = useState(settings.restBetweenSetsSeconds);
   const [exerciseRest, setExerciseRest] = useState(settings.restBetweenExercisesSeconds);
+  const [showQuickAdjustments, setShowQuickAdjustments] = useState(settings.showQuickRestAdjustments);
+  const [allowManualEditing, setAllowManualEditing] = useState(settings.allowManualRestEditing);
 
   useEffect(() => {
     if (isOpen) {
       setAutoTimer(settings.autoTimerEnabled);
       setSetRest(settings.restBetweenSetsSeconds);
       setExerciseRest(settings.restBetweenExercisesSeconds);
+      setShowQuickAdjustments(settings.showQuickRestAdjustments);
+      setAllowManualEditing(settings.allowManualRestEditing);
     }
   }, [isOpen, settings]);
 
@@ -46,6 +50,8 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
       autoTimerEnabled: autoTimer,
       restBetweenSetsSeconds: Math.min(600, Math.max(15, setRest || 120)),
       restBetweenExercisesSeconds: Math.min(600, Math.max(15, exerciseRest || 180)),
+      showQuickRestAdjustments: showQuickAdjustments,
+      allowManualRestEditing: allowManualEditing,
     });
     onClose();
   };
@@ -59,13 +65,13 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl space-y-5"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-md space-y-5 overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
           <div className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--blue-soft)] text-[var(--blue)]">
-              <AppIcon name="clock" className="h-5 w-5" />
+              <AppIcon name="stopwatch" className="h-5 w-5" />
             </span>
             <div>
               <h2 id="gym-rest-settings-title" className="text-base font-bold text-[var(--text)]">
@@ -120,7 +126,7 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
             <label htmlFor="rest-sets-input" className="text-xs font-bold text-[var(--text)]">
               Descanso entre series
             </label>
-            <span className="font-mono text-xs font-semibold text-[var(--text-soft)]">
+            <span className="tabular-nums text-xs font-semibold text-[var(--text-soft)]">
               {setRest} segundos ({Math.floor(setRest / 60)}m {setRest % 60 ? `${setRest % 60}s` : ''})
             </span>
           </div>
@@ -158,7 +164,7 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
             <label htmlFor="rest-exercises-input" className="text-xs font-bold text-[var(--text)]">
               Descanso al terminar ejercicio
             </label>
-            <span className="font-mono text-xs font-semibold text-[var(--text-soft)]">
+            <span className="tabular-nums text-xs font-semibold text-[var(--text-soft)]">
               {exerciseRest} segundos ({Math.floor(exerciseRest / 60)}m {exerciseRest % 60 ? `${exerciseRest % 60}s` : ''})
             </span>
           </div>
@@ -188,6 +194,50 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
             onChange={(e) => setExerciseRest(Math.max(15, Math.min(600, Number(e.target.value) || 180)))}
             className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold text-[var(--text)] outline-none focus:border-[var(--blue)]"
           />
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3.5">
+            <div className="min-w-0">
+              <span className="block text-sm font-bold text-[var(--text)]">Mostrar ajustes rápidos</span>
+              <span className="block text-xs text-[var(--text-soft)]">Muestra −30 s y +30 s mientras descansas</span>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={showQuickAdjustments}
+              aria-label="Mostrar ajustes rápidos de descanso"
+              onClick={() => setShowQuickAdjustments((current) => !current)}
+              className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none ${
+                showQuickAdjustments ? 'bg-[var(--blue)]' : 'bg-[var(--border-strong)]'
+              }`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 translate-y-1 rounded-full bg-white shadow-md transition duration-200 ${
+                showQuickAdjustments ? 'translate-x-6' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3.5">
+            <div className="min-w-0">
+              <span className="block text-sm font-bold text-[var(--text)]">Permitir edición manual</span>
+              <span className="block text-xs text-[var(--text-soft)]">Añade una acción secundaria para editar el descanso en curso</span>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={allowManualEditing}
+              aria-label="Permitir edición manual del descanso"
+              onClick={() => setAllowManualEditing((current) => !current)}
+              className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none ${
+                allowManualEditing ? 'bg-[var(--blue)]' : 'bg-[var(--border-strong)]'
+              }`}
+            >
+              <span className={`pointer-events-none inline-block h-5 w-5 translate-y-1 rounded-full bg-white shadow-md transition duration-200 ${
+                allowManualEditing ? 'translate-x-6' : 'translate-x-1'
+              }`} />
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-3">

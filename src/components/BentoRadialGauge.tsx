@@ -93,7 +93,7 @@ export const BentoRadialGauge: React.FC<BentoRadialGaugeProps> = ({
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center text-center leading-none pointer-events-none px-1">
         <span
-          className="font-black font-mono tracking-tight text-[var(--text)]"
+          className="font-black tabular-nums tracking-tight text-[var(--text)]"
           style={{ fontSize: size < 52 ? '0.7rem' : size < 70 ? '0.85rem' : '1.1rem' }}
         >
           {displayText}

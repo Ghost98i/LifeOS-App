@@ -5,6 +5,10 @@ declare const __LIFEOS_PORTABLE__: boolean;
 declare const __LIFEOS_BUILD_ID__: string;
 
 interface ImportMetaEnv {
+  readonly DEV: boolean;
+  readonly VITE_FIREBASE_EMULATORS?: string;
+  readonly VITE_COMMERCIAL_PILOT?: string;
+  readonly VITE_COMMERCIAL_PILOT_SYNC?: string;
   readonly VITE_FIREBASE_API_KEY?: string;
   readonly VITE_FIREBASE_AUTH_DOMAIN?: string;
   readonly VITE_FIREBASE_PROJECT_ID?: string;

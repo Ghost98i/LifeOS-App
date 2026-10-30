@@ -1,0 +1,17 @@
+/* Scope the established Celestian accent to this refinement's three screens. */
+.product-refinement {
+  --blue: #4F46E5;
+  --blue-hover: #4338CA;
+  --blue-soft: rgb(79 70 229 / 0.14);
+  --accent: #4F46E5;
+}
+
+.dark .product-refinement :is(.text-\[var\(--blue\)\], .text-\[var\(--accent\)\]) {
+  color: #A5A0FF;
+}
+
+/* Secondary text remains readable at large desktop widths and on touch screens. */
+.product-refinement .text-xs {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}

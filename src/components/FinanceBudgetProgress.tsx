@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { FinanceCategoryInput, LifeOSState } from '../types';
-import { fmtMoney, todayISO } from '../lib/storage';
+import { formatMoney, todayISO } from '../lib/storage';
 import { getAllCategories } from '../lib/financeCategories';
 import {
   deriveAllMonthlyBudgetStatuses,
@@ -59,8 +59,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
   const activeCurrency = allCurrencies.includes(selectedCurrency) ? selectedCurrency : (allCurrencies[0] || 'UYU');
 
   const formatCurr = (val: number) => {
-    if (activeCurrency === 'USD') return `US$ ${Math.round(val).toLocaleString('es-UY')}`;
-    return fmtMoney(val);
+    return formatMoney(val, activeCurrency);
   };
 
   // Derive report from state or fallback to legacy props
@@ -165,7 +164,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
               >
                 ‹
               </button>
-              <span className="font-bold text-[11px] min-w-[90px] text-center font-mono">
+              <span className="font-bold text-[11px] min-w-[90px] text-center tabular-nums">
                 {formatMonthTitle(selectedMonth)}
               </span>
               <button
@@ -190,7 +189,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
 
             {/* Currency Pill Selector if multi-currency exists */}
             {allCurrencies.length > 1 && (
-              <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] text-[10px] font-mono font-bold">
+              <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] text-[10px] font-bold">
                 {allCurrencies.map((c) => (
                   <button
                     key={c}
@@ -209,7 +208,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
             )}
 
             {effectiveLimit !== null && (
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold font-mono ${
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold tabular-nums ${
                 effectivePct >= 100
                   ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
                   : effectivePct >= 75
@@ -284,7 +283,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
               </div>
             ) : (
               <div className="flex items-center gap-1.5">
-                <strong className="finance-text-primary font-mono">
+                <strong className="finance-text-primary tabular-nums">
                   {report.globalLimit ? (
                     <PrivacyAmount>{formatCurr(report.globalLimit)}</PrivacyAmount>
                   ) : totalCategoryBudget > 0 ? (
@@ -311,7 +310,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-3 font-mono">
+          <div className="flex items-center gap-3 tabular-nums">
             <span>
               Gastado: <strong className="finance-text-primary"><PrivacyAmount>{formatCurr(effectiveSpent)}</PrivacyAmount></strong>
             </span>
@@ -385,7 +384,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                     </td>
 
                     {/* Planificado (Editable) */}
-                    <td className="finance-text-secondary py-2.5 px-3 font-mono">
+                    <td className="finance-text-secondary py-2.5 px-3 tabular-nums">
                       {isEditing ? (
                         <div className="flex items-center gap-1">
                           <input
@@ -422,12 +421,12 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                     </td>
 
                     {/* Gastado Real */}
-                    <td className="finance-text-primary py-2.5 px-3 font-mono font-semibold">
+                    <td className="finance-text-primary py-2.5 px-3 tabular-nums font-semibold">
                       <PrivacyAmount>{formatCurr(item.spent)}</PrivacyAmount>
                     </td>
 
                     {/* Restante / Excedido */}
-                    <td className="py-2.5 px-3 font-mono tabular-nums">
+                    <td className="py-2.5 px-3 tabular-nums">
                       {item.hasBudget && item.remaining !== null ? (
                         <span className={item.isExceeded ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-emerald-600 dark:text-emerald-400'}>
                           <PrivacyAmount>
@@ -457,7 +456,7 @@ export const FinanceBudgetProgress: React.FC<FinanceBudgetProgressProps> = ({
                               style={{ width: `${Math.min(item.pct, 100)}%` }}
                             />
                           </div>
-                          <span className={`font-mono font-bold text-[11px] w-9 text-right ${
+                          <span className={`tabular-nums font-bold text-[11px] w-9 text-right ${
                             item.isExceeded
                               ? 'text-rose-600 dark:text-rose-400'
                               : item.pct >= 75

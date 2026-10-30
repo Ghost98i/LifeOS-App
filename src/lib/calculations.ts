@@ -14,6 +14,7 @@ import {
   CashFlowCommitment,
   CashFlowDayPoint,
   CashFlowForecastItem,
+  JobApplicationType,
 } from '../types';
 import {
   todayISO,
@@ -24,6 +25,8 @@ import {
   dayKeyFromDate,
   isoWeekMonday,
   clamp,
+  sumMoney,
+  roundMoney,
 } from './storage';
 import {
   getUnifiedTaskMap,
@@ -31,8 +34,10 @@ import {
   getUnblockedCountIfCompleted,
 } from './taskDependencies';
 import { isModuleEnabled } from './moduleVisibility';
+import { filterJobApplications, getJobApplicationType } from './jobApplications';
 import { getPerformedGymVolume, isPerformedGymSession } from './gymFlows';
 import { calcDetailedPRs } from './gymMetrics';
+import { resaleItemCurrency, resaleProfitAmount } from './resaleMoney';
 import {
   calculateRealAvailable,
   evaluateCushionStatus,
@@ -42,6 +47,7 @@ import {
   sortCommitmentsChronologically,
   CushionEvaluation,
 } from './financialCommitments';
+import { calculateAgreementRemainingBalance, deriveAgreementSchedule } from './financeAgreements';
 
 export {
   calculateRealAvailable,
@@ -70,8 +76,23 @@ export {
   setMonthlyCategoryLimit,
 } from './financeBudget';
 
-export function calcAccountsTotal(state: LifeOSState): number {
-  return (state.finance?.accounts || []).reduce((s, a) => s + Number(a.balance || 0), 0);
+export function calcAccountsTotal(state: LifeOSState, currency?: string): number {
+  const accounts = state.finance?.accounts || [];
+  if (currency) {
+    const target = currency.toUpperCase();
+    return accounts
+      .filter((a) => (a.currency || 'UYU').toUpperCase() === target)
+      .reduce((s, a) => s + Number(a.balance || 0), 0);
+  }
+  const currencies = new Set(accounts.map((a) => (a.currency || 'UYU').toUpperCase()));
+  if (currencies.size <= 1) {
+    return accounts.reduce((s, a) => s + Number(a.balance || 0), 0);
+  }
+  // When multiple currencies exist and none is requested, aggregate only UYU accounts
+  // to prevent deceptive 1:1 summing of UYU and USD.
+  return accounts
+    .filter((a) => (a.currency || 'UYU').toUpperCase() === 'UYU')
+    .reduce((s, a) => s + Number(a.balance || 0), 0);
 }
 
 export function defaultAccountId(state: LifeOSState): string | null {
@@ -91,12 +112,37 @@ export function calcInvestmentsTotal(state: LifeOSState): number {
   return (state.finance?.investments || []).reduce((s, i) => s + Number(i.amount || 0), 0);
 }
 
-export function calcDebtsTotal(state: LifeOSState): number {
-  return (state.finance?.debts || []).reduce((s, d) => s + Number(d.amount || 0), 0);
+export function calcDebtsTotal(state: LifeOSState, currency = 'UYU'): number {
+  const normCur = currency.toUpperCase();
+  const agreements = state.finance?.agreements || [];
+  const excludedLegacyIds = new Set(
+    agreements
+      .filter((a) => a.status !== 'cancelled')
+      .map((a) => a.linkedLegacyDebtId)
+      .filter(Boolean)
+  );
+
+  // Legacy debts: default local currency (UYU), excluding any linked to new agreements
+  const legacyTotal = normCur === 'UYU'
+    ? (state.finance?.debts || [])
+        .filter((d) => !excludedLegacyIds.has(d.id))
+        .reduce((s, d) => s + Number(d.amount || 0), 0)
+    : 0;
+
+  // Active agreements in this currency (derived remaining balance)
+  const agreementsTotal = agreements
+    .filter((a) => (a.currency || 'UYU').toUpperCase() === normCur && a.status !== 'cancelled')
+    .reduce((s, a) => s + calculateAgreementRemainingBalance(a, state.finance?.transactions || []), 0);
+
+  return roundMoney(legacyTotal + agreementsTotal);
 }
 
-export function calcNetWorth(state: LifeOSState): number {
-  return calcAccountsTotal(state) + calcInvestmentsTotal(state) - calcDebtsTotal(state);
+export function calcNetWorth(state: LifeOSState, currency = 'UYU'): number {
+  const normCur = currency.toUpperCase();
+  if (normCur === 'USD') {
+    return roundMoney(calcAccountsTotal(state, 'USD') - calcDebtsTotal(state, 'USD'));
+  }
+  return roundMoney(calcAccountsTotal(state, 'UYU') + calcInvestmentsTotal(state) - calcDebtsTotal(state, 'UYU'));
 }
 
 export function calcSubscriptionsTotal(state: LifeOSState): number {
@@ -243,8 +289,10 @@ export function getExpectedIncomeOccurrences(
 export function cashFlowProjection(
   state: LifeOSState,
   days: 30 | 60 | 90 = 30,
-  fromIso = todayISO()
+  fromIso = todayISO(),
+  currency = 'UYU'
 ): CashFlowProjectionResult {
+  const normCur = currency.toUpperCase();
   const from = new Date(`${fromIso}T12:00:00`);
   const horizon = new Date(from);
   horizon.setDate(horizon.getDate() + days);
@@ -254,73 +302,120 @@ export function cashFlowProjection(
 
   // 1. Expected Incomes
   for (const inc of state.finance?.expectedIncomes || []) {
-    forecastItems.push(...getExpectedIncomeOccurrences(inc, fromIso, horizonIso));
+    const incCur = (inc.currency || 'UYU').toUpperCase();
+    if (incCur === normCur) {
+      forecastItems.push(...getExpectedIncomeOccurrences(inc, fromIso, horizonIso));
+    }
   }
 
-  // 2. Subscriptions
+  // 2. Subscriptions (default to UYU unless specified)
   for (const sub of state.finance?.subscriptions || []) {
-    const amount = Number(sub.amount || 0);
-    if (amount <= 0 || !sub.dueDay) continue;
+    if (normCur === 'UYU') {
+      const amount = Number(sub.amount || 0);
+      if (amount <= 0 || !sub.dueDay) continue;
 
-    const targetDay = Math.max(1, Math.min(31, sub.dueDay));
-    const maxMonths = days <= 30 ? 2 : days <= 60 ? 3 : 4;
+      const targetDay = Math.max(1, Math.min(31, sub.dueDay));
+      const maxMonths = days <= 30 ? 2 : days <= 60 ? 3 : 4;
 
-    for (let m = 0; m < maxMonths; m++) {
-      const y = from.getFullYear();
-      const month = from.getMonth() + m;
-      const lastDay = new Date(y, month + 1, 0).getDate();
-      const actualDay = Math.min(targetDay, lastDay);
-      const d = new Date(y, month, actualDay, 12);
-      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      if (iso > horizonIso) break;
-      if (iso >= fromIso) {
-        forecastItems.push({
-          id: `subscription-${sub.id}-${iso}`,
-          date: iso,
-          label: sub.name,
-          amount,
-          type: 'expense',
-          sourceId: sub.id,
-        });
+      for (let m = 0; m < maxMonths; m++) {
+        const y = from.getFullYear();
+        const month = from.getMonth() + m;
+        const lastDay = new Date(y, month + 1, 0).getDate();
+        const actualDay = Math.min(targetDay, lastDay);
+        const d = new Date(y, month, actualDay, 12);
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        if (iso > horizonIso) break;
+        if (iso >= fromIso) {
+          forecastItems.push({
+            id: `subscription-${sub.id}-${iso}`,
+            date: iso,
+            label: sub.name,
+            amount,
+            type: 'expense',
+            sourceId: sub.id,
+          });
+        }
       }
     }
   }
 
-  // 3. Debts
+  // 3. Debts (default to UYU unless specified)
+  const agreements = state.finance?.agreements || [];
+  const linkedDebtIds = new Set(agreements.map((a) => a.linkedLegacyDebtId).filter(Boolean));
+
   for (const debt of state.finance?.debts || []) {
-    const payment = Number(debt.monthlyPayment || 0);
-    if (payment <= 0) continue;
+    if (linkedDebtIds.has(debt.id)) continue;
+    if (normCur === 'UYU') {
+      const payment = Number(debt.monthlyPayment || 0);
+      if (payment <= 0) continue;
 
-    const startIso = debt.dueDate || fromIso;
-    if (debt.dueDate && debt.dueDate > horizonIso) continue;
+      const startIso = debt.dueDate || fromIso;
+      if (debt.dueDate && debt.dueDate > horizonIso) continue;
 
-    const start = new Date(`${startIso}T12:00:00`);
-    const targetDay = start.getDate();
+      const start = new Date(`${startIso}T12:00:00`);
+      const targetDay = start.getDate();
 
-    for (let m = 0; ; m++) {
-      const y = from.getFullYear();
-      const month = from.getMonth() + m;
-      const lastDay = new Date(y, month + 1, 0).getDate();
-      const actualDay = Math.min(targetDay, lastDay);
-      const d = new Date(y, month, actualDay, 12);
-      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      if (iso > horizonIso) break;
-      if (iso >= fromIso && iso >= startIso) {
-        forecastItems.push({
-          id: `debt-${debt.id}-${iso}`,
-          date: iso,
-          label: debt.name,
-          amount: payment,
-          type: 'debt',
-          sourceId: debt.id,
-        });
+      for (let m = 0; ; m++) {
+        const y = from.getFullYear();
+        const month = from.getMonth() + m;
+        const lastDay = new Date(y, month + 1, 0).getDate();
+        const actualDay = Math.min(targetDay, lastDay);
+        const d = new Date(y, month, actualDay, 12);
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        if (iso > horizonIso) break;
+        if (iso >= fromIso && iso >= startIso) {
+          forecastItems.push({
+            id: `debt-${debt.id}-${iso}`,
+            date: iso,
+            label: debt.name,
+            amount: payment,
+            type: 'debt',
+            sourceId: debt.id,
+          });
+        }
       }
     }
   }
 
   // 4. Financial Commitments
   for (const com of state.finance?.commitments || []) {
-    forecastItems.push(...getCommitmentOccurrences(com, fromIso, horizonIso));
+    const comCur = (com.currency || 'UYU').toUpperCase();
+    if (comCur === normCur) {
+      forecastItems.push(...getCommitmentOccurrences(com, fromIso, horizonIso));
+    }
+  }
+
+  // 5. Financing Agreements (Structured Installment Plans)
+  for (const agr of agreements) {
+    if (agr.status === 'cancelled' || !agr.schedule) continue;
+    const agrCur = (agr.currency || 'UYU').toUpperCase();
+    if (agrCur !== normCur) continue;
+
+    const breakdown = deriveAgreementSchedule(agr, state.finance?.transactions || [], fromIso);
+    if (!breakdown || breakdown.remainingBalance <= 0) continue;
+
+    for (const inst of breakdown.installments) {
+      if (inst.status === 'paid' || inst.remainingDue <= 0.005) continue;
+
+      const inWindow = inst.dueDate >= fromIso && inst.dueDate <= horizonIso;
+      const isOverdue = inst.isOverdue || inst.dueDate < fromIso;
+
+      if (inWindow || isOverdue) {
+        forecastItems.push({
+          id: `agreement-${agr.id}-cuota-${inst.installmentNumber}`,
+          date: inst.dueDate,
+          label: `${agr.title} (Cuota ${inst.installmentNumber}/${inst.totalInstallments})`,
+          amount: inst.remainingDue,
+          type: 'debt',
+          sourceId: agr.id,
+          isOverdue,
+          installmentNumber: inst.installmentNumber,
+          totalInstallments: inst.totalInstallments,
+          agreementId: agr.id,
+          isFinancing: true,
+        });
+      }
+    }
   }
 
   forecastItems.sort((a, b) => a.date.localeCompare(b.date));
@@ -342,7 +437,7 @@ export function cashFlowProjection(
     .reduce((s, f) => s + f.amount, 0);
 
   const committed = commitments.reduce((sum, item) => sum + item.amount, 0);
-  const currentBalance = calcAccountsTotal(state);
+  const currentBalance = calcAccountsTotal(state, normCur);
   const realAvailable = calculateRealAvailable(currentBalance, committed);
   const netCashFlow = totalExpectedIncome - committed;
   const projectedBalance = currentBalance + netCashFlow;
@@ -355,11 +450,12 @@ export function cashFlowProjection(
 
   const dayMap = new Map<string, { income: number; expense: number; debt: number }>();
   for (const item of forecastItems) {
-    const existing = dayMap.get(item.date) || { income: 0, expense: 0, debt: 0 };
+    const mapDate = item.date < fromIso ? fromIso : item.date;
+    const existing = dayMap.get(mapDate) || { income: 0, expense: 0, debt: 0 };
     if (item.type === 'income') existing.income += item.amount;
     else if (item.type === 'expense') existing.expense += item.amount;
     else if (item.type === 'debt') existing.debt += item.amount;
-    dayMap.set(item.date, existing);
+    dayMap.set(mapDate, existing);
   }
 
   const cursor = new Date(from);
@@ -389,16 +485,18 @@ export function cashFlowProjection(
     cursor.setDate(cursor.getDate() + 1);
   }
 
+  const accountsCount = state.finance?.accounts?.length ?? 0;
   const cushionVal = state.finance?.minCushion !== undefined ? state.finance.minCushion : 5000;
   const cushionEnabled = state.finance?.cushionEnabled !== undefined ? state.finance.cushionEnabled : true;
   const cushionEval = evaluateCushionStatus(
     currentBalance,
     minProjectedBalance,
     cushionVal,
-    cushionEnabled
+    cushionEnabled,
+    accountsCount
   );
   const minLiquidityReserve = cushionEval.minCushion ?? 0;
-  const isDeficit = projectedBalance < 0 || minProjectedBalance < 0;
+  const isDeficit = accountsCount > 0 && (projectedBalance < 0 || minProjectedBalance < 0);
   const thresholdWarning = isDeficit || cushionEval.status === 'below_current' || cushionEval.status === 'projected_below';
 
   const upcomingIncomes = forecastItems.filter((f) => f.type === 'income' && f.date >= fromIso);
@@ -447,8 +545,41 @@ export function resaleGananciaTotal(state: LifeOSState): number {
     }, 0);
 }
 
-function isOperationalTransaction(transaction: Transaction): boolean {
-  return transaction.origin !== 'adjustment';
+export function isOperationalTransaction(transaction: Transaction): boolean {
+  return transaction.origin !== 'adjustment' && transaction.origin !== 'debt_payment' && !transaction.agreementId;
+}
+
+/**
+ * Resolves the canonical currency of a transaction.
+ * Precedence:
+ * 1. Account currency if associated with an account.
+ * 2. Explicit transaction.currency.
+ * 3. Fallback: 'UYU'.
+ */
+export function resolveTransactionCurrency(
+  transaction: Pick<Transaction, 'currency' | 'accountId'>,
+  accounts: { id: string; currency?: string }[] = []
+): string {
+  if (transaction.accountId) {
+    const acc = accounts.find((a) => a.id === transaction.accountId);
+    if (acc?.currency) {
+      return acc.currency.toUpperCase();
+    }
+  }
+  if (transaction.currency) {
+    return transaction.currency.toUpperCase();
+  }
+  return 'UYU';
+}
+
+function resolveTargetCurrency(state: LifeOSState, currency?: string): string {
+  if (currency) return currency.toUpperCase();
+  const accounts = state.finance?.accounts || [];
+  const currencies = new Set(accounts.map((a) => (a.currency || 'UYU').toUpperCase()));
+  if (currencies.size === 1) {
+    return Array.from(currencies)[0];
+  }
+  return 'UYU';
 }
 
 export function txInMonth(state: LifeOSState, offset = 0): Transaction[] {
@@ -456,27 +587,33 @@ export function txInMonth(state: LifeOSState, offset = 0): Transaction[] {
   return (state.finance?.transactions || []).filter((t) => sameMonth(t.date, ref));
 }
 
-export function calcSpentMonth(state: LifeOSState, offset = 0): number {
-  return txInMonth(state, offset)
-    .filter((t) => t.type === 'gasto' && isOperationalTransaction(t))
-    .reduce((s, t) => s + Number(t.amount || 0), 0);
+export function calcSpentMonth(state: LifeOSState, offset = 0, currency?: string): number {
+  const targetCur = resolveTargetCurrency(state, currency);
+  const accounts = state.finance?.accounts || [];
+  const txs = txInMonth(state, offset)
+    .filter((t) => t.type === 'gasto' && isOperationalTransaction(t) && resolveTransactionCurrency(t, accounts) === targetCur);
+  return sumMoney(txs.map((t) => t.amount));
 }
 
-export function calcIncomeMonth(state: LifeOSState, offset = 0): number {
-  return txInMonth(state, offset)
-    .filter((t) => t.type === 'ingreso' && isOperationalTransaction(t))
-    .reduce((s, t) => s + Number(t.amount || 0), 0);
+export function calcIncomeMonth(state: LifeOSState, offset = 0, currency?: string): number {
+  const targetCur = resolveTargetCurrency(state, currency);
+  const accounts = state.finance?.accounts || [];
+  const txs = txInMonth(state, offset)
+    .filter((t) => t.type === 'ingreso' && isOperationalTransaction(t) && resolveTransactionCurrency(t, accounts) === targetCur);
+  return sumMoney(txs.map((t) => t.amount));
 }
 
-export function calcFixedSpentMonth(state: LifeOSState, offset = 0): number {
-  return txInMonth(state, offset)
-    .filter((t) => t.type === 'gasto' && t.fixed === 'fijo' && isOperationalTransaction(t))
-    .reduce((s, t) => s + Number(t.amount || 0), 0);
+export function calcFixedSpentMonth(state: LifeOSState, offset = 0, currency?: string): number {
+  const targetCur = resolveTargetCurrency(state, currency);
+  const accounts = state.finance?.accounts || [];
+  const txs = txInMonth(state, offset)
+    .filter((t) => t.type === 'gasto' && t.fixed === 'fijo' && isOperationalTransaction(t) && resolveTransactionCurrency(t, accounts) === targetCur);
+  return sumMoney(txs.map((t) => t.amount));
 }
 
-export function calcMonthComparison(state: LifeOSState): { pct: number; dir: 'up' | 'down' | 'flat' } {
-  const cur = calcSpentMonth(state, 0);
-  const prev = calcSpentMonth(state, -1);
+export function calcMonthComparison(state: LifeOSState, currency?: string): { pct: number; dir: 'up' | 'down' | 'flat' } {
+  const cur = calcSpentMonth(state, 0, currency);
+  const prev = calcSpentMonth(state, -1, currency);
   if (prev === 0) {
     return cur === 0 ? { pct: 0, dir: 'flat' } : { pct: 100, dir: 'up' };
   }
@@ -484,23 +621,140 @@ export function calcMonthComparison(state: LifeOSState): { pct: number; dir: 'up
   return { pct: Math.abs(pct), dir: pct > 0.5 ? 'up' : pct < -0.5 ? 'down' : 'flat' };
 }
 
-export function calcSpentByCategory(state: LifeOSState, offset = 0): Record<string, number> {
+export function calcSpentByCategory(state: LifeOSState, offset = 0, currency?: string): Record<string, number> {
+  const targetCur = resolveTargetCurrency(state, currency);
+  const accounts = state.finance?.accounts || [];
   const map: Record<string, number> = {};
   txInMonth(state, offset)
-    .filter((t) => t.type === 'gasto' && isOperationalTransaction(t))
+    .filter((t) => t.type === 'gasto' && isOperationalTransaction(t) && resolveTransactionCurrency(t, accounts) === targetCur)
     .forEach((t) => {
-      map[t.category] = (map[t.category] || 0) + Number(t.amount || 0);
+      map[t.category] = sumMoney([map[t.category] || 0, t.amount || 0]);
     });
   return map;
 }
 
-export function calcSpentByCategoryAllTime(state: LifeOSState): Record<string, number> {
+export function calcSpentByCategoryAllTime(state: LifeOSState, currency?: string): Record<string, number> {
+  const targetCur = resolveTargetCurrency(state, currency);
+  const accounts = state.finance?.accounts || [];
   const map: Record<string, number> = {};
   (state.finance?.transactions || [])
-    .filter((t) => t.type === 'gasto' && isOperationalTransaction(t))
+    .filter((t) => t.type === 'gasto' && isOperationalTransaction(t) && resolveTransactionCurrency(t, accounts) === targetCur)
     .forEach((t) => {
-      map[t.category] = (map[t.category] || 0) + Number(t.amount || 0);
+      map[t.category] = sumMoney([map[t.category] || 0, t.amount || 0]);
     });
+  return map;
+}
+
+/**
+ * Calculates debt service / installment payments made from liquid accounts during the month.
+ * Pure cash outflow: funds leaving bank accounts to amortize liabilities.
+ */
+export function calcDebtPaymentsMonth(state: LifeOSState, offset = 0, currency?: string): number {
+  const targetCur = resolveTargetCurrency(state, currency);
+  const accounts = state.finance?.accounts || [];
+  const txs = txInMonth(state, offset)
+    .filter((t) => t.type === 'gasto' && (t.origin === 'debt_payment' || Boolean(t.agreementId)) && resolveTransactionCurrency(t, accounts) === targetCur);
+  return sumMoney(txs.map((t) => t.amount));
+}
+
+/**
+ * Calculates total cash outflows for the month, breaking down:
+ * - operationalSpent: living expenses (food, transport, utilities, cash purchases)
+ * - debtPayments: real cash paid toward installments / agreements
+ * - totalOutflow: total cash leaving liquid accounts (excluding transfers and reconciliation adjustments)
+ */
+export function calcCashOutflowMonth(state: LifeOSState, offset = 0, currency?: string): {
+  operationalSpent: number;
+  debtPayments: number;
+  totalOutflow: number;
+} {
+  const operationalSpent = calcSpentMonth(state, offset, currency);
+  const debtPayments = calcDebtPaymentsMonth(state, offset, currency);
+  return {
+    operationalSpent,
+    debtPayments,
+    totalOutflow: sumMoney([operationalSpent, debtPayments]),
+  };
+}
+
+export interface FinancedAcquisitionItem {
+  agreementId: string;
+  title: string;
+  creditorName: string;
+  category: string;
+  amount: number;
+  acquisitionDate: string;
+}
+
+/**
+ * Returns financed commercial purchases acquired in the month (accrual date).
+ */
+export function calcFinancedAcquisitionsMonth(state: LifeOSState, offset = 0, currency?: string): {
+  total: number;
+  items: FinancedAcquisitionItem[];
+} {
+  const targetCur = resolveTargetCurrency(state, currency);
+  const ref = monthLabel(offset);
+  const agreements = state.finance?.agreements || [];
+  const items: FinancedAcquisitionItem[] = [];
+
+  for (const agr of agreements) {
+    if (agr.status === 'cancelled' || !agr.acquisition) continue;
+    const cur = (agr.currency || 'UYU').toUpperCase();
+    if (cur !== targetCur) continue;
+
+    if (sameMonth(agr.acquisition.acquisitionDate, ref)) {
+      items.push({
+        agreementId: agr.id,
+        title: agr.title,
+        creditorName: agr.creditorName,
+        category: agr.acquisition.category || 'Varios',
+        amount: roundMoney(agr.acquisition.totalPurchaseAmount),
+        acquisitionDate: agr.acquisition.acquisitionDate,
+      });
+    }
+  }
+
+  return {
+    total: sumMoney(items.map((i) => i.amount)),
+    items,
+  };
+}
+
+/**
+ * Calculates total consumption acquired during the month:
+ * - operationalSpent: purchases made in cash/debit
+ * - financedAcquisitions: value of goods acquired through 100% financing
+ * - totalAcquired: operationalSpent + financedAcquisitions
+ * (Explicitly DOES NOT include subsequent installment payments to prevent double counting).
+ */
+export function calcTotalAcquisitionsMonth(state: LifeOSState, offset = 0, currency?: string): {
+  operationalSpent: number;
+  financedAcquisitions: number;
+  totalAcquired: number;
+  financedItems: FinancedAcquisitionItem[];
+} {
+  const operationalSpent = calcSpentMonth(state, offset, currency);
+  const { total: financedAcquisitions, items: financedItems } = calcFinancedAcquisitionsMonth(state, offset, currency);
+  return {
+    operationalSpent,
+    financedAcquisitions,
+    totalAcquired: sumMoney([operationalSpent, financedAcquisitions]),
+    financedItems,
+  };
+}
+
+/**
+ * Calculates consumption breakdown by category for the month:
+ * Combines operational cash expenses with financed acquisitions acquired in that month.
+ * Does NOT include debt amortization payments.
+ */
+export function calcAcquisitionsByCategory(state: LifeOSState, offset = 0, currency?: string): Record<string, number> {
+  const map = { ...calcSpentByCategory(state, offset, currency) };
+  const { items } = calcFinancedAcquisitionsMonth(state, offset, currency);
+  for (const item of items) {
+    map[item.category] = sumMoney([map[item.category] || 0, item.amount]);
+  }
   return map;
 }
 
@@ -513,20 +767,24 @@ export interface MonthTransactionGroup {
   isCurrent: boolean;
 }
 
-export function groupTransactionsByMonth(state: LifeOSState): MonthTransactionGroup[] {
+export function groupTransactionsByMonth(state: LifeOSState, currency?: string): MonthTransactionGroup[] {
+  const targetCur = resolveTargetCurrency(state, currency);
+  const accounts = state.finance?.accounts || [];
   const groups: Record<string, Transaction[]> = {};
-  (state.finance?.transactions || []).filter(isOperationalTransaction).forEach((t) => {
-    const key = t.date.slice(0, 7); // YYYY-MM
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(t);
-  });
+  (state.finance?.transactions || [])
+    .filter((t) => isOperationalTransaction(t) && resolveTransactionCurrency(t, accounts) === targetCur)
+    .forEach((t) => {
+      const key = t.date.slice(0, 7); // YYYY-MM
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(t);
+    });
   const curKey = todayISO().slice(0, 7);
   return Object.keys(groups)
     .sort((a,b) => b.localeCompare(a))
     .map((key) => {
       const txs = groups[key].sort((a, b) => b.date.localeCompare(a.date));
-      const totalGasto = txs.filter((t) => t.type === 'gasto' && isOperationalTransaction(t)).reduce((s, t) => s + Number(t.amount || 0), 0);
-      const totalIngreso = txs.filter((t) => t.type === 'ingreso' && isOperationalTransaction(t)).reduce((s, t) => s + Number(t.amount || 0), 0);
+      const totalGasto = sumMoney(txs.filter((t) => t.type === 'gasto' && isOperationalTransaction(t)).map((t) => t.amount));
+      const totalIngreso = sumMoney(txs.filter((t) => t.type === 'ingreso' && isOperationalTransaction(t)).map((t) => t.amount));
       const parts = key.split('-');
       const y = parseInt(parts[0], 10);
       const m = parseInt(parts[1], 10) - 1;
@@ -590,8 +848,10 @@ export interface GymStreakDetails {
   label: string;
 }
 
-export function calcGymStreakDetails(state: LifeOSState): GymStreakDetails {
-  const sessions = (state.gym.sessions || []).filter(isPerformedGymSession);
+export function calcGymStreakDetails(state: LifeOSState, reference = new Date()): GymStreakDetails {
+  const localDate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  const today = localDate(reference);
+  const sessions = (state.gym.sessions || []).filter(session => isPerformedGymSession(session) && session.date <= today);
   if (sessions.length === 0) {
     return {
       streakDays: 0,
@@ -601,7 +861,7 @@ export function calcGymStreakDetails(state: LifeOSState): GymStreakDetails {
       isTrainedToday: false,
       isRestToday: false,
       status: 'broken',
-      label: '0 días',
+      label: '0 días entrenados',
     };
   }
 
@@ -613,11 +873,11 @@ export function calcGymStreakDetails(state: LifeOSState): GymStreakDetails {
       .map(([date]) => date),
   ]);
 
-  const today = todayISO();
   const isTrainedToday = trainedDates.has(today);
   const isRestToday = restDates.has(today);
 
-  const currentD = new Date();
+  const currentD = new Date(reference);
+  const firstTrainingDate = [...trainedDates].sort()[0];
   let status: GymStreakDetails['status'] = 'pending_today';
 
   let streakDays = 0;
@@ -647,6 +907,7 @@ export function calcGymStreakDetails(state: LifeOSState): GymStreakDetails {
     const m = String(currentD.getMonth() + 1).padStart(2, '0');
     const day = String(currentD.getDate()).padStart(2, '0');
     const iso = `${y}-${m}-${day}`;
+    if (iso < firstTrainingDate) break;
     const dayOfWeek = currentD.getDay(); // 0 is Sunday, 6 is Saturday
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
@@ -680,7 +941,7 @@ export function calcGymStreakDetails(state: LifeOSState): GymStreakDetails {
 
   // Calculate consecutive weeks with at least 1 workout
   let weeksStreak = 0;
-  const now = new Date();
+  const now = new Date(reference);
   const dayIdx = (now.getDay() + 6) % 7; // Monday = 0
   const currMon = new Date(now);
   currMon.setDate(now.getDate() - dayIdx);
@@ -691,8 +952,8 @@ export function calcGymStreakDetails(state: LifeOSState): GymStreakDetails {
   const hasWorkoutInWeek = (monDate: Date) => {
     const sunDate = new Date(monDate);
     sunDate.setDate(monDate.getDate() + 6);
-    const monISO = monDate.toISOString().slice(0, 10);
-    const sunISO = sunDate.toISOString().slice(0, 10);
+    const monISO = localDate(monDate);
+    const sunISO = localDate(sunDate);
     return sessions.some((s) => s.date >= monISO && s.date <= sunISO);
   };
 
@@ -707,7 +968,9 @@ export function calcGymStreakDetails(state: LifeOSState): GymStreakDetails {
     iterMon.setDate(iterMon.getDate() - 7);
   }
 
-  let label = `${streakDays} día${streakDays === 1 ? '' : 's'}`;
+  // Keep the existing continuity allowances. Only actual training dates add progress;
+  // permitted rest preserves continuity without becoming attendance.
+  let label = `${workoutCount} día${workoutCount === 1 ? '' : 's'} entrenado${workoutCount === 1 ? '' : 's'}`;
   if (status === 'trained_today') {
     label += ' · Entrenado';
   } else if (status === 'rest_today') {
@@ -717,7 +980,7 @@ export function calcGymStreakDetails(state: LifeOSState): GymStreakDetails {
   }
 
   return {
-    streakDays,
+    streakDays: workoutCount,
     workoutCount,
     restDaysCount,
     weeksStreak,
@@ -765,7 +1028,13 @@ export function nextExam(state: LifeOSState) {
   const today = todayISO();
   const pend = (state.study?.exams || [])
     .filter((e) => e.status === 'pendiente' && e.date >= today)
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort((a, b) => {
+      const cmp = a.date.localeCompare(b.date);
+      if (cmp !== 0) return cmp;
+      const tA = a.time || '99:99';
+      const tB = b.time || '99:99';
+      return tA.localeCompare(tB);
+    });
   return pend.length ? pend[0] : null;
 }
 
@@ -792,6 +1061,12 @@ export const EVENT_TYPE_META = {
   estreno: { label: 'Estreno', icon: '🎬', pill: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' },
   importante: { label: 'Importante', icon: '⭐', pill: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300' },
   otro: { label: 'Otro', icon: '📌', pill: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300' },
+  aniversario: { label: 'Aniversario', icon: '💗', pill: 'bg-pink-100 text-pink-800 dark:bg-pink-900/40 dark:text-pink-300' },
+  reunion: { label: 'Reunión', icon: '👥', pill: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900/40 dark:text-cyan-300' },
+  cita: { label: 'Cita', icon: '📅', pill: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300' },
+  tramite: { label: 'Trámite', icon: '🏛️', pill: 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200' },
+  viaje: { label: 'Viaje', icon: '✈️', pill: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300' },
+  recordatorio: { label: 'Recordatorio', icon: '🔔', pill: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300' },
 };
 
 export function eventsOnDate(state: LifeOSState, iso: string): CalendarEvent[] {
@@ -811,7 +1086,8 @@ export interface CalendarDisplayItem {
   id: string;
   name: string;
   date: string;
-  type: 'cumpleanos' | 'estreno' | 'importante' | 'otro' | 'entrega' | 'examen' | 'finanza_compromiso' | 'finanza_ingreso';
+  time?: string;
+  type: keyof typeof EVENT_TYPE_META | 'entrega' | 'examen' | 'finanza_compromiso' | 'finanza_ingreso';
   icon: string;
   pill: string;
   isDone?: boolean;
@@ -835,6 +1111,7 @@ export function calendarItemsOnDate(state: LifeOSState, iso: string): CalendarDi
       id: e.id,
       name: e.name,
       date: iso,
+      time: e.time,
       type: e.type,
       icon: meta.icon,
       pill: meta.pill,
@@ -844,12 +1121,17 @@ export function calendarItemsOnDate(state: LifeOSState, iso: string): CalendarDi
   // 2. Study Exams
   for (const ex of state.study?.exams || []) {
     if (ex.date === iso) {
-      const subject = (state.study?.subjects || []).find((s) => s.id === ex.subjectId);
+      const subject = ex.subjectId ? (state.study?.subjects || []).find((s) => s.id === ex.subjectId) : null;
       const subName = subject?.name || 'Materia';
+      const rawTitle = ex.title?.trim();
+      const displayName = rawTitle
+        ? (subject ? `${rawTitle} · ${subject.name}` : rawTitle)
+        : (subject ? `Examen: ${subName}` : 'Examen');
       items.push({
         id: `exam-${ex.id}`,
-        name: `Examen: ${subName}`,
+        name: displayName,
         date: iso,
+        time: ex.time || undefined,
         type: 'examen',
         icon: '📝',
         pill: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 font-bold',
@@ -858,7 +1140,7 @@ export function calendarItemsOnDate(state: LifeOSState, iso: string): CalendarDi
     }
   }
 
-  // 3. Task deadlines (TodayExtras)
+  // 3. Task deadlines and scheduled tasks (TodayExtras)
   for (const extra of state.todayExtras || []) {
     if (extra.dueDate === iso) {
       items.push({
@@ -872,6 +1154,18 @@ export function calendarItemsOnDate(state: LifeOSState, iso: string): CalendarDi
           : 'bg-rose-100 text-rose-800 font-bold dark:bg-rose-900/40 dark:text-rose-300',
         isDone: extra.done,
         isDeadline: true,
+      });
+    } else if (extra.date === iso) {
+      items.push({
+        id: `scheduled-extra-${extra.id}`,
+        name: extra.text,
+        date: iso,
+        type: 'otro',
+        icon: '📌',
+        pill: extra.done
+          ? 'bg-emerald-50 text-emerald-600 line-through dark:bg-emerald-950/30 dark:text-emerald-400'
+          : 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+        isDone: extra.done,
       });
     }
   }
@@ -946,24 +1240,28 @@ export function calendarItemsOnDate(state: LifeOSState, iso: string): CalendarDi
   return items;
 }
 
-export function nextOccurrence(e: CalendarEvent): string {
-  const today = todayISO();
+export function nextOccurrence(e: CalendarEvent, fromDate = todayISO()): string {
   if (e.recurring) {
     const parts = e.date.split('-');
     const m = parts[1];
     const d = parts[2];
-    const y = new Date().getFullYear();
-    let candidate = `${y}-${m}-${d}`;
-    if (candidate < today) candidate = `${y + 1}-${m}-${d}`;
-    return candidate;
+    let year = Number(fromDate.slice(0, 4));
+    for (let attempts = 0; attempts < 8; attempts++, year++) {
+      const candidate = `${year}-${m}-${d}`;
+      const parsed = new Date(year, Number(m) - 1, Number(d), 12);
+      if (candidate >= fromDate && parsed.getMonth() === Number(m) - 1 && parsed.getDate() === Number(d)) {
+        return candidate;
+      }
+    }
+    return e.date;
   }
   return e.date;
 }
 
-export function upcomingEvents(state: LifeOSState, limit = 5) {
+export function upcomingEvents(state: LifeOSState, limit = 5, fromDate = todayISO()) {
   return (state.calendarEvents || [])
-    .map((e) => ({ ...e, occursOn: nextOccurrence(e) }))
-    .filter((e) => e.recurring || e.date >= todayISO())
+    .map((e) => ({ ...e, occursOn: nextOccurrence(e, fromDate) }))
+    .filter((e) => e.occursOn >= fromDate)
     .sort((a, b) => a.occursOn.localeCompare(b.occursOn))
     .slice(0, limit);
 }
@@ -1066,15 +1364,23 @@ export function todayGymStatus(state: LifeOSState, dateIso = todayISO()): TodayG
   };
 }
 
-export function jobStats(state: LifeOSState) {
-  const apps = state.jobs?.applications || [];
-  const cvEnviados = apps.filter((a) => a.estado !== 'pendiente').length;
-  const entrevistas = apps.filter((a) => a.estado === 'entrevista').length;
+export function jobStats(state: LifeOSState, tipo: JobApplicationType | 'todos' = 'convencional') {
+  const apps = filterJobApplications(state.jobs?.applications || [], tipo);
+  const conventional = apps.filter((application) => getJobApplicationType(application) === 'convencional');
+  const contests = apps.filter((application) => getJobApplicationType(application) === 'concurso');
+  const cvEnviados = conventional.filter((a) => a.estado === 'cv_enviado').length;
+  const entrevistas = conventional.filter((a) => a.estado === 'entrevista').length;
+  const inscripciones = contests.filter((a) => a.estado !== 'pendiente_inscripcion').length;
+  const contratados = conventional.filter((a) => a.estado === 'contratado').length;
+  const ingresosConfirmados = contests.filter((a) => a.estado === 'ingreso_confirmado').length;
   const empresas = new Set(apps.map((a) => a.empresa)).size;
   const seguimientosPendientes = apps.filter((a) => a.nextActionDate && a.nextActionDate <= todayISO()).length;
   return {
     cvEnviados,
     entrevistas,
+    inscripciones,
+    contratados,
+    ingresosConfirmados,
     empresas,
     ofertasNuevas: (state.jobs?.opportunities || []).filter((o) => o.status === 'nueva').length,
     seguimientosPendientes,
@@ -1087,29 +1393,33 @@ export function resaleStats(state: LifeOSState) {
   const vendidos = inv.filter((i) => i.status === 'vendido');
   const ventas = vendidos.length;
   const compras = inv.length;
-  const netProfit = (item: (typeof vendidos)[number]) => {
-    const breakdown = Number(item.shippingCost || 0) + Number(item.platformFees || 0) + Number(item.taxes || 0);
-    return Number(item.sellPrice || 0) - Number(item.buyPrice || 0) - (breakdown > 0 ? breakdown : Number(item.fees || 0));
-  };
-  const gananciaTotal = vendidos.reduce((s, i) => s + netProfit(i), 0);
-  const gananciaPromedio = ventas ? gananciaTotal / ventas : 0;
-  const costoTotal = vendidos.reduce((s, i) => {
+  const currencies = vendidos.map((item) => resaleItemCurrency(state, item, 'sale'));
+  const profitCurrency = currencies.length > 0 && currencies.every((value) => value && value === currencies[0]) ? currencies[0] : null;
+  const profitComparable = vendidos.every((item) => resaleProfitAmount(item, state) !== null) &&
+    (vendidos.length === 0 || profitCurrency !== null);
+  const netProfit = (item: (typeof vendidos)[number]) => resaleProfitAmount(item, state);
+  const gananciaTotal = profitComparable ? sumMoney(vendidos.map((item) => netProfit(item) || 0)) : null;
+  const gananciaPromedio = ventas && gananciaTotal !== null ? gananciaTotal / ventas : gananciaTotal;
+  const costoTotal = profitComparable ? vendidos.reduce((s, i) => {
     const breakdown = Number(i.shippingCost || 0) + Number(i.platformFees || 0) + Number(i.taxes || 0);
     return s + Number(i.buyPrice || 0) + (breakdown > 0 ? breakdown : Number(i.fees || 0));
-  }, 0);
-  const roi = costoTotal > 0 ? (gananciaTotal / costoTotal) * 100 : 0;
+  }, 0) : 0;
+  const roi = gananciaTotal === null ? null : costoTotal > 0 ? (gananciaTotal / costoTotal) * 100 : 0;
   const tiempos = vendidos
     .filter((i) => i.buyDate && i.sellDate)
     .map((i) => daysBetween(i.buyDate, i.sellDate!));
   const tiempoPromedio = tiempos.length ? tiempos.reduce((a, b) => a + b, 0) / tiempos.length : null;
-  const ranking = [...vendidos]
-    .sort((a, b) => netProfit(b) - netProfit(a))
+  const ranking = (profitComparable ? [...vendidos] : [])
+    .filter((item) => netProfit(item) !== null)
+    .sort((a, b) => (netProfit(b) || 0) - (netProfit(a) || 0))
     .slice(0, 5);
   return {
     stock,
     ventas,
     compras,
     gananciaTotal,
+    profitCurrency,
+    profitComparable,
     gananciaPromedio,
     roi,
     tiempoPromedio,
@@ -1137,7 +1447,7 @@ export function goalCurrentValue(state: LifeOSState, g: Goal): number {
     return Math.round((totalMinutes / 60) * 10) / 10;
   }
   if (g.linked === 'resale_profit') {
-    return resaleStats(state).gananciaTotal;
+    return resaleStats(state).gananciaTotal ?? Number.NaN;
   }
   return g.current;
 }
@@ -1200,14 +1510,15 @@ export interface TodayItem {
   id: string;
   text: string;
   done: boolean;
-  source: 'agenda' | 'rutina' | 'extra' | 'trabajo';
-  kind: 'toggle-task-today' | 'toggle-extra-today' | 'complete-followup';
+  source: 'agenda' | 'rutina' | 'extra' | 'proyecto' | 'trabajo';
+  kind: 'toggle-task-today' | 'toggle-extra-today' | 'toggle-project-task' | 'complete-followup';
   priority: number;
   effort: EffortLevel;
   dueDate?: string;
   isBlocked?: boolean;
   blockingTaskNames?: string[];
   unblocksCount?: number;
+  time?: string;
 }
 
 export function routineScheduledFor(state: LifeOSState, task: TaskRecurring, iso: string): boolean {
@@ -1241,29 +1552,33 @@ export function todayItems(state: LifeOSState, dateIso?: string, includeFollowup
         const done = Boolean(log[b.id]);
         items.push({
           id: b.id,
-          text: `${b.activity} · ${b.time}`,
+          text: b.activity,
           done,
           source: 'agenda',
           kind: 'toggle-task-today',
           priority: computeAgendaPriority(b, done),
           effort: b.effort || 'medium',
+          time: b.time,
         });
       });
   }
 
-  (state.tasksRecurring || []).forEach((t) => {
-    if (!routineScheduledFor(state, t, iso)) return;
-    const done = Boolean(log[t.id]);
-    items.push({
-      id: t.id,
-      text: t.name,
-      done,
-      source: 'rutina',
-      kind: 'toggle-task-today',
-      priority: computeRutinaPriority(t, done),
-      effort: t.effort || 'medium',
+  if (isModuleEnabled(state, 'agenda')) {
+    (state.tasksRecurring || []).forEach((t) => {
+      if (!routineScheduledFor(state, t, iso)) return;
+      const done = Boolean(log[t.id]);
+      items.push({
+        id: t.id,
+        text: t.name,
+        done,
+        source: 'rutina',
+        kind: 'toggle-task-today',
+        priority: computeRutinaPriority(t, done),
+        effort: t.effort || 'medium',
+        time: t.time,
+      });
     });
-  });
+  }
 
   (state.todayExtras || [])
     .filter((x) => x.date === iso)
@@ -1286,8 +1601,27 @@ export function todayItems(state: LifeOSState, dateIso?: string, includeFollowup
         isBlocked,
         blockingTaskNames,
         unblocksCount,
+        time: x.time,
       });
     });
+
+  if (isModuleEnabled(state, 'notas')) {
+    for (const project of state.projects || []) {
+      for (const task of project.tasks || []) {
+        if (task.dueDate !== iso) continue;
+        items.push({
+          id: task.id,
+          text: task.text,
+          done: Boolean(task.done),
+          source: 'proyecto',
+          kind: 'toggle-project-task',
+          priority: task.priority === 'alta' ? 5 : task.priority === 'media' ? 3 : 2,
+          effort: task.effort || 'medium',
+          dueDate: task.dueDate,
+        });
+      }
+    }
+  }
 
   if (includeFollowups && isModuleEnabled(state, 'trabajo')) {
     (state.jobs?.applications || [])

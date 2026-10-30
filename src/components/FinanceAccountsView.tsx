@@ -1,14 +1,20 @@
 import React, { useState } from 'react';
 import { LifeOSState } from '../types';
-import { fmtDate, fmtMoney } from '../lib/storage';
+import { fmtDate, fmtMoney, formatMoney, parseDecimalInput } from '../lib/storage';
 import { AppIcon } from './AppIcon';
 import { PrivacyAmount } from './PrivacyAmount';
-import { calcDebtsTotal, calcInvestmentsTotal } from '../lib/calculations';
+import {
+  calcAccountsTotal,
+  calcDebtsTotal,
+  calcInvestmentsTotal,
+  calcNetWorth,
+} from '../lib/calculations';
+import { FinanceAgreementsSection } from './FinanceAgreementsSection';
 
 interface FinanceAccountsViewProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => void;
-  onAddAccount: (name: string, balance: number) => void;
+  onAddAccount: (name: string, balance: number, currency?: string) => void;
   onDeleteAccount: (id: string) => void;
   onAddDebt: (name: string, amount: number, monthlyPayment: number, dueDate: string | null) => void;
   onDeleteDebt: (id: string) => void;
@@ -20,6 +26,7 @@ interface FinanceAccountsViewProps {
 
 export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
   state,
+  onUpdateState,
   onAddAccount,
   onDeleteAccount,
   onAddDebt,
@@ -33,6 +40,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
   const [isAddAccountOpen, setIsAddAccountOpen] = useState(false);
   const [accName, setAccName] = useState('');
   const [accBalance, setAccBalance] = useState('');
+  const [accCurrency, setAccCurrency] = useState<'UYU' | 'USD'>('UYU');
 
   const [isAddDebtOpen, setIsAddDebtOpen] = useState(false);
   const [debtName, setDebtName] = useState('');
@@ -48,18 +56,61 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
   const accounts = state.finance?.accounts || [];
   const debts = state.finance?.debts || [];
   const investments = state.finance?.investments || [];
+  const agreements = state.finance?.agreements || [];
+  const activeAgreements = agreements.filter((a) => a.status !== 'cancelled');
 
-  const totalEnCuentas = accounts.reduce((acc, a) => acc + Number(a.balance || 0), 0);
-  const totalDebts = calcDebtsTotal(state);
+  const totalEnCuentasUYU = calcAccountsTotal(state, 'UYU');
   const totalInvs = calcInvestmentsTotal(state);
-  const patrimonioNeto = totalEnCuentas + totalInvs - totalDebts;
+  const totalDebtsUYU = calcDebtsTotal(state, 'UYU');
+  const patrimonioNetoUYU = calcNetWorth(state, 'UYU');
+
+  const totalEnCuentasUSD = calcAccountsTotal(state, 'USD');
+  const totalDebtsUSD = calcDebtsTotal(state, 'USD');
+  const patrimonioNetoUSD = calcNetWorth(state, 'USD');
+
+  const hasUYUAccount = accounts.some((a) => (a.currency || 'UYU').toUpperCase() === 'UYU');
+  const hasUYUAgreement = activeAgreements.some((a) => (a.currency || 'UYU').toUpperCase() === 'UYU');
+  const hasUSDAccount = accounts.some((a) => (a.currency || 'UYU').toUpperCase() === 'USD');
+  const hasUSDAgreement = activeAgreements.some((a) => (a.currency || 'UYU').toUpperCase() === 'USD');
+
+  const showUSD = hasUSDAccount || hasUSDAgreement || totalEnCuentasUSD !== 0 || totalDebtsUSD !== 0;
+  const showUYU =
+    hasUYUAccount ||
+    hasUYUAgreement ||
+    investments.length > 0 ||
+    debts.length > 0 ||
+    totalEnCuentasUYU !== 0 ||
+    totalDebtsUYU !== 0 ||
+    !showUSD;
+
+  const excludedLegacyDebtIds = new Set(
+    activeAgreements.map((a) => a.linkedLegacyDebtId).filter(Boolean)
+  );
+  const unlinkedLegacyDebtsTotal = debts
+    .filter((d) => !excludedLegacyDebtIds.has(d.id))
+    .reduce((s, d) => s + Number(d.amount || 0), 0);
+
+  const isPureLiquidityUYU =
+    totalInvs === 0 &&
+    totalDebtsUYU === 0 &&
+    activeAgreements.filter((a) => (a.currency || 'UYU').toUpperCase() === 'UYU').length === 0;
+
+  const isPureLiquidityUSD =
+    totalDebtsUSD === 0 &&
+    activeAgreements.filter((a) => (a.currency || 'UYU').toUpperCase() === 'USD').length === 0;
 
   const handleCreateAccount = (e: React.FormEvent) => {
     e.preventDefault();
     if (!accName.trim()) return;
-    onAddAccount(accName.trim(), Number(accBalance) || 0);
+    const parsed = parseDecimalInput(accBalance.trim() || '0');
+    if (parsed.error || parsed.value === null) {
+      alert(parsed.error || 'Saldo inicial inválido');
+      return;
+    }
+    onAddAccount(accName.trim(), parsed.value, accCurrency);
     setAccName('');
     setAccBalance('');
+    setAccCurrency('UYU');
     setIsAddAccountOpen(false);
   };
 
@@ -89,40 +140,31 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in">
+    <div className="space-y-7 animate-in fade-in">
       {/* SECTION 1: Cuentas Líquidas (Core Answer to "¿Dónde está mi dinero?") */}
-      <section className="finance-surface rounded-3xl p-5 sm:p-7 border border-[var(--finance-border)] space-y-5">
+      <section className="space-y-4 pt-0.5">
         {/* Header & Quick Actions */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-base sm:text-lg font-black tracking-tight text-[var(--finance-text-primary)]">
-                Cuentas líquidas
+            <div className="flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-[var(--finance-text-primary)]">
+                Tus cuentas
               </h2>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-                {accounts.length} {accounts.length === 1 ? 'activa' : 'activas'}
+              <span className="px-2 py-0.5 rounded-md text-[11px] tabular-nums font-semibold bg-[var(--finance-surface-subtle)] text-[var(--finance-text-secondary)]">
+                {accounts.length}
               </span>
             </div>
             <p className="text-xs text-[var(--finance-text-muted)] mt-0.5">
-              Depósitos bancarios, billeteras digitales y efectivo donde reside tu dinero
+              Cuentas bancarias, billeteras y efectivo
             </p>
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="text-right mr-1 hidden sm:block">
-              <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
-                Total en cuentas
-              </span>
-              <PrivacyAmount as="span" className="font-mono font-black text-base text-[var(--finance-text-primary)]">
-                {fmtMoney(totalEnCuentas)}
-              </PrivacyAmount>
-            </div>
-
             {onOpenTransfer && (
               <button
                 type="button"
                 onClick={onOpenTransfer}
-                className="finance-control px-3.5 py-2 text-xs font-bold rounded-xl border flex items-center justify-center gap-1.5 cursor-pointer transition-all hover:border-[var(--finance-border-strong)] min-h-[44px]"
+                className="finance-control px-3.5 py-2 text-xs font-bold rounded-xl border flex items-center justify-center gap-1.5 cursor-pointer transition-all hover:border-[var(--finance-border-strong)] min-h-[40px]"
                 title="Transferir dinero entre cuentas propias"
               >
                 <AppIcon name="repeat" className="h-4 w-4" />
@@ -133,22 +175,12 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsAddAccountOpen(true)}
-              className="py-2 px-4 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all min-h-[44px]"
+              className="py-2 px-4 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all min-h-[40px]"
             >
               <AppIcon name="plus" className="h-4 w-4" />
-              <span>+ Cuenta</span>
+              <span>Nueva cuenta</span>
             </button>
           </div>
-        </div>
-
-        {/* Mobile Total KPI (if screen is small) */}
-        <div className="sm:hidden p-3.5 rounded-2xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] flex items-center justify-between">
-          <span className="text-xs font-bold text-[var(--finance-text-muted)]">
-            Total en cuentas
-          </span>
-          <PrivacyAmount as="span" className="font-mono font-black text-lg text-[var(--finance-text-primary)]">
-            {fmtMoney(totalEnCuentas)}
-          </PrivacyAmount>
         </div>
 
         {/* Accounts Cards Grid */}
@@ -159,18 +191,19 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
             </div>
             <div>
               <h3 className="font-extrabold text-sm text-[var(--finance-text-primary)]">
-                Sin cuentas bancarias ni billeteras
+              Sin cuentas
               </h3>
               <p className="text-xs text-[var(--finance-text-muted)] max-w-sm mx-auto mt-1">
-                Creá tu primera cuenta (Efectivo, Banco o Billetera digital) para registrar saldos y conciliar movimientos.
+                Agregá una cuenta para registrar saldos y movimientos.
               </p>
             </div>
             <button
               type="button"
               onClick={() => setIsAddAccountOpen(true)}
-              className="py-2 px-4 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-500 cursor-pointer shadow-xs"
+              className="py-2 px-4 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-500 cursor-pointer shadow-xs inline-flex items-center gap-1.5"
             >
-              + Crear cuenta
+              <AppIcon name="plus" className="h-3.5 w-3.5" />
+              <span>Crear cuenta</span>
             </button>
           </div>
         ) : (
@@ -180,16 +213,16 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
               return (
                 <div
                   key={account.id}
-                  className="finance-surface-raised p-4 sm:p-5 rounded-2xl border border-[var(--finance-border)] flex flex-col justify-between gap-4 transition-all hover:border-[var(--finance-border-strong)] shadow-2xs"
+                  className="finance-surface-raised p-4 sm:p-5 rounded-2xl border border-[var(--finance-border)] flex flex-col justify-between gap-3.5 transition-all hover:border-[var(--finance-border-strong)] shadow-2xs"
                 >
-                  {/* Top: Icon + Name + Delete button */}
+                  {/* Top: Name + Currency + Delete button */}
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
-                        <AppIcon name="wallet" className="h-4 w-4" />
-                      </div>
-                      <span className="font-extrabold text-sm text-[var(--finance-text-primary)] truncate">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-bold text-sm text-[var(--finance-text-primary)] break-words [overflow-wrap:anywhere]">
                         {account.name}
+                      </span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--finance-surface-subtle)] text-[var(--finance-text-secondary)] shrink-0">
+                        {(account.currency || 'UYU').toUpperCase()}
                       </span>
                     </div>
 
@@ -200,7 +233,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                           onDeleteAccount(account.id);
                         }
                       }}
-                      className="text-[var(--finance-text-muted)] hover:text-rose-500 p-1 rounded-lg hover:bg-rose-500/10 text-xs cursor-pointer transition-colors"
+                      className="text-[var(--finance-text-muted)] hover:text-rose-500 p-1 -mr-1 -mt-0.5 rounded-lg hover:bg-rose-500/10 text-xs cursor-pointer transition-colors shrink-0"
                       title="Eliminar cuenta"
                     >
                       ✕
@@ -209,20 +242,17 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
 
                   {/* Middle: Prominent Balance */}
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block mb-0.5">
-                      Saldo disponible
-                    </span>
                     <PrivacyAmount
                       as="div"
-                      className="text-2xl sm:text-3xl font-black font-mono tracking-tight tabular-nums text-[var(--finance-text-primary)]"
+                      className="text-2xl sm:text-3xl font-black tracking-tight tabular-nums text-[var(--finance-text-primary)]"
                     >
-                      {fmtMoney(account.balance)}
+                      {formatMoney(account.balance, account.currency || 'UYU')}
                     </PrivacyAmount>
                   </div>
 
                   {/* Bottom: Last reconciliation & Contextual Conciliar button */}
-                  <div className="pt-2 border-t border-[var(--finance-border)] flex items-center justify-between gap-2">
-                    <span className="text-[10px] text-[var(--finance-text-muted)] truncate">
+                  <div className="pt-2.5 border-t border-[var(--finance-border)] flex items-center justify-between gap-2">
+                    <span className="text-xs text-[var(--finance-text-muted)] truncate">
                       {hasRecentRecon
                         ? `Conciliada ${fmtDate(account.lastReconciledAt!)}`
                         : 'Sin conciliación previa'}
@@ -232,10 +262,15 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                       <button
                         type="button"
                         onClick={() => onOpenReconcile(account.id)}
-                        className="py-1 px-2.5 rounded-lg text-xs font-bold border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 flex items-center gap-1 cursor-pointer transition-colors shrink-0"
+                        className="finance-control py-1 px-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors shrink-0"
                         title={`Conciliar saldo real de ${account.name}`}
                       >
-                        <AppIcon name="check" className="h-3 w-3" />
+                        <AppIcon
+                          name="check"
+                          className={`h-3 w-3 ${
+                            hasRecentRecon ? 'text-emerald-500' : 'text-[var(--finance-text-muted)]'
+                          }`}
+                        />
                         <span>Conciliar</span>
                       </button>
                     )}
@@ -247,67 +282,297 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
         )}
       </section>
 
-      {/* SECTION 2: Patrimonio Neto Consolidado & Pasivos (Secondary, Subdued) */}
-      <section className="finance-surface rounded-3xl p-5 sm:p-7 border border-[var(--finance-border)] space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-[var(--finance-border)]">
+      {/* BLOQUE A: Patrimonio por moneda */}
+      <section className="finance-surface rounded-2xl border border-[var(--finance-border)] p-4 sm:p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
           <div>
-            <h3 className="text-sm font-extrabold text-[var(--finance-text-primary)]">
-              Patrimonio neto & balance patrimonial
-            </h3>
+            <h2 className="text-base sm:text-lg font-extrabold tracking-tight text-[var(--finance-text-primary)]">
+              Patrimonio por moneda
+            </h2>
             <p className="text-xs text-[var(--finance-text-muted)] mt-0.5">
-              Cuentas (<PrivacyAmount as="span">{fmtMoney(totalEnCuentas)}</PrivacyAmount>) + Activos (<PrivacyAmount as="span">{fmtMoney(totalInvs)}</PrivacyAmount>) − Deudas (<PrivacyAmount as="span">{fmtMoney(totalDebts)}</PrivacyAmount>)
+                Cuentas e inversiones menos deudas. No equivale al dinero disponible.
             </p>
-          </div>
-
-          <div className="text-left sm:text-right">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--finance-text-muted)] block">
-              Patrimonio consolidado
-            </span>
-            <PrivacyAmount as="span" className="font-mono font-black text-lg text-[var(--finance-text-primary)]">
-              {fmtMoney(patrimonioNeto)}
-            </PrivacyAmount>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
-          {/* Deudas & Préstamos */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold text-[var(--finance-text-primary)]">
-                Deudas & pasivos
-              </span>
+        <div className="space-y-3.5">
+          {showUYU && (
+            <div className="pt-3.5 border-t border-[var(--finance-border)] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5 flex-wrap">
+                <span className="self-start sm:self-center px-2 py-0.5 rounded-md text-xs font-bold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 shrink-0">
+                  UYU
+                </span>
+
+                {isPureLiquidityUYU ? (
+                  <div className="flex items-center gap-2 text-xs text-[var(--finance-text-muted)]">
+                    <span>Solo cuentas; no incluye activos externos ni deudas.</span>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:flex sm:flex-wrap sm:items-center gap-2 sm:gap-4 text-xs">
+                    <div className="flex sm:block items-baseline justify-between gap-2">
+                      <span className="text-[11px] font-semibold text-[var(--finance-text-muted)] block">
+                        Liquidez registrada
+                      </span>
+                      <PrivacyAmount as="span" className="text-sm sm:text-base font-bold tabular-nums text-[var(--finance-text-primary)]">
+                        {formatMoney(totalEnCuentasUYU, 'UYU')}
+                      </PrivacyAmount>
+                    </div>
+
+                    <span className="hidden sm:inline text-sm font-bold text-[var(--finance-text-muted)] select-none" aria-hidden="true">
+                      +
+                    </span>
+
+                    <div className="flex sm:block items-baseline justify-between gap-2">
+                      <span className="text-[11px] font-semibold text-[var(--finance-text-muted)] block">
+                        Inversiones y activos
+                      </span>
+                      <PrivacyAmount as="span" className="text-sm sm:text-base font-bold tabular-nums text-[var(--finance-text-primary)]">
+                        {formatMoney(totalInvs, 'UYU')}
+                      </PrivacyAmount>
+                    </div>
+
+                    <span className="hidden sm:inline text-sm font-bold text-[var(--finance-text-muted)] select-none" aria-hidden="true">
+                      −
+                    </span>
+
+                    <div className="flex sm:block items-baseline justify-between gap-2">
+                      <span className="text-[11px] font-semibold text-[var(--finance-text-muted)] block">
+                        Pasivos computados
+                      </span>
+                      <PrivacyAmount as="span" className="text-sm sm:text-base font-bold tabular-nums text-rose-500">
+                        {formatMoney(totalDebtsUYU, 'UYU')}
+                      </PrivacyAmount>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2.5 lg:pt-0 lg:pl-6 border-t lg:border-t-0 lg:border-l border-[var(--finance-border)] flex lg:block items-baseline justify-between gap-3 shrink-0 lg:text-right">
+                <span className="text-xs font-bold text-[var(--finance-text-secondary)] block">
+                  Patrimonio neto UYU
+                </span>
+                <PrivacyAmount
+                  as="span"
+                  className={`text-lg sm:text-xl font-black tabular-nums ${
+                    patrimonioNetoUYU < 0 ? 'text-rose-500' : 'text-[var(--finance-text-primary)]'
+                  }`}
+                >
+                  {formatMoney(patrimonioNetoUYU, 'UYU')}
+                </PrivacyAmount>
+              </div>
+            </div>
+          )}
+
+          {showUSD && (
+            <div className="pt-3.5 border-t border-[var(--finance-border)] flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5 flex-wrap">
+                <span className="self-start sm:self-center px-2 py-0.5 rounded-md text-xs font-bold bg-[var(--finance-surface-subtle)] text-[var(--finance-text-secondary)] shrink-0">
+                  USD
+                </span>
+
+                {isPureLiquidityUSD ? (
+                  <div className="flex items-center gap-2 text-xs text-[var(--finance-text-muted)]">
+                    <span>Solo cuentas en USD; no incluye deudas.</span>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:flex sm:flex-wrap sm:items-center gap-2 sm:gap-4 text-xs">
+                    <div className="flex sm:block items-baseline justify-between gap-2">
+                      <span className="text-[11px] font-semibold text-[var(--finance-text-muted)] block">
+                        Liquidez registrada
+                      </span>
+                      <PrivacyAmount as="span" className="text-sm sm:text-base font-bold tabular-nums text-[var(--finance-text-primary)]">
+                        {formatMoney(totalEnCuentasUSD, 'USD')}
+                      </PrivacyAmount>
+                    </div>
+
+                    <span className="hidden sm:inline text-sm font-bold text-[var(--finance-text-muted)] select-none" aria-hidden="true">
+                      −
+                    </span>
+
+                    <div className="flex sm:block items-baseline justify-between gap-2">
+                      <span className="text-[11px] font-semibold text-[var(--finance-text-muted)] block">
+                        Pasivos computados
+                      </span>
+                      <PrivacyAmount as="span" className="text-sm sm:text-base font-bold tabular-nums text-rose-500">
+                        {formatMoney(totalDebtsUSD, 'USD')}
+                      </PrivacyAmount>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2.5 lg:pt-0 lg:pl-6 border-t lg:border-t-0 lg:border-l border-[var(--finance-border)] flex lg:block items-baseline justify-between gap-3 shrink-0 lg:text-right">
+                <span className="text-xs font-bold text-[var(--finance-text-secondary)] block">
+                  Patrimonio neto USD
+                </span>
+                <PrivacyAmount
+                  as="span"
+                  className={`text-lg sm:text-xl font-black tabular-nums ${
+                    patrimonioNetoUSD < 0 ? 'text-rose-500' : 'text-[var(--finance-text-primary)]'
+                  }`}
+                >
+                  {formatMoney(patrimonioNetoUSD, 'USD')}
+                </PrivacyAmount>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* BLOQUE B: Acuerdos y financiaciones (Sección independiente sobre el fondo principal) */}
+      <FinanceAgreementsSection state={state} onUpdateState={onUpdateState} />
+
+      {/* BLOQUE C: Inversiones y otros pasivos (Dos paneles independientes) */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* Panel 1: Inversiones y activos */}
+        <div className="finance-surface rounded-2xl border border-[var(--finance-border)] p-4 sm:p-5 space-y-3.5">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-extrabold text-[var(--finance-text-primary)]">
+                Inversiones y activos
+              </h3>
+              {investments.length > 0 ? (
+                <span className="text-xs text-[var(--finance-text-muted)] block mt-0.5">
+                  Subtotal UYU:{' '}
+                  <PrivacyAmount as="strong" className="font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                    +{fmtMoney(totalInvs)}
+                  </PrivacyAmount>
+                </span>
+              ) : (
+                <span className="text-xs text-[var(--finance-text-muted)] block mt-0.5">
+                  Activos y reservas registradas fuera de cuentas operativas
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsAddInvOpen(true)}
+              className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer shrink-0"
+            >
+              + Registrar activo
+            </button>
+          </div>
+
+          {investments.length === 0 ? (
+            <div className="p-3.5 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] flex items-center justify-between text-xs text-[var(--finance-text-muted)]">
+              <span>Sin inversiones registradas</span>
+              <button
+                type="button"
+                onClick={() => setIsAddInvOpen(true)}
+                className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+              >
+                + Agregar
+              </button>
+            </div>
+          ) : (
+            <div className="divide-y divide-[var(--finance-border)] border-t border-[var(--finance-border)]">
+              {investments.map((inv) => (
+                <div
+                  key={inv.id}
+                  className="py-3 first:pt-3 last:pb-0.5 flex items-center justify-between gap-3 text-xs"
+                >
+                  <span className="font-semibold text-[var(--finance-text-primary)] min-w-0 break-words [overflow-wrap:anywhere]">
+                    {inv.name}
+                  </span>
+
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <PrivacyAmount as="span" className="font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                      +{fmtMoney(inv.amount)}
+                    </PrivacyAmount>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteInvestment(inv.id)}
+                      className="text-[var(--finance-text-muted)] hover:text-rose-500 p-1 rounded-lg cursor-pointer transition-colors"
+                      title="Eliminar inversión"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Panel 2: Otros pasivos registrados */}
+        <div className="finance-surface rounded-2xl border border-[var(--finance-border)] p-4 sm:p-5 space-y-3.5">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-extrabold text-[var(--finance-text-primary)]">
+                Otros pasivos registrados
+              </h3>
+              {debts.length > 0 ? (
+                <span className="text-xs text-[var(--finance-text-muted)] block mt-0.5">
+                  Subtotal computado UYU:{' '}
+                  <PrivacyAmount
+                    as="strong"
+                    className={`font-bold tabular-nums ${
+                      unlinkedLegacyDebtsTotal > 0 ? 'text-rose-500' : 'text-[var(--finance-text-secondary)]'
+                    }`}
+                  >
+                    {fmtMoney(unlinkedLegacyDebtsTotal)}
+                  </PrivacyAmount>
+                </span>
+              ) : (
+                <span className="text-xs text-[var(--finance-text-muted)] block mt-0.5">
+                  Deudas y obligaciones fijas sin cronograma en Acuerdos
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsAddDebtOpen(true)}
+              className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer shrink-0"
+            >
+              + Registrar deuda
+            </button>
+          </div>
+
+          {debts.length === 0 ? (
+            <div className="p-3.5 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] flex items-center justify-between text-xs text-[var(--finance-text-muted)]">
+              <span>Sin deudas registradas</span>
               <button
                 type="button"
                 onClick={() => setIsAddDebtOpen(true)}
-                className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
               >
-                + Registrar deuda
+                + Agregar
               </button>
             </div>
-
-            {debts.length === 0 ? (
-              <div className="p-3 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] flex items-center justify-between text-xs text-[var(--finance-text-muted)]">
-                <span>Sin deudas registradas</span>
-                <button
-                  type="button"
-                  onClick={() => setIsAddDebtOpen(true)}
-                  className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                >
-                  + Agregar
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {debts.map((d) => (
+          ) : (
+            <div className="divide-y divide-[var(--finance-border)] border-t border-[var(--finance-border)]">
+              {debts.map((d) => {
+                const linkedAgreement = activeAgreements.find((a) => a.linkedLegacyDebtId === d.id);
+                return (
                   <div
                     key={d.id}
-                    className="p-3 rounded-xl border border-[var(--finance-border)] bg-[var(--finance-surface-subtle)] flex items-center justify-between text-xs"
+                    className={`py-3 first:pt-3 last:pb-0.5 flex items-start sm:items-center justify-between gap-3 text-xs ${
+                      linkedAgreement ? 'opacity-75' : ''
+                    }`}
                   >
-                    <div>
-                      <span className="font-semibold text-[var(--finance-text-primary)] block">{d.name}</span>
-                      <span className="text-[10px] text-[var(--finance-text-muted)]">
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={`font-semibold ${
+                            linkedAgreement ? 'text-[var(--finance-text-secondary)]' : 'text-[var(--finance-text-primary)]'
+                          }`}
+                        >
+                          {d.name}
+                        </span>
+                        {linkedAgreement && (
+                          <span
+                            className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] text-[var(--finance-text-secondary)]"
+                            title={`Vinculada al acuerdo "${linkedAgreement.title}"`}
+                          >
+                            Contabilizada en Acuerdos · Excluida de este subtotal
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-[var(--finance-text-muted)] block">
                         {d.monthlyPayment ? (
-                          <>Cuota mes: <PrivacyAmount as="span">{fmtMoney(d.monthlyPayment)}</PrivacyAmount></>
+                          <>
+                            Cuota mes: <PrivacyAmount as="span">{fmtMoney(d.monthlyPayment)}</PrivacyAmount>
+                          </>
                         ) : (
                           'Sin cuota fija'
                         )}
@@ -315,78 +580,38 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <PrivacyAmount as="span" className="font-mono font-bold text-rose-500">
-                        {fmtMoney(d.amount)}
-                      </PrivacyAmount>
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <div className="text-right">
+                        {linkedAgreement && (
+                          <span className="text-[10px] text-[var(--finance-text-muted)] block">
+                            Importe original
+                          </span>
+                        )}
+                        <PrivacyAmount
+                          as="span"
+                          className={`tabular-nums ${
+                            linkedAgreement
+                              ? 'font-semibold text-[var(--finance-text-muted)]'
+                              : 'font-bold text-rose-500'
+                          }`}
+                        >
+                          {fmtMoney(d.amount)}
+                        </PrivacyAmount>
+                      </div>
                       <button
                         type="button"
                         onClick={() => onDeleteDebt(d.id)}
-                        className="text-[var(--finance-text-muted)] hover:text-rose-500 px-1 cursor-pointer"
+                        className="text-[var(--finance-text-muted)] hover:text-rose-500 p-1 rounded-lg cursor-pointer transition-colors"
                         title="Eliminar deuda"
                       >
                         ✕
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Activos & Inversiones */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold text-[var(--finance-text-primary)]">
-                Inversiones & activos
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsAddInvOpen(true)}
-                className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-              >
-                + Registrar activo
-              </button>
+                );
+              })}
             </div>
-
-            {investments.length === 0 ? (
-              <div className="p-3 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] flex items-center justify-between text-xs text-[var(--finance-text-muted)]">
-                <span>Sin inversiones registradas</span>
-                <button
-                  type="button"
-                  onClick={() => setIsAddInvOpen(true)}
-                  className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                >
-                  + Agregar
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {investments.map((inv) => (
-                  <div
-                    key={inv.id}
-                    className="p-3 rounded-xl border border-[var(--finance-border)] bg-[var(--finance-surface-subtle)] flex items-center justify-between text-xs"
-                  >
-                    <span className="font-semibold text-[var(--finance-text-primary)]">{inv.name}</span>
-
-                    <div className="flex items-center gap-2">
-                      <PrivacyAmount as="span" className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                        +{fmtMoney(inv.amount)}
-                      </PrivacyAmount>
-                      <button
-                        type="button"
-                        onClick={() => onDeleteInvestment(inv.id)}
-                        className="text-[var(--finance-text-muted)] hover:text-rose-500 px-1 cursor-pointer"
-                        title="Eliminar inversión"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </section>
 
@@ -430,14 +655,26 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                   Saldo inicial
                 </label>
                 <input
-                  required
-                  type="number"
-                  step="any"
+                  type="text"
+                  inputMode="decimal"
                   value={accBalance}
                   onChange={(e) => setAccBalance(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full p-2.5 text-xs font-mono font-bold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
+                  placeholder="0,00"
+                  className="w-full p-2.5 text-xs font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
                 />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
+                  Moneda
+                </label>
+                <select
+                  value={accCurrency}
+                  onChange={(e) => setAccCurrency(e.target.value as 'UYU' | 'USD')}
+                  className="w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500 font-medium"
+                >
+                  <option value="UYU">UYU ($U - Pesos Uruguayos)</option>
+                  <option value="USD">USD (US$ - Dólares)</option>
+                </select>
               </div>
               <button
                 type="submit"
@@ -498,7 +735,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                   value={debtAmount}
                   onChange={(e) => setDebtAmount(e.target.value)}
                   placeholder="0.00"
-                  className="w-full p-2.5 text-xs font-mono font-bold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
+                  className="w-full p-2.5 text-xs font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
                 />
               </div>
               <div>
@@ -511,7 +748,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                   value={debtMonthlyPayment}
                   onChange={(e) => setDebtMonthlyPayment(e.target.value)}
                   placeholder="0.00"
-                  className="w-full p-2.5 text-xs font-mono font-bold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
+                  className="w-full p-2.5 text-xs font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
                 />
               </div>
               <div>
@@ -582,7 +819,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                   value={invAmount}
                   onChange={(e) => setInvAmount(e.target.value)}
                   placeholder="0.00"
-                  className="w-full p-2.5 text-xs font-mono font-bold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
+                  className="w-full p-2.5 text-xs font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
                 />
               </div>
               <button

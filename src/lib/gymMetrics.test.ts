@@ -18,6 +18,8 @@ import {
   getGymFrequencyMetrics,
   getGymProgressMetrics,
   normalizeExerciseName,
+  parseLocalMinutesOfDay,
+  nowTimeHHmm,
 } from './gymMetrics';
 
 // ── 0. Exercise Name Normalizer ───────────────────────────────────────────
@@ -866,4 +868,143 @@ test('legacy sin metadata sigue siendo set efectivo normal', () => {
 
   const prs = calcDetailedPRs(sessions);
   assert.equal(prs['press militar']?.maxWeight?.value, 50);
+});
+
+// ── 7. Session Duration & Local Time Parsing Tests ────────────────────────
+
+test('parseLocalMinutesOfDay: soporta formatos 24h, 12h estándar y 12h regional (a. m. / p. m.)', () => {
+  assert.equal(parseLocalMinutesOfDay('11:45'), 11 * 60 + 45);
+  assert.equal(parseLocalMinutesOfDay('13:10'), 13 * 60 + 10);
+  assert.equal(parseLocalMinutesOfDay('11:45 AM'), 11 * 60 + 45);
+  assert.equal(parseLocalMinutesOfDay('01:10 PM'), 13 * 60 + 10);
+  assert.equal(parseLocalMinutesOfDay('11:45 a. m.'), 11 * 60 + 45);
+  assert.equal(parseLocalMinutesOfDay('01:10 p. m.'), 13 * 60 + 10);
+  assert.equal(parseLocalMinutesOfDay('11:45\u202Fa.\u00A0m.'), 11 * 60 + 45);
+  assert.equal(parseLocalMinutesOfDay('01:10\u202Fp.\u00A0m.'), 13 * 60 + 10);
+  assert.equal(parseLocalMinutesOfDay('12:00 AM'), 0);
+  assert.equal(parseLocalMinutesOfDay('12:00 PM'), 12 * 60);
+});
+
+test('calculateSessionDuration: evita el falso 0 min cuando se usan formatos 12 horas móviles', () => {
+  // Caso real del usuario: entrenamiento iniciado a las 11:45 y finalizado a las 01:10 PM
+  const resSpanish = calculateSessionDuration('11:45 a. m.', '01:10 p. m.');
+  assert.equal(resSpanish.minutes, 85);
+  assert.equal(resSpanish.formatted, '1 h 25 min');
+
+  const resEnglish = calculateSessionDuration('11:45 AM', '01:10 PM');
+  assert.equal(resEnglish.minutes, 85);
+  assert.equal(resEnglish.formatted, '1 h 25 min');
+
+  const res24h = calculateSessionDuration('11:45', '13:10');
+  assert.equal(res24h.minutes, 85);
+  assert.equal(res24h.formatted, '1 h 25 min');
+});
+
+test('calculateSessionDuration: fallback a timestamps reales de completedAt si faltan horas de cabecera', () => {
+  const dummySession: GymSession = {
+    id: 's-fallback',
+    date: '2026-10-28',
+    status: 'completed',
+    startedAt: null,
+    finishedAt: null,
+    exercises: [
+      {
+        name: 'Press Banca',
+        sets: [
+          { id: '1', weight: 80, reps: 8, completed: true, completedAt: '2026-10-28T11:45:00.000Z' },
+          { id: '2', weight: 80, reps: 8, completed: true, completedAt: '2026-10-28T12:00:00.000Z' },
+        ],
+      },
+      {
+        name: 'Remo',
+        sets: [
+          { id: '3', weight: 70, reps: 10, completed: true, completedAt: '2026-10-28T12:35:00.000Z' },
+        ],
+      },
+    ],
+  };
+
+  const dur = calculateSessionDuration(null, null, dummySession);
+  assert.equal(dur.minutes, 50);
+  assert.equal(dur.formatted, '50 min');
+});
+
+// ── 8. Anti-Falsos PRs: Cross-Session y Multi-Ejercicio ──────────────────────
+
+test('detectSessionPRs: no genera 24 PRs falsos cuando el historial tiene distintos IDs de ejercicio', () => {
+  // Historial previo con 6 ejercicios (con IDs de plantilla antiguos)
+  const historicalSession: GymSession = {
+    id: 'historical-session-1',
+    date: '2026-10-20',
+    status: 'completed',
+    exercises: [
+      { id: 'old-ex-1', name: 'Press Banca', sets: [{ id: 'h1', weight: 80, reps: 8, completed: true }] },
+      { id: 'old-ex-2', name: 'Press Inclinado', sets: [{ id: 'h2', weight: 60, reps: 10, completed: true }] },
+      { id: 'old-ex-3', name: 'Cruces Polea', sets: [{ id: 'h3', weight: 25, reps: 12, completed: true }] },
+      { id: 'old-ex-4', name: 'Jalón Pecho', sets: [{ id: 'h4', weight: 70, reps: 10, completed: true }] },
+      { id: 'old-ex-5', name: 'Remo con Barra', sets: [{ id: 'h5', weight: 75, reps: 8, completed: true }] },
+      { id: 'old-ex-6', name: 'Curl Bíceps', sets: [{ id: 'h6', weight: 30, reps: 12, completed: true }] },
+    ],
+  };
+
+  const historicalPRs = calcDetailedPRs([historicalSession]);
+
+  // Sesión actual del usuario con 6 ejercicios, pero con IDs nuevos generados en la sesión
+  const currentSession: GymSession = {
+    id: 'current-session-today',
+    date: '2026-10-28',
+    status: 'completed',
+    exercises: [
+      { id: 'new-ex-1', name: 'Press Banca', sets: [{ id: 'c1', weight: 80, reps: 8, completed: true }] }, // empate
+      { id: 'new-ex-2', name: 'Press Inclinado', sets: [{ id: 'c2', weight: 55, reps: 10, completed: true }] }, // menor peso
+      { id: 'new-ex-3', name: 'Cruces Polea', sets: [{ id: 'c3', weight: 25, reps: 12, completed: true }] }, // empate
+      { id: 'new-ex-4', name: 'Jalón Pecho', sets: [{ id: 'c4', weight: 70, reps: 8, completed: true }] }, // menor reps
+      { id: 'new-ex-5', name: 'Remo con Barra', sets: [{ id: 'c5', weight: 75, reps: 8, completed: true }] }, // empate
+      { id: 'new-ex-6', name: 'Curl Bíceps', sets: [{ id: 'c6', weight: 30, reps: 12, completed: true }] }, // empate
+    ],
+  };
+
+  const prsDetected = detectSessionPRs(currentSession, historicalPRs);
+  // Al no haber superado ningún registro anterior, no debe otorgar 24 PRs falsos
+  assert.equal(prsDetected.length, 0, 'No debe declarar récords si no superó los valores históricos');
+
+  // Si en Press Banca sube a 82.5 kg, solo debe detectar los récords correspondientes a esa mejora
+  const improvedSession: GymSession = {
+    ...currentSession,
+    exercises: [
+      { id: 'new-ex-1', name: 'Press Banca', sets: [{ id: 'c1', weight: 82.5, reps: 8, completed: true }] },
+      ...currentSession.exercises.slice(1),
+    ],
+  };
+
+  const improvedPRs = detectSessionPRs(improvedSession, historicalPRs);
+  assert.ok(improvedPRs.length > 0 && improvedPRs.length <= 4);
+  assert.ok(improvedPRs.every((pr) => pr.exerciseName === 'Press Banca'));
+  assert.ok(improvedPRs.some((pr) => pr.type === 'maxWeight' && pr.value === 82.5));
+});
+
+test('detectSessionPRs: agrupa múltiples instancias del mismo ejercicio en la sesión sin duplicar PRs', () => {
+  const historicalPRs = calcDetailedPRs([]);
+  const sessionWithDuplicates: GymSession = {
+    id: 'sess-dup',
+    date: '2026-10-28',
+    status: 'completed',
+    exercises: [
+      { id: 'ex-a', name: 'Sentadilla', sets: [{ id: 's1', weight: 100, reps: 5, completed: true }] },
+      { id: 'ex-b', name: 'Sentadilla', sets: [{ id: 's2', weight: 90, reps: 8, completed: true }] },
+    ],
+  };
+
+  const prs = detectSessionPRs(sessionWithDuplicates, historicalPRs);
+  // Max weight para Sentadilla debe aparecer como máximo una sola vez
+  const maxWeightPRs = prs.filter((p) => p.exerciseName === 'Sentadilla' && p.type === 'maxWeight');
+  assert.equal(maxWeightPRs.length, 1);
+  assert.equal(maxWeightPRs[0].value, 100);
+});
+
+test('nowTimeHHmm: genera hora en formato HH:mm de 24 horas', () => {
+  const sample = new Date('2026-10-28T14:05:00');
+  assert.equal(nowTimeHHmm(sample), '14:05');
+  const morning = new Date('2026-10-28T09:07:00');
+  assert.equal(nowTimeHHmm(morning), '09:07');
 });

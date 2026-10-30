@@ -1,106 +1,97 @@
-/**
- * Alpine Day-Cycle System
- * Computes temporal daylight periods and themes based on local solar hour:
- * - dawn: 06:00 - 11:59 (celeste suave, dorado tenue, energía ascendente)
- * - day: 12:00 - 17:59 (limpio, claro, contraste activo)
- * - sunset: 18:00 - 19:59 (violeta cálido, ámbar/coral sutil, transición)
- * - night: 20:00 - 05:59 (azul profundo, índigo, calma y foco)
- */
+/** Local visual periods for the Matterhorn hero. Greeting and image periods
+ * intentionally use separate schedules. */
+export type DayCyclePeriod = 'predawn' | 'morning' | 'day' | 'sunset' | 'night';
 
-export type DayCyclePeriod = 'dawn' | 'day' | 'sunset' | 'night';
+export interface SolarCoordinates {
+  latitude: number;
+  longitude: number;
+}
 
 export interface DayCycleConfig {
   period: DayCyclePeriod;
   label: string;
-  greetingPrefix: string;
-  greeting: (name?: string) => string;
-  skyTone: {
-    ambientColor: string;
-    accentGlow: string;
-    mountainRidgeFront: string;
-    mountainRidgeMid: string;
-    mountainRidgeBack: string;
-    sunOrMoonColor: string;
+  skyTone: { ambientColor: string; accentGlow: string };
+  focalPoint: {
+    /** Desktop object-position preserving Matterhorn summit & right-anchored massif */
+    desktopPosition: string;
+    /** Tablet object-position */
+    tabletPosition: string;
+    /** Mobile object-position for the panoramic scenes */
+    mobilePosition: string;
   };
 }
 
-export function getDayCyclePeriod(input?: Date | number): DayCyclePeriod {
-  let h: number;
+function localMinutes(input?: Date | number): number {
   if (typeof input === 'number') {
-    h = input;
-  } else if (input instanceof Date) {
-    h = input.getHours();
-  } else {
-    h = new Date().getHours();
+    const minutes = Math.floor(input * 60);
+    return ((minutes % 1440) + 1440) % 1440;
   }
-  if (h >= 6 && h < 12) return 'dawn';
-  if (h >= 12 && h < 18) return 'day';
-  if (h >= 18 && h < 20) return 'sunset';
+  const date = input instanceof Date ? input : new Date();
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+/**
+ * Explicit 5-period schedule for the Matterhorn Hero:
+ * - Noche (night):       19:30–04:59 -> cervino-panorama-noche.png
+ * - Madrugada (predawn): 05:00–06:59 -> cervino-panorama-madrugada.png
+ * - Mañana (morning):    07:00–10:59 -> cervino-panorama-manana.png
+ * - Mediodía (day):      11:00–16:59 -> cervino-panorama-dia.png
+ * - Atardecer (sunset):  17:00–19:29 -> cervino-panorama-atardecer.png
+ */
+export function getDayCyclePeriod(input?: Date | number, _coordinates?: SolarCoordinates | null): DayCyclePeriod {
+  const minutes = localMinutes(input);
+  if (minutes < 5 * 60) return 'night';
+  if (minutes < 7 * 60) return 'predawn';
+  if (minutes < 11 * 60) return 'morning';
+  if (minutes < 17 * 60) return 'day';
+  if (minutes < 19 * 60 + 30) return 'sunset';
   return 'night';
 }
 
+export function getGreetingPrefix(input?: Date | number): 'Buenos días' | 'Buenas tardes' | 'Buenas noches' {
+  const minutes = localMinutes(input);
+  if (minutes >= 5 * 60 && minutes < 12 * 60) return 'Buenos días';
+  if (minutes >= 12 * 60 && minutes < 19 * 60 + 30) return 'Buenas tardes';
+  return 'Buenas noches';
+}
+
+export function getLocalGreeting(input?: Date | number, name?: string): string {
+  return `${getGreetingPrefix(input)}${name?.trim() ? `, ${name.trim()}` : ''}`;
+}
+
+const configs: Record<DayCyclePeriod, DayCycleConfig> = {
+  predawn: {
+    period: 'predawn',
+    label: 'Madrugada',
+    skyTone: { ambientColor: 'rgba(37, 51, 95, .28)', accentGlow: 'rgba(246, 232, 231, .24)' },
+    focalPoint: { desktopPosition: '70% 14%', tabletPosition: '70% 18%', mobilePosition: '72% 22%' },
+  },
+  morning: {
+    period: 'morning',
+    label: 'Mañana',
+    skyTone: { ambientColor: 'rgba(95, 151, 194, .18)', accentGlow: 'rgba(255, 232, 185, .28)' },
+    focalPoint: { desktopPosition: '70% 14%', tabletPosition: '70% 18%', mobilePosition: '72% 22%' },
+  },
+  day: {
+    period: 'day',
+    label: 'Mediodía',
+    skyTone: { ambientColor: 'rgba(80, 145, 199, .14)', accentGlow: 'rgba(241, 245, 250, .24)' },
+    focalPoint: { desktopPosition: '70% 14%', tabletPosition: '70% 18%', mobilePosition: '72% 22%' },
+  },
+  sunset: {
+    period: 'sunset',
+    label: 'Atardecer',
+    skyTone: { ambientColor: 'rgba(77, 58, 105, .24)', accentGlow: 'rgba(254, 196, 118, .30)' },
+    focalPoint: { desktopPosition: '70% 14%', tabletPosition: '70% 18%', mobilePosition: '72% 22%' },
+  },
+  night: {
+    period: 'night',
+    label: 'Noche',
+    skyTone: { ambientColor: 'rgba(20, 31, 64, .32)', accentGlow: 'rgba(52, 70, 96, .22)' },
+    focalPoint: { desktopPosition: '70% 14%', tabletPosition: '70% 18%', mobilePosition: '72% 22%' },
+  },
+};
+
 export function getDayCycleConfig(period: DayCyclePeriod): DayCycleConfig {
-  switch (period) {
-    case 'dawn':
-      return {
-        period: 'dawn',
-        label: 'Amanecer',
-        greetingPrefix: 'Buenos días',
-        greeting: (name) => `Buenos días${name ? `, ${name}` : ''}`,
-        skyTone: {
-          ambientColor: 'rgba(56, 189, 248, 0.08)',
-          accentGlow: 'rgba(251, 191, 36, 0.15)',
-          mountainRidgeFront: '#0284c7',
-          mountainRidgeMid: '#38bdf8',
-          mountainRidgeBack: '#f59e0b',
-          sunOrMoonColor: '#fbbf24',
-        },
-      };
-    case 'day':
-      return {
-        period: 'day',
-        label: 'Día',
-        greetingPrefix: 'Buenas tardes',
-        greeting: (name) => `Buenas tardes${name ? `, ${name}` : ''}`,
-        skyTone: {
-          ambientColor: 'rgba(59, 130, 246, 0.06)',
-          accentGlow: 'rgba(99, 102, 241, 0.09)',
-          mountainRidgeFront: '#2563eb',
-          mountainRidgeMid: '#60a5fa',
-          mountainRidgeBack: '#93c5fd',
-          sunOrMoonColor: '#f59e0b',
-        },
-      };
-    case 'sunset':
-      return {
-        period: 'sunset',
-        label: 'Atardecer',
-        greetingPrefix: 'Buenas tardes',
-        greeting: (name) => `Buenas tardes${name ? `, ${name}` : ''}`,
-        skyTone: {
-          ambientColor: 'rgba(244, 63, 94, 0.08)',
-          accentGlow: 'rgba(245, 158, 11, 0.16)',
-          mountainRidgeFront: '#7c3aed',
-          mountainRidgeMid: '#f43f5e',
-          mountainRidgeBack: '#fb923c',
-          sunOrMoonColor: '#fb923c',
-        },
-      };
-    case 'night':
-    default:
-      return {
-        period: 'night',
-        label: 'Noche',
-        greetingPrefix: 'Buenas noches',
-        greeting: (name) => `Buenas noches${name ? `, ${name}` : ''}`,
-        skyTone: {
-          ambientColor: 'rgba(99, 102, 241, 0.07)',
-          accentGlow: 'rgba(129, 140, 248, 0.12)',
-          mountainRidgeFront: '#4338ca',
-          mountainRidgeMid: '#6366f1',
-          mountainRidgeBack: '#312e81',
-          sunOrMoonColor: '#c7d2fe',
-        },
-      };
-  }
+  return configs[period];
 }

@@ -1,7 +1,8 @@
 import type { FinancialCommitment, LifeOSState, Transaction } from '../types';
+import { isCommercialFinanceTransaction } from './financeFlows';
 import { identifyMerchant } from './merchantIdentity';
 import { findMatchCandidates, type MatchCandidate, type TransactionMatchResult } from './financeMatching';
-import { todayISO } from './storage';
+import { localISODate, todayISO } from './storage';
 
 export type ReviewReasonCode =
   | 'missing_category'
@@ -59,7 +60,7 @@ function daysDiff(isoA: string, isoB: string): number {
 function addDays(iso: string, days: number): string {
   const d = new Date(`${iso}T00:00:00`);
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return localISODate(d);
 }
 
 export function isTransactionReviewed(tx: Transaction): boolean {
@@ -109,8 +110,13 @@ export function deriveFinanceReviewInbox(
       continue;
     }
 
-    // Skip ledger conciliation adjustments (they are balance reconciliation artifacts, not expenses to review)
-    if (tx.origin === 'adjustment') {
+    // Skip ledger conciliation adjustments and commercial/resale movements
+    if (
+      tx.origin === 'adjustment' ||
+      tx.origin === 'resale_purchase' ||
+      tx.origin === 'resale_sale' ||
+      isCommercialFinanceTransaction(state, tx)
+    ) {
       continue;
     }
 
@@ -306,6 +312,10 @@ export function deriveFinanceReviewInbox(
     const compatibleTx = transactions.find((tx) => (
       !tx.commitmentId &&
       tx.type === 'gasto' &&
+      tx.origin !== 'adjustment' &&
+      tx.origin !== 'resale_purchase' &&
+      tx.origin !== 'resale_sale' &&
+      !isCommercialFinanceTransaction(state, tx) &&
       Math.abs(Number(tx.amount) - Number(com.amount)) < 0.001 &&
       Math.abs(daysDiff(tx.date, com.nextDueDate)) <= 7
     ));

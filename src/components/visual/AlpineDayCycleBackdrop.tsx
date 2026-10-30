@@ -1,8 +1,9 @@
 import React from 'react';
-import alpineDawnScene from '../../assets/dashboard/alpine-dawn-hero.jpg';
-import alpineDayScene from '../../assets/dashboard/alpine-day-hero.jpg';
-import alpineNightScene from '../../assets/dashboard/alpine-night-hero.jpg';
-import alpineSunsetScene from '../../assets/dashboard/alpine-sunset-hero.jpg';
+import madrugadaScene from '../../../assets/hero/alpine-day-cicle/cervino-panorama-madrugada.webp';
+import mananaScene from '../../../assets/hero/alpine-day-cicle/cervino-panorama-manana.webp';
+import diaScene from '../../../assets/hero/alpine-day-cicle/cervino-panorama-dia.webp';
+import atardecerScene from '../../../assets/hero/alpine-day-cicle/cervino-panorama-atardecer.webp';
+import nocheScene from '../../../assets/hero/alpine-day-cicle/cervino-panorama-noche.webp';
 import { DayCyclePeriod, getDayCycleConfig, getDayCyclePeriod } from '../../lib/alpineDayCycle';
 
 interface AlpineDayCycleBackdropProps {
@@ -12,16 +13,18 @@ interface AlpineDayCycleBackdropProps {
   sceneSrc?: string;
 }
 
-/**
- * Alpine is the first official LifeOS scene preset. Every period uses the same
- * geography and framing, with only the natural light and atmosphere changing.
- */
 export const DAY_CYCLE_SCENE_ASSETS: Record<DayCyclePeriod, string> = {
-  dawn: alpineDawnScene,
-  day: alpineDayScene,
-  sunset: alpineSunsetScene,
-  night: alpineNightScene,
+  predawn: madrugadaScene,
+  morning: mananaScene,
+  day: diaScene,
+  sunset: atardecerScene,
+  night: nocheScene,
 };
+
+interface ActiveSceneState {
+  period: DayCyclePeriod;
+  src: string;
+}
 
 export const AlpineDayCycleBackdrop: React.FC<AlpineDayCycleBackdropProps> = ({
   className = '',
@@ -31,57 +34,69 @@ export const AlpineDayCycleBackdrop: React.FC<AlpineDayCycleBackdropProps> = ({
 }) => {
   const period = forcePeriod || getDayCyclePeriod();
   const config = getDayCycleConfig(period);
-  const periodScene = DAY_CYCLE_SCENE_ASSETS[period];
-  const resolvedScene = sceneSrc || periodScene;
+  const resolvedScene = sceneSrc || DAY_CYCLE_SCENE_ASSETS[period];
   const [failedScene, setFailedScene] = React.useState<string | null>(null);
+  const [previousScene, setPreviousScene] = React.useState<ActiveSceneState | null>(null);
+  const currentSceneRef = React.useRef<ActiveSceneState>({ period, src: resolvedScene });
   const sceneAvailable = failedScene !== resolvedScene;
 
   React.useEffect(() => {
-    if (typeof Image === 'undefined') return;
-    Object.values(DAY_CYCLE_SCENE_ASSETS).forEach((src) => {
-      const image = new Image();
-      image.decoding = 'async';
-      image.src = src;
-    });
-  }, []);
+    setFailedScene(null);
+    const prev = currentSceneRef.current;
+    if (prev.src !== resolvedScene) {
+      setPreviousScene(prev);
+      currentSceneRef.current = { period, src: resolvedScene };
+      const timer = window.setTimeout(() => setPreviousScene(null), 680);
+      return () => window.clearTimeout(timer);
+    }
+    currentSceneRef.current = { period, src: resolvedScene };
+    return undefined;
+  }, [period, resolvedScene]);
+
+  const renderScenePair = (targetPeriod: DayCyclePeriod, targetSrc: string, isOutgoing: boolean) => {
+    const targetConfig = getDayCycleConfig(targetPeriod);
+    const sceneVars = {
+      '--hero-desktop-pos': targetConfig.focalPoint.desktopPosition,
+      '--hero-tablet-pos': targetConfig.focalPoint.tabletPosition,
+      '--hero-mobile-pos': targetConfig.focalPoint.mobilePosition,
+    } as React.CSSProperties;
+
+    const isCrossfading = !isOutgoing && previousScene !== null && previousScene.src !== targetSrc;
+
+    return (
+      <div
+        key={`${targetPeriod}-${targetSrc}`}
+        style={sceneVars}
+        className={`hero-scene-stage hero-scene-${targetPeriod} absolute inset-0 ${
+          isOutgoing ? 'hero-scene-outgoing' : isCrossfading ? 'hero-scene-transitioning' : 'hero-scene-active'
+        }`}
+      >
+        <img
+          src={targetSrc}
+          alt=""
+          loading="eager"
+          decoding="async"
+          fetchPriority={isOutgoing ? 'low' : 'high'}
+          onError={!isOutgoing ? () => setFailedScene(targetSrc) : undefined}
+          className="hero-matterhorn-scene hero-matterhorn-photo select-none"
+        />
+      </div>
+    );
+  };
 
   return (
     <div
       aria-hidden="true"
       data-day-cycle={period}
       data-scene-status={sceneAvailable ? 'ready' : 'fallback'}
-      className={`pointer-events-none absolute inset-x-0 top-0 overflow-hidden select-none ${
-        compact ? 'z-0 h-full' : '-z-10 h-[420px] sm:h-[480px]'
-      } ${className}`}
+      className={`pointer-events-none absolute inset-x-0 top-0 overflow-hidden select-none ${compact ? 'z-0 h-full' : '-z-10 h-[420px] sm:h-[480px]'} ${className}`}
     >
-      {sceneAvailable && (
-        <img
-          src={resolvedScene}
-          alt=""
-          loading="eager"
-          decoding="async"
-          fetchPriority="high"
-          onError={() => setFailedScene(resolvedScene)}
-          className={`absolute inset-0 h-full w-full object-cover hero-scene-${period} opacity-92 saturate-[0.96] contrast-[1.02] transition-opacity duration-500 dark:opacity-96 dark:saturate-[0.95]`}
-        />
-      )}
-
+      {sceneAvailable && previousScene && previousScene.src !== resolvedScene && renderScenePair(previousScene.period, previousScene.src, true)}
+      {sceneAvailable && renderScenePair(period, resolvedScene, false)}
       <div
-        className="hero-scrim absolute inset-0"
-        style={{
-          background: sceneAvailable
-            ? undefined
-            : `radial-gradient(ellipse at 78% 22%, ${config.skyTone.accentGlow} 0%, transparent 42%), radial-gradient(ellipse at 28% 8%, ${config.skyTone.ambientColor} 0%, transparent 58%), var(--hero-bg)`,
-        }}
+        className={`hero-scrim hero-scrim-${period} absolute inset-0`}
+        style={!sceneAvailable ? { background: `radial-gradient(ellipse at 78% 22%, ${config.skyTone.accentGlow}, transparent 45%), var(--hero-bg)` } : undefined}
       />
-
-      {!sceneAvailable && (
-        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-[var(--hero-bg)] via-[var(--hero-bg)]/45 to-transparent" />
-      )}
-
-      {sceneAvailable && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/4 bg-gradient-to-t from-[var(--hero-bg)]/60 via-[var(--hero-bg)]/15 to-transparent opacity-50" />
-      )}
     </div>
   );
 };

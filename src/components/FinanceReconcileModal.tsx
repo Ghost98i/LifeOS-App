@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { LifeOSState } from '../types';
 import { reconcileAccount, updateReconciliation, deleteReconciliation } from '../lib/financeFlows';
-import { fmtDate, fmtMoney, todayISO } from '../lib/storage';
+import { fmtDate, formatMoney, diffMoney, parseDecimalInput, todayISO } from '../lib/storage';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
 import { AppIcon } from './AppIcon';
@@ -55,10 +55,12 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
   if (!open) return null;
 
   const targetAccount = accounts.find((a) => a.id === selectedAccountId);
+  const targetCurrency = (targetAccount?.currency || 'UYU').toUpperCase();
   const currentLedgerBalance = targetAccount ? Number(targetAccount.balance || 0) : 0;
-  const numActual = Number(actualBalance);
-  const hasValidActual = actualBalance.trim() !== '' && !isNaN(numActual);
-  const difference = hasValidActual ? numActual - currentLedgerBalance : 0;
+  const parsedActual = parseDecimalInput(actualBalance);
+  const hasValidActual = actualBalance.trim() !== '' && !parsedActual.error && parsedActual.value !== null;
+  const numActual = hasValidActual ? parsedActual.value! : 0;
+  const difference = hasValidActual ? diffMoney(numActual, currentLedgerBalance) : 0;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,7 +91,7 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
       showToast(
         difference === 0
           ? 'Cuenta conciliada sin diferencias.'
-          : `Cuenta conciliada. Ajuste registrado: ${difference > 0 ? '+' : ''}${fmtMoney(difference)}`
+          : `Cuenta conciliada. Ajuste registrado: ${difference > 0 ? '+' : ''}${formatMoney(difference, targetCurrency)}`
       );
       onClose();
     } catch (error) {
@@ -132,7 +134,7 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
                 {editingReconId ? 'Editar conciliación' : 'Conciliar saldo de cuenta'}
               </h3>
               <p className="text-xs text-[var(--text-soft)]">
-                Alineá el saldo contable con tu extracto bancario real
+                Compará con tu banco o efectivo. La diferencia se registra como un ajuste de saldo.
               </p>
             </div>
           </div>
@@ -175,10 +177,10 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
             <div className="p-3.5 rounded-2xl bg-[var(--surface-muted)]/50 border border-[var(--border)] flex items-center justify-between">
               <div>
                 <span className="text-[10px] uppercase font-bold text-[var(--text-faint)] block">
-                  Saldo en LifeOS
+                  Saldo en Celestian
                 </span>
-                <PrivacyAmount as="span" className="font-mono font-black text-base text-[var(--text)]">
-                  {fmtMoney(currentLedgerBalance)}
+                <PrivacyAmount as="span" className="font-black tabular-nums text-base text-[var(--text)]">
+                  {formatMoney(currentLedgerBalance, targetCurrency)}
                 </PrivacyAmount>
               </div>
               <div className="text-right">
@@ -199,12 +201,12 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
             <input
               required
               autoFocus
-              type="number"
-              step="any"
+              type="text"
+              inputMode="decimal"
               value={actualBalance}
               onChange={(e) => setActualBalance(e.target.value)}
-              placeholder="Ej. 15420.50"
-              className="w-full p-2.5 text-sm font-mono font-bold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
+              placeholder="0,00"
+              className="w-full p-2.5 text-sm font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
             />
           </div>
 
@@ -222,8 +224,8 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
                   ? 'Coincidencia exacta (sin ajuste)'
                   : 'Ajuste contable necesario:'}
               </span>
-              <span className="font-mono font-bold">
-                {difference === 0 ? '✓ Al día' : `${difference > 0 ? '+' : ''}${fmtMoney(difference)}`}
+              <span className="tabular-nums font-bold">
+                {difference === 0 ? '✓ Al día' : `${difference > 0 ? '+' : ''}${formatMoney(difference, targetCurrency)}`}
               </span>
             </div>
           )}
@@ -297,8 +299,8 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
                 {accountReconciliations.map((r) => (
                   <div key={r.id} className="flex items-center justify-between py-2 text-xs">
                     <div>
-                      <span className="font-mono font-bold text-[var(--text)]">
-                        {fmtMoney(r.actualBalance)}
+                      <span className="tabular-nums font-bold text-[var(--text)]">
+                        {formatMoney(r.actualBalance, targetCurrency)}
                       </span>
                       <span className="text-[10px] text-[var(--text-faint)] block">
                         {fmtDate(r.date)} {r.note ? `· ${r.note}` : ''}

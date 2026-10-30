@@ -1,0 +1,37 @@
+/* Presentation is restricted to the three screens in this refinement. */
+:is(.study-refinement, .notes-refinement, .ai-refinement) {
+  --blue: #4F46E5;
+  --blue-hover: #4338CA;
+  --accent: #4F46E5;
+  --color-indigo-600: #4F46E5;
+  min-width: 0;
+}
+:is(.study-refinement, .notes-refinement, .ai-refinement) :is(.text-xs, .text-\[9px\], .text-\[10px\], .text-\[11px\]) {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+:is(.study-refinement, .notes-refinement, .ai-refinement) .uppercase { text-transform: none; letter-spacing: normal; }
+:is(.study-refinement, .notes-refinement, .ai-refinement) :is(input, select, textarea) { min-width: 0; }
+:is(.study-refinement, .notes-refinement, .ai-refinement) :is(button, summary) { cursor: pointer; }
+:is(.study-refinement, .notes-refinement, .ai-refinement) button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.notes-refinement [aria-pressed="true"] { border-color: var(--blue); }
+.notes-refinement :is(.bg-purple-500, .bg-blue-500) { background-color: var(--blue); }
+.notes-refinement :is(.text-purple-600, .text-blue-600) { color: var(--blue); }
+.dark :is(.study-refinement, .notes-refinement, .ai-refinement) :is(.text-\[var\(--blue\)\], .text-purple-600, .text-blue-600) { color: #A5A0FF; }
+.study-refinement :is(.bg-indigo-600, .bg-indigo-500) { background-color: var(--blue); }
+.study-refinement { font-variant-numeric: tabular-nums; }
+.study-refinement button[aria-controls="manual-study-form"] { border-color: var(--blue); color: var(--blue); background: var(--card); }
+.dark .study-refinement button[aria-controls="manual-study-form"] { color: #A5A0FF; }
+:root:not(.dark) :is(.study-refinement, .notes-refinement, .ai-refinement) :is(.text-emerald-500, .text-emerald-600) { color: #047857; }
+:root:not(.dark) :is(.study-refinement, .notes-refinement, .ai-refinement) :is(.text-rose-500, .text-rose-600, .text-red-500) { color: #BE123C; }
+:root:not(.dark) :is(.study-refinement, .notes-refinement, .ai-refinement) :is(.text-amber-500, .text-amber-600) { color: #92400E; }
+.ai-refinement :is(input, textarea) { color: var(--text); }
+.ai-refinement input { min-height: 2.75rem; }
+.ai-refinement article { overflow-wrap: anywhere; min-width: 0; }
+.notes-refinement :is(form input:not([type="checkbox"]), form select, form button) { min-height: 2.5rem; }
+@media (max-width: 640px) {
+  .notes-refinement form > input { width: 100%; flex-basis: 100%; }
+  .notes-refinement [aria-label^="Marcar "] { min-width: 2.75rem; min-height: 2.75rem; }
+  .ai-refinement form { flex-wrap: wrap; }
+  .ai-refinement form input { flex-basis: 100%; width: 100%; }
+}

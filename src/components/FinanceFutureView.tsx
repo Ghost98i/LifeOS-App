@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { FinancialCommitment, ExpectedIncome, LifeOSState } from '../types';
-import { CashFlowProjectionResult } from '../lib/calculations';
-import { fmtDate, fmtMoney } from '../lib/storage';
+import { CashFlowProjectionResult, cashFlowProjection } from '../lib/calculations';
+import { fmtDate, formatMoney as canonicalFormatMoney, parseDecimalInput, todayISO } from '../lib/storage';
 import { identifyMerchant } from '../lib/merchantIdentity';
 import { AppIcon } from './AppIcon';
+import { ContextualHelp } from './ContextualHelp';
 import { PrivacyAmount } from './PrivacyAmount';
 
 interface FinanceFutureViewProps {
@@ -75,36 +76,71 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
   const subscriptions = state.finance?.subscriptions || [];
   const totalSubs = subscriptions.reduce((acc, s) => acc + Number(s.amount || 0), 0);
 
+  // Multi-currency handling for projections
+  const currencies = useMemo(() => {
+    const set = new Set<string>();
+    (state.finance?.accounts || []).forEach((a) => set.add((a.currency || 'UYU').toUpperCase()));
+    (state.finance?.commitments || []).forEach((c) => set.add((c.currency || 'UYU').toUpperCase()));
+    (state.finance?.expectedIncomes || []).forEach((e) => set.add((e.currency || 'UYU').toUpperCase()));
+    const arr = Array.from(set);
+    return arr.length > 0 ? arr : ['UYU'];
+  }, [state.finance?.accounts, state.finance?.commitments, state.finance?.expectedIncomes]);
+
+  const [selectedCurrency, setSelectedCurrency] = useState<string>('UYU');
+  const activeCurrency = currencies.includes(selectedCurrency) ? selectedCurrency : (currencies[0] || 'UYU');
+
+  const activeProj = useMemo(() => {
+    if (currencies.length <= 1 && activeCurrency === 'UYU') return projection;
+    return cashFlowProjection(state, projHorizon, todayISO(), activeCurrency);
+  }, [state, projHorizon, activeCurrency, currencies.length, projection]);
+
+  const horizonEndDate = useMemo(() => {
+    const today = todayISO();
+    const [y, m, d] = today.split('-').map(Number);
+    const date = new Date(Date.UTC(y, m - 1, d + projHorizon));
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+  }, [projHorizon]);
+
+  const formatMoney = (amount: number, itemCur?: string) => {
+    const cur = itemCur ? itemCur.toUpperCase() : activeCurrency;
+    return canonicalFormatMoney(amount, cur);
+  };
+
   // Verification of real data conditions (avoids anxiety during onboarding or empty state)
   const accounts = state.finance?.accounts || [];
   const hasAccounts = accounts.length > 0;
   const hasNonZeroBalance = accounts.some((a) => Number(a.balance || 0) > 0);
   const hasFutureSignal =
-    projection.forecastItems.length > 0 ||
-    projection.commitments.length > 0 ||
-    projection.dailyTrajectory.some((pt) => pt.netDayChange !== 0);
+    activeProj.forecastItems.length > 0 ||
+    activeProj.commitments.length > 0 ||
+    activeProj.dailyTrajectory.some((pt) => pt.netDayChange !== 0);
 
   const hasRealData = hasAccounts && (hasNonZeroBalance || hasFutureSignal);
   const hasExplicitCushion = state.finance?.minCushion != null && state.finance?.cushionEnabled !== false;
 
-  const showDeficitAlert = hasRealData && projection.isDeficit;
-  const showCushionAlert = hasRealData && hasExplicitCushion && projection.thresholdWarning && !projection.isDeficit;
+  const showDeficitAlert = hasRealData && activeProj.isDeficit;
+  const showCushionAlert = hasRealData && hasExplicitCushion && activeProj.thresholdWarning && !activeProj.isDeficit;
 
   const statusBadge = !hasFutureSignal
     ? { label: 'Sin proyección', cls: 'bg-zinc-500/10 text-[var(--finance-text-muted)]' }
     : showDeficitAlert
-    ? { label: 'Riesgo de Déficit', cls: 'bg-rose-500/15 text-rose-600 dark:text-rose-400' }
+    ? { label: 'Faltan fondos', cls: 'bg-rose-500/15 text-rose-600 dark:text-rose-400' }
     : showCushionAlert
-    ? { label: 'Alerta Colchón', cls: 'bg-amber-500/15 text-amber-600 dark:text-amber-400' }
-    : { label: 'Liquidez Estable', cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' };
+    ? { label: 'Por debajo de la reserva', cls: 'bg-amber-500/15 text-amber-600 dark:text-amber-400' }
+    : { label: 'Sin déficit previsto', cls: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' };
 
   const handleCreateSub = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!subName.trim() || !Number(subAmount)) return;
+    const parsed = parseDecimalInput(subAmount);
+    if (parsed.error || parsed.value === null || parsed.value <= 0) {
+      alert(parsed.error || 'Importe inválido');
+      return;
+    }
+    if (!subName.trim()) return;
     if (onAddSubscription) {
       onAddSubscription(
         subName.trim(),
-        Number(subAmount),
+        parsed.value,
         subDueDay ? Math.min(31, Math.max(1, Number(subDueDay))) : null
       );
     }
@@ -123,72 +159,97 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-sm font-extrabold text-[var(--finance-text-primary)]">
-                Trayectoria Diaria de Liquidez
+                Saldo proyectado
               </h2>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusBadge.cls}`}>
                 {statusBadge.label}
               </span>
             </div>
             <p className="text-xs text-[var(--finance-text-muted)] mt-0.5">
-              Simulación de saldo día por día según cobros y obligaciones previstas
+              Saldo estimado con cobros y pagos previstos
             </p>
           </div>
 
-          {/* Horizon Selector (30d default) */}
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] self-start sm:self-auto shadow-2xs">
-            {([30, 60, 90] as const).map((h) => (
-              <button
-                key={h}
-                type="button"
-                onClick={() => onSetProjHorizon(h)}
-                className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
-                  projHorizon === h
-                    ? 'bg-[var(--finance-surface-raised)] text-[var(--finance-text-primary)] shadow-xs'
-                    : 'text-[var(--finance-text-muted)] hover:text-[var(--finance-text-primary)]'
-                }`}
-              >
-                {h} días {h === 30 && <span className="text-[10px] opacity-70">★</span>}
-              </button>
-            ))}
+          {/* Selectors: Currency (if multiple) & Horizon (30d default) */}
+          <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+            {currencies.length > 1 && (
+              <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] shadow-2xs">
+                {currencies.map((cur) => (
+                  <button
+                    key={cur}
+                    type="button"
+                    onClick={() => setSelectedCurrency(cur)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      activeCurrency === cur
+                        ? 'bg-[var(--finance-surface-raised)] text-[var(--finance-text-primary)] shadow-xs'
+                        : 'text-[var(--finance-text-muted)] hover:text-[var(--finance-text-primary)]'
+                    }`}
+                  >
+                    {cur}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] shadow-2xs">
+              {([30, 60, 90] as const).map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => onSetProjHorizon(h)}
+                  className={`px-3 py-1 rounded-lg text-xs tabular-nums font-bold transition-all cursor-pointer ${
+                    projHorizon === h
+                      ? 'bg-[var(--finance-surface-raised)] text-[var(--finance-text-primary)] shadow-xs'
+                      : 'text-[var(--finance-text-muted)] hover:text-[var(--finance-text-primary)]'
+                  }`}
+                >
+                  {h} días {h === 30 && <span className="text-[10px] opacity-70">★</span>}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <span className="text-sm text-[var(--finance-text-secondary)]">Saldo estimado al {fmtDate(horizonEndDate)}</span>
+          <PrivacyAmount as="strong" className="text-2xl font-bold tabular-nums text-[var(--finance-text-primary)]">{formatMoney(activeProj.dailyTrajectory.at(-1)?.endingBalance ?? 0)}</PrivacyAmount>
+        </div>
         {/* Tira compacta con métricas tipográficas integradas al horizonte */}
         <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-4 py-2 px-1 border-y border-[var(--finance-border)] text-xs">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
             <div className="flex items-baseline gap-1.5">
-              <span className="text-[11px] font-medium text-[var(--finance-text-muted)]">Flujo neto {projHorizon}d:</span>
+              <span className="text-[11px] font-medium text-[var(--finance-text-muted)]">Variación en {projHorizon} días:</span>
               <PrivacyAmount
                 as="span"
-                className={`font-mono font-bold text-xs ${
-                  projection.netCashFlow > 0
+                className={`tabular-nums font-bold text-xs ${
+                  activeProj.netCashFlow > 0
                     ? 'text-emerald-600 dark:text-emerald-400'
-                    : projection.netCashFlow < 0
+                    : activeProj.netCashFlow < 0
                     ? 'text-rose-500'
                     : 'text-[var(--finance-text-primary)]'
                 }`}
               >
-                {projection.netCashFlow > 0 ? '+' : ''}{fmtMoney(projection.netCashFlow)}
+                {activeProj.netCashFlow > 0 ? '+' : ''}{formatMoney(activeProj.netCashFlow)}
               </PrivacyAmount>
               <span className="text-[10px] text-[var(--finance-text-muted)]">
-                ({projection.netCashFlow >= 0 ? 'superávit' : 'déficit'})
+                <ContextualHelp label="Variación prevista">Cobros previstos menos pagos previstos en este período. Es el cambio esperado, no el saldo total.</ContextualHelp>
               </span>
             </div>
 
             <div className="flex items-baseline gap-1.5">
-              <span className="text-[11px] font-medium text-[var(--finance-text-muted)]">Punto mínimo:</span>
+              <span className="text-[11px] font-medium text-[var(--finance-text-muted)]">Saldo mínimo:</span>
               <PrivacyAmount
                 as="span"
-                className={`font-mono font-bold text-xs ${
-                  projection.minProjectedBalance < 0
+                className={`tabular-nums font-bold text-xs ${
+                  activeProj.minProjectedBalance < 0
                     ? 'text-rose-600 dark:text-rose-400'
                     : 'text-[var(--finance-text-primary)]'
                 }`}
               >
-                {fmtMoney(projection.minProjectedBalance)}
+                {formatMoney(activeProj.minProjectedBalance)}
               </PrivacyAmount>
-              <span className="text-[10px] text-[var(--finance-text-muted)] font-mono">
-                el {fmtDate(projection.minBalanceDate)}
+              <span className="text-[10px] text-[var(--finance-text-muted)] tabular-nums">
+                el {fmtDate(activeProj.minBalanceDate)}
               </span>
             </div>
           </div>
@@ -197,22 +258,22 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
             <span className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
               <span>Cobros:</span>
-              <PrivacyAmount as="span" className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                +{fmtMoney(projection.totalExpectedIncome)}
+              <PrivacyAmount as="span" className="tabular-nums font-semibold text-emerald-600 dark:text-emerald-400">
+                +{formatMoney(activeProj.totalExpectedIncome)}
               </PrivacyAmount>
               <span className="text-[10px] opacity-75">
-                ({projection.forecastItems.filter((f) => f.type === 'income').length})
+                ({activeProj.forecastItems.filter((f) => f.type === 'income').length})
               </span>
             </span>
 
             <span className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-rose-500 shrink-0" />
               <span>Salidas:</span>
-              <PrivacyAmount as="span" className="font-mono font-semibold text-[var(--finance-text-secondary)]">
-                −{fmtMoney(projection.committed)}
+              <PrivacyAmount as="span" className="tabular-nums font-semibold text-[var(--finance-text-secondary)]">
+                −{formatMoney(activeProj.committed)}
               </PrivacyAmount>
               <span className="text-[10px] opacity-75">
-                ({projection.commitments.length})
+                ({activeProj.commitments.length})
               </span>
             </span>
           </div>
@@ -223,9 +284,9 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
           <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/25 flex items-start gap-2.5 text-xs text-rose-700 dark:text-rose-300">
             <span className="text-base shrink-0 leading-none">⚠️</span>
             <div>
-              <strong className="block font-bold">Riesgo de Déficit detectado</strong>
+              <strong className="block font-bold">Riesgo de déficit</strong>
               <span>
-                Tu saldo proyecta caer a <PrivacyAmount as="strong" className="font-mono">{fmtMoney(projection.minProjectedBalance)}</PrivacyAmount> el día <strong className="font-mono">{fmtDate(projection.minBalanceDate)}</strong>. Se sugiere diferir compromisos o ingresar fondos para evitar sobregiro.
+                Saldo mínimo estimado: <PrivacyAmount as="strong" className="tabular-nums">{formatMoney(activeProj.minProjectedBalance)}</PrivacyAmount> el <strong className="tabular-nums">{fmtDate(activeProj.minBalanceDate)}</strong>. Diferí pagos o sumá fondos para evitar sobregiro.
               </span>
             </div>
           </div>
@@ -234,7 +295,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
             <div className="flex items-center gap-2">
               <span className="text-base shrink-0 leading-none">⚠️</span>
               <span>
-                El saldo caerá por debajo de tu colchón mínimo configurado (<PrivacyAmount as="strong" className="font-mono">{fmtMoney(projection.minProjectedBalance)}</PrivacyAmount> el {fmtDate(projection.minBalanceDate)}).
+                Saldo bajo el colchón previsto: <PrivacyAmount as="strong" className="tabular-nums">{formatMoney(activeProj.minProjectedBalance)}</PrivacyAmount> el {fmtDate(activeProj.minBalanceDate)}.
               </span>
             </div>
             <button type="button" onClick={onOpenCushionModal} className="text-[11px] font-bold underline cursor-pointer shrink-0">
@@ -254,10 +315,10 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                   </div>
                   <div>
                     <h4 className="font-bold text-[var(--finance-text-primary)] text-xs">
-                      Sin movimientos futuros para proyectar en los próximos {projHorizon} días
+                      Sin previsiones para los próximos {projHorizon} días
                     </h4>
                     <p className="text-[11px] text-[var(--finance-text-muted)] mt-0.5">
-                      Registrá un compromiso, una cuota o un cobro previsto para activar la simulación día a día.
+                      Agregá pagos o cobros para ver la proyección.
                     </p>
                   </div>
                 </div>
@@ -283,18 +344,18 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
           }
 
           return (
-            <div className="h-64 sm:h-72 w-full pt-2">
+            <div className="h-52 sm:h-60 w-full pt-2">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={projection.dailyTrajectory} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <AreaChart data={activeProj.dailyTrajectory} margin={{ top: 10, right: 10, left: 5, bottom: 0 }}>
                   <defs>
                     <linearGradient id="futureTrajGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={projection.isDeficit ? '#f43f5e' : '#10b981'} stopOpacity={0.28} />
-                      <stop offset="95%" stopColor={projection.isDeficit ? '#f43f5e' : '#10b981'} stopOpacity={0.0} />
+                      <stop offset="5%" stopColor={activeProj.isDeficit ? '#f43f5e' : '#10b981'} stopOpacity={0.28} />
+                      <stop offset="95%" stopColor={activeProj.isDeficit ? '#f43f5e' : '#10b981'} stopOpacity={0.0} />
                     </linearGradient>
                   </defs>
                   <XAxis
                     dataKey="date"
-                    tick={{ fill: 'var(--finance-text-muted)', fontSize: 10 }}
+                    tick={{ fill: 'var(--finance-text-muted)', fontSize: 13 }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(val) => {
@@ -304,44 +365,51 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                     }}
                   />
                   <YAxis
-                    tick={{ fill: 'var(--finance-text-muted)', fontSize: 10 }}
+                    width={54}
+                    tick={{ fill: 'var(--finance-text-muted)', fontSize: 13 }}
                     axisLine={false}
                     tickLine={false}
-                    tickFormatter={(v) => `$${v}`}
+                    tickFormatter={(v) => {
+                      const sym = activeCurrency === 'USD' ? 'US$' : '$';
+                      if (Math.abs(v) >= 1000000) return `${sym}${(v / 1000000).toFixed(1)}M`;
+                      if (Math.abs(v) >= 1000) return `${sym}${Math.round(v / 1000)}k`;
+                      return `${sym}${v}`;
+                    }}
                   />
                   <Tooltip
+                    cursor={{ stroke: 'rgba(99, 102, 241, 0.4)', strokeWidth: 1, strokeDasharray: '3 3' }}
                     content={({ active, payload }) => {
                       if (active && payload && payload.length) {
                         const pt = payload[0].payload;
-                        const dayEvents = projection.forecastItems.filter((f) => f.date === pt.date);
+                        const dayEvents = activeProj.forecastItems.filter((f) => f.date === pt.date);
                         return (
                           <div className="finance-surface-raised border border-[var(--finance-border)] p-3 rounded-xl shadow-xl text-xs space-y-1.5 min-w-[210px]">
                             <div className="flex items-center justify-between gap-2 border-b border-[var(--finance-border)] pb-1">
                               <p className="font-bold text-[var(--finance-text-primary)]">{fmtDate(pt.date)}</p>
                               {dayEvents.length > 0 && (
-                                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-bold">
+                                <span className="text-[10px] tabular-nums px-1.5 py-0.2 rounded bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 font-bold">
                                   {dayEvents.length} {dayEvents.length === 1 ? 'evento' : 'eventos'}
                                 </span>
                               )}
                             </div>
-                            <p className="font-mono text-indigo-600 dark:text-indigo-400 font-extrabold text-sm">
-                              Saldo estimado: <PrivacyAmount as="span">{fmtMoney(pt.endingBalance)}</PrivacyAmount>
+                            <p className="tabular-nums text-indigo-600 dark:text-indigo-400 font-extrabold text-sm">
+                              Saldo estimado: <PrivacyAmount as="span">{formatMoney(pt.endingBalance)}</PrivacyAmount>
                             </p>
                             {pt.netDayChange !== 0 && (
-                              <p className={`font-mono text-[11px] font-bold ${
+                              <p className={`tabular-nums text-[11px] font-bold ${
                                 pt.netDayChange > 0
                                   ? 'text-emerald-500'
                                   : pt.endingBalance < 0
                                   ? 'text-rose-500'
                                   : 'text-[var(--finance-text-primary)]'
                               }`}>
-                                Flujo neto: <PrivacyAmount as="span">{pt.netDayChange > 0 ? '+' : ''}{fmtMoney(pt.netDayChange)}</PrivacyAmount>
+                                Flujo neto: <PrivacyAmount as="span">{pt.netDayChange > 0 ? '+' : ''}{formatMoney(pt.netDayChange)}</PrivacyAmount>
                               </p>
                             )}
                             {dayEvents.length > 0 && (
                               <div className="pt-1.5 border-t border-[var(--finance-border)] space-y-1">
                                 <p className="text-[10px] uppercase font-bold tracking-wider text-[var(--finance-text-muted)]">
-                                  Hitos del día:
+                                  Movimientos previstos:
                                 </p>
                                 {dayEvents.map((ev) => {
                                   const m = identifyMerchant(ev.label);
@@ -351,8 +419,8 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                                         {m ? <span>{m.icon}</span> : <span>•</span>}
                                         <span className="truncate">{ev.label}</span>
                                       </span>
-                                      <PrivacyAmount as="span" className={`font-mono font-bold shrink-0 ${ev.type === 'income' ? 'text-emerald-500' : 'text-[var(--finance-text-primary)]'}`}>
-                                        {ev.type === 'income' ? '+' : '−'}{fmtMoney(ev.amount)}
+                                      <PrivacyAmount as="span" className={`tabular-nums font-bold shrink-0 ${ev.type === 'income' ? 'text-emerald-500' : 'text-[var(--finance-text-primary)]'}`}>
+                                        {ev.type === 'income' ? '+' : '−'}{formatMoney(ev.amount)}
                                       </PrivacyAmount>
                                     </div>
                                   );
@@ -398,7 +466,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                     key={item.id}
                     className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[var(--finance-border)] bg-[var(--finance-surface-subtle)] text-xs"
                   >
-                    <span className="font-mono text-[10px] font-bold text-[var(--finance-text-muted)]">
+                    <span className="tabular-nums text-[10px] font-bold text-[var(--finance-text-muted)]">
                       {fmtDate(item.date)}
                     </span>
                     {merchant ? (
@@ -418,13 +486,18 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                         {item.label}
                       </span>
                     )}
+                    {item.isFinancing && item.installmentNumber && (
+                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                        {item.installmentNumber}/{item.totalInstallments}
+                      </span>
+                    )}
                     <PrivacyAmount
                       as="span"
-                      className={`font-mono font-bold text-[11px] ${
+                      className={`tabular-nums font-bold text-[11px] ${
                         isIncome ? 'text-emerald-500' : 'text-[var(--finance-text-primary)]'
                       }`}
                     >
-                      {isIncome ? '+' : '−'}{fmtMoney(item.amount)}
+                      {isIncome ? '+' : '−'}{formatMoney(item.amount)}
                     </PrivacyAmount>
                   </div>
                 );
@@ -447,6 +520,9 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                 </h3>
                 <p className="text-xs text-[var(--finance-text-muted)]">
                   {sortedCommitments.length} compromiso{sortedCommitments.length === 1 ? '' : 's'} programado{sortedCommitments.length === 1 ? '' : 's'}
+                  {sortedCommitments.filter((c) => c.nextDueDate <= horizonEndDate).length < sortedCommitments.length && (
+                    <span className="opacity-80"> · {sortedCommitments.filter((c) => c.nextDueDate <= horizonEndDate).length} en el horizonte de {projHorizon}d</span>
+                  )}
                 </p>
               </div>
               <button
@@ -473,22 +549,23 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
             ) : (
               <div className="divide-y divide-[var(--finance-border)] max-h-[360px] overflow-y-auto pr-1">
                 {sortedCommitments.map((com) => {
-                  const isOverdue = com.nextDueDate < new Date().toISOString().slice(0, 10);
+                  const isOverdue = com.nextDueDate < todayISO();
                   return (
                     <div
                       key={com.id}
-                      className={`py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-2 text-xs transition-opacity ${
+                      id={`commitment-${com.id}`}
+                      className={`py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-2 text-xs transition-all rounded-xl px-1.5 ${
                         com.active ? 'opacity-100' : 'opacity-50'
                       }`}
                     >
                       <div className="min-w-0 space-y-0.5">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-bold text-[var(--finance-text-primary)] truncate">{com.name}</span>
-                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[var(--finance-surface-subtle)] text-[var(--finance-text-secondary)] border border-[var(--finance-border)]">
+                          <span className="text-[10px] tabular-nums px-1.5 py-0.2 rounded bg-[var(--finance-surface-subtle)] text-[var(--finance-text-secondary)] border border-[var(--finance-border)]">
                             {freqLabels[com.frequency] || com.frequency}
                           </span>
                           {com.remainingOccurrences != null && (
-                            <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                            <span className="text-[9px] tabular-nums font-bold px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300">
                               {com.remainingOccurrences} cuota{com.remainingOccurrences === 1 ? '' : 's'}
                             </span>
                           )}
@@ -502,15 +579,20 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                               Pausado
                             </span>
                           )}
+                          {com.nextDueDate > horizonEndDate && (
+                            <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-[var(--finance-surface-subtle)] text-[var(--finance-text-muted)] border border-[var(--finance-border)]" title={`Vence posterior al horizonte de ${projHorizon} días del gráfico`}>
+                              Posterior a {projHorizon}d
+                            </span>
+                          )}
                         </div>
                         <div className="text-[10px] text-[var(--finance-text-muted)]">
-                          Vence: <strong className={isOverdue && com.active ? 'text-rose-500 font-mono' : 'text-[var(--finance-text-secondary)] font-mono'}>{fmtDate(com.nextDueDate)}</strong>
+                          Vence: <strong className={isOverdue && com.active ? 'text-rose-500 tabular-nums' : 'text-[var(--finance-text-secondary)] tabular-nums'}>{fmtDate(com.nextDueDate)}</strong>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
-                        <PrivacyAmount as="span" className={`font-mono font-bold text-xs ${isOverdue && com.active ? 'text-rose-500' : 'text-[var(--finance-text-primary)]'}`}>
-                          −{fmtMoney(com.amount)}
+                        <PrivacyAmount as="span" className={`tabular-nums font-bold text-xs ${isOverdue && com.active ? 'text-rose-500' : 'text-[var(--finance-text-primary)]'}`}>
+                          −{formatMoney(com.amount, com.currency)}
                         </PrivacyAmount>
 
                         {com.active && (
@@ -563,10 +645,13 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
             <div className="flex items-center justify-between pb-2 border-b border-[var(--finance-border)]">
               <div>
                 <h3 className="text-sm font-extrabold text-[var(--finance-text-primary)]">
-                  Ingresos previstos
+                  Cobros previstos
                 </h3>
                 <p className="text-xs text-[var(--finance-text-muted)]">
                   {sortedIncomes.length} cobro{sortedIncomes.length === 1 ? '' : 's'} planificado{sortedIncomes.length === 1 ? '' : 's'}
+                  {sortedIncomes.filter((i) => i.startDate <= horizonEndDate).length < sortedIncomes.length && (
+                    <span className="opacity-80"> · {sortedIncomes.filter((i) => i.startDate <= horizonEndDate).length} en el horizonte de {projHorizon}d</span>
+                  )}
                 </p>
               </div>
               <button
@@ -602,7 +687,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                     <div className="min-w-0 space-y-0.5">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-bold text-[var(--finance-text-primary)] truncate">{inc.name}</span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[var(--finance-surface-subtle)] text-[var(--finance-text-secondary)] border border-[var(--finance-border)]">
+                        <span className="text-[10px] tabular-nums px-1.5 py-0.2 rounded bg-[var(--finance-surface-subtle)] text-[var(--finance-text-secondary)] border border-[var(--finance-border)]">
                           {freqLabels[inc.frequency] || inc.frequency}
                         </span>
                         {!inc.active && (
@@ -610,25 +695,32 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                             Pausado
                           </span>
                         )}
+                        {inc.startDate > horizonEndDate && (
+                          <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-[var(--finance-surface-subtle)] text-[var(--finance-text-muted)] border border-[var(--finance-border)]" title={`Previsto luego del horizonte de ${projHorizon} días del gráfico`}>
+                            Posterior a {projHorizon}d
+                          </span>
+                        )}
                       </div>
                       <div className="text-[10px] text-[var(--finance-text-muted)]">
-                        Desde: <strong className="font-mono text-[var(--finance-text-secondary)]">{fmtDate(inc.startDate)}</strong>
+                        Desde: <strong className="tabular-nums text-[var(--finance-text-secondary)]">{fmtDate(inc.startDate)}</strong>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      <PrivacyAmount as="span" className="font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
-                        +{fmtMoney(inc.amount)}
+                      <PrivacyAmount as="span" className="tabular-nums font-bold text-xs text-emerald-600 dark:text-emerald-400">
+                        +{formatMoney(inc.amount, inc.currency)}
                       </PrivacyAmount>
 
-                      <button
-                        type="button"
-                        onClick={() => onConfirmIncomeReal(inc)}
-                        className="px-2 py-0.5 rounded-lg text-xs font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 cursor-pointer transition-colors"
-                        title="Registrar como cobrado hoy"
-                      >
-                        Cobrado
-                      </button>
+                      {inc.active && (
+                        <button
+                          type="button"
+                          onClick={() => onConfirmIncomeReal(inc)}
+                          className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer transition-colors shadow-2xs"
+                          title="Confirmar cobro real hoy"
+                        >
+                          Confirmar cobro
+                        </button>
+                      )}
 
                       <button
                         type="button"
@@ -670,16 +762,16 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-extrabold text-[var(--finance-text-primary)]">
-                  Suscripciones y servicios recurrentes
+                  Suscripciones
                 </h3>
                 {totalSubs > 0 && (
-                  <span className="text-xs font-mono font-bold text-rose-500">
-                    (−<PrivacyAmount as="span">{fmtMoney(totalSubs)}</PrivacyAmount>/mes)
+                  <span className="text-xs tabular-nums font-bold text-rose-500">
+                    (−<PrivacyAmount as="span">{formatMoney(totalSubs)}</PrivacyAmount>/mes)
                   </span>
                 )}
               </div>
               <p className="text-xs text-[var(--finance-text-muted)] mt-0.5">
-                Costos fijos mensuales que impactan directamente tu liquidez proyectada
+                Incluidas en la proyección mensual.
               </p>
             </div>
 
@@ -717,15 +809,15 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                     </div>
                     <div className="min-w-0">
                       <span className="font-semibold text-[var(--finance-text-primary)] block truncate">{sub.name}</span>
-                      <span className="text-[10px] text-[var(--finance-text-muted)] font-mono">
+                      <span className="text-[10px] text-[var(--finance-text-muted)] tabular-nums">
                         {sub.dueDay ? `Día ${sub.dueDay} de cada mes` : 'Cobro mensual'}
                       </span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3 shrink-0">
-                    <PrivacyAmount as="span" className="font-mono font-bold text-xs text-rose-500">
-                      −{fmtMoney(sub.amount)}
+                    <PrivacyAmount as="span" className="tabular-nums font-bold text-xs text-rose-500">
+                      −{formatMoney(sub.amount, (sub as any).currency)}
                     </PrivacyAmount>
                     {onDeleteSubscription && (
                       <button
@@ -754,13 +846,13 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
             >
               <div>
                 <h3 className="text-xs font-extrabold text-[var(--finance-text-primary)]">
-                  Cronograma Detallado de Flujos ({projHorizon} días)
+                  Pagos y cobros por fecha ({projHorizon} días)
                 </h3>
                 <p className="text-[11px] text-[var(--finance-text-muted)]">
                   {projection.forecastItems.length} eventos de cobro y pago proyectados día por día
                 </p>
               </div>
-              <span className="text-xs font-mono font-bold text-[var(--finance-text-muted)]">
+              <span className="text-xs tabular-nums font-bold text-[var(--finance-text-muted)]">
                 {showScheduleDetails ? 'Ocultar cronograma ▴' : 'Ver cronograma día por día ▾'}
               </span>
             </button>
@@ -779,7 +871,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                   <tbody className="divide-y divide-[var(--finance-border)]">
                     {projection.forecastItems.map((item, idx) => (
                       <tr key={`${item.id}-${idx}`} className="hover:bg-[var(--finance-surface-hover)] transition-colors">
-                        <td className="py-2 px-3 font-mono text-[var(--finance-text-primary)] whitespace-nowrap">{fmtDate(item.date)}</td>
+                        <td className="py-2 px-3 tabular-nums text-[var(--finance-text-primary)] whitespace-nowrap">{fmtDate(item.date)}</td>
                         <td className="py-2 px-3 whitespace-nowrap">
                           <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
                             item.type === 'income'
@@ -791,8 +883,15 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                             {item.type === 'income' ? 'Ingreso' : item.isOverdue ? 'Vencido' : 'Salida prevista'}
                           </span>
                         </td>
-                        <td className="py-2 px-3 font-medium text-[var(--finance-text-primary)]">{item.label}</td>
-                        <td className={`py-2 px-3 text-right font-mono font-bold whitespace-nowrap ${
+                        <td className="py-2 px-3 font-medium text-[var(--finance-text-primary)]">
+                          <span>{item.label}</span>
+                          {item.isFinancing && item.installmentNumber && (
+                            <span className="ml-2 text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                              Cuota {item.installmentNumber}/{item.totalInstallments}
+                            </span>
+                          )}
+                        </td>
+                        <td className={`py-2 px-3 text-right tabular-nums font-bold whitespace-nowrap ${
                           item.type === 'income'
                             ? 'text-emerald-600 dark:text-emerald-400'
                             : item.isOverdue
@@ -800,7 +899,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                             : 'text-[var(--finance-text-primary)]'
                         }`}>
                           <PrivacyAmount>
-                            {item.type === 'income' ? '+' : '−'}{fmtMoney(item.amount)}
+                            {item.type === 'income' ? '+' : '−'}{formatMoney(item.amount)}
                           </PrivacyAmount>
                         </td>
                       </tr>
@@ -854,13 +953,12 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                 </label>
                 <input
                   required
-                  type="number"
-                  step="any"
-                  min="0.01"
+                  type="text"
+                  inputMode="decimal"
                   value={subAmount}
                   onChange={(e) => setSubAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full p-2.5 text-xs font-mono font-bold rounded-xl finance-control border border-[var(--finance-border)] text-[var(--finance-text-primary)] outline-none focus:border-indigo-500"
+                  placeholder="0,00"
+                  className="w-full p-2.5 text-xs tabular-nums font-bold rounded-xl finance-control border border-[var(--finance-border)] text-[var(--finance-text-primary)] outline-none focus:border-indigo-500"
                 />
               </div>
               <div>
@@ -874,7 +972,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                   value={subDueDay}
                   onChange={(e) => setSubDueDay(e.target.value)}
                   placeholder="1 - 31"
-                  className="w-full p-2.5 text-xs font-mono rounded-xl finance-control border border-[var(--finance-border)] text-[var(--finance-text-primary)] outline-none focus:border-indigo-500"
+                  className="w-full p-2.5 text-xs tabular-nums rounded-xl finance-control border border-[var(--finance-border)] text-[var(--finance-text-primary)] outline-none focus:border-indigo-500"
                 />
               </div>
               <button

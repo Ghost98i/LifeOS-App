@@ -1,359 +1,317 @@
-import React, { useState } from 'react';
-import { LifeOSState, JobApplication } from '../types';
-import {
-  todayISO,
-  fmtDate,
-  ESTADO_LABELS,
-  uid,
-} from '../lib/storage';
+import React, { useEffect, useState } from 'react';
+import { JobApplication, JobApplicationType, LifeOSState } from '../types';
+import { todayISO, fmtDate, uid } from '../lib/storage';
 import { jobStats } from '../lib/calculations';
 import { JobKanbanBoard } from './JobKanbanBoard';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
+import { ContextualHelp } from './ContextualHelp';
+import {
+  filterJobApplications,
+  getJobApplicationType,
+  getJobStageLabel,
+  isJobStatusForType,
+  JOB_STAGES,
+  JobApplicationDraft,
+  JobTypeFilter,
+  saveJobApplication,
+} from '../lib/jobApplications';
 
 interface TrabajoViewProps {
   state: LifeOSState;
-  onUpdateState: (updater: (draft: LifeOSState) => void) => void;
+  onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
 }
 
+const NO_JOB_APPLICATIONS: JobApplication[] = [];
+
+const emptyForm = (tipo: JobApplicationType = 'convencional'): JobApplicationDraft => ({
+  tipo,
+  empresa: '',
+  puesto: '',
+  estado: tipo === 'concurso' ? 'pendiente_inscripcion' : 'pendiente',
+  fecha: todayISO(),
+  reclutador: '',
+  notas: '',
+  link: '',
+  nextAction: '',
+  nextActionDate: '',
+});
+
+const initialProcessType = (applications: JobApplication[]): JobTypeFilter =>
+  applications.length > 0 && applications.every((application) => getJobApplicationType(application) === 'concurso')
+    ? 'concurso'
+    : 'convencional';
+
 export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }) => {
-  const [empresa, setEmpresa] = useState('');
-  const [puesto, setPuesto] = useState('');
-  const [estado, setEstado] = useState<JobApplication['estado']>('cv_enviado');
-  const [fecha, setFecha] = useState(todayISO());
-  const [reclutador, setReclutador] = useState('');
+  const applications = state.jobs?.applications || NO_JOB_APPLICATIONS;
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
+  const [processType, setProcessType] = useState<JobTypeFilter>(() => initialProcessType(applications));
+  const [processTypeChosen, setProcessTypeChosen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState<JobApplicationDraft>(() => emptyForm(initialProcessType(applications) === 'concurso' ? 'concurso' : 'convencional'));
+  const [tableSearch, setTableSearch] = useState('');
+  const [formError, setFormError] = useState('');
+  const today = todayISO();
 
-  const jstats = jobStats(state);
+  // If persisted data arrives after the view mounts, choose a useful initial pipeline only
+  // until the user has made a process selection of their own.
+  useEffect(() => {
+    if (!processTypeChosen && applications.length > 0 && applications.every((application) => getJobApplicationType(application) === 'concurso')) {
+      setProcessType('concurso');
+    }
+  }, [applications, processTypeChosen]);
 
-  const handleAddApplication = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!empresa.trim()) return;
-    onUpdateState((draft) => {
-      if (!draft.jobs) draft.jobs = { applications: [] };
-      if (!draft.jobs.applications) draft.jobs.applications = [];
-      draft.jobs.applications.push({
-        id: uid(),
-        empresa: empresa.trim(),
-        puesto: puesto.trim(),
-        estado,
-        fecha: fecha || todayISO(),
-        reclutador: reclutador.trim(),
-        notas: '',
-        link: '',
-        nextAction: '',
-        nextActionDate: '',
-      });
-    });
-    setEmpresa('');
-    setPuesto('');
-    setReclutador('');
+  const scopedApplications = filterJobApplications(applications, processType);
+  const stats = jobStats(state, processType);
+  const nextWeek = new Date(`${today}T12:00:00`);
+  nextWeek.setDate(nextWeek.getDate() + 7);
+  const nextWeekISO = `${nextWeek.getFullYear()}-${String(nextWeek.getMonth() + 1).padStart(2, '0')}-${String(nextWeek.getDate()).padStart(2, '0')}`;
+  const relevantFollowups = scopedApplications
+    .filter((application) => application.nextActionDate && application.nextActionDate <= nextWeekISO)
+    .sort((a, b) => (a.nextActionDate || '').localeCompare(b.nextActionDate || ''));
+  const visibleApplications = scopedApplications.filter((application) => {
+    const query = tableSearch.trim().toLocaleLowerCase();
+    return !query || [application.empresa, application.puesto, application.estado, application.reclutador, application.notas, application.nextAction]
+      .some((value) => value?.toLocaleLowerCase().includes(query));
+  });
+  const stageCompatible = isJobStatusForType(form.tipo, form.estado);
+
+  const chooseProcessType = (tipo: JobTypeFilter) => {
+    setProcessType(tipo);
+    setProcessTypeChosen(true);
   };
 
-  const handleSetEstado = (id: string, newEstado: JobApplication['estado']) => {
-    onUpdateState((draft) => {
-      if (!draft.jobs) draft.jobs = { applications: [] };
-      if (!draft.jobs.applications) draft.jobs.applications = [];
-      const app = draft.jobs.applications.find((a) => a.id === id);
-      if (app) app.estado = newEstado;
-    });
+  const openCreateForm = () => {
+    setEditingId(null);
+    setForm(emptyForm(processType === 'todos' ? 'convencional' : processType));
+    setFormError('');
+    setFormOpen(true);
   };
 
-  const handleSetNextAction = (id: string, nextAction: string) => {
-    onUpdateState((draft) => {
-      if (!draft.jobs) draft.jobs = { applications: [] };
-      if (!draft.jobs.applications) draft.jobs.applications = [];
-      const app = draft.jobs.applications.find((a) => a.id === id);
-      if (app) app.nextAction = nextAction;
+  const openEditForm = (application: JobApplication) => {
+    const tipo = getJobApplicationType(application);
+    setEditingId(application.id);
+    setForm({
+      tipo,
+      empresa: application.empresa,
+      puesto: application.puesto,
+      estado: application.estado,
+      fecha: application.fecha,
+      reclutador: application.reclutador || '',
+      notas: application.notas || '',
+      link: application.link || '',
+      nextAction: application.nextAction || '',
+      nextActionDate: application.nextActionDate || '',
     });
+    setFormError('');
+    setFormOpen(true);
   };
 
-  const handleSetNextActionDate = (id: string, nextActionDate: string) => {
+  const closeForm = () => {
+    setFormOpen(false);
+    setEditingId(null);
+    setFormError('');
+  };
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!form.empresa.trim()) return;
+    if (!stageCompatible) {
+      setFormError('Elegí una etapa válida para el tipo de proceso seleccionado. La etapa anterior se mantiene hasta que confirmes una compatible.');
+      return;
+    }
+
+    const draft: JobApplicationDraft = {
+      ...form,
+      empresa: form.empresa.trim(),
+      puesto: form.puesto.trim(),
+      reclutador: form.reclutador.trim(),
+    };
+    const saved = onUpdateState((stateDraft) => {
+      if (!stateDraft.jobs) stateDraft.jobs = { opportunities: [], applications: [] };
+      if (!stateDraft.jobs.applications) stateDraft.jobs.applications = [];
+      const result = saveJobApplication(stateDraft.jobs.applications, draft, editingId, uid);
+      if (result.saved) stateDraft.jobs.applications = result.applications;
+    });
+    if (saved === false) {
+      setFormError('No se pudo guardar. Conservamos los datos para que puedas reintentar.');
+      return;
+    }
+
+    if (processType !== 'todos') chooseProcessType(form.tipo);
+    closeForm();
+  };
+
+  const handleSetEstado = (id: string, estado: JobApplication['estado']) => {
     onUpdateState((draft) => {
-      if (!draft.jobs) draft.jobs = { applications: [] };
-      if (!draft.jobs.applications) draft.jobs.applications = [];
-      const app = draft.jobs.applications.find((a) => a.id === id);
-      if (app) app.nextActionDate = nextActionDate;
+      const application = (draft.jobs?.applications || []).find((candidate) => candidate.id === id);
+      if (application && isJobStatusForType(getJobApplicationType(application), estado)) application.estado = estado;
     });
   };
 
   const handleDeleteApplication = (id: string) => {
     onUpdateState((draft) => {
-      if (!draft.jobs) draft.jobs = { applications: [] };
-      draft.jobs.applications = (draft.jobs.applications || []).filter((a) => a.id !== id);
+      if (draft.jobs) draft.jobs.applications = (draft.jobs.applications || []).filter((application) => application.id !== id);
     });
   };
 
-  const handleQuickAddInColumn = (colEstado: JobApplication['estado']) => {
-    setEstado(colEstado);
-    const el = document.getElementById('qa-focus-trabajo');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      const input = el.querySelector('input');
-      if (input) input.focus();
-    }
-  };
+  const fieldClass = 'w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2.5 text-sm text-[var(--text)] outline-hidden focus:border-[var(--blue)]';
+  const labelClass = 'mb-1 block text-xs font-semibold text-[var(--text-soft)]';
+  const typeLabel = (tipo: JobApplicationType) => tipo === 'concurso' ? 'Concurso público' : 'Empleo convencional';
 
   return (
-    <div className="space-y-6">
+    <div className="product-refinement space-y-5">
       <PageHeader
-        title="Trabajo & Empleo"
-        subtitle="Postulaciones, embudo de entrevistas y seguimiento laboral centralizado."
+        title="Trabajo y empleo"
         actions={
-          <button
-            type="button"
-            onClick={() => handleQuickAddInColumn('pendiente')}
-            className="px-3.5 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
-          >
-            <AppIcon name="plus" className="h-3.5 w-3.5" />
-            <span>Nueva postulación</span>
+          <button id="qa-focus-trabajo" type="button" onClick={openCreateForm} className="flex min-h-11 items-center gap-2 rounded-xl bg-[var(--blue)] px-4 py-2 text-sm font-bold text-white shadow-xs transition-colors hover:bg-[var(--blue-hover)]">
+            <AppIcon name="plus" className="h-4 w-4" /> Nueva postulación
           </button>
         }
       />
 
-      {/* Metrics Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="lifeos-stat-card">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">CVs enviados</span>
-            <AppIcon name="note" className="h-4 w-4 text-[var(--blue)] shrink-0" />
+      {applications.length > 0 && (
+        <>
+        <div className="grid grid-cols-2 gap-2 lg:hidden">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2">
+            <span className="block text-xs font-semibold text-[var(--text-faint)]">Postulaciones</span>
+            <span className="text-lg font-extrabold tabular-nums text-[var(--text)]">{scopedApplications.length}</span>
           </div>
-          <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{jstats.cvEnviados}</div>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2">
+            <span className="block text-xs font-semibold text-[var(--text-faint)]">Seguimientos vencidos o de hoy</span>
+            <span className={`text-lg font-extrabold tabular-nums ${stats.seguimientosPendientes ? 'text-red-500' : 'text-[var(--text)]'}`}>{stats.seguimientosPendientes}</span>
+          </div>
         </div>
-        <div className="lifeos-stat-card">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Entrevistas</span>
-            <AppIcon name="checkCircle" className="h-4 w-4 text-emerald-500 shrink-0" />
+        <details className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 lg:hidden">
+          <summary className="min-h-8 cursor-pointer content-center text-xs font-semibold text-[var(--text-soft)]">Ver otras métricas</summary>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {processType === 'convencional' && <>
+              <div><span className="block text-xs text-[var(--text-faint)]">CV enviados</span><strong className="text-sm tabular-nums text-[var(--text)]">{stats.cvEnviados}</strong></div>
+              <div><span className="block text-xs text-[var(--text-faint)]">Entrevistas</span><strong className="text-sm tabular-nums text-[var(--text)]">{stats.entrevistas}</strong></div>
+              <div><span className="block text-xs text-[var(--text-faint)]">Empresas</span><strong className="text-sm tabular-nums text-[var(--text)]">{stats.empresas}</strong></div>
+            </>}
+            {processType === 'concurso' && <>
+              <div><span className="block text-xs text-[var(--text-faint)]">Inscripciones avanzadas</span><strong className="text-sm tabular-nums text-[var(--text)]">{stats.inscripciones}</strong></div>
+              <div><span className="block text-xs text-[var(--text-faint)]">Ingresos confirmados</span><strong className="text-sm tabular-nums text-[var(--text)]">{stats.ingresosConfirmados}</strong></div>
+              <div><span className="block text-xs text-[var(--text-faint)]">Organismos</span><strong className="text-sm tabular-nums text-[var(--text)]">{stats.empresas}</strong></div>
+            </>}
+            {processType === 'todos' && <>
+              <div><span className="block text-xs text-[var(--text-faint)]">CV enviados · empleo</span><strong className="text-sm tabular-nums text-[var(--text)]">{stats.cvEnviados}</strong></div>
+              <div><span className="block text-xs text-[var(--text-faint)]">Inscripciones · concursos</span><strong className="text-sm tabular-nums text-[var(--text)]">{stats.inscripciones}</strong></div>
+            </>}
           </div>
-          <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{jstats.entrevistas}</div>
+        </details>
+
+        <div className="hidden grid-cols-2 gap-2 lg:grid lg:grid-cols-4 lg:gap-3">
+          {processType === 'convencional' && <>
+            <div className="lifeos-stat-card"><span className="text-xs font-semibold text-[var(--text-faint)]">CV enviados</span><div className="mt-1 text-2xl font-extrabold tabular-nums text-[var(--text)]">{stats.cvEnviados}</div></div>
+            <div className="lifeos-stat-card"><span className="text-xs font-semibold text-[var(--text-faint)]">Entrevistas</span><div className="mt-1 text-2xl font-extrabold tabular-nums text-[var(--text)]">{stats.entrevistas}</div></div>
+            <div className="lifeos-stat-card"><span className="text-xs font-semibold text-[var(--text-faint)]">Empresas</span><div className="mt-1 text-2xl font-extrabold tabular-nums text-[var(--text)]">{stats.empresas}</div></div>
+          </>}
+          {processType === 'concurso' && <>
+            <div className="lifeos-stat-card"><span className="text-xs font-semibold text-[var(--text-faint)]">Inscripciones avanzadas</span><div className="mt-1 text-2xl font-extrabold tabular-nums text-[var(--text)]">{stats.inscripciones}</div></div>
+            <div className="lifeos-stat-card"><span className="text-xs font-semibold text-[var(--text-faint)]">Ingresos confirmados</span><div className="mt-1 text-2xl font-extrabold tabular-nums text-[var(--text)]">{stats.ingresosConfirmados}</div></div>
+            <div className="lifeos-stat-card"><span className="text-xs font-semibold text-[var(--text-faint)]">Organismos</span><div className="mt-1 text-2xl font-extrabold tabular-nums text-[var(--text)]">{stats.empresas}</div></div>
+          </>}
+          {processType === 'todos' && <>
+            <div className="lifeos-stat-card"><span className="text-xs font-semibold text-[var(--text-faint)]">CV enviados · empleo</span><div className="mt-1 text-2xl font-extrabold tabular-nums text-[var(--text)]">{stats.cvEnviados}</div></div>
+            <div className="lifeos-stat-card"><span className="text-xs font-semibold text-[var(--text-faint)]">Inscripciones · concursos</span><div className="mt-1 text-2xl font-extrabold tabular-nums text-[var(--text)]">{stats.inscripciones}</div></div>
+            <div className="lifeos-stat-card"><span className="text-xs font-semibold text-[var(--text-faint)]">Procesos</span><div className="mt-1 text-2xl font-extrabold tabular-nums text-[var(--text)]">{scopedApplications.length}</div></div>
+          </>}
+          <div className="lifeos-stat-card"><span className="text-xs font-semibold text-[var(--text-faint)]">Seguimientos para hoy o vencidos</span><div className={`mt-1 text-2xl font-extrabold tabular-nums ${stats.seguimientosPendientes ? 'text-red-500' : 'text-[var(--text)]'}`}>{stats.seguimientosPendientes}</div></div>
         </div>
-        <div className="lifeos-stat-card">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Empresas</span>
-            <AppIcon name="briefcase" className="h-4 w-4 text-[var(--blue)] shrink-0" />
+        </>
+      )}
+
+      {formOpen && (
+        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5" aria-labelledby="job-form-title">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 id="job-form-title" className="text-base font-bold text-[var(--text)]">{editingId ? 'Editar postulación' : 'Nueva postulación'}</h2>
+            <button type="button" onClick={closeForm} className="min-h-10 rounded-lg px-3 text-sm text-[var(--text-soft)] hover:bg-[var(--surface-muted)]">Cerrar</button>
           </div>
-          <div className="text-2xl font-extrabold font-mono mt-1 text-[var(--text)]">{jstats.empresas}</div>
+          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <label className={labelClass}>Tipo de proceso<select value={form.tipo} onChange={(e) => { setForm({ ...form, tipo: e.target.value as JobApplicationType }); setFormError(''); }} className={`${fieldClass} mt-1`}><option value="convencional">Empleo convencional</option><option value="concurso">Concurso público</option></select></label>
+            <label className={labelClass}>{form.tipo === 'concurso' ? 'Organismo' : 'Empresa'}<input required autoFocus value={form.empresa} onChange={(e) => setForm({ ...form, empresa: e.target.value })} placeholder={form.tipo === 'concurso' ? 'Ej.: Ministerio de Salud Pública' : 'Ej.: Scotiabank'} className={`${fieldClass} mt-1`} /></label>
+            <label className={labelClass}>{form.tipo === 'concurso' ? 'Cargo' : 'Puesto'}<input value={form.puesto} onChange={(e) => setForm({ ...form, puesto: e.target.value })} placeholder={form.tipo === 'concurso' ? 'Ej.: Administrativo III' : 'Ej.: Analista'} className={`${fieldClass} mt-1`} /></label>
+            <label className={labelClass}>Estado<select value={stageCompatible ? form.estado : ''} onChange={(e) => { setForm({ ...form, estado: e.target.value as JobApplication['estado'] }); setFormError(''); }} className={`${fieldClass} mt-1`}><option value="" disabled>Elegí una etapa</option>{JOB_STAGES[form.tipo].map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}</select>{!stageCompatible && <span className="mt-1 block text-xs text-amber-700 dark:text-amber-300">La etapa guardada pertenece al otro tipo. Seleccioná una etapa compatible; los datos actuales se conservan hasta guardar.</span>}</label>
+            <label className={labelClass}>Fecha<input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} className={`${fieldClass} mt-1`} /></label>
+            <label className={labelClass}>{form.tipo === 'concurso' ? 'Contacto / referente' : 'Contacto / LinkedIn'}<input value={form.reclutador} onChange={(e) => setForm({ ...form, reclutador: e.target.value })} placeholder="Opcional" className={`${fieldClass} mt-1`} /></label>
+            <label className={labelClass}>Enlace a la publicación<input type="url" value={form.link} onChange={(e) => setForm({ ...form, link: e.target.value })} placeholder="https://…" className={`${fieldClass} mt-1`} /></label>
+            <label className={`${labelClass} sm:col-span-2 lg:col-span-3`}>Notas<textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} className={`${fieldClass} mt-1 resize-y`} /></label>
+            <label className={labelClass}>Próxima acción<input value={form.nextAction} onChange={(e) => setForm({ ...form, nextAction: e.target.value })} placeholder="Ej.: Consultar por el proceso" className={`${fieldClass} mt-1`} /></label>
+            <label className={labelClass}>Fecha del seguimiento<input type="date" value={form.nextActionDate} onChange={(e) => setForm({ ...form, nextActionDate: e.target.value })} className={`${fieldClass} mt-1`} /></label>
+            {formError && <p role="alert" className="text-sm font-medium text-amber-700 dark:text-amber-300 sm:col-span-2 lg:col-span-3">{formError}</p>}
+            <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
+              <button type="submit" disabled={!stageCompatible} className="min-h-11 rounded-xl bg-[var(--blue)] px-4 py-2 text-sm font-bold text-white hover:bg-[var(--blue-hover)] disabled:cursor-not-allowed disabled:opacity-50">{editingId ? 'Guardar cambios' : 'Agregar postulación'}</button>
+              <button type="button" onClick={closeForm} className="min-h-11 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-muted)]">Cancelar</button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <div className="space-y-2">
+        <div className="flex w-full items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1 sm:ml-auto sm:w-fit">
+          <button type="button" onClick={() => setViewMode('kanban')} aria-pressed={viewMode === 'kanban'} className={`min-h-10 flex-1 rounded-lg px-3 text-xs font-semibold sm:flex-none ${viewMode === 'kanban' ? 'bg-[var(--card)] text-[var(--text)] shadow-xs' : 'text-[var(--text-soft)]'}`}><span className="inline-flex items-center justify-center gap-1.5"><AppIcon name="dashboard" className="h-3.5 w-3.5" /> Tablero</span></button>
+          <button type="button" onClick={() => setViewMode('table')} aria-pressed={viewMode === 'table'} className={`min-h-10 flex-1 rounded-lg px-3 text-xs font-semibold sm:flex-none ${viewMode === 'table' ? 'bg-[var(--card)] text-[var(--text)] shadow-xs' : 'text-[var(--text-soft)]'}`}><span className="inline-flex items-center justify-center gap-1.5"><AppIcon name="list" className="h-3.5 w-3.5" /> Lista / Tabla</span></button>
         </div>
-        <div className="lifeos-stat-card">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Seguimientos hoy</span>
-            <AppIcon name="clock" className={`h-4 w-4 shrink-0 ${jstats.seguimientosPendientes > 0 ? 'text-red-500' : 'text-[var(--text-faint)]'}`} />
-          </div>
-          <div className={`text-2xl font-extrabold font-mono mt-1 ${jstats.seguimientosPendientes > 0 ? 'text-red-500' : 'text-[var(--text)]'}`}>
-            {jstats.seguimientosPendientes}
-          </div>
-          <p className="text-[11px] text-[var(--text-soft)] mt-0.5">aparecen en el Dashboard</p>
-        </div>
+        <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-soft)]">Proceso<select aria-label="Filtrar por tipo de proceso" value={processType} onChange={(e) => chooseProcessType(e.target.value as JobTypeFilter)} className="min-h-10 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm text-[var(--text)]"><option value="convencional">Empleo convencional</option><option value="concurso">Concurso público</option><option value="todos">Todos los procesos (solo en Lista)</option></select></label>
       </div>
 
-      {/* Add Form */}
-      <div id="qa-focus-trabajo" className="space-y-2">
-        <h2 className="text-sm font-bold text-[var(--text)]">Nueva postulación</h2>
-        <form onSubmit={handleAddApplication} className="flex flex-wrap items-end gap-2 p-4 bg-[var(--bg)] border border-dashed border-[var(--border)] rounded-2xl">
-          <div className="min-w-[140px] flex-1">
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Empresa</label>
-            <input
-              type="text"
-              value={empresa}
-              onChange={(e) => setEmpresa(e.target.value)}
-              placeholder="Ej: Scotiabank"
-              className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
-            />
-          </div>
-          <div className="min-w-[140px] flex-1">
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Puesto</label>
-            <input
-              type="text"
-              value={puesto}
-              onChange={(e) => setPuesto(e.target.value)}
-              placeholder="Ej: Analista"
-              className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
-            />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Estado</label>
-            <select
-              value={estado}
-              onChange={(e) => setEstado(e.target.value as any)}
-              className="px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)] cursor-pointer"
-            >
-              {Object.entries(ESTADO_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>
-                  {v}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Fecha</label>
-            <input
-              type="date"
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              className="px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
-            />
-          </div>
-          <div className="min-w-[140px] flex-1">
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Reclutador / LinkedIn</label>
-            <input
-              type="text"
-              value={reclutador}
-              onChange={(e) => setReclutador(e.target.value)}
-              placeholder="Opcional"
-              className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
-            />
-          </div>
-          <button
-            type="submit"
-            className="flex items-center gap-1.5 px-4 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs"
-          >
-            <AppIcon name="plus" className="h-3.5 w-3.5" />
-            <span>Agregar</span>
-          </button>
-        </form>
-      </div>
+      {applications.length === 0 ? (
+        <section className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] px-5 py-10 text-center sm:py-14">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-muted)] text-[var(--blue)]"><AppIcon name="briefcase" className="h-6 w-6" /></div>
+          <h2 className="text-lg font-bold text-[var(--text)]">Tu búsqueda empieza acá</h2>
+          <p className="mx-auto mt-1 max-w-md text-sm text-[var(--text-soft)]">Registrá una postulación laboral o un concurso público con su etapa y próximo seguimiento.</p>
+          {!formOpen && <button type="button" onClick={openCreateForm} className="mt-5 min-h-11 rounded-xl bg-[var(--blue)] px-4 py-2 text-sm font-bold text-white hover:bg-[var(--blue-hover)]">Crear primera postulación</button>}
+        </section>
+      ) : (
+        <section className="space-y-3">
+          <div className="flex items-center gap-1"><h2 className="text-base font-bold text-[var(--text)]">Postulaciones <span className="ml-1 text-sm font-normal text-[var(--text-soft)]">{scopedApplications.length}</span></h2><ContextualHelp label="Estados de las postulaciones">{processType === 'concurso' ? 'Las etapas del llamado no son obligatorias ni secuenciales. «Ingreso confirmado» indica que vas a ingresar al cargo.' : processType === 'todos' ? 'Cada proceso conserva sus etapas. «Oferta recibida» es una propuesta laboral; «Contratado» e «Ingreso confirmado» indican un ingreso confirmado.' : '«Oferta recibida» es una propuesta laboral. «Contratado» indica que el ingreso está confirmado.'}</ContextualHelp></div>
 
-      {/* Applications Pipeline Section */}
-      <div className="space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div>
-            <h2 className="text-base font-bold text-[var(--text)] flex items-center gap-2">
-              Postulaciones y Pipeline
-              <span className="text-xs font-semibold text-[var(--text-faint)] bg-[var(--bg)] px-2.5 py-0.5 rounded-md border border-[var(--border)]">
-                {state.jobs.applications.length}
-              </span>
-            </h2>
-            <p className="text-xs text-[var(--text-soft)]">
-              Organizado en columnas por fase o en vista de lista detallada.
-            </p>
-          </div>
+          {relevantFollowups.length > 0 && (
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 sm:p-4">
+              <h3 className="mb-2 text-sm font-bold text-[var(--text)]">Próximos seguimientos</h3>
+              <ul className="divide-y divide-[var(--border)]">
+                {relevantFollowups.map((application) => {
+                  const overdue = Boolean(application.nextActionDate && application.nextActionDate < today);
+                  return <li key={application.id} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0"><div className="min-w-0"><p className="truncate text-sm font-semibold text-[var(--text)]">{application.nextAction || 'Seguimiento'} · {application.empresa}</p><p className={`mt-0.5 text-xs ${overdue ? 'font-semibold text-red-500' : 'text-[var(--text-soft)]'}`}>{overdue ? 'Vencido' : application.nextActionDate === today ? 'Hoy' : 'Próximo'} · {fmtDate(application.nextActionDate || '')}</p></div><button type="button" onClick={() => openEditForm(application)} className="min-h-10 shrink-0 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-muted)]">Ver / editar</button></li>;
+                })}
+              </ul>
+            </div>
+          )}
 
-          {/* View Switcher: Kanban vs Table */}
-          <div className="flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1 self-start sm:self-auto">
-            <button
-              type="button"
-              onClick={() => setViewMode('kanban')}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
-                viewMode === 'kanban'
-                  ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
-                  : 'text-[var(--text-soft)] hover:text-[var(--text)]'
-              }`}
-            >
-              <AppIcon name="dashboard" className="h-3.5 w-3.5" />
-              <span>Tablero Kanban</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('table')}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
-                viewMode === 'table'
-                  ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
-                  : 'text-[var(--text-soft)] hover:text-[var(--text)]'
-              }`}
-            >
-              <AppIcon name="filter" className="h-3.5 w-3.5" />
-              <span>Lista / Tabla</span>
-            </button>
-          </div>
-        </div>
-
-        {/* View content */}
-        {viewMode === 'kanban' ? (
-          <JobKanbanBoard
-            applications={state.jobs?.applications || []}
-            onSetEstado={handleSetEstado}
-            onSetNextAction={handleSetNextAction}
-            onSetNextActionDate={handleSetNextActionDate}
-            onDeleteApplication={handleDeleteApplication}
-            onQuickAddInColumn={handleQuickAddInColumn}
-          />
-        ) : (
-          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 overflow-x-auto">
-            {(state.jobs?.applications || []).length === 0 ? (
-              <p className="text-center py-8 text-xs text-[var(--text-faint)]">Sin postulaciones cargadas todavía.</p>
-            ) : (
-              <table className="w-full text-xs text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-[var(--border)] text-[var(--text-faint)] uppercase text-[10px]">
-                    <th className="py-2 px-2">Empresa</th>
-                    <th className="py-2 px-2">Puesto</th>
-                    <th className="py-2 px-2">Estado</th>
-                    <th className="py-2 px-2">Fecha</th>
-                    <th className="py-2 px-2">Contacto</th>
-                    <th className="py-2 px-2">Seguimiento</th>
-                    <th className="py-2 px-2"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--border)]">
-                  {[...(state.jobs?.applications || [])]
-                    .sort((a, b) => b.fecha.localeCompare(a.fecha))
-                    .map((a) => (
-                      <tr key={a.id} className="hover:bg-[var(--bg)]/50 transition-colors">
-                        <td className="py-2.5 px-2">
-                          <span className="font-bold text-[var(--text)]">{a.empresa}</span>
-                          {a.link && (
-                            <div>
-                              <a
-                                href={a.link}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-[11px] text-[var(--blue)] font-medium hover:underline"
-                              >
-                                ver oferta ↗
-                              </a>
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-2">
-                          <div>{a.puesto}</div>
-                          {a.notas && <div className="text-[11px] text-[var(--text-faint)]">{a.notas}</div>}
-                        </td>
-                        <td className="py-2.5 px-2">
-                          <select
-                            value={a.estado}
-                            onChange={(e) => handleSetEstado(a.id, e.target.value as any)}
-                            className="px-2 py-1 text-xs rounded-md bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)]"
-                          >
-                            {Object.entries(ESTADO_LABELS).map(([k, v]) => (
-                              <option key={k} value={k}>
-                                {v}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="py-2.5 px-2 font-mono text-[var(--text-soft)]">{fmtDate(a.fecha)}</td>
-                        <td className="py-2.5 px-2 text-[var(--text-soft)]">{a.reclutador || '—'}</td>
-                        <td className="py-2.5 px-2 space-y-1">
-                          <input
-                            type="text"
-                            value={a.nextAction || ''}
-                            onChange={(e) => handleSetNextAction(a.id, e.target.value)}
-                            placeholder="Ej: escribir por LinkedIn"
-                            className="w-36 px-2 py-1 text-[11px] rounded-md bg-[var(--bg-elevated)] border border-[var(--border)]"
-                          />
-                          <input
-                            type="date"
-                            value={a.nextActionDate || ''}
-                            onChange={(e) => handleSetNextActionDate(a.id, e.target.value)}
-                            className="w-36 px-2 py-1 text-[11px] rounded-md bg-[var(--bg-elevated)] border border-[var(--border)] block"
-                          />
-                        </td>
-                        <td className="py-2.5 px-2 text-right">
-                          <button
-                            onClick={() => handleDeleteApplication(a.id)}
-                            className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1.5 py-1"
-                          >
-                            ✕
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )}
-      </div>
+          {viewMode === 'kanban' && processType === 'todos' ? (
+            <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] p-5 text-sm text-[var(--text-soft)]">
+              El tablero muestra un solo tipo de proceso para mantener sus etapas claras. Elegí Empleo convencional o Concurso público, o abrí Lista / Tabla para verlos juntos.
+            </div>
+          ) : viewMode === 'kanban' && scopedApplications.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--card)] px-4 py-4 text-center">
+              <p className="text-sm text-[var(--text-soft)]">Todavía no hay procesos de tipo {processType === 'concurso' ? 'concurso público' : 'empleo convencional'}.</p>
+            </div>
+          ) : viewMode === 'kanban' ? (
+            <div className="job-kanban-panorama">
+              <JobKanbanBoard applications={scopedApplications} tipo={processType} onSetEstado={handleSetEstado} onEditApplication={openEditForm} onDeleteApplication={handleDeleteApplication} />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="max-w-sm"><label className="sr-only" htmlFor="job-table-search">Buscar postulaciones</label><input id="job-table-search" value={tableSearch} onChange={(e) => setTableSearch(e.target.value)} placeholder="Buscar por empresa, puesto o contacto…" className={fieldClass} /></div>
+              <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+                <table className="w-full min-w-[900px] border-collapse text-left text-xs">
+                  <thead><tr className="border-b border-[var(--border)] text-xs text-[var(--text-faint)]"><th className="px-3 py-2.5">Tipo</th><th className="px-3 py-2.5">Empresa / Organismo</th><th className="px-3 py-2.5">Puesto / Cargo</th><th className="px-3 py-2.5">Estado</th><th className="px-3 py-2.5">Fecha</th><th className="px-3 py-2.5">Contacto</th><th className="px-3 py-2.5">Seguimiento</th><th className="px-3 py-2.5">Acciones</th></tr></thead>
+                  <tbody className="divide-y divide-[var(--border)]">
+                    {visibleApplications.sort((a, b) => b.fecha.localeCompare(a.fecha)).map((application) => {
+                      const tipo = getJobApplicationType(application);
+                      return <tr key={application.id} className="hover:bg-[var(--bg)]/50"><td className="px-3 py-3"><span className="inline-flex rounded-md border border-[var(--border)] px-2 py-1 text-xs font-semibold text-[var(--text-soft)]">{typeLabel(tipo)}</span></td><td className="px-3 py-3 font-bold text-[var(--text)]">{application.empresa}{application.link && <a href={application.link} target="_blank" rel="noreferrer" className="ml-2 whitespace-nowrap text-[var(--blue)] hover:underline">Ver publicación ↗</a>}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.puesto}{application.notas && <p className="mt-1 max-w-xs truncate text-xs text-[var(--text-faint)]">{application.notas}</p>}</td><td className="px-3 py-3"><select aria-label={`Estado de ${application.empresa}`} value={application.estado} onChange={(e) => handleSetEstado(application.id, e.target.value as JobApplication['estado'])} className="max-w-[180px] rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-2 text-xs text-[var(--text)]">{JOB_STAGES[tipo].map((stage) => <option key={stage.id} value={stage.id}>{getJobStageLabel(tipo, stage.id)}</option>)}</select></td><td className="px-3 py-3 tabular-nums text-[var(--text-soft)]">{fmtDate(application.fecha)}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.reclutador || '—'}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.nextAction ? <>{application.nextAction}<br />{application.nextActionDate && fmtDate(application.nextActionDate)}</> : '—'}</td><td className="whitespace-nowrap px-3 py-3"><button type="button" onClick={() => openEditForm(application)} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)]">Editar</button><button type="button" onClick={() => handleDeleteApplication(application.id)} className="min-h-10 rounded-lg px-2 text-xs text-[var(--text-faint)] hover:text-red-500" aria-label={`Eliminar postulación de ${application.empresa}`}>Eliminar</button></td></tr>;
+                    })}
+                    {visibleApplications.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-sm text-[var(--text-faint)]">{scopedApplications.length === 0 ? 'No hay postulaciones para este tipo de proceso.' : 'No hay postulaciones que coincidan con esa búsqueda.'}</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
     </div>
   );
 };

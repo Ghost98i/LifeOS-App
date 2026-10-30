@@ -88,7 +88,8 @@ service cloud.firestore {
 
       return request.resource.data.keys().hasOnly([
           'schemaVersion', 'syncProtocolVersion', 'isEncrypted', 'module', 'data',
-          'revision', 'parentRevision', 'deviceId', 'clientUpdatedAt', 'updatedAt'
+          'revision', 'parentRevision', 'deviceId', 'clientUpdatedAt', 'updatedAt',
+          'commercialProtocolVersion'
         ])
         && request.resource.data.schemaVersion is int
         && request.resource.data.module == module
@@ -97,6 +98,7 @@ service cloud.firestore {
         && request.resource.data.clientUpdatedAt is int
         && (!('isEncrypted' in request.resource.data) || request.resource.data.isEncrypted is bool)
         && (!('syncProtocolVersion' in request.resource.data) || request.resource.data.syncProtocolVersion is int)
+        && (module in ['resale', 'finance'] || !('commercialProtocolVersion' in request.resource.data))
         // If module requires encryption, request MUST be encrypted
         && (!isMustEncrypt || isReqEncrypted)
         // If unencrypted, legacy writes must be permitted
@@ -107,6 +109,134 @@ service cloud.firestore {
           && request.resource.data.syncProtocolVersion >= 2
           && isValidCryptoEnvelope(request.resource.data.data)
         ));
+    }
+
+    function hasCommercialProtocol(payload) {
+      return ('commercialProtocolVersion' in payload)
+        && payload.commercialProtocolVersion is int
+        && payload.commercialProtocolVersion >= 1;
+    }
+
+    function resaleProtocolVersion(payload) {
+      return ('syncProtocolVersion' in payload) ? payload.syncProtocolVersion : 1;
+    }
+
+    function validResaleProtocolWrite() {
+      let version = resaleProtocolVersion(request.resource.data);
+      return version is int && version >= 1;
+    }
+
+    function preservesResaleProtocol() {
+      let previous = resaleProtocolVersion(resource.data);
+      let next = resaleProtocolVersion(request.resource.data);
+      return previous is int && previous >= 1 && next is int && next >= previous;
+    }
+
+    function hasVisibleCommercial(payload) {
+      return (!('isEncrypted' in payload) || payload.isEncrypted != true)
+        && payload.data is map
+        && ('resale' in payload.data)
+        && payload.data.resale is map
+        && ('commercial' in payload.data.resale);
+    }
+
+    function commercialPublicationEnabled() {
+      let capabilityPath = /databases/$(database)/documents/systemCapabilities/commercial;
+      return exists(capabilityPath)
+        && get(capabilityPath).data.keys().hasOnly([
+          'enabled', 'commercialProtocolVersion', 'minimumSyncProtocolVersion'
+        ])
+        && get(capabilityPath).data.keys().hasAll([
+          'enabled', 'commercialProtocolVersion', 'minimumSyncProtocolVersion'
+        ])
+        && get(capabilityPath).data.enabled == true
+        && get(capabilityPath).data.commercialProtocolVersion == 1
+        && get(capabilityPath).data.minimumSyncProtocolVersion == 3;
+    }
+
+    function commercialWriteAuthorized(payload) {
+      let marked = hasCommercialProtocol(payload);
+      let visible = hasVisibleCommercial(payload);
+      return (!marked && !visible) || commercialPublicationEnabled();
+    }
+
+    function validResaleCommercialWrite() {
+      let payload = request.resource.data;
+      let marked = hasCommercialProtocol(payload);
+      let visible = hasVisibleCommercial(payload);
+      return (!('commercialProtocolVersion' in payload) || marked)
+        && (!visible || marked)
+        && commercialWriteAuthorized(payload)
+        && (!marked || (
+          ('syncProtocolVersion' in payload)
+          && payload.syncProtocolVersion is int
+          && payload.syncProtocolVersion >= 3
+          && (visible || (('isEncrypted' in payload) && payload.isEncrypted == true))
+        ));
+    }
+
+    function preservesResaleCommercial() {
+      let previous = resource.data;
+      let next = request.resource.data;
+      return (!('commercialProtocolVersion' in previous) || (
+          hasCommercialProtocol(next)
+          && hasCommercialProtocol(previous)
+          && next.commercialProtocolVersion >= previous.commercialProtocolVersion
+        ))
+        && (!hasVisibleCommercial(previous) || (
+          hasVisibleCommercial(next)
+          || (hasCommercialProtocol(next) && ('isEncrypted' in next) && next.isEncrypted == true)
+        ));
+    }
+
+    function userHasCommercialResale(userId) {
+      let resalePath = /databases/$(database)/documents/users/$(userId)/lifeosModules/resale;
+      return (exists(resalePath) && (hasCommercialProtocol(get(resalePath).data) || hasVisibleCommercial(get(resalePath).data)))
+        || (existsAfter(resalePath) && (hasCommercialProtocol(getAfter(resalePath).data) || hasVisibleCommercial(getAfter(resalePath).data)));
+    }
+
+    function financeProtocolVersion(payload) {
+      return ('syncProtocolVersion' in payload) ? payload.syncProtocolVersion : 1;
+    }
+
+    function preservesFinanceProtocol() {
+      let previous = financeProtocolVersion(resource.data);
+      let next = financeProtocolVersion(request.resource.data);
+      return previous is int && previous >= 1 && next is int && next >= previous;
+    }
+
+    function validFinanceCommercialWrite(userId) {
+      let payload = request.resource.data;
+      let isUpdate = resource != null;
+      let protected = isUpdate && userHasCommercialResale(userId);
+      let marked = hasCommercialProtocol(payload);
+      return (!protected && !marked) || (
+        marked
+        && commercialWriteAuthorized(payload)
+        && ('syncProtocolVersion' in payload)
+        && payload.syncProtocolVersion is int
+        && payload.syncProtocolVersion >= 3
+        && ('isEncrypted' in payload)
+        && payload.isEncrypted == true
+      );
+    }
+
+    function preservesFinanceCommercial() {
+      let previous = resource.data;
+      let next = request.resource.data;
+      return (!('commercialProtocolVersion' in previous) || (
+        hasCommercialProtocol(next)
+        && hasCommercialProtocol(previous)
+        && next.commercialProtocolVersion >= previous.commercialProtocolVersion
+      ));
+    }
+
+    // Clients may read the activation state but cannot create or change it.
+    // Trusted administration operates through a privileged server context.
+    match /systemCapabilities/{capabilityId} {
+      allow get: if request.auth != null && capabilityId == 'commercial';
+      allow list: if false;
+      allow create, update, delete: if false;
     }
 
     // Account Sync Capability & Cloud Wrapped Key Envelope
@@ -150,9 +280,40 @@ service cloud.firestore {
     match /users/{userId}/lifeosModules/{module} {
       allow list: if isOwner(userId);
       allow get: if isOwner(userId) && validModule(module);
-      allow create, update: if isOwner(userId)
+      allow create: if isOwner(userId)
         && validModule(module)
-        && validSyncPayload(userId, module);
+        && validSyncPayload(userId, module)
+        && (module != 'resale' || (validResaleProtocolWrite() && validResaleCommercialWrite()))
+        && (module != 'resale' || (
+          ('parentRevision' in request.resource.data)
+          && request.resource.data.parentRevision == null
+        ))
+        && (module != 'finance' || validFinanceCommercialWrite(userId))
+        && (module != 'finance' || !userHasCommercialResale(userId) || (
+          ('parentRevision' in request.resource.data)
+          && request.resource.data.parentRevision == null
+        ));
+      allow update: if isOwner(userId)
+        && validModule(module)
+        && validSyncPayload(userId, module)
+        && (module != 'resale' || (validResaleProtocolWrite() && preservesResaleProtocol()
+          && validResaleCommercialWrite() && preservesResaleCommercial()))
+        && (module != 'resale' || (
+          ('parentRevision' in request.resource.data)
+          && request.resource.data.parentRevision is string
+          && ('revision' in resource.data)
+          && resource.data.revision is string
+          && request.resource.data.parentRevision == resource.data.revision
+        ))
+        && (module != 'finance' || (preservesFinanceProtocol() && validFinanceCommercialWrite(userId)
+          && preservesFinanceCommercial()))
+        && (module != 'finance' || !userHasCommercialResale(userId) || (
+          ('parentRevision' in request.resource.data)
+          && request.resource.data.parentRevision is string
+          && ('revision' in resource.data)
+          && resource.data.revision is string
+          && request.resource.data.parentRevision == resource.data.revision
+        ));
       allow delete: if false;
     }
 
@@ -161,6 +322,8 @@ service cloud.firestore {
       allow create: if isOwner(userId)
         && validModule(request.resource.data.module)
         && validSyncPayload(userId, request.resource.data.module)
+        && (request.resource.data.module != 'resale' || (validResaleProtocolWrite() && validResaleCommercialWrite()))
+        && (request.resource.data.module != 'finance' || validFinanceCommercialWrite(userId))
         && request.resource.data.revision == revisionId;
       allow update: if isOwner(userId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt']);

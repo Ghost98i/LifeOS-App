@@ -104,7 +104,9 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
         </div>
 
         <p className="text-[11px] leading-relaxed text-[var(--text-faint)] text-center">
-          🔒 Seguridad garantizada: se guardó una copia de recuperación de ambos estados en el almacenamiento local antes de aplicar cualquier acción.
+          {modules.includes('gym')
+            ? 'Antes de continuar se guardará una copia local de la versión que no elijas. Si ese guardado falla, el conflicto seguirá bloqueado.'
+            : 'Antes de elegir, revisá qué versión querés conservar. La versión descartada se guarda como copia de recuperación cuando el almacenamiento local lo permite.'}
         </p>
       </section>
     </div>

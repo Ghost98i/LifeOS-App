@@ -84,7 +84,11 @@ export function syncModuleData(state: LifeOSState, module: SyncModuleKey): unkno
       delete syncedGym.activeTimer;
       return { gym: syncedGym };
     }
-    case 'study': return { study: state.study };
+    case 'study': {
+      const syncedStudy = { ...state.study };
+      delete syncedStudy.activeSession;
+      return { study: syncedStudy };
+    }
     case 'streaming': return { streaming: state.streaming };
     case 'jobs': return { jobs: state.jobs };
     case 'resale': return { resale: state.resale };
@@ -177,6 +181,7 @@ export function mergeSyncModuleWithConflicts(
   const pureBaseline = extractPureModuleData(baselineData);
   const localData = syncModuleData(state, module);
   const { data: mergedData, conflicts } = mergeModuleDataWithConflicts(module, localData, pureRemote, pureBaseline, tombstones);
+  if ((module === 'resale' || module === 'gym') && conflicts.length > 0) return { state, conflicts };
   const candidate = { ...state, ...(mergedData as Partial<LifeOSState>) };
   if (module === 'gym' && candidate.gym) {
     candidate.gym = { ...candidate.gym, activeTimer: state.gym.activeTimer ?? null };

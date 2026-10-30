@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 import { Transaction, Account } from '../types';
-import { todayISO } from '../lib/storage';
+import { todayISO, parseDecimalInput } from '../lib/storage';
 import { AppIcon } from './AppIcon';
 
 export interface FinanceTransactionModalProps {
@@ -13,6 +14,7 @@ export interface FinanceTransactionModalProps {
     accountId: string;
     fixed: 'variable' | 'fijo';
     date: string;
+    operationTime: string | null;
     note: string;
   }) => void;
   accounts: Account[];
@@ -38,8 +40,14 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
   const [accountId, setAccountId] = useState('');
   const [fixed, setFixed] = useState<'variable' | 'fijo'>('variable');
   const [date, setDate] = useState(todayISO());
+  const [operationTime, setOperationTime] = useState('');
   const [note, setNote] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(open, dialogRef, onClose, '#finance-movement-trigger');
+
+  const selectedAccount = accounts.find((a) => a.id === accountId);
+  const accountCurrency = (selectedAccount?.currency || 'UYU').toUpperCase();
 
   useEffect(() => {
     if (open) {
@@ -50,8 +58,9 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
         setAccountId(editingTransaction.accountId || accounts[0]?.id || '');
         setFixed(editingTransaction.fixed);
         setDate(editingTransaction.date);
+        setOperationTime(editingTransaction.operationTime || '');
         setNote(editingTransaction.note || '');
-        setShowAdvanced(Boolean(editingTransaction.note || editingTransaction.fixed === 'fijo' || editingTransaction.date !== todayISO()));
+        setShowAdvanced(Boolean(editingTransaction.note || editingTransaction.operationTime || editingTransaction.fixed === 'fijo' || editingTransaction.date !== todayISO()));
       } else {
         setType(initialType);
         setAmount('');
@@ -60,6 +69,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
         setAccountId(accounts[0]?.id || '');
         setFixed('variable');
         setDate(todayISO());
+        setOperationTime('');
         setNote('');
         setShowAdvanced(false);
       }
@@ -70,23 +80,31 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const num = Number(amount);
-    if (!Number.isFinite(num) || num <= 0) return;
-    if (!accountId) return;
+    const parsed = parseDecimalInput(amount);
+    if (parsed.error || parsed.value === null || parsed.value <= 0) {
+      alert(parsed.error || 'Ingresá un importe válido mayor a cero.');
+      return;
+    }
+    if (!accountId) {
+      alert('Elegí una cuenta.');
+      return;
+    }
 
     onSubmit({
       type,
-      amount: num,
+      amount: parsed.value,
       category: category.trim(),
       accountId,
       fixed,
       date,
+      operationTime: operationTime || null,
       note: note.trim(),
     });
   };
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="finance-tx-title"
@@ -95,7 +113,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6 shadow-2xl transition-all space-y-4">
+      <div className="relative w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6 shadow-2xl transition-all space-y-4 max-h-[calc(100dvh-2rem)] overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
           <div className="flex items-center gap-2.5">
@@ -150,23 +168,23 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
 
           {/* Amount Hero Input */}
           <div>
-            <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
-              Monto (UYU)
+            <label htmlFor="finance-tx-amount" className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
+              Monto ({accountCurrency})
             </label>
             <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono font-bold text-lg text-[var(--text-faint)]">
-                $
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-sm sm:text-base text-[var(--text-faint)] select-none">
+                {accountCurrency === 'USD' ? 'US$' : '$U'}
               </span>
               <input
-                type="number"
-                min="0.01"
-                step="any"
+                id="finance-tx-amount"
+                type="text"
+                inputMode="decimal"
                 required
                 autoFocus
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                className="w-full pl-8 pr-4 py-3 text-2xl font-mono font-black rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)] tabular-nums"
+                placeholder="0,00"
+                className="w-full pl-12 pr-4 py-3 text-2xl font-black rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)] tabular-nums"
               />
             </div>
           </div>
@@ -174,10 +192,11 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
           {/* Account & Category Row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
+              <label htmlFor="finance-tx-account" className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
                 Cuenta / Billetera
               </label>
               <select
+                id="finance-tx-account"
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
                 required
@@ -185,7 +204,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
               >
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name}
+                    {a.name} ({(a.currency || 'UYU').toUpperCase()})
                   </option>
                 ))}
               </select>
@@ -193,7 +212,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block">
+                <label htmlFor="finance-tx-category" className="text-[10px] font-black uppercase text-[var(--text-faint)] block">
                   Categoría
                 </label>
                 {onOpenCategoryModal && (
@@ -207,6 +226,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
                 )}
               </div>
               <select
+                id="finance-tx-category"
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
                 required
@@ -228,7 +248,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
               onClick={() => setShowAdvanced(!showAdvanced)}
               className="text-xs font-semibold text-[var(--blue)] hover:underline flex items-center gap-1 cursor-pointer"
             >
-              <span>{showAdvanced ? 'Ocultar detalles adicionales ▴' : 'Más detalles (fecha, fijos, notas) ▾'}</span>
+              <span>{showAdvanced ? 'Ocultar detalles adicionales ▴' : 'Más detalles (fecha, hora, fijos, notas) ▾'}</span>
             </button>
           </div>
 
@@ -237,10 +257,11 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
             <div className="space-y-3 pt-2 border-t border-[var(--border)] animate-in fade-in duration-150">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
+                  <label htmlFor="finance-tx-date" className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
                     Fecha
                   </label>
                   <input
+                    id="finance-tx-date"
                     type="date"
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
@@ -249,10 +270,11 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
                 </div>
 
                 <div>
-                  <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
+                  <label htmlFor="finance-tx-fixed" className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
                     Naturaleza del Gasto
                   </label>
                   <select
+                    id="finance-tx-fixed"
                     value={fixed}
                     onChange={(e) => setFixed(e.target.value as any)}
                     className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] font-medium focus:outline-hidden focus:border-[var(--blue)] cursor-pointer"
@@ -264,10 +286,24 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
               </div>
 
               <div>
-                <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
+                <label htmlFor="finance-tx-time" className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
+                  Hora de la operación (opcional)
+                </label>
+                <input
+                  id="finance-tx-time"
+                  type="time"
+                  value={operationTime}
+                  onChange={(e) => setOperationTime(e.target.value)}
+                  className="w-full sm:w-44 px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] font-medium focus:outline-hidden focus:border-[var(--blue)]"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="finance-tx-note" className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
                   Nota / Detalle (Opcional)
                 </label>
                 <input
+                  id="finance-tx-note"
                   type="text"
                   value={note}
                   onChange={(e) => setNote(e.target.value)}

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import type { JobApplication, LifeOSState, ViewType } from '../types';
+import { useDialogFocus } from '../hooks/useDialogFocus';
+import type { JobApplication, JobApplicationType, LifeOSState, ViewType } from '../types';
 import { AppIcon, type AppIconName } from './AppIcon';
 import { searchLifeOS, type SearchResult } from '../lib/search';
 import { fmtMoney, todayISO, uid } from '../lib/storage';
@@ -9,6 +10,7 @@ import { showToast } from '../lib/toast';
 import { playSound } from '../lib/audio';
 import { getActiveCategories } from '../lib/financeCategories';
 import { isModuleEnabled } from '../lib/moduleVisibility';
+import { getJobStageLabel, isJobStatusForType, JOB_STAGES } from '../lib/jobApplications';
 
 export interface GlobalSearchModalProps {
   state: LifeOSState;
@@ -16,7 +18,7 @@ export interface GlobalSearchModalProps {
   initialQuery?: string;
   onClose: () => void;
   onNavigate: (view: ViewType, focusId?: string, txType?: 'gasto' | 'ingreso') => void;
-  onUpdateState?: (fn: (draft: LifeOSState) => void) => void;
+  onUpdateState?: (fn: (draft: LifeOSState) => void) => boolean | void;
   onOpenCapture?: () => void;
   onToggleTheme?: () => void;
   onTogglePrivacy?: () => void;
@@ -46,8 +48,8 @@ const VIEW_METADATA: { view: ViewType; label: string; desc: string; icon: AppIco
   { view: 'trabajo', label: 'Trabajo & Empleo', desc: 'Pipeline Kanban de postulaciones laborales', icon: 'briefcase', keywords: ['trabajo', 'empleo', 'cv', 'postulaciones', 'entrevistas'], shortcut: 'G T' },
   { view: 'agenda', label: 'Agenda Semanal', desc: 'Bloques horarios y rutinas periódicas', icon: 'calendar', keywords: ['agenda', 'horario', 'semana', 'bloques'], shortcut: 'G A' },
   { view: 'calendario', label: 'Calendario', desc: 'Eventos, hitos y fechas clave del mes', icon: 'calendarDays', keywords: ['calendario', 'eventos', 'mes', 'fechas'] },
-  { view: 'estudios', label: 'Estudios', desc: 'Materias, exámenes, pomodoro y horas', icon: 'book', keywords: ['estudio', 'facultad', 'materias', 'examenes', 'pomodoro'] },
-  { view: 'reventa', label: 'Reventa', desc: 'Inventario, margen comercial y ventas', icon: 'repeat', keywords: ['reventa', 'ventas', 'inventario', 'productos', 'negocio'] },
+  { view: 'estudios', label: 'Estudios', desc: 'Materias, exámenes, pomodoro y horas', icon: 'graduation', keywords: ['estudio', 'facultad', 'materias', 'examenes', 'pomodoro'] },
+  { view: 'reventa', label: 'Mi negocio', desc: 'Compraventa, inventario y ganancias', icon: 'store', keywords: ['reventa', 'ventas', 'inventario', 'productos', 'negocio'] },
   { view: 'notas', label: 'Notas & Captura', desc: 'Post-its, listas de compras y enlaces', icon: 'note', keywords: ['notas', 'postits', 'compras', 'links', 'enlaces', 'nueva nota'], shortcut: 'G N' },
   { view: 'ia', label: 'IA & Proyectos', desc: 'Asistente personal, ideas y proyectos', icon: 'sparkles', keywords: ['ia', 'ai', 'ideas', 'proyectos', 'asistente'] },
   { view: 'config', label: 'Configuración', desc: 'Copias de seguridad, sincronización y ajustes', icon: 'settings', keywords: ['config', 'ajustes', 'backup', 'nube', 'perfil'] },
@@ -88,6 +90,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   const [jobEmpresa, setJobEmpresa] = useState('');
   const [jobPuesto, setJobPuesto] = useState('');
   const [jobEstado, setJobEstado] = useState<JobApplication['estado']>('cv_enviado');
+  const [jobTipo, setJobTipo] = useState<JobApplicationType>('convencional');
   const [jobReclutador, setJobReclutador] = useState('');
   const [jobLink, setJobLink] = useState('');
   const [jobSaving, setJobSaving] = useState(false);
@@ -97,7 +100,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   const jobEmpresaRef = useRef<HTMLInputElement>(null);
   const itemRefs = useRef<Record<number, HTMLButtonElement | null>>({});
 
-  const previousFocusedElementRef = useRef<HTMLElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(open, dialogRef, onClose);
 
   // Reset & focus on open
   useEffect(() => {
@@ -105,23 +109,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       setMode('palette');
       return;
     }
-    if (document.activeElement instanceof HTMLElement) {
-      previousFocusedElementRef.current = document.activeElement;
-    }
     setMode('palette');
     setQuery(initialQuery);
     setSelectedIdx(0);
     setCategoryFilter('all');
     setExpenseAccount((curr) => curr || state.finance.accounts[0]?.id || '');
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     const timer = window.setTimeout(() => inputRef.current?.focus(), 60);
     return () => {
-      document.body.style.overflow = prevOverflow;
       window.clearTimeout(timer);
-      if (previousFocusedElementRef.current && typeof previousFocusedElementRef.current.focus === 'function') {
-        previousFocusedElementRef.current.focus();
-      }
     };
   }, [open, initialQuery, state.finance.accounts]);
 
@@ -135,6 +130,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     } else if (mode === 'new-job') {
       setJobEmpresa('');
       setJobPuesto('');
+      setJobTipo('convencional');
+      setJobEstado('cv_enviado');
       setJobReclutador('');
       setJobLink('');
       window.setTimeout(() => jobEmpresaRef.current?.focus(), 50);
@@ -260,7 +257,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       category: 'Acciones Rápidas',
       categoryOrder: 1,
       title: state.settings.darkMode ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro',
-      subtitle: 'Alternar entre el tema visual claro y oscuro de LifeOS',
+      subtitle: 'Alternar entre el tema visual claro y oscuro de Celestian',
       iconName: state.settings.darkMode ? 'sun' : 'moon',
       onSelect: () => {
         if (onToggleTheme) onToggleTheme();
@@ -504,8 +501,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
     setExpenseSaving(true);
     try {
-      if (onUpdateState) {
-        onUpdateState((draft) => {
+      if (!onUpdateState) throw new Error('No se puede guardar desde esta búsqueda. Abrí Finanzas para registrar el gasto.');
+      {
+        const saved = onUpdateState((draft) => {
           addTransaction(draft, {
             type: 'gasto',
             amount: amountNum,
@@ -517,6 +515,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             date: todayISO(),
           });
         });
+        if (saved === false) return;
       }
       const accName = state.finance.accounts.find((a) => a.id === accountId)?.name || 'Cuenta';
       const toastAmount = state.settings.privacyMode ? '$U ••••' : fmtMoney(amountNum);
@@ -542,13 +541,19 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       showToast('Ingresá el puesto o rol', 'error');
       return;
     }
+    if (!isJobStatusForType(jobTipo, jobEstado)) {
+      showToast('Elegí una etapa compatible con el tipo de proceso', 'error');
+      return;
+    }
 
     setJobSaving(true);
     try {
-      if (onUpdateState) {
-        onUpdateState((draft) => {
+      if (!onUpdateState) throw new Error('No se puede guardar desde esta búsqueda. Abrí Trabajo para registrar la postulación.');
+      {
+        const saved = onUpdateState((draft) => {
           draft.jobs.applications.unshift({
             id: uid(),
+            tipo: jobTipo,
             empresa: jobEmpresa.trim(),
             puesto: jobPuesto.trim(),
             estado: jobEstado,
@@ -557,6 +562,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             link: jobLink.trim() || undefined,
           });
         });
+        if (saved === false) return;
       }
       showToast(`Postulación a "${jobEmpresa.trim()}" guardada en el pipeline`);
       playSound('success');
@@ -576,9 +582,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label="Paleta de Comandos LifeOS"
+        aria-label="Comandos de Celestian"
         className="w-full max-w-2xl overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl ring-1 ring-black/10 dark:ring-white/10 transition-all flex flex-col max-h-[82vh]"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
@@ -660,7 +667,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                   <div key={group.category} className="space-y-1">
                     <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] flex items-center justify-between">
                       <span>{group.category}</span>
-                      <span className="text-[10px] font-mono opacity-70">{group.items.length}</span>
+                      <span className="text-[10px] tabular-nums opacity-70">{group.items.length}</span>
                     </div>
 
                     <div className="space-y-0.5">
@@ -702,7 +709,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                 </span>
                                 {item.badge && (
                                   <span
-                                    className={`rounded-md px-1.5 py-0.5 text-[10px] font-mono font-bold shrink-0 ${
+                                    className={`rounded-md px-1.5 py-0.5 text-[10px] tabular-nums font-bold shrink-0 ${
                                       item.isSensitive && state.settings.privacyMode ? 'privacy-sensitive ' : ''
                                     }${
                                       item.badgeTone === 'green'
@@ -747,9 +754,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             {/* Raycast / Notion style minimal footer */}
             <div className="flex items-center justify-between border-t border-[var(--border)] bg-[var(--card)] px-4 py-2 text-[11px] text-[var(--text-faint)]">
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-[var(--text-soft)]">LifeOS Command</span>
+                <span className="font-semibold text-[var(--text-soft)]">Celestian · Comandos</span>
                 <span className="hidden sm:inline">·</span>
-                <span className="hidden sm:inline font-mono">{visibleItems.length} opciones</span>
+                <span className="hidden sm:inline tabular-nums">{visibleItems.length} opciones</span>
               </div>
               <div className="flex items-center gap-3 font-mono text-[10px]">
                 <span className="hidden sm:inline-flex items-center gap-1">
@@ -797,7 +804,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                   Monto a Registrar
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono font-bold text-lg text-[var(--text-faint)]">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 tabular-nums font-bold text-lg text-[var(--text-faint)]">
                     $
                   </span>
                   <input
@@ -809,7 +816,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                     onChange={(e) => setExpenseAmount(e.target.value)}
                     placeholder="0.00"
                     required
-                    className="w-full pl-8 pr-4 py-2.5 text-xl font-bold font-mono rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue)]/20 outline-none text-[var(--text)]"
+                    className="w-full pl-8 pr-4 py-2.5 text-xl font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue)]/20 outline-none text-[var(--text)]"
                   />
                 </div>
 
@@ -820,7 +827,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                       key={preset}
                       type="button"
                       onClick={() => setExpenseAmount(preset.toString())}
-                      className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs font-mono font-semibold text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition-colors"
+                      className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs tabular-nums font-semibold text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition-colors"
                     >
                       +${preset.toLocaleString('es-AR')}
                     </button>
@@ -851,7 +858,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                           }`}
                         >
                           <span className="text-xs font-bold text-[var(--text)] truncate w-full">{acc.name}</span>
-                          <span className="text-[11px] font-mono text-[var(--text-soft)] mt-0.5">
+                          <span className="text-[11px] tabular-nums text-[var(--text-soft)] mt-0.5">
                             <PrivacyAmount>{fmtMoney(acc.balance)}</PrivacyAmount>
                           </span>
                         </button>
@@ -952,7 +959,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 </button>
                 <div className="flex items-center gap-2">
                   <AppIcon name="briefcase" className="h-4 w-4 text-[var(--blue)]" />
-                  <span className="text-sm font-bold text-[var(--text)]">Nueva Postulación de Empleo</span>
+                  <span className="text-sm font-bold text-[var(--text)]">Nueva postulación</span>
                 </div>
               </div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] bg-[var(--card)] px-2 py-0.5 rounded-md border border-[var(--border)]">
@@ -961,17 +968,24 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             </div>
 
             <div className="p-5 space-y-4 flex-1 overflow-y-auto">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-[var(--text-soft)] uppercase tracking-wider block">Tipo de proceso</label>
+                <select value={jobTipo} onChange={(e) => setJobTipo(e.target.value as JobApplicationType)} className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] text-[var(--text)]">
+                  <option value="convencional">Empleo convencional</option>
+                  <option value="concurso">Concurso / llamado público</option>
+                </select>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-[var(--text-soft)] uppercase tracking-wider block">
-                    Empresa *
+                    {jobTipo === 'concurso' ? 'Organismo *' : 'Empresa *'}
                   </label>
                   <input
                     ref={jobEmpresaRef}
                     type="text"
                     value={jobEmpresa}
                     onChange={(e) => setJobEmpresa(e.target.value)}
-                    placeholder="Ej: MercadoLibre, Globant, Startup…"
+                    placeholder={jobTipo === 'concurso' ? 'Ej.: Ministerio de Salud Pública' : 'Ej.: MercadoLibre, Globant, Startup…'}
                     required
                     className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue)]/20 outline-none text-[var(--text)] font-semibold"
                   />
@@ -979,13 +993,13 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-[var(--text-soft)] uppercase tracking-wider block">
-                    Puesto / Rol *
+                    {jobTipo === 'concurso' ? 'Cargo *' : 'Puesto / Rol *'}
                   </label>
                   <input
                     type="text"
                     value={jobPuesto}
                     onChange={(e) => setJobPuesto(e.target.value)}
-                    placeholder="Ej: Fullstack Developer, Product Designer…"
+                    placeholder={jobTipo === 'concurso' ? 'Ej.: Administrativo III' : 'Ej: Fullstack Developer, Product Designer…'}
                     required
                     className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue)]/20 outline-none text-[var(--text)]"
                   />
@@ -995,32 +1009,29 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
               {/* Estado selector */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-[var(--text-soft)] uppercase tracking-wider block">
-                  Fase Inicial en Pipeline
+                  {jobTipo === 'concurso' ? 'Etapa del llamado' : 'Etapa laboral'}
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {[
-                    { key: 'pendiente', label: 'Pendiente' },
-                    { key: 'cv_enviado', label: 'CV Enviado' },
-                    { key: 'entrevista', label: 'Entrevista' },
-                    { key: 'oferta', label: 'Oferta' },
-                  ].map((st) => {
-                    const isSelected = jobEstado === st.key;
+                  {JOB_STAGES[jobTipo].map((st) => {
+                    const isSelected = jobEstado === st.id;
                     return (
                       <button
-                        key={st.key}
+                        key={st.id}
                         type="button"
-                        onClick={() => setJobEstado(st.key as any)}
+                        onClick={() => setJobEstado(st.id)}
+                        aria-pressed={isSelected}
                         className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all text-center ${
                           isSelected
                             ? 'border-[var(--blue)] bg-[var(--blue-soft)] text-[var(--blue)] ring-1 ring-[var(--blue)]/30'
                             : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:bg-[var(--surface-muted)]'
                         }`}
                       >
-                        {st.label}
+                        {getJobStageLabel(jobTipo, st.id)}
                       </button>
                     );
                   })}
                 </div>
+                {!isJobStatusForType(jobTipo, jobEstado) && <p role="alert" className="text-xs text-amber-700 dark:text-amber-300">Elegí una etapa de este tipo de proceso. La selección anterior no se cambiará automáticamente.</p>}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1039,13 +1050,13 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-[var(--text-soft)] uppercase tracking-wider block">
-                    Link de la oferta (Opcional)
+                    Enlace a la publicación (Opcional)
                   </label>
                   <input
                     type="url"
                     value={jobLink}
                     onChange={(e) => setJobLink(e.target.value)}
-                    placeholder="https://linkedin.com/jobs/..."
+                    placeholder={jobTipo === 'concurso' ? 'https://…' : 'https://linkedin.com/jobs/...'}
                     className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue)]/20 outline-none text-[var(--text)]"
                   />
                 </div>
@@ -1075,7 +1086,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 </button>
                 <button
                   type="submit"
-                  disabled={jobSaving || !jobEmpresa.trim() || !jobPuesto.trim()}
+                  disabled={jobSaving || !jobEmpresa.trim() || !jobPuesto.trim() || !isJobStatusForType(jobTipo, jobEstado)}
                   className="rounded-xl bg-[var(--blue)] px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-1.5"
                 >
                   <span>Guardar Postulación</span>

@@ -17,7 +17,7 @@ import {
   loadSyncRecoverySnapshot,
   clearSyncRecoverySnapshots,
   writeCloudModulesGuarded,
-  writeCloudModules,
+  getFirestoreDb,
 } from './cloudSync';
 import { cryptoSession, generateMdek } from './cryptoCore';
 
@@ -496,36 +496,9 @@ test('Hotfix Loop Infinito: Fail-Safe ante divergencia consecutiva repetida', ()
   assert.equal(queuedModules.size, 0, 'El fail-safe debe vaciar o evitar reencolar módulos tras >=3 divergencias consecutivas sin progreso');
 });
 
-test('Hotfix Loop Infinito: Alineación determinista de revisiones E2EE entre writeCloudModules y batch preparado', async () => {
-  const userId = 'user-e2ee-test-123';
-  const mdek = await generateMdek();
-  cryptoSession.setUnlocked(mdek, userId);
-
-  try {
-    const state = defaultState();
-    const modules: SyncModuleKey[] = ['finance', 'tasks'];
-    const deviceId = 'test-device-id';
-    const baseRevisions = { finance: 'rev-prev-1', tasks: 'rev-prev-2' };
-
-    // writeCloudModules con sesión E2EE activa
-    const res = writeCloudModules(userId, state, modules, deviceId, baseRevisions);
-
-    // En ambiente de test sin emulador activo, batch.commit() fallará con PERMISSION_DENIED;
-    // manejamos el catch para evitar unhandledRejection en Node test runner.
-    res.completion.catch(() => {});
-
-    // Las revisiones retornadas a App.tsx deben ser exactamente las que writeCloudModules preparó
-    assert.equal(res.writes.length, 2);
-    assert.equal(res.writes[0].module, 'finance');
-    assert.equal(res.writes[0].parentRevision, 'rev-prev-1');
-    assert.ok(res.writes[0].revision.includes(deviceId));
-
-    assert.equal(res.writes[1].module, 'tasks');
-    assert.equal(res.writes[1].parentRevision, 'rev-prev-2');
-    assert.ok(res.writes[1].revision.includes(deviceId));
-  } finally {
-    cryptoSession.lock();
-  }
+test('Las pruebas unitarias no pueden inicializar Firebase de producción', () => {
+  // The real encrypted write/revision contract runs in cloudWriteRevision.emulator.test.ts.
+  assert.throws(() => getFirestoreDb(), /requieren demo-lifeos y los emuladores/);
 });
 
 test('Hotfix 2 - Caso 1: local == remote semánticamente pero revisión remota diferente -> Adopción limpia sin write, status synced', () => {

@@ -208,26 +208,34 @@ test('LifeOS — Fase 4: Non-financial captures (tasks, notes, ideas, resale, st
   }
 });
 
-test('LifeOS — Fase 4: Multi-intent compound capture generates independent drafts', () => {
+test('LifeOS — Fase 4: Multi-intent compound capture generates independent drafts with semantic fidelity', () => {
   const state = defaultState();
   state.settings.hiddenTabs = [];
 
-  const drafts = parseCaptureDrafts('mañana estudiar redes y pagar 1200 de internet', state, {
+  // Case A: Actionable study + completed expense ('pagué 1200 de internet')
+  const draftsA = parseCaptureDrafts('mañana estudiar redes y pagué 1200 de internet', state, {
     defaultDate: '2026-10-03',
   });
 
-  assert.equal(drafts.length, 2, 'Debe generar exactamente 2 borradores');
+  assert.equal(draftsA.length, 2, 'Debe generar exactamente 2 borradores');
 
-  const studyOrTask = drafts[0];
-  assert.ok(studyOrTask.kind === 'study' || studyOrTask.kind === 'task');
-  assert.ok(studyOrTask.rawText.includes('estudiar redes'));
+  const studyOrTaskA = draftsA[0];
+  assert.ok(studyOrTaskA.kind === 'study' || studyOrTaskA.kind === 'task');
+  assert.ok(studyOrTaskA.rawText.includes('estudiar redes'));
 
-  const finance = drafts[1];
-  assert.equal(finance.kind, 'finance');
-  if (finance.kind === 'finance') {
-    assert.equal(finance.amount, 1200);
-    assert.equal(finance.category, 'Admin/Hogar');
+  const financeA = draftsA[1];
+  assert.equal(financeA.kind, 'finance');
+  if (financeA.kind === 'finance') {
+    assert.equal(financeA.amount, 1200);
+    assert.equal(financeA.category, 'Admin/Hogar');
   }
+
+  // Case B: Actionable study + pending payment action ('pagar 1200 de internet')
+  const draftsB = parseCaptureDrafts('mañana estudiar redes y pagar 1200 de internet', state, {
+    defaultDate: '2026-10-03',
+  });
+  assert.equal(draftsB.length, 2);
+  assert.equal(draftsB[1].kind, 'task', 'pagar debe ser una tarea pendiente, no un gasto realizado');
 });
 
 test('LifeOS — Fase 4: Module Visibility prevents mutations to inactive modules and offers safe fallback', () => {
@@ -1206,4 +1214,281 @@ test('ACCION vs INFORMACION: Multi-intent mixto preserva tarea y captura ambigua
   confirmCaptureDraft(state, drafts[1]);
   assert.equal(state.todayExtras.length, initialTaskCount, 'No debe crear tareas en el estado');
   assert.equal(state.inbox?.length, initialInboxCount + 1, 'Debe guardar exactamente en inbox');
+});
+
+/* =========================================================================
+   QUICK CAPTURE 2.1: PAYMENT INTENT, CONFIRMATION & PRIVACY INTEGRITY TESTS
+   ========================================================================= */
+
+test('QC 2.1: "pagar 9300 a Jorge" without date routes as TaskDraft with NO invented due date and zero balance deduction', () => {
+  const state = defaultState();
+  const refDate = '2026-10-16';
+
+  const drafts = parseCaptureDrafts('pagar 9300 a Jorge', state, { defaultDate: refDate });
+  assert.equal(drafts.length, 1);
+
+  const draft = drafts[0];
+  assert.equal(draft.kind, 'task', 'Debe ser interpretado como tarea pendiente, nunca como gasto realizado');
+  if (draft.kind === 'task') {
+    assert.equal(draft.text, 'pagar 9300 a Jorge', 'Debe conservar la acción, el monto y el destinatario');
+    assert.equal(draft.dueDate, undefined, 'No debe inventar una fecha de vencimiento');
+    assert.equal(draft.dueDateLabel, undefined, 'No debe etiquetar como Hoy');
+  }
+
+  // Confirmation must create a task with no due date and leave finance untouched
+  const initialBalance = state.finance.accounts[0]?.balance || 0;
+  const initialTxCount = state.finance.transactions.length;
+  const initialTaskCount = state.todayExtras.length;
+
+  const result = confirmCaptureDraft(state, draft);
+  assert.ok(result.message.includes('Tarea creada'));
+
+  // Finance untouched
+  assert.equal(state.finance.accounts[0]?.balance || 0, initialBalance, 'El saldo no debe descontarse');
+  assert.equal(state.finance.transactions.length, initialTxCount, 'No debe crear ninguna transacción');
+
+  // Task created with undefined dueDate
+  assert.equal(state.todayExtras.length, initialTaskCount + 1);
+  const createdTask = state.todayExtras[state.todayExtras.length - 1];
+  assert.equal(createdTask.text, 'pagar 9300 a Jorge');
+  assert.equal(createdTask.dueDate, undefined, 'dueDate en TodayExtra debe ser undefined');
+});
+
+test('QC 2.1: "pagar 9300 a Jorge el 25 de octubre" routes as TaskDraft with exact future due date', () => {
+  const state = defaultState();
+  const refDate = '2026-10-16';
+
+  const drafts = parseCaptureDrafts('pagar 9300 a Jorge el 25 de octubre', state, { defaultDate: refDate });
+  assert.equal(drafts.length, 1);
+
+  const draft = drafts[0];
+  assert.equal(draft.kind, 'task');
+  if (draft.kind === 'task') {
+    assert.equal(draft.text, 'pagar 9300 a Jorge');
+    assert.equal(draft.dueDate, '2026-10-25');
+    assert.ok(draft.dueDateLabel?.includes('25 de Octubre'));
+  }
+
+  const initialTxCount = state.finance.transactions.length;
+  confirmCaptureDraft(state, draft);
+  assert.equal(state.finance.transactions.length, initialTxCount, 'No debe crear transacción');
+
+  const createdTask = state.todayExtras[state.todayExtras.length - 1];
+  assert.equal(createdTask.dueDate, '2026-10-25');
+});
+
+test('QC 2.1: "pagué 9300 a Jorge" remains an effective financial expense', () => {
+  const state = defaultState();
+  const refDate = '2026-10-16';
+
+  const drafts = parseCaptureDrafts('pagué 9300 a Jorge', state, { defaultDate: refDate });
+  assert.equal(drafts.length, 1);
+
+  const draft = drafts[0];
+  assert.equal(draft.kind, 'finance', 'pagué debe ser un gasto financiero');
+  if (draft.kind === 'finance') {
+    assert.equal(draft.type, 'gasto');
+    assert.equal(draft.amount, 9300);
+  }
+});
+
+test('QC 2.1: Past tense expressions ("ayer pagué 9300 a Jorge", "gasté 800 en internet") preserve financial movements', () => {
+  const state = defaultState();
+  const refDate = '2026-10-16';
+
+  // "ayer pagué 9300 a Jorge"
+  const draftsA = parseCaptureDrafts('ayer pagué 9300 a Jorge', state, { defaultDate: refDate });
+  assert.equal(draftsA.length, 1);
+  assert.equal(draftsA[0].kind, 'finance');
+  if (draftsA[0].kind === 'finance') {
+    assert.equal(draftsA[0].amount, 9300);
+    assert.equal(draftsA[0].date, '2026-10-15');
+  }
+
+  // "gasté 800 en internet"
+  const draftsB = parseCaptureDrafts('gasté 800 en internet', state, { defaultDate: refDate });
+  assert.equal(draftsB.length, 1);
+  assert.equal(draftsB[0].kind, 'finance');
+  if (draftsB[0].kind === 'finance') {
+    assert.equal(draftsB[0].amount, 800);
+  }
+});
+
+test('QC 2.1: Debts and commitments ("debo pagar 9300 a Jorge", "tengo que pagar la luz", "pago de internet") route as tasks without invented due date', () => {
+  const state = defaultState();
+  const refDate = '2026-10-16';
+
+  // "debo pagar 9300 a Jorge"
+  const d1 = parseCaptureDrafts('debo pagar 9300 a Jorge', state, { defaultDate: refDate })[0];
+  assert.equal(d1.kind, 'task');
+  if (d1.kind === 'task') {
+    assert.equal(d1.dueDate, undefined);
+    assert.equal(d1.dueDateLabel, undefined);
+  }
+
+  // "tengo que pagar la luz"
+  const d2 = parseCaptureDrafts('tengo que pagar la luz', state, { defaultDate: refDate })[0];
+  assert.equal(d2.kind, 'task');
+  if (d2.kind === 'task') {
+    assert.equal(d2.dueDate, undefined);
+    assert.equal(d2.dueDateLabel, undefined);
+  }
+
+  // Ambiguous "pago de internet" (no past verb) -> conservative handling as task, not completed expense
+  const d3 = parseCaptureDrafts('pago de internet', state, { defaultDate: refDate })[0];
+  assert.equal(d3.kind, 'task', 'pago de internet debe tratarse como tarea/compromiso pendiente');
+});
+
+test('QC 2.1: Explicit dates on tasks ("examen el 30 de octubre") resolve to explicit day, while general tasks ("comprar leche") have no invented due date', () => {
+  const state = defaultState();
+  const refDate = '2026-10-16';
+
+  // "examen el 30 de octubre"
+  const dExam = parseCaptureDrafts('examen el 30 de octubre', state, { defaultDate: refDate })[0];
+  assert.equal(dExam.kind, 'task');
+  if (dExam.kind === 'task') {
+    assert.equal(dExam.dueDate, '2026-10-30');
+    assert.ok(dExam.dueDateLabel?.includes('30 de Octubre'));
+  }
+
+  // "comprar leche" (no date)
+  const dMilk = parseCaptureDrafts('comprar leche', state, { defaultDate: refDate })[0];
+  assert.equal(dMilk.kind, 'task');
+  if (dMilk.kind === 'task') {
+    assert.equal(dMilk.dueDate, undefined, 'comprar leche no debe tener dueDate');
+    assert.equal(dMilk.dueDateLabel, undefined, 'comprar leche no debe tener dueDateLabel');
+  }
+});
+
+test('QC 2.2: Matriz completa de precisión semántica financiera (Ingresos, Gastos, Tareas de compra, Ahorros, Negaciones)', () => {
+  const state = defaultState();
+  const refDate = '2026-10-16';
+
+  // 1. "gané 500 pesos por arbitrar un partido" -> Ingreso $U 500
+  const dGane = parseCaptureDrafts('gané 500 pesos por arbitrar un partido', state, { defaultDate: refDate })[0];
+  assert.equal(dGane.kind, 'finance');
+  if (dGane.kind === 'finance') {
+    assert.equal(dGane.type, 'ingreso', 'gané debe clasificarse como ingreso, no como gasto');
+    assert.equal(dGane.amount, 500);
+  }
+
+  // 2. "cobré 1500 pesos por un trabajo" -> Ingreso $U 1.500
+  const dCobre = parseCaptureDrafts('cobré 1500 pesos por un trabajo', state, { defaultDate: refDate })[0];
+  assert.equal(dCobre.kind, 'finance');
+  if (dCobre.kind === 'finance') {
+    assert.equal(dCobre.type, 'ingreso', 'cobré debe clasificarse como ingreso');
+    assert.equal(dCobre.amount, 1500);
+  }
+
+  // 3. "recibí 800 pesos por un servicio" -> Ingreso $U 800
+  const dRecibi = parseCaptureDrafts('recibí 800 pesos por un servicio', state, { defaultDate: refDate })[0];
+  assert.equal(dRecibi.kind, 'finance');
+  if (dRecibi.kind === 'finance') {
+    assert.equal(dRecibi.type, 'ingreso', 'recibí debe clasificarse como ingreso');
+    assert.equal(dRecibi.amount, 800);
+  }
+
+  // 4. "pagué 800 pesos de internet" -> Gasto $U 800
+  const dPague = parseCaptureDrafts('pagué 800 pesos de internet', state, { defaultDate: refDate })[0];
+  assert.equal(dPague.kind, 'finance');
+  if (dPague.kind === 'finance') {
+    assert.equal(dPague.type, 'gasto');
+    assert.equal(dPague.amount, 800);
+  }
+
+  // 5. "compré 250 pesos de manzana" -> Gasto $U 250 (acción pasada)
+  const dCompre = parseCaptureDrafts('compré 250 pesos de manzana', state, { defaultDate: refDate })[0];
+  assert.equal(dCompre.kind, 'finance');
+  if (dCompre.kind === 'finance') {
+    assert.equal(dCompre.type, 'gasto');
+    assert.equal(dCompre.amount, 250);
+  }
+
+  // 6. "comprar 250 pesos de manzana" -> Tarea pendiente (infinitivo = acción futura)
+  const dComprar = parseCaptureDrafts('comprar 250 pesos de manzana', state, { defaultDate: refDate })[0];
+  assert.equal(dComprar.kind, 'task', 'comprar en infinitivo debe ser tarea, no gasto');
+  if (dComprar.kind === 'task') {
+    assert.ok(dComprar.text.includes('comprar 250 pesos de manzana'));
+    assert.equal(dComprar.dueDate, undefined, 'Sin fecha explícita no debe inventar dueDate');
+  }
+
+  // 7. "voy a comprar 250 pesos de manzana" -> Tarea pendiente
+  const dVoyAComprar = parseCaptureDrafts('voy a comprar 250 pesos de manzana', state, { defaultDate: refDate })[0];
+  assert.equal(dVoyAComprar.kind, 'task', 'voy a comprar debe ser tarea');
+  if (dVoyAComprar.kind === 'task') {
+    assert.equal(dVoyAComprar.dueDate, undefined);
+  }
+
+  // 8. "pagar 9300 a Jorge" -> Tarea sin vencimiento
+  const dPagar = parseCaptureDrafts('pagar 9300 a Jorge', state, { defaultDate: refDate })[0];
+  assert.equal(dPagar.kind, 'task');
+  if (dPagar.kind === 'task') {
+    assert.equal(dPagar.dueDate, undefined);
+  }
+
+  // 9. "debo 500 pesos a jorga" -> Tarea pendiente
+  const dDebo = parseCaptureDrafts('debo 500 pesos a jorga', state, { defaultDate: refDate })[0];
+  assert.equal(dDebo.kind, 'task');
+
+  // 10. "ahorro de 1000 pesos en viaje a bolivia" -> No registrar gasto ni ingreso (Bandeja)
+  const dAhorro = parseCaptureDrafts('ahorro de 1000 pesos en viaje a bolivia', state, { defaultDate: refDate })[0];
+  assert.notEqual(dAhorro.kind, 'finance', 'Ahorro no debe ser gasto ni ingreso');
+  assert.equal(dAhorro.kind, 'inbox', 'Ahorro debe ser capturado de forma segura en Bandeja');
+
+  // 11. "quiero ahorrar 5000 pesos" -> Intención futura, no ingreso/gasto
+  const dQuieroAhorrar = parseCaptureDrafts('quiero ahorrar 5000 pesos', state, { defaultDate: refDate })[0];
+  assert.notEqual(dQuieroAhorrar.kind, 'finance');
+  assert.equal(dQuieroAhorrar.kind, 'inbox');
+
+  // 12. "me ahorré 1000 pesos en un viaje" -> No gasto ni ingreso automático
+  const dMeAhorre = parseCaptureDrafts('me ahorré 1000 pesos en un viaje', state, { defaultDate: refDate })[0];
+  assert.notEqual(dMeAhorre.kind, 'finance');
+  assert.equal(dMeAhorre.kind, 'inbox');
+
+  // 13. "no pagué 500 pesos" -> No gasto realizado (negación)
+  const dNoPague = parseCaptureDrafts('no pagué 500 pesos', state, { defaultDate: refDate })[0];
+  assert.notEqual(dNoPague.kind, 'finance');
+  assert.equal(dNoPague.kind, 'inbox');
+
+  // 14. "quiero ganar 500 pesos" -> No ingreso realizado (deseo)
+  const dQuieroGanar = parseCaptureDrafts('quiero ganar 500 pesos', state, { defaultDate: refDate })[0];
+  assert.notEqual(dQuieroGanar.kind, 'finance');
+  assert.equal(dQuieroGanar.kind, 'inbox');
+
+  // 15. "examen el 30 de octubre" -> Fecha explícita correcta
+  const dExamen = parseCaptureDrafts('examen el 30 de octubre', state, { defaultDate: refDate })[0];
+  assert.equal(dExamen.kind, 'task');
+  if (dExamen.kind === 'task') {
+    assert.equal(dExamen.dueDate, '2026-10-30');
+  }
+
+  // 16. "6000 en 6 cuotas" -> No inventar cuotas ni vencimientos en finanzas
+  const dCuotas = parseCaptureDrafts('6000 en 6 cuotas', state, { defaultDate: refDate })[0];
+  assert.equal(dCuotas.kind, 'finance');
+  if (dCuotas.kind === 'finance') {
+    assert.equal(dCuotas.amount, 6000);
+    assert.equal(dCuotas.installments, 6);
+  }
+});
+
+test('QC 2.2: Capturas compuestas preservan intenciones independientes ("cobré 500 por arbitrar y mañana comprar leche")', () => {
+  const state = defaultState();
+  const refDate = '2026-10-16';
+
+  const drafts = parseCaptureDrafts('cobré 500 por arbitrar y mañana comprar leche', state, { defaultDate: refDate });
+  assert.equal(drafts.length, 2, 'Debe generar exactamente dos borradores independientes');
+
+  // Borrador 1: Ingreso por arbitrar
+  assert.equal(drafts[0].kind, 'finance');
+  if (drafts[0].kind === 'finance') {
+    assert.equal(drafts[0].type, 'ingreso');
+    assert.equal(drafts[0].amount, 500);
+  }
+
+  // Borrador 2: Tarea para mañana comprar leche
+  assert.equal(drafts[1].kind, 'task');
+  if (drafts[1].kind === 'task') {
+    assert.equal(drafts[1].text, 'comprar leche');
+    assert.equal(drafts[1].dueDate, '2026-10-17');
+  }
 });

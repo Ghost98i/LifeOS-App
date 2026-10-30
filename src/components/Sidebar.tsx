@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ViewType, LifeOSState } from '../types';
 import lifeOSIcon from '../assets/lifeos-icon.png';
 import { AppIcon, type AppIconName } from './AppIcon';
@@ -20,10 +20,10 @@ export const NAV_ITEMS: { id: ViewType; icon: AppIconName; label: string; option
   { id: 'agenda', icon: 'calendar', label: 'Agenda', optional: true },
   { id: 'calendario', icon: 'calendarDays', label: 'Calendario', optional: true },
   { id: 'trabajo', icon: 'briefcase', label: 'Trabajo', optional: true },
-  { id: 'reventa', icon: 'repeat', label: 'Reventa', optional: true },
-  { id: 'estudios', icon: 'book', label: 'Estudios', optional: true },
+  { id: 'reventa', icon: 'store', label: 'Mi negocio', optional: true },
+  { id: 'estudios', icon: 'graduation', label: 'Estudios', optional: true },
   { id: 'notas', icon: 'note', label: 'Notas', optional: true },
-  { id: 'ia', icon: 'sparkles', label: 'IA', optional: true },
+  { id: 'ia', icon: 'ai', label: 'IA', optional: true },
   { id: 'config', icon: 'settings', label: 'Configuración' },
 ];
 
@@ -36,6 +36,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
 }) => {
   const items = NAV_ITEMS.filter((item) => isModuleEnabled(state, item.id));
+  const drawerRef = useRef<HTMLElement>(null);
+  const closeRef = useRef(onCloseMobile);
+  closeRef.current = onCloseMobile;
+
+  useEffect(() => {
+    if (!isOpenMobile || window.matchMedia('(min-width: 1024px)').matches) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    drawerRef.current?.querySelector<HTMLButtonElement>('[aria-label="Cerrar navegación"]')?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeRef.current();
+      }
+      if (event.key !== 'Tab') return;
+      const buttons = Array.from(drawerRef.current?.querySelectorAll('button:not(:disabled)') || []) as HTMLButtonElement[];
+      const first = buttons[0];
+      const last = buttons[buttons.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    const desktop = window.matchMedia('(min-width: 1024px)');
+    const onResize = () => { if (desktop.matches) closeRef.current(); };
+    desktop.addEventListener('change', onResize);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener('keydown', onKeyDown);
+      desktop.removeEventListener('change', onResize);
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, [isOpenMobile]);
 
   return (
     <>
@@ -48,8 +81,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <aside
+        ref={drawerRef}
+        aria-label="Navegación principal"
         className={`fixed lg:sticky top-0 left-0 h-screen w-[232px] bg-[var(--sidebar)] border-r border-[var(--border)] flex flex-col p-4 z-50 transition-transform duration-200 ease-in-out shrink-0 shadow-[var(--chrome-shadow)] ${
-          isOpenMobile ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          isOpenMobile ? 'visible translate-x-0' : 'invisible -translate-x-full lg:visible lg:translate-x-0'
         }`}
       >
         <div className="flex items-center justify-between px-2 pb-5 pt-1">
@@ -59,13 +94,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             <div className="flex flex-col min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="text-base font-black leading-none tracking-tight text-[var(--text)] truncate">LifeOS</span>
+                <span className="text-sm font-black leading-none tracking-tight text-[var(--text)] truncate">Celestian LifeOS</span>
                 <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
               </div>
               <span className="mt-1 text-[10px] font-semibold text-[var(--text-faint)] truncate tracking-wide">Workspace Personal</span>
             </div>
           </div>
         </div>
+
+        <button type="button" onClick={onCloseMobile} aria-label="Cerrar navegación" className="mb-2 flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--border)] text-sm text-[var(--text-soft)] lg:hidden">
+          <AppIcon name="x" className="h-4 w-4" /> Cerrar
+        </button>
 
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto pr-1">
           {items.map((item, idx) => {
@@ -107,12 +146,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {isActive && (
                     <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-gradient-to-b from-indigo-500 to-blue-500" />
                   )}
+                  <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
                   <AppIcon
                     name={item.icon}
-                    className={`h-[18px] w-[18px] shrink-0 transition-colors ${
-                      isActive ? 'text-indigo-500 dark:text-indigo-400' : 'text-[var(--text-faint)] group-hover:text-[var(--text)]'
+                    className={`h-[22px] w-[22px] shrink-0 transition-colors ${
+                      isActive ? 'text-[#4F46E5] dark:text-indigo-400' : 'text-[var(--text-soft)] group-hover:text-[var(--text)]'
                     }`}
                   />
+                  </span>
                   <span className="truncate">{item.label}</span>
                 </button>
               </React.Fragment>
@@ -132,7 +173,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </span>
               <span>Modo {state.settings.darkMode ? 'Oscuro' : 'Claro'}</span>
             </div>
-            <span className="text-[10px] font-bold text-[var(--text-faint)] uppercase font-mono px-1.5 py-0.5 rounded bg-[var(--surface-muted)]">
+            <span className="text-[10px] font-bold text-[var(--text-faint)] uppercase px-1.5 py-0.5 rounded bg-[var(--surface-muted)]">
               {state.settings.darkMode ? 'ON' : 'OFF'}
             </span>
           </button>

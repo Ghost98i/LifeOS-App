@@ -63,6 +63,18 @@ export function startGymSession(
   const template = input.templateId
     ? gym.routineTemplates.find((candidate) => candidate.id === input.templateId)
     : undefined;
+
+  // Recuperación segura de rutinas históricas que quedaron con timerEnabled: false
+  // por el comportamiento anterior, sin alterar rutinas con desactivación selectiva o explícita.
+  if (template && template.exercises.length > 0) {
+    const allUniformlyFalse = template.exercises.every((ex) => ex.timerEnabled === false);
+    const noneExplicitlyDisabled = template.exercises.every((ex) => ex.restSecondsMode !== 'disabled' && ex.restSeconds !== 0);
+    if (allUniformlyFalse && noneExplicitlyDisabled) {
+      for (const ex of template.exercises) {
+        ex.timerEnabled = true;
+      }
+    }
+  }
   const session: GymSession = {
     id: input.sessionId || uid(),
     date: input.date,
@@ -219,6 +231,9 @@ export function updateGymTemplateExercise(
   const found = findTemplateExercise(template, target);
   if (!found) return false;
   Object.assign(found.exercise, updates);
+  if (updates.restSeconds !== undefined && updates.restSecondsMode === undefined) {
+    found.exercise.restSecondsMode = 'custom';
+  }
   return true;
 }
 
@@ -226,7 +241,7 @@ export function configureGymTemplateExercise(
   gym: Gym,
   templateId: string,
   target: TemplateExerciseTarget,
-  input: { setsCount: number; reps: number; targetWeight: number; restSeconds: number }
+  input: { setsCount: number; reps: number; targetWeight: number; restSeconds?: number }
 ): boolean {
   const template = gym.routineTemplates.find((candidate) => candidate.id === templateId);
   const found = findTemplateExercise(template, target);
@@ -235,7 +250,6 @@ export function configureGymTemplateExercise(
   const setsCount = Math.min(20, Math.max(1, Math.round(input.setsCount) || 1));
   const reps = Math.min(1000, Math.max(1, Math.round(input.reps) || 1));
   const targetWeight = Math.max(0, Number(input.targetWeight) || 0);
-  const restSeconds = Math.min(600, Math.max(15, Math.round(input.restSeconds) || 90));
   found.exercise.sets = Array.from({ length: setsCount }, (_, index) => ({
     id: found.exercise.sets[index]?.id || uid(),
     weight: targetWeight,
@@ -244,7 +258,10 @@ export function configureGymTemplateExercise(
     completedAt: null,
   }));
   found.exercise.weight = targetWeight;
-  found.exercise.restSeconds = restSeconds;
+  if (input.restSeconds !== undefined) {
+    found.exercise.restSeconds = Math.min(600, Math.max(15, Math.round(input.restSeconds) || 90));
+    found.exercise.restSecondsMode = 'custom';
+  }
   return true;
 }
 
@@ -332,7 +349,7 @@ export function addExerciseToGymSession(
     equipment,
     muscleGroup: input.muscleGroup || inferMuscleGroup(name),
     barWeight,
-    restSeconds: 90,
+    restSecondsMode: 'inherit',
     timerEnabled: true,
     sets,
     weight: startWeight,
@@ -456,6 +473,8 @@ export const DEFAULT_GYM_SETTINGS: Required<GymSettings> = {
   restBetweenSetsSeconds: 120,
   restBetweenExercisesSeconds: 180,
   autoTimerEnabled: true,
+  showQuickRestAdjustments: true,
+  allowManualRestEditing: false,
 };
 
 export function getGymSettings(gym?: Gym | null): Required<GymSettings> {
@@ -470,7 +489,29 @@ export function getGymSettings(gym?: Gym | null): Required<GymSettings> {
     autoTimerEnabled: settings?.autoTimerEnabled !== undefined
       ? Boolean(settings.autoTimerEnabled)
       : DEFAULT_GYM_SETTINGS.autoTimerEnabled,
+    showQuickRestAdjustments: settings?.showQuickRestAdjustments !== undefined
+      ? Boolean(settings.showQuickRestAdjustments)
+      : DEFAULT_GYM_SETTINGS.showQuickRestAdjustments,
+    allowManualRestEditing: settings?.allowManualRestEditing !== undefined
+      ? Boolean(settings.allowManualRestEditing)
+      : DEFAULT_GYM_SETTINGS.allowManualRestEditing,
   };
+}
+
+const LEGACY_EXERCISE_REST_DEFAULT_SECONDS = 90;
+
+/**
+ * Resolves the effective between-set rest without letting an old template default
+ * silently shadow the user's global setting. Unmarked legacy values other than the
+ * historical 90-second default are retained as likely user customizations.
+ */
+export function getEffectiveExerciseRestSeconds(exercise: Exercise, settings: Required<GymSettings>): number {
+  const stored = typeof exercise.restSeconds === 'number' && exercise.restSeconds > 0
+    ? Math.min(600, Math.max(15, Math.round(exercise.restSeconds)))
+    : null;
+  const hasExplicitOverride = exercise.restSecondsMode === 'custom'
+    || (exercise.restSecondsMode === undefined && stored !== null && stored !== LEGACY_EXERCISE_REST_DEFAULT_SECONDS);
+  return hasExplicitOverride && stored !== null ? stored : settings.restBetweenSetsSeconds;
 }
 
 export function isExerciseCompleted(exercise: Exercise): boolean {
@@ -497,7 +538,7 @@ export function resolveNextRestTimer(
   if (!exercise) return null;
 
   const settings = getGymSettings(gym);
-  if (!settings.autoTimerEnabled || exercise.timerEnabled === false) {
+  if (!settings.autoTimerEnabled || exercise.timerEnabled === false || exercise.restSecondsMode === 'disabled' || exercise.restSeconds === 0) {
     return null;
   }
 
@@ -506,6 +547,11 @@ export function resolveNextRestTimer(
   const exerciseIndex = found.index;
 
   if (exerciseDone) {
+    // Si todos los ejercicios de la sesión ya están completados, no requiere timer de descanso
+    const hasRemainingIncomplete = session.exercises.some((ex, idx) => idx !== exerciseIndex && !isExerciseCompleted(ex));
+    if (!hasRemainingIncomplete) {
+      return null;
+    }
     const durationSeconds = settings.restBetweenExercisesSeconds;
     const targetExerciseIndex = exerciseIndex + 1 < session.exercises.length ? exerciseIndex + 1 : undefined;
     return {
@@ -520,9 +566,7 @@ export function resolveNextRestTimer(
     };
   }
 
-  const durationSeconds = typeof exercise.restSeconds === 'number' && exercise.restSeconds > 0
-    ? exercise.restSeconds
-    : settings.restBetweenSetsSeconds;
+  const durationSeconds = getEffectiveExerciseRestSeconds(exercise, settings);
 
   return {
     endsAt: now + durationSeconds * 1000,
@@ -535,11 +579,53 @@ export function resolveNextRestTimer(
   };
 }
 
+export function pauseGymRestTimer(timer: GymActiveTimer, now = Date.now()): GymActiveTimer {
+  if (timer.pausedAt) return timer;
+  const remainingSeconds = Math.max(0, Math.ceil((timer.endsAt - now) / 1000));
+  return {
+    ...timer,
+    pausedAt: now,
+    remainingSecondsWhenPaused: remainingSeconds,
+  };
+}
+
+export function resumeGymRestTimer(timer: GymActiveTimer, now = Date.now()): GymActiveTimer {
+  if (!timer.pausedAt) return timer;
+  const remainingSeconds = timer.remainingSecondsWhenPaused ?? Math.max(0, Math.ceil((timer.endsAt - timer.pausedAt) / 1000));
+  return {
+    ...timer,
+    endsAt: now + remainingSeconds * 1000,
+    pausedAt: null,
+    remainingSecondsWhenPaused: null,
+  };
+}
+
+export function toggleGymRestTimerPause(timer: GymActiveTimer, now = Date.now()): GymActiveTimer {
+  return timer.pausedAt ? resumeGymRestTimer(timer, now) : pauseGymRestTimer(timer, now);
+}
+
 export function applyGymRestTimerAdjustment(
   timer: GymActiveTimer,
   deltaSeconds: number,
   now = Date.now()
 ): { timer: GymActiveTimer | null; completed: boolean } {
+  if (timer.pausedAt) {
+    const currentRemaining = timer.remainingSecondsWhenPaused ?? Math.max(0, Math.ceil((timer.endsAt - timer.pausedAt) / 1000));
+    const nextRemaining = currentRemaining + deltaSeconds;
+    if (nextRemaining <= 0) {
+      return { timer: null, completed: true };
+    }
+    return {
+      timer: {
+        ...timer,
+        remainingSecondsWhenPaused: nextRemaining,
+        durationSeconds: Math.max(1, timer.durationSeconds + deltaSeconds),
+        endsAt: timer.pausedAt + nextRemaining * 1000,
+      },
+      completed: false,
+    };
+  }
+
   if (deltaSeconds > 0) {
     return {
       timer: {
@@ -568,6 +654,27 @@ export function applyGymRestTimerAdjustment(
       durationSeconds: Math.max(1, timer.durationSeconds + deltaSeconds),
     },
     completed: false,
+  };
+}
+
+export function setGymRestTimerRemaining(
+  timer: GymActiveTimer,
+  remainingSeconds: number,
+  now = Date.now()
+): GymActiveTimer {
+  const durationSeconds = Math.max(1, Math.round(remainingSeconds) || 1);
+  if (timer.pausedAt) {
+    return {
+      ...timer,
+      endsAt: timer.pausedAt + durationSeconds * 1000,
+      durationSeconds,
+      remainingSecondsWhenPaused: durationSeconds,
+    };
+  }
+  return {
+    ...timer,
+    endsAt: now + durationSeconds * 1000,
+    durationSeconds,
   };
 }
 

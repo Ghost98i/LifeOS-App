@@ -51,7 +51,7 @@ export const ONBOARDING_MODULES: readonly OnboardingModuleOption[] = [
     id: 'estudios',
     name: 'Estudios',
     description: 'Materias académicas, registro de estudio y exámenes.',
-    icon: 'book',
+    icon: 'graduation',
   },
   {
     id: 'trabajo',
@@ -81,7 +81,7 @@ export const ONBOARDING_MODULES: readonly OnboardingModuleOption[] = [
     id: 'reventa',
     name: 'Reventa',
     description: 'Inventario de productos, compras, ventas y márgenes.',
-    icon: 'repeat',
+    icon: 'store',
   },
 ];
 
@@ -140,10 +140,10 @@ export const MODULE_NAV_METADATA: Record<ViewType, ModuleNavMetadata> = {
   agenda: { id: 'agenda', label: 'Agenda', icon: 'calendar' },
   calendario: { id: 'calendario', label: 'Calendario', icon: 'calendarDays' },
   trabajo: { id: 'trabajo', label: 'Trabajo', icon: 'briefcase' },
-  reventa: { id: 'reventa', label: 'Reventa', icon: 'repeat' },
-  estudios: { id: 'estudios', label: 'Estudios', icon: 'book' },
+  reventa: { id: 'reventa', label: 'Reventa', icon: 'store' },
+  estudios: { id: 'estudios', label: 'Estudios', icon: 'graduation' },
   notas: { id: 'notas', label: 'Notas', icon: 'note' },
-  ia: { id: 'ia', label: 'IA', icon: 'sparkles' },
+  ia: { id: 'ia', label: 'IA', icon: 'ai' },
   config: { id: 'config', label: 'Configuración', icon: 'settings' },
   checkout: { id: 'checkout', label: 'Cerrar Día', icon: 'moon' },
 };

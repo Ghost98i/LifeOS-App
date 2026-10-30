@@ -326,6 +326,9 @@ test('evaluateCushionStatus: correctly classifies disabled, below_current, proje
   assert.equal(evaluateCushionStatus(10000, 8000, 5000, false).status, 'disabled');
   assert.equal(evaluateCushionStatus(10000, 8000, null, true).status, 'disabled');
   assert.equal(evaluateCushionStatus(10000, 8000, 0, true).status, 'disabled');
+  // Disabled when no accounts are configured (avoids false cushion alarms during onboarding)
+  assert.equal(evaluateCushionStatus(0, 0, 5000, true, 0).status, 'disabled');
+  assert.equal(evaluateCushionStatus(0, 0, 5000, true, 0).message, 'Sin cuentas configuradas.');
 
   // Currently below
   const belowCurrent = evaluateCushionStatus(3000, 2000, 5000, true);

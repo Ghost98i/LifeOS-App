@@ -1,12 +1,70 @@
 node_modules/
 dist/
-.env
-.env.local
+# Local configuration: keep only sanitized templates in Git.
+.env*
+!.env.example
+!.env.*.example
 .firebase/
 firebase-debug.log
 *-debug.log
-release/
+# Private release packages and backups remain local. One already-public,
+# immutable compatibility fixture is required by publishedResaleContract.test.ts.
+/release/*
+!/release/published-observation-20261023/
+/release/published-observation-20261023/*
+!/release/published-observation-20261023/assets_index-ExwrnwAV.js
 *.zip
 deploy-package/
 deploy-*/
 lifeos-*-202*/
+
+# Audit evidence may include local exports, synthetic keys and personal records.
+/artifacts/
+/backups/
+/backup/
+/private/
+/credentials/
+/secrets/
+
+# Installed agent packages are local tooling, not application dependencies.
+/.agent/
+/.agents/
+/skills-lock.json
+
+# Generated files already tracked: future index-only removals need approval.
+/LifeOS.html
+/MANIFEST.sha256
+/das
+
+# Credentials and key containers (Firebase web app config is public, not a key).
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa
+id_ed25519
+id_ecdsa
+id_dsa
+*service-account*.json
+*service_account*.json
+*serviceAccount*.json
+*ServiceAccount*.json
+*adminsdk*.json
+credentials.json
+credentials.local.json
+application_default_credentials.json
+.credentials/
+.secrets/
+/.npmrc
+
+# Reproducible local outputs.
+coverage/
+playwright-report/
+test-results/
+__pycache__/
+*.pyc
+*.tsbuildinfo
+*.log
+.cache/

@@ -4,7 +4,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { GimnasioView } from '../components/GimnasioView';
 import type { GymSession } from '../types';
-import { buildGymSessionPresentation } from './gymIdlePresentation';
+import { buildGymSessionPresentation, dedupeVisibleGymRecords, formatGymSessionDateTime, getGymCalendarOverview, getPreviousSessionBestLabel } from './gymIdlePresentation';
 import { defaultState, todayISO } from './storage';
 
 const session: GymSession = {
@@ -59,6 +59,33 @@ test('sólo marca PR si la sesión conserva un récord real frente al historial'
   assert.equal(buildGymSessionPresentation(session, [session, strongerSession]).prExerciseCount, 0);
 });
 
+test('la mejor serie anterior usa el máximo efectivo, no la sugerencia inicial', () => {
+  assert.equal(getPreviousSessionBestLabel([session], 'current', 'Press banca'), '70 kg × 8');
+});
+
+test('los récords visualmente idénticos se muestran una sola vez aunque tengan IDs distintos', () => {
+  const records = [
+    { id: 'a', name: 'Press banca plano', weight: 80, reps: 7 },
+    { id: 'b', name: 'Press banca plano', weight: 80, reps: 7 },
+    { id: 'c', name: 'Press banca plano', weight: 85, reps: 5 },
+  ];
+  assert.deepEqual(dedupeVisibleGymRecords(records).map((record) => record.id), ['a', 'c']);
+  assert.equal(records.length, 3);
+});
+
+test('cuenta sesiones realizadas por semana y mes calendario y muestra la hora registrada', () => {
+  const older = { ...session, id: 'older', date: '2026-09-30' };
+  const monday = { ...session, id: 'monday', date: '2026-10-19', startedAt: '07:30' };
+  const recent = { ...session, id: 'recent', date: '2026-10-24', startedAt: '18:00' };
+  const active = { ...session, id: 'active', date: '2026-10-24', status: 'active' as const };
+  const overview = getGymCalendarOverview([older, monday, recent, active], '2026-10-24');
+  assert.equal(overview.weekCount, 2);
+  assert.equal(overview.monthCount, 2);
+  assert.equal(overview.latest?.id, 'recent');
+  assert.match(formatGymSessionDateTime(recent), /24 de octubre de 2026 · 18:00/);
+  assert.doesNotMatch(formatGymSessionDateTime({ ...recent, startedAt: 'Cerrada', finishedAt: null }), /Cerrada/);
+});
+
 test('el idle completado prioriza lectura y mantiene un único CTA de inicio', () => {
   const state = defaultState();
   state.gym.sessions = [{ ...session, date: todayISO() }];
@@ -67,11 +94,13 @@ test('el idle completado prioriza lectura y mantiene un único CTA de inicio', (
   );
 
   assert.match(html, /data-gym-today-status/);
-  assert.match(html, /data-latest-session-summary/);
+  assert.match(html, /Secciones de Gimnasio/);
+  assert.match(html, /Rutinas/);
   assert.match(html, /Sesión de hoy completada/);
   assert.match(html, /Volumen total/);
   assert.match(html, /Mejores marcas/);
-  assert.match(html, /Ver detalle/);
+  assert.doesNotMatch(html, /data-gym-routines/);
+  assert.doesNotMatch(html, /data-latest-session-summary/);
   assert.doesNotMatch(html, /data-latest-session-detail/);
   assert.doesNotMatch(html, /data-historical-session-editor/);
   assert.doesNotMatch(html, /data-workout-session-card/);
@@ -110,7 +139,7 @@ test('progreso prioriza frecuencia y el nuevo motor omite gráficos con pocos da
   );
 
   assert.match(html, /data-gym-progress-overview/);
-  assert.match(html, /Frecuencia reciente/);
+  assert.match(html, /Entrenamientos esta semana/);
   assert.match(html, /Última ejecución/);
   assert.match(html, /Mejor serie/);
   assert.ok(html.indexOf('Mejor serie') < html.indexOf('Última ejecución'));
@@ -143,9 +172,35 @@ test('rutinas presenta inicio como acción principal y editor explícito', () =>
 
   assert.match(html, /data-gym-routines/);
   assert.match(html, /data-gym-routine-editor/);
-  assert.match(html, /Tu biblioteca/);
+  assert.match(html, /Planes guardados · las sesiones ejecutadas están en Historial/);
+  assert.match(html, /Ejercicios y objetivos/);
+  assert.match(html, /1 series · 8 reps · 70 kg/);
   assert.match(html, />Iniciar</);
   assert.match(html, /Objetivo \(kg\)/);
   assert.match(html, /Descanso \(s\)/);
   assert.match(html, /Más acciones para Torso A/);
+});
+
+test('una rutina sin ejercicios queda identificada y no ofrece inicio directo', () => {
+  const state = defaultState();
+  state.gym.routineTemplates = [{ id: 'brazos', name: 'Brazos', exercises: [] }];
+  let writes = 0;
+  const html = renderToStaticMarkup(
+    React.createElement(GimnasioView, {
+      state,
+      onUpdateState: () => { writes++; return true; },
+      initialTab: 'rutinas',
+    })
+  );
+  const trainingHtml = renderToStaticMarkup(
+    React.createElement(GimnasioView, {
+      state,
+      onUpdateState: () => { writes++; return true; },
+      initialTab: 'entrenar',
+    })
+  );
+  assert.match(html, /Sin ejercicios · Editá para empezar/);
+  assert.match(trainingHtml, /<option[^>]*disabled=""[^>]*>Brazos · sin ejercicios<\/option>/);
+  assert.doesNotMatch(html, />Iniciar<\/button>/);
+  assert.equal(writes, 0);
 });

@@ -1,15 +1,21 @@
 import React, { useState, useMemo } from 'react';
 import { Transaction, Account, FinanceCategoryInput } from '../types';
-import { fmtDate, fmtMoney } from '../lib/storage';
+import type { CommercialSet } from '../lib/commercialContract';
+import { resolveCommercialTransactionPresentation } from '../lib/commercialFinanceBridge';
+import { fmtDate, formatMoney, sumMoney, diffMoney } from '../lib/storage';
+import { resolveTransactionCurrency } from '../lib/calculations';
 import { getCategoryName, getAllCategories } from '../lib/financeCategories';
 import { identifyMerchant } from '../lib/merchantIdentity';
 import { AppIcon } from './AppIcon';
 import { PrivacyAmount } from './PrivacyAmount';
+import { compareTransactionsChronologically, transactionTimeLabel } from '../lib/financeTransactionChronology';
 
 interface FinanceTransactionTableProps {
   transactions: Transaction[];
   accounts: Account[];
   categories: FinanceCategoryInput[];
+  commercial?: CommercialSet | null;
+  onOpenCommercial?: () => void;
   onEdit: (transaction: Transaction) => void;
   onDelete: (id: string) => void;
   totalGastadoAnio?: number;
@@ -22,6 +28,8 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
   transactions,
   accounts,
   categories,
+  commercial,
+  onOpenCommercial,
   onEdit,
   onDelete,
   totalGastadoAnio: _totalGastadoAnio,
@@ -76,12 +84,17 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
         const accountName = accounts.find((a) => a.id === t.accountId)?.name?.toLowerCase() || '';
+        const commercialMeta = resolveCommercialTransactionPresentation(t, commercial);
         const note = (t.note || '').toLowerCase();
+        const displayNote = commercialMeta.displayNote.toLowerCase();
+        const originBadge = (commercialMeta.originBadge || '').toLowerCase();
         const category = (t.category || '').toLowerCase();
         const categoryDisplayName = getCategoryName(categories, t.category).toLowerCase();
         const amountStr = String(t.amount);
         const match =
           note.includes(query) ||
+          displayNote.includes(query) ||
+          originBadge.includes(query) ||
           category.includes(query) ||
           categoryDisplayName.includes(query) ||
           accountName.includes(query) ||
@@ -90,14 +103,14 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
       }
       return true;
     });
-  }, [transactions, selectedAccount, selectedCategory, selectedType, searchQuery, accounts, categories]);
+  }, [transactions, selectedAccount, selectedCategory, selectedType, searchQuery, accounts, categories, commercial]);
 
   // Sort logic
   const sortedTransactions = useMemo(() => {
     const list = [...filteredTransactions];
     list.sort((a, b) => {
-      if (sortBy === 'date_desc') return b.date.localeCompare(a.date) || b.id.localeCompare(a.id);
-      if (sortBy === 'date_asc') return a.date.localeCompare(b.date) || a.id.localeCompare(b.id);
+      if (sortBy === 'date_desc') return compareTransactionsChronologically(b, a);
+      if (sortBy === 'date_asc') return compareTransactionsChronologically(a, b);
       if (sortBy === 'amount_desc') return b.amount - a.amount;
       if (sortBy === 'amount_asc') return a.amount - b.amount;
       return 0;
@@ -113,16 +126,25 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
     return sortedTransactions.slice(start, start + pageSize);
   }, [sortedTransactions, currentPage, pageSize]);
 
-  // Totals for filtered transactions
-  const totals = useMemo(() => {
-    let gastos = 0;
-    let ingresos = 0;
+  // Totals for filtered transactions segregated by currency
+  const totalsByCurrency = useMemo(() => {
+    const result: Record<string, { gastos: number; ingresos: number; balance: number }> = {};
     for (const t of filteredTransactions) {
-      if (t.type === 'gasto') gastos += Number(t.amount || 0);
-      else if (t.type === 'ingreso') ingresos += Number(t.amount || 0);
+      const cur = resolveTransactionCurrency(t, accounts);
+      if (!result[cur]) {
+        result[cur] = { gastos: 0, ingresos: 0, balance: 0 };
+      }
+      if (t.type === 'gasto') {
+        result[cur].gastos = sumMoney(result[cur].gastos, Number(t.amount || 0));
+      } else if (t.type === 'ingreso') {
+        result[cur].ingresos = sumMoney(result[cur].ingresos, Number(t.amount || 0));
+      }
     }
-    return { gastos, ingresos, balance: ingresos - gastos };
-  }, [filteredTransactions]);
+    for (const cur of Object.keys(result)) {
+      result[cur].balance = diffMoney(result[cur].ingresos, result[cur].gastos);
+    }
+    return result;
+  }, [filteredTransactions, accounts]);
 
   const selectedAccountObj = accounts.find((a) => a.id === selectedAccount);
   const selectedCategoryName = selectedCategory !== 'all' ? getCategoryName(categories, selectedCategory) : null;
@@ -172,7 +194,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
             <AppIcon name="settings" className="h-3.5 w-3.5 opacity-80" />
             <span>Filtros</span>
             {activeFiltersCount > 0 && (
-              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-indigo-600 text-white font-bold">
+              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] tabular-nums bg-indigo-600 text-white font-bold">
                 {activeFiltersCount}
               </span>
             )}
@@ -417,14 +439,25 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
           <div className="divide-y divide-[var(--finance-border)] md:hidden">
             {paginatedTransactions.map((t) => {
               const account = accounts.find((a) => a.id === t.accountId);
+              const txCurrency = resolveTransactionCurrency(t, accounts);
               const isExpense = t.type === 'gasto';
-              const merchant = identifyMerchant(t.note);
+              const commercialMeta = resolveCommercialTransactionPresentation(t, commercial);
+              const merchant = commercialMeta.isCommercial ? null : identifyMerchant(t.note);
+              const displayLabel = commercialMeta.displayNote || getCategoryName(categories, t.category);
               return (
                 <article key={t.id} className="p-3.5 space-y-2 hover:bg-[var(--finance-surface-hover)] transition-colors">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {merchant ? (
+                        {commercialMeta.isCommercial ? (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold border shrink-0 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/25"
+                            title="Origen: Mi negocio"
+                          >
+                            <span>🏪</span>
+                            <span>{commercialMeta.originBadge}</span>
+                          </span>
+                        ) : merchant ? (
                           <span
                             className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold border shrink-0"
                             style={{
@@ -456,11 +489,12 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                           </span>
                         )}
                       </div>
-                      <p className="finance-text-primary mt-1 text-sm font-semibold truncate">
-                        {t.note || getCategoryName(categories, t.category)}
+                      <p className="finance-text-primary mt-1 text-sm font-semibold leading-snug break-words [overflow-wrap:anywhere]">
+                        {displayLabel}
                       </p>
-                      <p className="finance-text-muted text-[11px] font-mono">
+                      <p className="finance-text-muted text-[11px] tabular-nums">
                         {fmtDate(t.date)}
+                        {transactionTimeLabel(t) && ` · ${transactionTimeLabel(t)}`}
                         {t.fixed && ` · ${t.fixed}`}
                       </p>
                     </div>
@@ -468,31 +502,53 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                     <div className="text-right shrink-0">
                       <PrivacyAmount
                         as="strong"
-                        className={`font-mono text-sm font-extrabold block ${
+                        className={`tabular-nums text-sm font-extrabold block ${
                           isExpense ? 'finance-text-primary' : 'text-emerald-600 dark:text-emerald-400'
                         }`}
                       >
-                        {isExpense ? '−' : '+'} {fmtMoney(t.amount)}
+                        {isExpense ? '−' : '+'} {formatMoney(t.amount, txCurrency)}
                       </PrivacyAmount>
                       <div className="mt-1.5 flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={() => onEdit(t)}
-                          className="rounded-md px-2 py-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 cursor-pointer"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (confirm(`¿Eliminar movimiento "${t.note || getCategoryName(categories, t.category)}"?`)) {
-                              onDelete(t.id);
-                            }
-                          }}
-                          className="finance-text-muted rounded-md px-1.5 py-0.5 text-[11px] hover:text-rose-500 cursor-pointer"
-                        >
-                          ✕
-                        </button>
+                        {commercialMeta.isCommercial ? (
+                          onOpenCommercial ? (
+                            <button
+                              type="button"
+                              onClick={onOpenCommercial}
+                              title="Movimiento comercial protegido. Para corregir, devolver o reembolsar, abrí Mi negocio."
+                              className="rounded-md px-2 py-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 cursor-pointer"
+                            >
+                              Mi negocio →
+                            </button>
+                          ) : (
+                            <span
+                              title="Movimiento comercial protegido. Gestioná devoluciones, correcciones o reembolsos desde Mi negocio."
+                              className="finance-text-muted rounded-md px-2 py-0.5 text-[10px] font-semibold"
+                            >
+                              En Mi negocio
+                            </span>
+                          )
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => onEdit(t)}
+                              className="rounded-md px-2 py-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 cursor-pointer"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (confirm(`¿Eliminar movimiento "${displayLabel}"?`)) {
+                                  onDelete(t.id);
+                                }
+                              }}
+                              className="finance-text-muted rounded-md px-1.5 py-0.5 text-[11px] hover:text-rose-500 cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -518,8 +574,11 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                 {paginatedTransactions.map((t) => {
                   const account = accounts.find((a) => a.id === t.accountId);
+                  const txCurrency = resolveTransactionCurrency(t, accounts);
                   const isExpense = t.type === 'gasto';
-                  const merchant = identifyMerchant(t.note);
+                  const commercialMeta = resolveCommercialTransactionPresentation(t, commercial);
+                  const merchant = commercialMeta.isCommercial ? null : identifyMerchant(t.note);
+                  const displayLabel = commercialMeta.displayNote || getCategoryName(categories, t.category);
                   return (
                     <tr
                       key={t.id}
@@ -528,21 +587,31 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                       {/* Column 1: Merchant / Description */}
                       <td className="py-3 px-4 max-w-[280px]">
                         <div className="flex items-center gap-2">
-                          {merchant && (
+                          {commercialMeta.isCommercial ? (
                             <span
-                              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold border shrink-0"
-                              style={{
-                                backgroundColor: merchant.badgeBg,
-                                color: merchant.badgeColor,
-                                borderColor: merchant.badgeBorder,
-                              }}
+                              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold border shrink-0 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/25"
+                              title="Origen: Mi negocio"
                             >
-                              <span>{merchant.icon}</span>
-                              <span>{merchant.name}</span>
+                              <span>🏪</span>
+                              <span>{commercialMeta.originBadge}</span>
                             </span>
+                          ) : (
+                            merchant && (
+                              <span
+                                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold border shrink-0"
+                                style={{
+                                  backgroundColor: merchant.badgeBg,
+                                  color: merchant.badgeColor,
+                                  borderColor: merchant.badgeBorder,
+                                }}
+                              >
+                                <span>{merchant.icon}</span>
+                                <span>{merchant.name}</span>
+                              </span>
+                            )
                           )}
-                          <span className="finance-text-primary font-semibold truncate">
-                            {t.note || getCategoryName(categories, t.category)}
+                          <span className="finance-text-primary min-w-0 font-semibold leading-snug break-words [overflow-wrap:anywhere]">
+                            {displayLabel}
                           </span>
                         </div>
                       </td>
@@ -567,8 +636,11 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                       </td>
 
                       {/* Column 4: Fecha */}
-                      <td className="finance-text-secondary py-3 px-3 font-mono whitespace-nowrap">
+                      <td className="finance-text-secondary py-3 px-3 tabular-nums whitespace-nowrap">
                         {fmtDate(t.date)}
+                        {transactionTimeLabel(t) && (
+                          <span className="finance-text-muted block text-[10px]">{transactionTimeLabel(t)}</span>
+                        )}
                       </td>
 
                       {/* Column 5: Tipo */}
@@ -585,39 +657,61 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                       </td>
 
                       {/* Column 6: Monto */}
-                      <td className="py-3 px-4 text-right font-mono tabular-nums whitespace-nowrap">
+                      <td className="py-3 px-4 text-right tabular-nums whitespace-nowrap">
                         <PrivacyAmount
                           as="span"
                           className={`font-black text-xs sm:text-sm ${
                             isExpense ? 'finance-text-primary' : 'text-emerald-600 dark:text-emerald-400'
                           }`}
                         >
-                          {isExpense ? '−' : '+'} {fmtMoney(t.amount)}
+                          {isExpense ? '−' : '+'} {formatMoney(t.amount, txCurrency)}
                         </PrivacyAmount>
                       </td>
 
                       {/* Column 7: Acciones */}
                       <td className="py-3 px-3 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
-                          <button
-                            type="button"
-                            onClick={() => onEdit(t)}
-                            className="rounded-lg px-2 py-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition cursor-pointer"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (confirm(`¿Eliminar movimiento "${t.note || getCategoryName(categories, t.category)}"?`)) {
-                                onDelete(t.id);
-                              }
-                            }}
-                            className="finance-text-muted rounded-lg px-1.5 py-1 text-[11px] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer"
-                            title="Eliminar movimiento"
-                          >
-                            ✕
-                          </button>
+                          {commercialMeta.isCommercial ? (
+                            onOpenCommercial ? (
+                              <button
+                                type="button"
+                                onClick={onOpenCommercial}
+                                title="Movimiento comercial protegido. Para corregir, devolver o reembolsar, abrí Mi negocio."
+                                className="rounded-lg px-2 py-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition cursor-pointer"
+                              >
+                                Mi negocio →
+                              </button>
+                            ) : (
+                              <span
+                                title="Movimiento comercial protegido. Gestioná devoluciones, correcciones o reembolsos desde Mi negocio."
+                                className="finance-text-muted rounded-lg px-2 py-1 text-[10px] font-semibold"
+                              >
+                                En Mi negocio
+                              </span>
+                            )
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => onEdit(t)}
+                                className="rounded-lg px-2 py-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition cursor-pointer"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (confirm(`¿Eliminar movimiento "${displayLabel}"?`)) {
+                                    onDelete(t.id);
+                                  }
+                                }}
+                                className="finance-text-muted rounded-lg px-1.5 py-1 text-[11px] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer"
+                                title="Eliminar movimiento"
+                              >
+                                ✕
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -629,16 +723,26 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
 
           {/* Clean Footer with Filtered Totals & Pagination */}
           <div className="finance-divider bg-[var(--finance-surface-subtle)] p-3 sm:px-4 border-t flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-            <div className="finance-text-secondary flex items-center gap-3">
+            <div className="finance-text-secondary flex flex-wrap items-center gap-2 sm:gap-3">
               <span>
                 {filteredTransactions.length} {filteredTransactions.length === 1 ? 'movimiento' : 'movimientos'}
               </span>
               <span>·</span>
-              <span>
-                Neto: <strong className={totals.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400 font-mono' : 'text-rose-500 font-mono'}>
-                  {totals.balance >= 0 ? '+' : ''}{fmtMoney(totals.balance)}
+              <span>Neto:</span>
+              {Object.keys(totalsByCurrency).length === 0 ? (
+                <strong className="text-emerald-600 dark:text-emerald-400 tabular-nums">
+                  {formatMoney(0, 'UYU')}
                 </strong>
-              </span>
+              ) : (
+                (Object.entries(totalsByCurrency) as [string, { gastos: number; ingresos: number; balance: number }][]).map(([cur, data], idx) => (
+                  <span key={cur} className="inline-flex items-center gap-1">
+                    {idx > 0 && <span>|</span>}
+                    <strong className={data.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400 tabular-nums' : 'text-rose-500 tabular-nums'}>
+                      {data.balance >= 0 ? '+' : ''}{formatMoney(data.balance, cur)}
+                    </strong>
+                  </span>
+                ))
+              )}
             </div>
 
             {totalPages > 1 && (
@@ -651,7 +755,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                 >
                   Anterior
                 </button>
-                <span className="finance-text-secondary font-mono">
+                <span className="finance-text-secondary tabular-nums">
                   {currentPage} / {totalPages}
                 </span>
                 <button

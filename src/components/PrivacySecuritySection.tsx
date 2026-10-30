@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { LifeOSState } from '../types';
 import { AppIcon } from './AppIcon';
+import { ContextualHelp } from './ContextualHelp';
 import { showToast } from '../lib/toast';
 import { SYNC_MODULES } from '../lib/syncModel';
 import {
@@ -54,6 +55,14 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
     loadWrappedKeyEnvelope(storageUserId)
   );
   const [isEnrolled, setIsEnrolled] = useState<boolean>(false);
+  const [, setSessionNonce] = useState(0);
+
+  useEffect(() => {
+    return cryptoSession.subscribe(() => {
+      setSessionNonce((n) => n + 1);
+    });
+  }, []);
+
   const isSessionUnlocked = cryptoSession.isUnlocked(storageUserId);
 
   // Wizard state: 0 = Closed, 1 = Intro/Explanation, 2 = Key Generation & Backup, 3 = Verification, 4 = Progress
@@ -111,6 +120,9 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
             setPendingRotation(getRotationPendingState(storageUserId));
           }
         })
+        .catch(() => {
+          if (active) { setCapability(null); setCloudEnvelopeAvailable(false); setPlaintextInventory(null); }
+        })
         .finally(() => {
           if (active) setIsLoadingCap(false);
         });
@@ -134,8 +146,9 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
   }, [storageUserId, cloudConnected]);
 
   // Status computation
-  const encryptionState = capability?.encryptionState || (localEnvelope ? 'encrypted' : 'plaintext');
+  const encryptionState = capability?.encryptionState || (localEnvelope ? 'unknown' : 'plaintext');
   const isEncrypted = encryptionState === 'encrypted';
+  const isUnverified = encryptionState === 'unknown';
   const isMixed = encryptionState === 'mixed';
   const isSecondDeviceNeedingRecovery = (isEncrypted || isMixed) && !localEnvelope && cloudEnvelopeAvailable;
 
@@ -155,17 +168,22 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
   };
 
   // Copy Recovery Key to Clipboard
-  const handleCopyKey = () => {
-    if (!generatedKey) return;
-    navigator.clipboard.writeText(generatedKey);
-    showToast('Clave de recuperación copiada al portapapeles.');
+  const copyRecoveryKey = async (key: string) => {
+    if (!key) return;
+    try {
+      await navigator.clipboard.writeText(key);
+      showToast('Clave de recuperación copiada al portapapeles.');
+    } catch {
+      showToast('No se pudo copiar la clave. Seleccionala y copiala manualmente antes de continuar.', 'error');
+    }
   };
+  const handleCopyKey = () => copyRecoveryKey(generatedKey);
 
   // Download Recovery Key as text file with explicit safety warning
   const handleDownloadKeyFile = () => {
     if (!generatedKey) return;
     const blob = new Blob([
-      `LIFEOS — CLAVE DE RECUPERACIÓN DE SEGURIDAD\n` +
+      `CELESTIAN LIFEOS — CLAVE DE RECUPERACIÓN DE SEGURIDAD\n` +
       `Generada: ${new Date().toLocaleString('es-UY')}\n\n` +
       `Tu Clave de Recuperación:\n` +
       `${generatedKey}\n\n` +
@@ -173,12 +191,12 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       `- Este archivo contiene la clave de recuperación completa de 256 bits.\n` +
       `- Cualquier persona que tenga acceso a este archivo y a tu cuenta de Google puede descifrar tus datos personales.\n` +
       `- Guardá este archivo en un pendrive cifrado, gestor de contraseñas o imprimilo en papel y borrá el archivo digital.\n` +
-      `- Ni Google, ni los servidores de LifeOS, ni terceros pueden restaurarla por ti.\n`
+      `- Ni Google, ni los servidores de Celestian LifeOS, ni terceros pueden restaurarla por ti.\n`
     ], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `lifeos-recovery-key-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `celestian-recovery-key-${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     URL.revokeObjectURL(url);
     showToast('Archivo descargado. Recordá mantenerlo en un lugar seguro y privado.');
@@ -357,10 +375,13 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <AppIcon name="lock" className="h-4 w-4 text-[var(--blue)]" />
-            <h2 className="text-sm font-bold text-[var(--text)]">Privacidad y Protección de Extremo a Extremo</h2>
+            <h2 className="text-sm font-bold text-[var(--text)]">Privacidad y seguridad</h2>
+            <ContextualHelp label="Protección de extremo a extremo">
+              Cuando activás la protección, tus módulos se cifran en este navegador antes de sincronizarse. Los metadatos y las copias históricas sin cifrar tienen un alcance diferente, explicado más abajo.
+            </ContextualHelp>
           </div>
           <p className="text-xs text-[var(--text-soft)]">
-            Cifrado del lado del cliente. Tus datos se protegen en tu dispositivo antes de viajar a la nube.
+            Cifrado de la sincronización y recuperación de acceso.
           </p>
         </div>
 
@@ -369,8 +390,10 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
           {isEncrypted ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
               <span className="h-2 w-2 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.7)]" />
-              Protección activada
+              {capability ? 'Protección activada' : 'Cifrado en la nube sin verificar'}
             </span>
+          ) : isUnverified ? (
+            <span className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-1 text-xs font-semibold text-[var(--text-soft)]">Cifrado en la nube sin verificar</span>
           ) : isMixed ? (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse">
               <span className="h-2 w-2 rounded-full bg-amber-500" />
@@ -379,7 +402,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
           ) : (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold bg-[var(--surface-muted)] text-[var(--text-faint)] border border-[var(--border)]">
               <span className="h-2 w-2 rounded-full bg-slate-400" />
-              Protección no activada
+              {capability ? 'Cifrado no activado' : 'Cifrado en la nube sin verificar'}
             </span>
           )}
         </div>
@@ -419,7 +442,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
               <span>Nuevo dispositivo detectado: Cuenta protegida con cifrado</span>
             </div>
             <p className="text-[11px] text-[var(--text-soft)] leading-relaxed">
-              Tus datos en la nube están cifrados. Para habilitar la sincronización en este navegador, ingresá tu Clave de Recuperación. Se descargará el key envelope asegurado y se activará la sesión.
+              Los datos de tu cuenta están cifrados. Ingresá tu clave de recuperación para desbloquearlos y sincronizar desde este navegador.
             </p>
             <button
               type="button"
@@ -432,22 +455,22 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
           </div>
         )}
 
-        {isEncrypted ? (
+        {isEncrypted || isUnverified ? (
           <div className="space-y-3">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="space-y-1">
                 <p className="text-xs font-bold text-[var(--text)]">
-                  Tus datos en la nube están completamente cifrados
+                  Datos sincronizados
                 </p>
                 <p className="text-[11px] text-[var(--text-soft)] max-w-xl">
-                  Los 15 módulos de LifeOS están protegidos con AES-256-GCM. Solo tus dispositivos autorizados con la clave de recuperación pueden descifrarlos.
+                  {isUnverified ? 'Hay una clave local. Todavía no se verificó qué módulos están cifrados en la nube.' : 'El contenido de los módulos protegidos usa AES-256-GCM. Los metadatos de sincronización permanecen legibles y pueden existir copias históricas sin cifrar, indicadas más abajo.'}
                 </p>
               </div>
-              <div className="text-right">
-                <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">
-                  {capability?.encryptedModules?.length || 15} de 15 módulos asegurados
+              {capability && <div className="text-right">
+                <span className={`text-sm tabular-nums font-semibold ${capability ? 'text-emerald-700 dark:text-emerald-300' : 'text-[var(--text-soft)]'}`}>
+                  {capability ? `${SYNC_MODULES.filter((module) => capability.encryptedModules?.includes(module)).length} de ${SYNC_MODULES.length} módulos verificados` : 'Sin verificación de la nube'}
                 </span>
-              </div>
+              </div>}
             </div>
 
             {/* Session status */}
@@ -455,14 +478,14 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
               <div className="flex items-center gap-2 text-xs">
                 <span className={`h-2 w-2 rounded-full ${isSessionUnlocked ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                 <span className="text-[var(--text-soft)]">
-                  Sesión en este navegador:{' '}
+                  Acceso en este navegador:{' '}
                   <strong className="text-[var(--text)]">
-                    {isSessionUnlocked ? 'Desbloqueada y operativa' : 'Bloqueada'}
+                    {isSessionUnlocked ? 'Desbloqueado' : 'Bloqueado'}
                   </strong>
                 </span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 {!isSessionUnlocked && (
                   <button
                     type="button"
@@ -470,7 +493,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl cursor-pointer shadow-2xs"
                   >
                     <AppIcon name="unlock" className="h-3.5 w-3.5" />
-                    <span>Desbloquear con Clave</span>
+                    <span>Desbloquear con clave</span>
                   </button>
                 )}
                 <button
@@ -484,7 +507,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-xs font-semibold rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
                 >
                   <AppIcon name="rotateCcw" className="h-3.5 w-3.5" />
-                  <span>Renovar Clave de Recuperación</span>
+                  <span>Renovar clave de recuperación</span>
                 </button>
                 {(isEnrolled || isSessionUnlocked) && (
                   <button
@@ -560,12 +583,13 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1 max-w-xl">
               <p className="text-xs font-bold text-[var(--text)]">
-                Protegé tus finanzas, notas y tareas con tu propia clave
+                Cifrado de los datos sincronizados
               </p>
               <p className="text-[11px] text-[var(--text-soft)] leading-relaxed">
-                Al activar la protección de extremo a extremo, tus datos se cifran en tu navegador antes de enviarse a la nube. Nadie más, ni siquiera los administradores de la base de datos, puede leer tu contenido personal.
+                Al activarlo, los módulos se cifran antes de sincronizar. La copia de este navegador y los archivos exportados no quedan cifrados por esta función.
               </p>
             </div>
+            <div className="shrink-0 space-y-2">
             <button
               type="button"
               disabled={isLoadingCap || !cloudConnected}
@@ -578,43 +602,55 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
               }`}
             >
               <AppIcon name="lock" className="h-4 w-4" />
-              <span>Activar Privacidad</span>
+              <span>Activar cifrado</span>
             </button>
+            {!cloudConnected && <a href="#config-account" className="block max-w-52 text-sm text-[var(--blue)] hover:underline">Conectá Google para activar el cifrado.</a>}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Security Scope Guarantee Card */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-        <div className="p-3.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)] space-y-1.5">
-          <div className="flex items-center gap-2 font-bold text-[var(--text)]">
-            <span className="text-emerald-500">✓</span>
-            <span>Lo que protege activamente</span>
+      {/* Security Scope Guarantee Card - Progressive Disclosure */}
+      <details className="group rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/30 transition-colors">
+        <summary className="flex items-center justify-between p-3.5 cursor-pointer text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] select-none">
+          <div className="flex items-center gap-2">
+            <AppIcon name="shield" className="h-3.5 w-3.5 text-[var(--blue)]" />
+            <span>Qué protege el cifrado y cómo recuperar el acceso</span>
           </div>
-          <ul className="text-[11px] text-[var(--text-soft)] space-y-1 list-disc list-inside">
-            <li>Finanzas (cuentas, transacciones, compromisos).</li>
-            <li>Notas, ideas, tareas, proyectos y contexto personal.</li>
-            <li>Agenda, rutinas de gimnasio y registros de estudio.</li>
-            <li>Payloads de sincronización en tránsito y en reposo en la nube.</li>
-          </ul>
-        </div>
-        <div className="p-3.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)] space-y-1.5">
-          <div className="flex items-center gap-2 font-bold text-[var(--text)]">
-            <span className="text-[var(--blue)]">ℹ</span>
-            <span>Lo que debés saber con transparencia</span>
+          <span className="text-[10px] text-[var(--text-faint)] group-open:rotate-180 transition-transform">▼</span>
+        </summary>
+        <div className="p-3.5 pt-1 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs border-t border-[var(--border)]">
+          <div className="p-3 rounded-lg bg-[var(--card)] border border-[var(--border)] space-y-1.5">
+            <div className="flex items-center gap-1.5 font-bold text-[var(--text)]">
+              <span className="text-emerald-500">✓</span>
+              <span>Alcance al activar</span>
+            </div>
+            <ul className="text-[11px] text-[var(--text-soft)] space-y-1 list-disc list-inside">
+              <li>Finanzas (cuentas, transacciones, compromisos).</li>
+              <li>Notas, ideas, tareas, proyectos y contexto personal.</li>
+              <li>Agenda, rutinas de gimnasio y registros de estudio.</li>
+              <li>Cifrado en reposo y en tránsito hacia la nube.</li>
+            </ul>
           </div>
-          <ul className="text-[11px] text-[var(--text-soft)] space-y-1 list-disc list-inside">
-            <li>La clave de recuperación no se guarda en ningún servidor.</li>
-            <li>Si perdés la clave, nadie puede recuperar tus datos en un dispositivo nuevo.</li>
-            <li>Metadatos no sensibles (versión de sync, revisiones, timestamps) permanecen legibles para resolver conflictos.</li>
-          </ul>
+          <div className="p-3 rounded-lg bg-[var(--card)] border border-[var(--border)] space-y-1.5">
+            <div className="flex items-center gap-1.5 font-bold text-[var(--text)]">
+              <span className="text-[var(--blue)]">ℹ</span>
+              <span>Transparencia y responsabilidades</span>
+            </div>
+            <ul className="text-[11px] text-[var(--text-soft)] space-y-1 list-disc list-inside">
+              <li>La clave de recuperación solo existe en tu poder; no se almacena en servidores.</li>
+              <li>Si perdés la clave, nadie puede recuperarla en un dispositivo nuevo.</li>
+              <li>Metadatos no sensibles (versiones, marcas temporales) se conservan para sincronización.</li>
+              <li>La base de datos local y los backups JSON exportados no quedan cifrados por esta función.</li>
+            </ul>
+          </div>
         </div>
-      </div>
+      </details>
 
       {/* Wizard Modal: 4 Steps */}
       {wizardStep > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-2xl">
+          <div role="dialog" aria-modal="true" aria-label="Activar cifrado" className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-xl w-full p-6 space-y-5 shadow-2xl">
             {/* Header */}
             <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] pb-4">
               <div className="space-y-1">
@@ -651,15 +687,15 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
             {wizardStep === 1 && (
               <div className="space-y-4 text-xs text-[var(--text-soft)]">
                 <p>
-                  Vas a activar el cifrado de extremo a extremo para tu cuenta de LifeOS. A partir de este momento, tus datos sensibles se cifrarán en este dispositivo con una clave maestra única (MDEK).
+                  Al completar la activación, los módulos se cifrarán en este navegador antes de sincronizarse. Guardá la clave de recuperación para poder acceder desde otro dispositivo.
                 </p>
                 <div className="bg-[var(--surface-muted)] rounded-xl p-4 space-y-2 border border-[var(--border)] text-[11px]">
                   <p className="font-bold text-[var(--text)]">¿Qué significa en la práctica?</p>
                   <ul className="space-y-1.5 list-disc list-inside">
-                    <li>La nube de Google/Firebase solo almacenará texto cifrado ilegible.</li>
+                    <li>El contenido de los módulos migrados se guardará cifrado en Firebase. Los metadatos y las copias históricas pendientes de limpieza pueden permanecer legibles.</li>
                     <li>Generaremos una <strong>Clave de Recuperación de 256 bits</strong> en tu navegador.</li>
                     <li>
-                      <strong>Importante:</strong> LifeOS no tiene un botón de “Olvidé mi contraseña”. Si cambiás de dispositivo o borrás los datos del navegador sin esta clave, no podremos recuperar tus datos.
+                      <strong>Importante:</strong> Celestian LifeOS no tiene un botón de “Olvidé mi contraseña”. Si cambiás de dispositivo o borrás los datos del navegador sin esta clave, no podremos recuperar tus datos.
                     </li>
                   </ul>
                 </div>
@@ -839,7 +875,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       {/* Modal: Desbloqueo de Dispositivo */}
       {isUnlockModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+          <div role="dialog" aria-modal="true" aria-label="Desbloquear este navegador" className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-xl bg-blue-500/10 text-[var(--blue)]">
                 <AppIcon name="unlock" className="h-6 w-6" />
@@ -888,16 +924,16 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
         </div>
       )}
 
-      {/* Modal: Renovar Clave de Recuperación (Rewrap) */}
+      {/* Modal: Renovar clave de recuperación (Rewrap) */}
       {isRewrapModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+          <div role="dialog" aria-modal="true" aria-label="Renovar clave de recuperación" className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center gap-3">
               <div className="p-2.5 rounded-xl bg-purple-500/10 text-purple-500">
                 <AppIcon name="rotateCcw" className="h-6 w-6" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-[var(--text)]">Renovar Clave de Recuperación</h3>
+                <h3 className="text-base font-bold text-[var(--text)]">Renovar clave de recuperación</h3>
                 <p className="text-xs text-[var(--text-soft)]">Actualiza la credencial para recuperar esta cuenta en nuevos dispositivos</p>
               </div>
             </div>
@@ -906,10 +942,10 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
               <div className="space-y-4">
                 <div className="space-y-2">
                   <p className="text-xs text-[var(--text-soft)] leading-relaxed">
-                    Si necesitás cambiar tu Clave de Recuperación (por rotación periódica o si perdiste tu copia física anterior), podés generar una nueva. Se cambiará la credencial requerida para desbloquear esta cuenta en nuevos dispositivos sin alterar los módulos cifrados en la nube.
+                    Necesitás tu clave actual para generar otra. La nueva clave se usará para desbloquear la cuenta en otros dispositivos; los datos cifrados no cambian.
                   </p>
                   <div className="p-2.5 rounded-lg bg-[var(--surface-muted)] border border-[var(--border)] text-[11px] text-[var(--text-faint)] leading-relaxed">
-                    <strong>Nota técnica:</strong> Esta operación re-envuelve la clave de cifrado (MDEK) con una nueva clave en el servidor. El envelope cloud solo podrá abrirse con la nueva clave. Si sospechás que un tercero obtuvo simultáneamente tu clave física previa y una copia de almacenamiento de tu dispositivo, una revocación total requeriría el re-cifrado completo de los datos.
+                    <strong>Alcance de la renovación:</strong> Cambia la clave de recuperación, pero no vuelve a cifrar todos los datos. Si alguien obtuvo la clave anterior junto con una copia del almacenamiento de tu dispositivo, revocar ese acceso requiere volver a cifrar los datos.
                   </div>
                 </div>
 
@@ -970,10 +1006,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                 <div className="flex justify-center gap-2">
                   <button
                     type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(rewrapResultKey);
-                      showToast('Nueva clave copiada.');
-                    }}
+                    onClick={() => copyRecoveryKey(rewrapResultKey)}
                     className="px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-xs font-bold rounded-xl text-[var(--text)] cursor-pointer shadow-2xs"
                   >
                     Copiar
@@ -998,7 +1031,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       {/* Resolve Pending Rotation Modal (Stage E) */}
       {isResolveModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl animate-in fade-in zoom-in-95">
+          <div role="dialog" aria-modal="true" aria-label="Verificar nueva clave de recuperación" className="bg-[var(--card)] border border-[var(--border)] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-xl animate-in fade-in zoom-in-95">
             <div className="flex items-center gap-2">
               <AppIcon name="key" className="h-5 w-5 text-amber-500" />
               <h3 className="text-sm font-bold text-[var(--text)]">Verificar Renovación de Clave Pendiente</h3>

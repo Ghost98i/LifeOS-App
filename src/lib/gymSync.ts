@@ -164,7 +164,7 @@ function recordExerciseChanges(
     const path = `${ownerPath}/exercise/${part(id)}`;
     const previous = beforeMap.get(id);
     recordFieldChanges(previous as unknown as Record<string, unknown> | undefined, exercise as unknown as Record<string, unknown>, path,
-      ['name', 'equipment', 'weight', 'barWeight', 'reps', 'muscleGroup', 'restSeconds', 'timerEnabled', 'legacyReps'], changed);
+      ['name', 'equipment', 'weight', 'barWeight', 'reps', 'muscleGroup', 'restSeconds', 'restSecondsMode', 'timerEnabled', 'legacyReps'], changed);
     recordSetChanges(previous?.sets, exercise.sets, path, changed, deleted);
   }
   for (const id of beforeMap.keys()) if (!afterMap.has(id)) deleted.add(`${ownerPath}/exercise/${part(id)}`);
@@ -362,6 +362,7 @@ function mergeExercises(
       reps: resolveField(`${path}/reps`, l.reps, r.reps, b?.reps, context),
       muscleGroup: resolveField(`${path}/muscleGroup`, l.muscleGroup, r.muscleGroup, b?.muscleGroup, context),
       restSeconds: resolveField(`${path}/restSeconds`, l.restSeconds, r.restSeconds, b?.restSeconds, context),
+      restSecondsMode: resolveField(`${path}/restSecondsMode`, l.restSecondsMode, r.restSecondsMode, b?.restSecondsMode, context),
       timerEnabled: resolveField(`${path}/timerEnabled`, l.timerEnabled, r.timerEnabled, b?.timerEnabled, context),
       legacyReps: resolveField(`${path}/legacyReps`, l.legacyReps, r.legacyReps, b?.legacyReps, context),
       sets,
@@ -451,6 +452,12 @@ function mergeGymSettings(local?: Gym['settings'], remote?: Gym['settings'], bas
     autoTimerEnabled: remote?.autoTimerEnabled !== undefined && remote.autoTimerEnabled !== baseline?.autoTimerEnabled
       ? remote.autoTimerEnabled
       : (local?.autoTimerEnabled ?? true),
+    showQuickRestAdjustments: remote?.showQuickRestAdjustments !== undefined && remote.showQuickRestAdjustments !== baseline?.showQuickRestAdjustments
+      ? remote.showQuickRestAdjustments
+      : (local?.showQuickRestAdjustments ?? true),
+    allowManualRestEditing: remote?.allowManualRestEditing !== undefined && remote.allowManualRestEditing !== baseline?.allowManualRestEditing
+      ? remote.allowManualRestEditing
+      : (local?.allowManualRestEditing ?? false),
   };
 }
 

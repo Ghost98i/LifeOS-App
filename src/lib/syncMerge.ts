@@ -28,6 +28,7 @@ import type {
   ResaleItem,
   ResaleOpportunity,
   Settings,
+  AttentionDismissalRecord,
   ShoppingItem,
   Streaming,
   StreamChecklistItem,
@@ -48,6 +49,9 @@ import { normalizeCategories } from './financeCategories';
 import { compareLedgerEvents, reconstructAccountBalance } from './financeLedger';
 import { financeRevisionMillis, parseFinanceRevisionOrder } from './financeRevision';
 import { gymSyncPath, mergeGymState } from './gymSync';
+import { migrateGym } from './gymMigration';
+import { reconcileCommercialSets, type CommercialReconcileResult } from './commercialReconcile';
+import type { CommercialSet } from './commercialContract';
 
 const TOMBSTONE_PREFIX = 'lifeos-cloud-tombstones-v2:';
 const DEFAULT_MAX_TOMBSTONE_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -129,6 +133,7 @@ function collectEntityIds(state: LifeOSState): Set<string> {
     add(state.finance.subscriptions);
     add(state.finance.expectedIncomes);
     add(state.finance.commitments);
+    add(state.finance.agreements);
     add(state.finance.reconciliations);
     add(state.finance.accounts);
     add(state.finance.categories);
@@ -879,6 +884,16 @@ export function mergeFinanceModule(
     { module: 'finance', entityType: 'Compromiso Financiero', getLabel: (c) => c.name }
   );
 
+  const agreements = mergeEntityCollection(
+    local.agreements || [],
+    remote.agreements || [],
+    baseline?.agreements || [],
+    tombstones,
+    undefined,
+    onConflict,
+    { module: 'finance', entityType: 'Acuerdo Financiero', getLabel: (a) => a.title }
+  );
+
   let minCushion = local.minCushion;
   if (baseline && local.minCushion === baseline.minCushion) {
     minCushion = remote.minCushion !== undefined ? remote.minCushion : local.minCushion;
@@ -1226,6 +1241,7 @@ export function mergeFinanceModule(
     subscriptions,
     expectedIncomes,
     commitments,
+    agreements,
     minCushion,
     cushionEnabled,
     heroDisplayMode,
@@ -1239,6 +1255,49 @@ export function mergeGymModule(
   tombstones: Record<string, number> = {}
 ): Gym {
   return mergeGymState(local, remote, baseline, tombstones);
+}
+
+/** A workout is an atomic record for conflict decisions. Do not guess how to
+ * combine two independently edited sets of weights/reps. */
+export function detectGymSessionConflicts(local: Gym, remote: Gym, baseline?: Gym, replacing = false): SyncConflictItem[] {
+  const localById = new Map(migrateGym(local).sessions.map((session) => [session.id, session]));
+  const remoteById = new Map(migrateGym(remote).sessions.map((session) => [session.id, session]));
+  const baseById = new Map((baseline ? migrateGym(baseline).sessions : []).map((session) => [session.id, session]));
+  const conflicts: SyncConflictItem[] = [];
+  for (const id of new Set([...localById.keys(), ...remoteById.keys(), ...baseById.keys()])) {
+    const l = localById.get(id);
+    const r = remoteById.get(id);
+    const b = baseById.get(id);
+    if (stableEqual(l, r)) continue;
+    const bothEdited = Boolean(l && r && (!b || (!stableEqual(l, b) && !stableEqual(r, b))));
+    const editVersusRemoval = Boolean(b && (!l || !r) && !stableEqual(l || r, b));
+    const incomingRemoval = Boolean(l && !r && (b || replacing));
+    // A confirmed workout must never be removed or stripped of exercises/sets
+    // just because an incoming copy is older or incomplete.
+    const confirmedLoss = Boolean(l?.status === 'completed' && (replacing || r || b) && (
+      !r || r.status !== 'completed' || l.exercises.some((exercise) => {
+        const counterpart = r.exercises.find((item) => item.id === exercise.id);
+        return !counterpart || exercise.sets.some((set) => !counterpart.sets.some((item) => item.id === set.id));
+      })
+    ));
+    const confirmedRemoteChange = Boolean(l?.status === 'completed' && r &&
+      !stableEqual(l, r) && (replacing || !b || !stableEqual(r, b)));
+    if (!bothEdited && !editVersusRemoval && !incomingRemoval && !confirmedLoss && !confirmedRemoteChange) continue;
+    conflicts.push({
+      id: `conflict-gym-session-${id}`,
+      module: 'gym',
+      entityType: !l || !r ? 'delete_vs_modify' : 'entity',
+      entityId: id,
+      label: `Sesión de ${l?.date || r?.date || b?.date || id}`,
+      localSummary: l ? `${l.exercises.length} ejercicios` : 'Ausente',
+      remoteSummary: r ? `${r.exercises.length} ejercicios` : 'Ausente',
+      baseSummary: b ? `${b.exercises.length} ejercicios` : undefined,
+      localValue: l,
+      remoteValue: r,
+      baseValue: b,
+    });
+  }
+  return conflicts;
 }
 
 export function mergeTasksModule(
@@ -1645,27 +1704,38 @@ export function mergeStudyModule(
   local: Study,
   remote: Study,
   baseline?: Study,
-  tombstones: Record<string, number> = {}
+  tombstones: Record<string, number> = {},
+  onConflict?: (conflict: SyncConflictItem) => void
 ): Study {
   return {
     subjects: mergeEntityCollection<Subject>(
       local.subjects,
       remote.subjects,
       baseline?.subjects,
-      tombstones
+      tombstones,
+      undefined,
+      onConflict,
+      { module: 'study', entityType: 'Materia', getLabel: (s) => s.name }
     ),
     exams: mergeEntityCollection(
       local.exams,
       remote.exams,
       baseline?.exams,
-      tombstones
+      tombstones,
+      undefined,
+      onConflict,
+      { module: 'study', entityType: 'Examen', getLabel: (e) => `Examen ${e.date}` }
     ),
     studyLog: mergeEntityCollection<StudyLog>(
       local.studyLog,
       remote.studyLog,
       baseline?.studyLog,
-      tombstones
+      tombstones,
+      undefined,
+      onConflict,
+      { module: 'study', entityType: 'Registro de estudio', getLabel: (l) => `${l.minutes} min el ${l.date}` }
     ),
+    activeSession: local.activeSession || null,
   };
 }
 
@@ -1720,12 +1790,54 @@ export function mergeJobsModule(
   };
 }
 
+type CommercialCarrier = Resale & { commercial?: unknown };
+
+function isCommercialSet(value: unknown): value is CommercialSet {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) &&
+    Array.isArray((value as CommercialSet).items) &&
+    Array.isArray((value as CommercialSet).operations) &&
+    Array.isArray((value as CommercialSet).movements);
+}
+
+/** Preview only: commercial operations have no persistent writer or recovery resolution yet. */
+export function previewResaleCommercialMerge(local: Resale, remote: Resale): CommercialReconcileResult | { status: 'invalid'; left: unknown; right: unknown } | null {
+  const left = (local as CommercialCarrier).commercial;
+  const right = (remote as CommercialCarrier).commercial;
+  if (left === undefined && right === undefined) return null;
+  if ((left !== undefined && !isCommercialSet(left)) || (right !== undefined && !isCommercialSet(right))) {
+    return { status: 'invalid', left: structuredClone(left), right: structuredClone(right) };
+  }
+  const empty = (): CommercialSet => ({ items: [], operations: [], movements: [] });
+  try {
+    return reconcileCommercialSets(left === undefined ? empty() : left as CommercialSet,
+      right === undefined ? empty() : right as CommercialSet);
+  } catch {
+    // Unexpected payload shapes are conflicts, never a reason to accept a partial union.
+    return { status: 'invalid', left: structuredClone(left), right: structuredClone(right) };
+  }
+}
+
 export function mergeResaleModule(
   local: Resale,
   remote: Resale,
   baseline?: Resale,
-  tombstones: Record<string, number> = {}
+  tombstones: Record<string, number> = {},
+  onConflict?: (conflict: SyncConflictItem) => void
 ): Resale {
+  const commercial = previewResaleCommercialMerge(local, remote);
+  if (commercial) {
+    // Even a valid union is only a preview. Publishing it would activate a new writer.
+    if (!onConflict) throw new Error('La colección comercial requiere una resolución de sincronización antes de publicarse.');
+    onConflict({
+      id: 'conflict-resale-commercial', module: 'resale', entityType: 'entity', entityId: 'commercial',
+      field: commercial.status === 'combined' ? 'commercial_publication_disabled' : 'commercial_reconcile_blocked',
+      label: 'Operaciones comerciales pendientes de integración',
+      localSummary: commercial.status === 'blocked' ? commercial.issues.map((issue) => issue.code).join(', ') : commercial.status,
+      remoteSummary: 'La publicación comercial aún no está habilitada.',
+      localValue: structuredClone(local), remoteValue: structuredClone(remote),
+      ...(baseline ? { baseValue: structuredClone(baseline) } : {}),
+    });
+  }
   return {
     opportunities: mergeEntityCollection<ResaleOpportunity>(
       local.opportunities,
@@ -1790,15 +1902,64 @@ export function mergeContextModule(
       local.dailyContext,
       remote.dailyContext,
       baseline?.dailyContext,
-      (l, r) => ({
-        ...l,
-        ...r,
-        sleepHours: r.sleepHours ?? l.sleepHours,
-        energy: r.energy ?? l.energy,
-        mood: r.mood ?? l.mood,
-        connection: r.connection ?? l.connection,
-        note: r.note || l.note,
-      })
+      (l, r, b) => {
+        const lTime = extractTimestamp(l);
+        const rTime = extractTimestamp(r);
+        const preferRemote = rTime >= lTime;
+        const primary = preferRemote ? r : l;
+        const secondary = preferRemote ? l : r;
+
+        const pickField = <K extends keyof DailyContextEntry>(key: K): DailyContextEntry[K] => {
+          if (b && stableEqual(l[key], b[key]) && !stableEqual(r[key], b[key])) return r[key];
+          if (b && stableEqual(r[key], b[key]) && !stableEqual(l[key], b[key])) return l[key];
+          return primary[key] !== undefined && primary[key] !== null ? primary[key] : secondary[key];
+        };
+
+        const mergedSnapshot = (l.morningSnapshot || r.morningSnapshot)
+          ? {
+              ...(r.morningSnapshot || {}),
+              ...(l.morningSnapshot || {}),
+              capturedAt: [l.morningSnapshot?.capturedAt, r.morningSnapshot?.capturedAt]
+                .filter((d): d is string => typeof d === 'string' && d.length > 0)
+                .sort()[0] || l.morningSnapshot?.capturedAt || r.morningSnapshot?.capturedAt,
+            }
+          : undefined;
+
+        const merged: DailyContextEntry = {
+          ...secondary,
+          ...primary,
+          date: l.date || r.date,
+          sleepHours: pickField('sleepHours') ?? null,
+          energy: pickField('energy') ?? null,
+          mood: pickField('mood') ?? null,
+          connection: pickField('connection') ?? null,
+          note: (pickField('note') || secondary.note || primary.note || '') as string,
+        };
+
+        const sleepQuality = pickField('sleepQuality');
+        if (sleepQuality !== undefined) merged.sleepQuality = sleepQuality;
+        const stress = pickField('stress');
+        if (stress !== undefined) merged.stress = stress;
+        const physicalDiscomfort = pickField('physicalDiscomfort');
+        if (physicalDiscomfort !== undefined) merged.physicalDiscomfort = physicalDiscomfort;
+        if (mergedSnapshot) merged.morningSnapshot = mergedSnapshot;
+
+        const recordedAt = [l.recordedAt, r.recordedAt]
+          .filter((d): d is string => typeof d === 'string' && d.length > 0)
+          .sort()[0];
+        if (recordedAt) merged.recordedAt = recordedAt;
+
+        const updatedAt = [l.updatedAt, r.updatedAt]
+          .filter((d): d is string => typeof d === 'string' && d.length > 0)
+          .sort()
+          .pop();
+        if (updatedAt) merged.updatedAt = updatedAt;
+
+        const dismissedKey = pickField('dismissedRecommendationKey');
+        if (dismissedKey !== undefined) merged.dismissedRecommendationKey = dismissedKey;
+
+        return merged;
+      }
     ),
   };
 }
@@ -1824,11 +1985,126 @@ export function mergeCheckoutModule(
   return { checkoutLog: merged };
 }
 
+export function mergeAttentionDismissals(
+  localDismissals?: Record<string, AttentionDismissalRecord>,
+  remoteDismissals?: Record<string, AttentionDismissalRecord>,
+  localLegacyKeys?: string[],
+  remoteLegacyKeys?: string[],
+  baselineDismissals?: Record<string, AttentionDismissalRecord>
+): {
+  attentionDismissals: Record<string, AttentionDismissalRecord>;
+  dismissedAttentionKeys: string[];
+} {
+  const localMap: Record<string, AttentionDismissalRecord> = { ...(localDismissals || {}) };
+  if (Array.isArray(localLegacyKeys)) {
+    for (const k of localLegacyKeys) {
+      if (typeof k === 'string' && k.length > 0 && !localMap[k]) {
+        localMap[k] = { status: 'dismissed', updatedAt: 1 };
+      }
+    }
+  }
+
+  const remoteMap: Record<string, AttentionDismissalRecord> = { ...(remoteDismissals || {}) };
+  if (Array.isArray(remoteLegacyKeys)) {
+    for (const k of remoteLegacyKeys) {
+      if (typeof k === 'string' && k.length > 0 && !remoteMap[k]) {
+        remoteMap[k] = { status: 'dismissed', updatedAt: 1 };
+      }
+    }
+  }
+
+  const baseMap = baselineDismissals ? { ...baselineDismissals } : null;
+  const allKeys = new Set([...Object.keys(localMap), ...Object.keys(remoteMap)]);
+  if (baseMap) {
+    for (const k of Object.keys(baseMap)) {
+      allKeys.add(k);
+    }
+  }
+
+  const merged: Record<string, AttentionDismissalRecord> = {};
+
+  for (const k of allKeys) {
+    const loc = localMap[k];
+    const rem = remoteMap[k];
+    const base = baseMap ? baseMap[k] : undefined;
+
+    if (loc && !rem) {
+      if (base && loc.status === base.status && loc.updatedAt === base.updatedAt) {
+        continue;
+      }
+      merged[k] = { ...loc };
+      continue;
+    }
+    if (!loc && rem) {
+      if (base && rem.status === base.status && rem.updatedAt === base.updatedAt) {
+        continue;
+      }
+      merged[k] = { ...rem };
+      continue;
+    }
+    if (loc && rem) {
+      if (base) {
+        const locUnchanged = loc.status === base.status && loc.updatedAt === base.updatedAt;
+        const remUnchanged = rem.status === base.status && rem.updatedAt === base.updatedAt;
+
+        if (!locUnchanged && remUnchanged) {
+          merged[k] = { ...loc };
+          continue;
+        }
+        if (!remUnchanged && locUnchanged) {
+          merged[k] = { ...rem };
+          continue;
+        }
+      }
+
+      if (loc.updatedAt > rem.updatedAt) {
+        merged[k] = { ...loc };
+      } else if (rem.updatedAt > loc.updatedAt) {
+        merged[k] = { ...rem };
+      } else {
+        if (loc.status === 'dismissed' || rem.status === 'dismissed') {
+          merged[k] = { status: 'dismissed', updatedAt: loc.updatedAt };
+        } else {
+          merged[k] = { status: 'active', updatedAt: loc.updatedAt };
+        }
+      }
+    }
+  }
+
+  const dismissedKeys = Object.entries(merged)
+    .filter(([_, rec]) => rec.status === 'dismissed')
+    .map(([k]) => k)
+    .sort();
+
+  return {
+    attentionDismissals: merged,
+    dismissedAttentionKeys: dismissedKeys,
+  };
+}
+
 export function mergeProfileModule(
   local: { profile: Profile; settings: Settings },
   remote: { profile: Profile; settings: Settings },
   baseline?: { profile: Profile; settings: Settings }
 ) {
+  const baseFactors = baseline?.settings?.contextOptionalFactors;
+  const localFactors = local.settings?.contextOptionalFactors;
+  const remoteFactors = remote.settings?.contextOptionalFactors;
+  let mergedFactors = remoteFactors ?? localFactors ?? baseFactors;
+  if (baseline?.settings && stableEqual(remoteFactors, baseFactors) && !stableEqual(localFactors, baseFactors)) {
+    mergedFactors = localFactors;
+  } else if (baseline?.settings && stableEqual(localFactors, baseFactors) && !stableEqual(remoteFactors, baseFactors)) {
+    mergedFactors = remoteFactors;
+  }
+
+  const { attentionDismissals, dismissedAttentionKeys } = mergeAttentionDismissals(
+    local.settings?.attentionDismissals,
+    remote.settings?.attentionDismissals,
+    local.settings?.dismissedAttentionKeys,
+    remote.settings?.dismissedAttentionKeys,
+    baseline?.settings?.attentionDismissals
+  );
+
   return {
     profile: {
       ...baseline?.profile,
@@ -1839,6 +2115,7 @@ export function mergeProfileModule(
       ...baseline?.settings,
       ...local.settings,
       ...remote.settings,
+      ...(mergedFactors !== undefined ? { contextOptionalFactors: mergedFactors } : {}),
       lastWeeklyReviewAt: [
         local.settings?.lastWeeklyReviewAt,
         remote.settings?.lastWeeklyReviewAt,
@@ -1855,6 +2132,8 @@ export function mergeProfileModule(
         remote.settings?.onboardingCompleted ||
         baseline?.settings?.onboardingCompleted
       ),
+      attentionDismissals,
+      dismissedAttentionKeys,
     },
   };
 }
@@ -1886,6 +2165,11 @@ export function mergeModuleDataWithConflicts(
       };
       break;
     case 'gym':
+      conflicts.push(...detectGymSessionConflicts(
+        (localData as { gym: Gym }).gym,
+        (remoteData as { gym: Gym }).gym,
+        baselineData ? (baselineData as { gym: Gym }).gym : undefined,
+      ));
       data = {
         gym: mergeGymModule(
           (localData as { gym: Gym }).gym,
@@ -1955,7 +2239,8 @@ export function mergeModuleDataWithConflicts(
           (localData as { study: Study }).study,
           (remoteData as { study: Study }).study,
           baselineData ? (baselineData as { study: Study }).study : undefined,
-          tombstones
+          tombstones,
+          onConflict
         ),
       };
       break;
@@ -1985,7 +2270,8 @@ export function mergeModuleDataWithConflicts(
           (localData as { resale: Resale }).resale,
           (remoteData as { resale: Resale }).resale,
           baselineData ? (baselineData as { resale: Resale }).resale : undefined,
-          tombstones
+          tombstones,
+          onConflict
         ),
       };
       break;
@@ -2029,7 +2315,11 @@ export function mergeModuleData(
   baselineData?: unknown,
   tombstones: Record<string, number> = {}
 ): unknown {
-  return mergeModuleDataWithConflicts(module, localData, remoteData, baselineData, tombstones).data;
+  const result = mergeModuleDataWithConflicts(module, localData, remoteData, baselineData, tombstones);
+  if (module === 'resale' && result.conflicts.length > 0) {
+    throw new Error('La mezcla comercial de Mi negocio está bloqueada y requiere conservar ambas versiones.');
+  }
+  return result.data;
 }
 
 /**

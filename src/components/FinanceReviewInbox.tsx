@@ -4,7 +4,7 @@ import {
   deriveFinanceReviewInbox,
   ReviewReason,
 } from '../lib/financeReview';
-import { fmtDate, fmtMoney, todayISO } from '../lib/storage';
+import { fmtDate, formatMoney, todayISO } from '../lib/storage';
 import { getActiveCategories } from '../lib/financeCategories';
 import { AppIcon } from './AppIcon';
 import { PrivacyAmount } from './PrivacyAmount';
@@ -58,7 +58,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
               <h3 className="font-extrabold text-sm text-[var(--finance-text-primary)]">
                 Atención requerida
               </h3>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300">
+              <span className="px-2 py-0.5 rounded-full text-[10px] tabular-nums font-bold bg-amber-500/15 text-amber-700 dark:text-amber-300">
                 {attentionCount} pendiente{attentionCount === 1 ? '' : 's'}
               </span>
             </div>
@@ -110,7 +110,9 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                   {att.kind === 'overdue' ? '⚠️ Vencido:' : att.kind === 'compatible_movement' ? '🔗 Compatible:' : '⏰ Próximo:'}
                 </span>
                 <span className="font-semibold">{att.commitment.name}</span>
-                <PrivacyAmount as="span" className="font-mono font-bold">({fmtMoney(att.commitment.amount)})</PrivacyAmount>
+                <PrivacyAmount as="span" className="tabular-nums font-bold">
+                  ({formatMoney(att.commitment.amount, att.commitment.currency || 'UYU')})
+                </PrivacyAmount>
                 <span className="text-[11px] opacity-80">· {att.label}</span>
               </div>
 
@@ -150,7 +152,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2 flex-wrap text-xs">
                     <span
-                      className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase ${
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
                         tx.type === 'ingreso'
                           ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                           : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
@@ -159,8 +161,8 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                       {tx.type}
                     </span>
 
-                    <PrivacyAmount as="span" className="font-mono font-black text-sm text-[var(--text)]">
-                      {tx.type === 'ingreso' ? '+' : '−'}{fmtMoney(tx.amount)}
+                    <PrivacyAmount as="span" className="font-black tabular-nums text-sm text-[var(--text)]">
+                      {tx.type === 'ingreso' ? '+' : '−'}{formatMoney(tx.amount, account?.currency || (tx as any).currency || 'UYU')}
                     </PrivacyAmount>
 
                     <span className="text-[var(--text-faint)]">·</span>
@@ -316,8 +318,8 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-[var(--text)]">{cand.name}</span>
                               <span className="text-[var(--text-faint)]">·</span>
-                              <PrivacyAmount as="span" className="font-mono font-bold text-[var(--text)]">
-                                {cand.currency === 'USD' ? 'U$S ' : '$U '}{fmtMoney(cand.amount)}
+                              <PrivacyAmount as="span" className="font-bold tabular-nums text-[var(--text)]">
+                                {formatMoney(cand.amount, cand.currency || 'UYU')}
                               </PrivacyAmount>
                               <span className="text-[var(--text-faint)]">·</span>
                               <span className="text-[11px] text-[var(--text-soft)]">{cand.cycleLabel}</span>

@@ -165,7 +165,7 @@ function findDayOfWeek(baseISO: string, targetDayIndex: number, direction: 'futu
 
 export interface ParsedDateResult {
   date?: string;
-  dateLabel: string;
+  dateLabel?: string;
   cleanedText: string;
   hasExplicitDate?: boolean;
   ambiguityWarning?: string;
@@ -190,8 +190,8 @@ export function extractRelativeDate(
   const [refYearStr] = today.split('-');
   const refYear = parseInt(refYearStr, 10) || new Date().getFullYear();
   let cleaned = rawText;
-  let resolvedDate: string | undefined = today;
-  let resolvedLabel = 'Hoy';
+  let resolvedDate: string | undefined = undefined;
+  let resolvedLabel: string | undefined = undefined;
 
   // 1. Explicit calendar date: "el 25 de octubre de 2026", "25 de octubre", "el 5 de mayo"
   const explicitMonthRegex = /\b(?:el\s+)?(\d{1,2})\s+de\s+([a-záéíóúñ]+)(?:\s+(?:de\s+|del\s+)?(\d{4}))?\b/i;
@@ -396,10 +396,10 @@ export function extractRelativeDate(
   // 11. "hoy"
   if (/\bhoy\b/i.test(cleaned)) {
     cleaned = cleaned.replace(/\bhoy\b/gi, ' ');
-    return { date: today, dateLabel: 'Hoy', cleanedText: cleanPunctuation(cleaned) };
+    return { date: today, dateLabel: 'Hoy', cleanedText: cleanPunctuation(cleaned), hasExplicitDate: true };
   }
 
-  return { date: today, dateLabel: 'Hoy', cleanedText: cleanPunctuation(cleaned) };
+  return { date: undefined, dateLabel: undefined, cleanedText: cleanPunctuation(cleaned) };
 }
 
 function cleanPunctuation(s: string): string {
@@ -442,7 +442,7 @@ export function segmentCompoundClauses(rawInput: string): string[] {
   //    intent verb, date, or explicit money token ($ or number with currency).
   // Does NOT split on simple noun conjunctions like " y 2 leches" or "comprar pan y leche".
   const connectorRegex =
-    /\s+(?:y\s+(?:luego|despu[eé]s)\b|e\s+(?:luego|despu[eé]s)\b|,\s*y\s+(?:luego|despu[eé]s)\b|,\s*e\s+(?:luego|despu[eé]s)\b|(?:y|e|,\s*y|,\s*e)\s+(?=(?:ma[nñ]ana|hoy|ayer|el\s+[a-z]+|pagu[eé]|pagar|gast[eé]|gastar|compr[eé]|comprar|vend[eé]|vender|estudiar|repasar|llamar|revisar|recordar|hacer|anotar|nota|idea|inbox|\$(?:U)?\s*\d+|\d+\s*(?:pesos|d[oó]lares|usd|eur|uyu))\b))/i;
+    /\s+(?:y\s+(?:luego|despu[eé]s)\b|e\s+(?:luego|despu[eé]s)\b|,\s*y\s+(?:luego|despu[eé]s)\b|,\s*e\s+(?:luego|despu[eé]s)\b|(?:y|e|,\s*y|,\s*e)\s+(?=(?:ma[nñ]ana|hoy|ayer|el\s+[a-z]+|pagu[eé]|pagar|gast[eé]|gastar|compr[eé]|comprar|cobr[eé]|cobrar|gan[eé]|ganar|recib[ií]|recibir|vend[eé]|vender|debo|estudiar|repasar|llamar|revisar|recordar|hacer|anotar|nota|idea|inbox|\$(?:U)?\s*\d+|\d+\s*(?:pesos|d[oó]lares|usd|eur|uyu))(?:\b|\s|$)))/i;
 
   if (connectorRegex.test(trimmed)) {
     const parts = trimmed.split(connectorRegex);
@@ -481,7 +481,7 @@ export function parseCaptureDrafts(
   return drafts;
 }
 
-function parseSingleClauseDraft(
+export function parseSingleClauseDraft(
   clause: string,
   state: LifeOSState,
   referenceDate: string
@@ -568,8 +568,8 @@ function parseSingleClauseDraft(
       text: taskText || 'Gym',
       time,
       priority: 'media',
-      dueDate: dateExtraction.date,
-      dueDateLabel: dateExtraction.dateLabel,
+      dueDate: dateExtraction.date || referenceDate,
+      dueDateLabel: dateExtraction.dateLabel || 'Hoy',
       targetModule: 'dashboard',
       isModuleEnabled: true,
     };
@@ -635,8 +635,8 @@ function parseSingleClauseDraft(
         subjectName: matchedSubject?.name || subjectText || 'General',
         subjectId: matchedSubject?.id,
         minutes,
-        date: dateExtraction.date,
-        dateLabel: dateExtraction.dateLabel,
+        date: dateExtraction.date || referenceDate,
+        dateLabel: dateExtraction.dateLabel || 'Hoy',
         note: `Sesión de ${minutes} min de ${subjectText}`,
         targetModule: 'estudios',
         isModuleEnabled: enabled,
@@ -660,23 +660,35 @@ function parseSingleClauseDraft(
     }
   }
 
-  // 5. Future payments and debts/obligations as Tasks:
-  // e.g. "Debo 5939 pesos a Jorge pagar el 25 de septiembre", "pagar 1200 internet mañana", "tengo que pagar la luz"
+  // 5. Payments, debts, obligations and purchases as Tasks:
+  // e.g. "pagar 9300 a Jorge", "Debo 5939 pesos a Jorge pagar el 25 de septiembre", "comprar 250 pesos de manzana", "voy a comprar 250 pesos de manzana", "tengo que pagar la luz"
   // Semantics: These are pending commitments/obligations, NOT completed transactions.
   // They must NOT mutate account balances or create immediate financial records.
-  const isDebtOrObligation = /\b(?:debo|le\s+debo|deuda|deudas|por\s+pagar|tengo\s+que\s+pagar|hay\s+que\s+pagar)\b/i.test(trimmed);
-  const hasFuturePayment = /^(?:pagar|pago\s+de)\s+/i.test(trimmed) || (/\bpagar\b/i.test(trimmed) && (hasFutureDateMention || dateExtractionStudy.hasExplicitDate));
+  const isDebtOrObligation = /(?<![\wáéíóúñ])(?:debo|le\s+debo|deuda|deudas|por\s+pagar|tengo\s+que\s+pagar|hay\s+que\s+pagar)(?![\wáéíóúñ])/i.test(trimmed);
+  const isPendingPaymentAction = /(?<![\wáéíóúñ])pagar(?![\wáéíóúñ])/i.test(trimmed) || /^(?:pago\s+de|pendiente\s+de\s+pago)(?![\wáéíóúñ])/i.test(trimmed);
+  const isPendingPurchaseAction =
+    /^(?:comprar|voy\s+a\s+comprar|tengo\s+que\s+comprar|hay\s+que\s+comprar|adquirir|conseguir)(?![\wáéíóúñ])/i.test(trimmed) ||
+    /(?<![\wáéíóúñ])(?:voy\s+a\s+comprar|tengo\s+que\s+comprar|hay\s+que\s+comprar)(?![\wáéíóúñ])/i.test(trimmed) ||
+    (/(?<![\wáéíóúñ])comprar(?![\wáéíóúñ])/i.test(trimmed) && !/^(?:compr[eé]|compramos)(?![\wáéíóúñ])/i.test(trimmed));
 
-  if (isDebtOrObligation || (hasFuturePayment && (hasFutureDateMention || dateExtractionStudy.hasExplicitDate))) {
+  if (isDebtOrObligation || isPendingPaymentAction || isPendingPurchaseAction) {
     const dateExtraction = extractRelativeDate(trimmed, referenceDate, 'future');
     let taskText = cleanPunctuation(dateExtraction.cleanedText);
+    let priority: 'alta' | 'media' | 'baja' = 'media';
+    if (/^(?:urgente|importante|ya|hoy\s+mismo)[:\s]*/i.test(taskText)) {
+      priority = 'alta';
+      taskText = taskText.replace(/^(?:urgente|importante|ya|hoy\s+mismo)[:\s]*/i, '').trim();
+    } else if (/^(?:baja\s+prioridad|cuando\s+pueda)[:\s]*/i.test(taskText)) {
+      priority = 'baja';
+      taskText = taskText.replace(/^(?:baja\s+prioridad|cuando\s+pueda)[:\s]*/i, '').trim();
+    }
     taskText = taskText.replace(/^(?:recordar|tengo\s+que|hacer)\s+/i, '');
     return {
       id: draftId,
       rawText: trimmed,
       kind: 'task',
       text: taskText || trimmed,
-      priority: 'media',
+      priority,
       dueDate: dateExtraction.date,
       dueDateLabel: dateExtraction.dateLabel,
       ambiguityWarning: dateExtraction.ambiguityWarning,
@@ -685,11 +697,33 @@ function parseSingleClauseDraft(
     };
   }
 
+  // 5b. Non-Transactional Guard: Savings, Goals, Negations, Hypotheses, Desires and Internal Transfers
+  // A financial number + verb does NOT mean a transaction occurred.
+  // Expressions like "ahorro de 1000 pesos en viaje a bolivia", "quiero ahorrar 5000",
+  // "me ahorré 1000 pesos en un viaje", "no pagué 500 pesos", "quizás compre algo de 1000",
+  // "cuánto gastaría si viajara con 3000", "quiero ganar 500 pesos" must NEVER be classified as expenses or incomes.
+  const isSavingsOrReserve = /(?<![\wáéíóúñ])(?:ahorro|ahorrar|ahorrando|ahorr[eé]|me\s+ahorr[eé]|reserva|reservar|reservando)(?![\wáéíóúñ])/i.test(trimmed);
+  const isFinancialNegation = /(?<![\wáéíóúñ])no\s+(?:pagu[eé]|gast[eé]|compr[eé]|cobr[eé]|gan[eé]|recib[ií]|deb[oí]|adeudo)(?![\wáéíóúñ])/i.test(trimmed);
+  const isFinancialHypothesisOrQuestion = /(?<![\wáéíóúñ])(?:quiz[aá]s|tal\s+vez|si\s+(?:gastara|viajara|comprara|ganara)|cu[aá]nto\s+(?:gastar[ií]a|costar[ií]a))(?![\wáéíóúñ])/i.test(trimmed);
+  const isFinancialDesire = /(?<![\wáéíóúñ])(?:quiero|deseo|quisiera|me\s+gustar[ií]a)\s+(?:ganar|ahorrar|gastar|cobrar)(?![\wáéíóúñ])/i.test(trimmed);
+  const isInternalTransferOrDeposit = /(?<![\wáéíóúñ])(?:ingres[eé]|transfer[ií]|deposit[eé])\s+.*?\s+a\s+(?:mi\s+cuenta|otra\s+cuenta)(?![\wáéíóúñ])/i.test(trimmed);
+
+  if (isSavingsOrReserve || isFinancialNegation || isFinancialHypothesisOrQuestion || isFinancialDesire || isInternalTransferOrDeposit) {
+    return {
+      id: draftId,
+      rawText: trimmed,
+      kind: 'inbox',
+      targetModule: 'dashboard',
+      isModuleEnabled: true,
+      text: trimmed,
+    };
+  }
+
   // 6. Financial Parsing (Strict & Nuanced)
-  // Check for currency symbols, keywords, or missing amounts ("pagué internet")
+  // Check for currency symbols, keywords, or missing amounts ("pagué internet", "gané por arbitrar")
   const hasCurrencySign = /(?:\$|\$U\b|USD\b|EUR\b|UYU\b|pesos\b|d[oó]lares\b|euros?\b)/i.test(trimmed);
-  const hasPastTransactionalDeclaration = /^(?:gast[eé]|pagu[eé]|cobr[eé]|compr[eé]|pago\s+de|gasto\s+en)(?:\s+|$)/i.test(trimmed);
-  const hasTransactionalVerb = /(?:^|\s)(?:gast[eé]|gasto|gastar|pagu[eé]|pago|pagar|compr[eé]|compra|comprar|cost[oó]|cobro|cobr[eé]|cobrar|ingreso|sueldo|salario)(?:\s|$)/i.test(trimmed);
+  const hasPastTransactionalDeclaration = /^(?:gast[eé]|pagu[eé]|cobr[eé]|compr[eé]|gan[eé]|recib[ií]|me\s+pagaron|gasto\s+en)(?:\s+|$)/i.test(trimmed);
+  const hasTransactionalVerb = /(?:^|\s)(?:gast[eé]|gasto|gastar|pagu[eé]|compr[eé]|compra|comprar|cost[oó]|cobro|cobr[eé]|cobrar|gan[eé]|ganar|recib[ií]|recibir|me\s+pagaron|ingreso|sueldo|salario)(?:\s|$)/i.test(trimmed);
   const startsWithPlusOrMinusNum = /^(?:\+|-)\s*\d+/i.test(trimmed);
   const startsWithAmount = /^[+-]?\$?\d+(?:[.,]\d+)?\s+[a-záéíóúñ]/i.test(trimmed);
   const isMeasurementUnit = /^[+-]?\$?\d+(?:[.,]\d+)?\s*(?:horas?|hs?\b|h\b|minutos?|mins?\b|m\b|segundos?|segs?\b|d[ií]as?|km|kms?|kilos?|kg|reps?|series?|materias?|veces)\b/i.test(trimmed);
@@ -711,7 +745,7 @@ function parseSingleClauseDraft(
     const dateExtraction = extractRelativeDate(trimmed, referenceDate, 'past');
     const enabled = isModuleEnabled(state, 'finanzas');
 
-    const cleanRemaining = dateExtraction.cleanedText.replace(/(?:^|\s)(?:gast[eé]|gasto|pagu[eé]|pago|compr[eé]|compra|en|de)(?:\s|$)/gi, ' ').trim();
+    const cleanRemaining = dateExtraction.cleanedText.replace(/(?:^|\s)(?:gast[eé]|gasto|pagu[eé]|pago|compr[eé]|compra|cobr[eé]|gan[eé]|recib[ií]|en|de)(?:\s|$)/gi, ' ').trim();
 
     const matchedCat = (state.finance?.categories || []).find((c) => {
       const cName = typeof c === 'string' ? c : c.name;
@@ -726,12 +760,12 @@ function parseSingleClauseDraft(
       id: draftId,
       rawText: trimmed,
       kind: 'finance',
-      type: 'gasto',
+      type: /^(?:cobr[eé]|gan[eé]|recib[ií])/i.test(trimmed) ? 'ingreso' : 'gasto',
       amount: undefined,
       category: categoryId,
       categoryMatched: categoryName || cleanRemaining || 'Sin especificar',
-      date: dateExtraction.date,
-      dateLabel: dateExtraction.dateLabel,
+      date: dateExtraction.date || referenceDate,
+      dateLabel: dateExtraction.dateLabel || 'Hoy',
       missingFields: ['amount'],
       targetModule: 'finanzas',
       isModuleEnabled: enabled,
@@ -761,10 +795,7 @@ function parseSingleClauseDraft(
         installments = parseInt(cuotasMatch[1], 10);
       }
 
-      let financeCandidate = trimmed;
-      if (/^(?:gast[eé]|pagu[eé]|compr[eé]|pagar)\s+/i.test(trimmed)) {
-        financeCandidate = trimmed.replace(/^(?:gast[eé]|pagu[eé]|compr[eé]|pagar)\s+/i, '');
-      }
+      const financeCandidate = trimmed;
 
       const parsed = parseQuickFinance(financeCandidate, {
         accounts: state.finance?.accounts || [],
@@ -774,7 +805,7 @@ function parseSingleClauseDraft(
 
       // Currency check from parsed result
       const parsedCurrency = parsed.currency || 'UYU';
-      const isCurrencyIncompatible = parsed.isCurrencyIncompatible || parsedCurrency !== 'UYU';
+      const isCurrencyIncompatible = Boolean(parsed.isCurrencyIncompatible);
 
       // If valid or if amount/currency detected
       if (parsed.amount !== null || isCurrencyIncompatible || parsed.isAmbiguous) {
@@ -802,11 +833,21 @@ function parseSingleClauseDraft(
           if (!parsed.category) missingFields.push('category');
 
           let ambiguityWarning: string | undefined;
-          if (isCurrencyIncompatible) {
-            ambiguityWarning = `Moneda no soportada (${parsedCurrency}). LifeOS opera únicamente en moneda local. Podés guardarlo en tu Bandeja de Entrada.`;
+          if (parsedCurrency === 'USD' && isCurrencyIncompatible) {
+            ambiguityWarning = 'Necesitás una cuenta en dólares para registrar este movimiento. Podés crearla en Finanzas o guardarlo en tu Bandeja de Entrada.';
+          } else if (isCurrencyIncompatible) {
+            ambiguityWarning = `Moneda no soportada (${parsedCurrency}). Celestian LifeOS no convierte monedas automáticamente. Podés guardarlo en tu Bandeja de Entrada.`;
           } else if (parsed.isAmbiguous) {
             ambiguityWarning = 'Importe con formato de separadores ambiguo. Revisá el valor antes de confirmar.';
+          } else if (installments && installments > 1) {
+            ambiguityWarning = 'Compra financiada en cuotas. Para proteger tu saldo real, Celestian LifeOS no descuenta el total en un único gasto inmediato. Registrala en Compromisos futuros o guardala en Bandeja de entrada.';
           }
+
+          const defaultUsdAcc = parsedCurrency === 'USD'
+            ? (state.finance?.accounts || []).find((a) => (a.currency || 'UYU').toUpperCase() === 'USD')
+            : null;
+          const assignedAccountId = parsed.accountId || defaultUsdAcc?.id;
+          const assignedAccountName = parsed.accountName || defaultUsdAcc?.name;
 
           return {
             id: draftId,
@@ -816,11 +857,11 @@ function parseSingleClauseDraft(
             amount: parsed.amount || undefined,
             currency: parsedCurrency,
             isCurrencyIncompatible,
-            isAccountSuggested: parsed.isAccountSuggested,
+            isAccountSuggested: parsed.isAccountSuggested || Boolean(defaultUsdAcc && !parsed.accountId),
             category: parsed.category || undefined,
             categoryMatched: parsed.categoryMatched || undefined,
-            accountId: parsed.accountId || undefined,
-            accountName: parsed.accountName || undefined,
+            accountId: assignedAccountId,
+            accountName: assignedAccountName,
             date: parsed.date,
             dateLabel: parsed.dateLabel,
             note: parsed.note || trimmed,
@@ -877,8 +918,8 @@ function parseSingleClauseDraft(
       kind: 'agenda',
       activity: activity || 'Actividad programada',
       time,
-      date: dateExtraction.date,
-      dateLabel: dateExtraction.dateLabel,
+      date: dateExtraction.date || referenceDate,
+      dateLabel: dateExtraction.dateLabel || 'Hoy',
       targetModule: 'agenda',
       isModuleEnabled: enabled,
     };
@@ -957,6 +998,21 @@ export function canConfirmDraft(
   state: LifeOSState,
   draft: CaptureDraft
 ): { valid: boolean; reason?: string } {
+  if (draft.kind === 'finance' && draft.installments && draft.installments > 1) {
+    return { valid: false, reason: 'Las compras en cuotas no se confirman como gasto inmediato para proteger el saldo real' };
+  }
+  if (draft.kind === 'finance') {
+    const draftCurrency = (draft.currency || 'UYU').toUpperCase();
+    const accounts = state.finance?.accounts || [];
+    const hasUsdAccount = accounts.some((a) => (a.currency || 'UYU').toUpperCase() === 'USD');
+
+    if (draftCurrency === 'USD' && !hasUsdAccount) {
+      return { valid: false, reason: 'Necesitás una cuenta en dólares' };
+    }
+    if (draft.isCurrencyIncompatible || (draftCurrency !== 'UYU' && draftCurrency !== 'USD')) {
+      return { valid: false, reason: 'Moneda incompatible' };
+    }
+  }
   if (draft.ambiguityWarning) {
     return { valid: false, reason: 'Fecha o datos ambiguos requieren revisión' };
   }
@@ -973,14 +1029,20 @@ export function canConfirmDraft(
     if (draft.amount === undefined || draft.amount <= 0) {
       return { valid: false, reason: 'Importe requerido' };
     }
-    if (draft.isCurrencyIncompatible || (draft.currency && draft.currency !== 'UYU')) {
-      return { valid: false, reason: 'Moneda extranjera no soportada' };
-    }
-    if (draft.accountId) {
-      const accExists = (state.finance?.accounts || []).some((a) => a.id === draft.accountId);
-      if (!accExists) {
+    const draftCurrency = (draft.currency || 'UYU').toUpperCase();
+    const accounts = state.finance?.accounts || [];
+    const targetAccountId = draft.accountId || accounts.find((a) => (a.currency || 'UYU').toUpperCase() === draftCurrency)?.id;
+    if (targetAccountId) {
+      const targetAccount = accounts.find((a) => a.id === targetAccountId);
+      if (!targetAccount) {
         return { valid: false, reason: 'Cuenta inexistente' };
       }
+      const accCurrency = (targetAccount.currency || 'UYU').toUpperCase();
+      if (draftCurrency !== accCurrency) {
+        return { valid: false, reason: `Moneda incompatible (${draftCurrency} vs cuenta ${accCurrency})` };
+      }
+    } else {
+      return { valid: false, reason: draftCurrency === 'USD' ? 'Necesitás una cuenta en dólares' : 'Cuenta requerida' };
     }
     if (draft.category) {
       const catObj = (state.finance?.categories || []).find((c) =>
@@ -1005,20 +1067,37 @@ export function confirmCaptureDraft(
 
   switch (draft.kind) {
     case 'finance': {
+      if (draft.installments && draft.installments > 1) {
+        throw new Error('Las compras en cuotas no se confirman como gasto inmediato para proteger el saldo real. Registrala en Compromisos futuros.');
+      }
       if (!draft.amount || draft.amount <= 0) {
         throw new Error('El importe es obligatorio para registrar un movimiento.');
       }
-      if (draft.isCurrencyIncompatible || (draft.currency && draft.currency !== 'UYU')) {
-        throw new Error(`Moneda no soportada (${draft.currency || 'extranjera'}). LifeOS no realiza conversiones automáticas.`);
+      const draftCurrency = (draft.currency || 'UYU').toUpperCase();
+      if (draftCurrency !== 'UYU' && draftCurrency !== 'USD') {
+        throw new Error(`Moneda no soportada (${draft.currency || 'extranjera'}). Celestian LifeOS no convierte monedas automáticamente.`);
+      }
+      const accounts = draftState.finance?.accounts || [];
+      const hasUsdAccount = accounts.some((a) => (a.currency || 'UYU').toUpperCase() === 'USD');
+      if (draftCurrency === 'USD' && !hasUsdAccount) {
+        throw new Error('Moneda no soportada: se necesita una cuenta en dólares para registrar este movimiento.');
+      }
+      if (draft.isCurrencyIncompatible) {
+        throw new Error('Moneda no soportada: el borrador presenta una moneda incompatible con las cuentas configuradas.');
       }
 
-      // Check account exists
-      const accounts = draftState.finance?.accounts || [];
-      if (draft.accountId) {
-        const accExists = accounts.some((a) => a.id === draft.accountId);
-        if (!accExists) {
-          throw new Error('La cuenta seleccionada no existe o fue eliminada.');
-        }
+      // Check account exists and currency compatibility
+      const targetAccountId = draft.accountId || accounts.find((a) => (a.currency || 'UYU').toUpperCase() === draftCurrency)?.id;
+      if (!targetAccountId) {
+        throw new Error(draftCurrency === 'USD' ? 'Necesitás una cuenta en dólares para registrar este movimiento.' : 'Elegí una cuenta válida.');
+      }
+      const targetAccount = accounts.find((a) => a.id === targetAccountId);
+      if (!targetAccount) {
+        throw new Error('La cuenta seleccionada no existe o fue eliminada.');
+      }
+      const accCurrency = (targetAccount.currency || 'UYU').toUpperCase();
+      if (draftCurrency !== accCurrency) {
+        throw new Error(`Moneda incompatible: el movimiento es en ${draftCurrency} pero la cuenta seleccionada opera en ${accCurrency}. Elegí una cuenta compatible.`);
       }
 
       // Check category is active if specified
@@ -1034,8 +1113,9 @@ export function confirmCaptureDraft(
       const tx = addQuickTransaction(draftState, {
         type: draft.type,
         amount: draft.amount,
+        currency: draftCurrency,
         category,
-        accountId: draft.accountId,
+        accountId: targetAccountId,
         note: draft.installments ? `${draft.note || ''} (${draft.installments} cuotas)`.trim() : draft.note,
         date: draft.date,
       });
@@ -1049,7 +1129,7 @@ export function confirmCaptureDraft(
     }
 
     case 'task': {
-      addQuickTask(draftState, draft.text, draft.priority, draft.dueDate || todayISO(), draft.effort || 'medium');
+      addQuickTask(draftState, draft.text, draft.priority, draft.dueDate || todayISO(), draft.effort || 'medium', draft.dueDate);
       const dueSuffix = draft.dueDateLabel && draft.dueDateLabel !== 'Hoy' ? ` (${draft.dueDateLabel})` : '';
       return {
         message: `Tarea creada: "${draft.text}"${dueSuffix}.`,

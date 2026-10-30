@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { LifeOSState } from '../types';
+import type { GymActiveTimer, LifeOSState } from '../types';
 import { playSound } from '../lib/audio';
 import { isModuleEnabled } from '../lib/moduleVisibility';
+import { applyGymRestTimerAdjustment, getGymSettings, toggleGymRestTimerPause } from '../lib/gymFlows';
 
 interface GymRestOverlayProps {
   state: LifeOSState;
@@ -9,30 +10,41 @@ interface GymRestOverlayProps {
   onOpenGym: () => void;
 }
 
-function remainingSeconds(endsAt?: number): number {
-  return endsAt ? Math.max(0, Math.ceil((endsAt - Date.now()) / 1000)) : 0;
+function remainingSeconds(timer?: GymActiveTimer | null): number {
+  if (!timer) return 0;
+  if (timer.pausedAt) return timer.remainingSecondsWhenPaused ?? Math.max(0, Math.ceil((timer.endsAt - timer.pausedAt) / 1000));
+  return Math.max(0, Math.ceil((timer.endsAt - Date.now()) / 1000));
 }
 
 export const GymRestOverlay: React.FC<GymRestOverlayProps> = ({ state, onUpdateState, onOpenGym }) => {
   const timer = state.gym.activeTimer;
-  const timerEndsAt = timer?.endsAt;
   const isExerciseRest = timer?.kind === 'exercise';
-  const [left, setLeft] = useState(() => remainingSeconds(timer?.endsAt));
+  const settings = getGymSettings(state.gym);
+  const [left, setLeft] = useState(() => remainingSeconds(timer));
   const [announcedEnd, setAnnouncedEnd] = useState(false);
 
   useEffect(() => {
-    setLeft(remainingSeconds(timerEndsAt));
+    setLeft(remainingSeconds(timer));
     setAnnouncedEnd(false);
-    if (!timerEndsAt) return;
-    const interval = window.setInterval(() => setLeft(remainingSeconds(timerEndsAt)), 250);
-    return () => window.clearInterval(interval);
-  }, [timerEndsAt]);
+    if (!timer || timer.pausedAt) return;
+    const refresh = () => setLeft(remainingSeconds(timer));
+    const interval = window.setInterval(refresh, 250);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [timer]);
 
   useEffect(() => {
-    if (!timer || left > 0 || announcedEnd) return;
+    if (!timer || timer.pausedAt || remainingSeconds(timer) > 0 || left > 0 || announcedEnd) return;
     setAnnouncedEnd(true);
     playSound('beep');
-    onUpdateState((draft) => { draft.gym.activeTimer = null; });
+    onUpdateState((draft) => {
+      if (draft.gym.activeTimer?.endsAt === timer.endsAt && !draft.gym.activeTimer.pausedAt) draft.gym.activeTimer = null;
+    });
   }, [announcedEnd, left, onUpdateState, timer]);
 
   const progress = useMemo(() => timer ? Math.max(0, Math.min(100, (left / Math.max(1, timer.durationSeconds)) * 100)) : 0, [left, timer]);
@@ -43,24 +55,17 @@ export const GymRestOverlay: React.FC<GymRestOverlayProps> = ({ state, onUpdateS
 
   const change = (delta: number) => {
     if (!timer) return;
-    const now = Date.now();
-    const remainingMs = timer.endsAt - now;
-    if (delta < 0 && remainingMs <= Math.abs(delta) * 1000) {
-      playSound('beep');
-      onUpdateState((draft) => { draft.gym.activeTimer = null; });
-      return;
-    }
     onUpdateState((draft) => {
       if (!draft.gym.activeTimer) return;
-      draft.gym.activeTimer.endsAt = Math.max(now, draft.gym.activeTimer.endsAt + delta * 1000);
-      draft.gym.activeTimer.durationSeconds = Math.max(1, draft.gym.activeTimer.durationSeconds + delta);
+      const result = applyGymRestTimerAdjustment(draft.gym.activeTimer, delta);
+      draft.gym.activeTimer = result.timer;
     });
   };
 
   return (
     <aside
       aria-label="Temporizador de descanso en segundo plano"
-      className="fixed bottom-[calc(5.25rem+env(safe-area-inset-bottom))] left-3 right-3 z-[65] overflow-hidden rounded-2xl border border-blue-400/30 bg-slate-950/95 text-white shadow-2xl backdrop-blur-md sm:bottom-5 sm:left-auto sm:right-5 sm:w-[380px]"
+      className="fixed bottom-[calc(6.25rem+env(safe-area-inset-bottom))] left-3 right-3 z-[65] overflow-hidden rounded-2xl border border-blue-400/30 bg-slate-950/95 text-white shadow-2xl backdrop-blur-md lg:bottom-5 sm:left-auto sm:right-5 sm:w-[380px]"
     >
       <div className="h-1 bg-white/10">
         <div
@@ -72,27 +77,33 @@ export const GymRestOverlay: React.FC<GymRestOverlayProps> = ({ state, onUpdateS
         <button type="button" onClick={onOpenGym} className="min-w-0 flex-1 text-left cursor-pointer">
           <span className={`block text-[10px] font-black uppercase tracking-widest ${isExerciseRest ? 'text-amber-300' : 'text-blue-300'}`}>
             {isExerciseRest ? 'Descanso ejercicios' : 'Descanso series'}
+            {timer.pausedAt ? ' · En pausa' : ''}
           </span>
-          <strong className="font-mono text-2xl font-bold tabular-nums">
+          <strong className="text-2xl font-bold tabular-nums">
             {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
           </strong>
         </button>
 
         <div className="flex items-center gap-1.5">
-          <button
+          <button type="button" aria-label={timer.pausedAt ? 'Reanudar descanso' : 'Pausar descanso'} onClick={() => onUpdateState(draft => {
+            if (draft.gym.activeTimer) draft.gym.activeTimer = toggleGymRestTimerPause(draft.gym.activeTimer);
+          })} className="min-h-11 rounded-xl bg-white/10 px-2.5 text-xs font-bold hover:bg-white/20">
+            {timer.pausedAt ? 'Reanudar' : 'Pausar'}
+          </button>
+          {settings.showQuickRestAdjustments && <button
             type="button"
             onClick={() => change(-30)}
             className="min-h-10 rounded-xl bg-white/10 px-2.5 text-xs font-black transition-colors hover:bg-white/20 active:scale-95"
           >
             −30s
-          </button>
-          <button
+          </button>}
+          {settings.showQuickRestAdjustments && <button
             type="button"
             onClick={() => change(30)}
             className="min-h-10 rounded-xl bg-white/10 px-2.5 text-xs font-black transition-colors hover:bg-white/20 active:scale-95"
           >
             +30s
-          </button>
+          </button>}
           <button
             type="button"
             onClick={() => onUpdateState((draft) => { draft.gym.activeTimer = null; })}

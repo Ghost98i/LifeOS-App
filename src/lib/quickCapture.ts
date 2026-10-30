@@ -12,6 +12,7 @@ export interface QuickTransactionInput {
   category?: string;
   note?: string;
   date?: string;
+  currency?: string;
 }
 
 export function suggestedQuickAccountId(state: LifeOSState, type: 'gasto' | 'ingreso'): string {
@@ -49,6 +50,7 @@ export function addQuickTransaction(state: LifeOSState, input: QuickTransactionI
   return addTransaction(state, {
     type: input.type,
     amount,
+    currency: input.currency,
     category: resolvedCategory,
     fixed: 'variable',
     date: input.date || todayISO(),
@@ -64,11 +66,12 @@ export function addQuickTask(
   priority: 'alta' | 'media' | 'baja' = 'media',
   date = todayISO(),
   effort: EffortLevel = 'medium',
+  dueDate?: string,
 ): string {
   const cleanText = text.trim();
   if (!cleanText) throw new Error('Escribí qué querés recordar.');
   const id = uid();
-  state.todayExtras.push({ id, text: cleanText, priority, date, done: false, effort });
+  state.todayExtras.push({ id, text: cleanText, priority, date, done: false, effort, dueDate });
   return id;
 }
 

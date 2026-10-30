@@ -20,9 +20,9 @@ export default defineConfig(({ mode }) => {
             includeAssets: ['lifeos-icon-16.png', 'lifeos-icon-32.png', 'lifeos-icon-180.png', 'lifeos-icon-192.png', 'lifeos-icon-512.png'],
             manifest: {
               id: '/',
-              name: 'LifeOS de Christian',
-              short_name: 'LifeOS',
-              description: 'Centro de operaciones personal, local y sincronizado.',
+              name: 'Celestian LifeOS',
+              short_name: 'Celestian',
+              description: 'Organización personal con datos locales y sincronización opcional.',
               lang: 'es',
               theme_color: '#08111f',
               background_color: '#08111f',
@@ -40,6 +40,10 @@ export default defineConfig(({ mode }) => {
               ],
             },
             workbox: {
+              // Keep the actual interface available offline, including local fonts,
+              // the five Cervino scenes and the existing gym/completion artwork.
+              globPatterns: ['**/*.{js,css,html,wasm,woff2,png,webp,svg,lottie,json}'],
+              maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
               navigateFallback: '/index.html',
               cleanupOutdatedCaches: true,
               clientsClaim: false,

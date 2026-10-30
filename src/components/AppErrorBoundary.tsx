@@ -23,7 +23,7 @@ export class AppErrorBoundary extends React.Component<AppErrorBoundaryProps, Sta
   }
 
   componentDidCatch(error: unknown): void {
-    console.error('LifeOS recovered from a screen error:', error);
+    console.error('Celestian LifeOS recovered from a screen error:', error);
   }
 
   handleReset = () => {
@@ -71,7 +71,7 @@ export class AppErrorBoundary extends React.Component<AppErrorBoundaryProps, Sta
             onClick={() => window.location.reload()}
             className="w-full sm:w-auto rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2.5 text-xs font-bold text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer"
           >
-            Recargar LifeOS
+            Recargar Celestian LifeOS
           </button>
         </div>
       </section>

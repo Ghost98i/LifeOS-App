@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -12,6 +12,8 @@ import {
 } from 'recharts';
 import { DayKey, Exercise, ExerciseEquipment, GymSession, GymSet, LifeOSState, MuscleGroup, RoutineAppearance } from '../types';
 import { GymRestTimerBar } from './GymRestTimerBar';
+import { GymNoteSurface } from './GymNoteSurface';
+import { GYM_NOTE_PLACEMENTS_ENABLED } from '../lib/notePlacements';
 import { ActiveWorkoutView } from './ActiveWorkoutView';
 import { GymPlateCalculator } from './GymPlateCalculator';
 import { PersonalRecordsCard } from './PersonalRecordsCard';
@@ -20,6 +22,8 @@ import { WorkoutSummaryModal } from './WorkoutSummaryModal';
 import { ExerciseHistoryModal } from './ExerciseHistoryModal';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
+import { GymExerciseArtwork } from './visual/GymExerciseArtwork';
+import { GymIcon } from './visual/GymIcon';
 import {
   todayISO,
   DAYS,
@@ -35,6 +39,7 @@ import {
   getGymProgressMetrics,
   calculateSessionDuration,
   NewPRRecord,
+  nowTimeHHmm,
 } from '../lib/gymMetrics';
 import type { ExerciseMetricTarget } from '../lib/gymMetrics';
 import {
@@ -46,7 +51,7 @@ import {
   sortedWeight,
 } from '../lib/calculations';
 import { buildGymHistory } from '../lib/gymHistory';
-import { buildGymSessionPresentation } from '../lib/gymIdlePresentation';
+import { buildGymSessionPresentation, formatGymSessionDateTime, getGymCalendarOverview, getPreviousSessionBestLabel, getScheduledGymRoutine } from '../lib/gymIdlePresentation';
 import {
   EXERCISE_EQUIPMENT_OPTIONS,
   inferExerciseEquipment,
@@ -72,8 +77,10 @@ import {
   previewNormalizeGymHistory,
   reorderGymTemplateExercise,
   requestGymSessionDeletion,
+  applyGymRestTimerAdjustment,
   resolveNextRestTimer,
   startGymSession,
+  toggleGymRestTimerPause,
   updateGymTemplate,
   updateGymTemplateExercise,
   updateGymSessionExercise,
@@ -87,12 +94,14 @@ import {
   getRoutineIdentity,
   ROUTINE_ICON_OPTIONS,
   ROUTINE_ICON_LABELS,
-  shouldShowRoutineCategory,
 } from '../lib/gymAppearance';
+import { motionItemKey, shouldPlayCompletionMotion } from '../lib/motion';
 
 interface GimnasioViewProps {
   state: LifeOSState;
-  onUpdateState: (updater: (draft: LifeOSState) => void) => void;
+  onUpdateState: (updater: (draft: LifeOSState) => void) => boolean;
+  storageUserId: string | null;
+  onOpenNote: (id: string) => void;
   initialTab?: 'entrenar' | 'historial' | 'progresion';
   initialEditingTemplateId?: string | null;
 }
@@ -132,43 +141,24 @@ const RoutineIdentityMark: React.FC<{
   return (
     <div
       aria-hidden="true"
-      className={`relative shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br ${identity.surface} ring-1 ring-inset ring-[var(--border)] ${compact ? 'h-11 w-11' : 'h-14 w-14 sm:h-16 sm:w-16'}`}
+      className={`gym-routine-mark relative shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br ${identity.surface} ring-1 ring-inset ring-[var(--border)] ${compact ? 'h-11 w-11' : 'h-14 w-14 sm:h-16 sm:w-16'}`}
     >
-      <span className="absolute -right-3 -top-3 h-9 w-9 rounded-full border border-current opacity-[0.08]" />
-      <span className="absolute -bottom-4 -left-2 h-10 w-10 rounded-full bg-current opacity-[0.04]" />
-      <span className={`absolute inset-0 flex items-center justify-center ${identity.accent}`}>
-        <AppIcon name={identity.icon} className={compact ? 'h-5 w-5' : 'h-6 w-6 sm:h-7 sm:w-7'} />
-      </span>
+      <GymIcon icon={identity.icon} decorative className="absolute inset-0 h-full w-full p-2.5" />
     </div>
   );
 };
 
-function getPreviousExerciseStats(
-  sessions: GymSession[],
-  currentSessionId: string,
-  exerciseName: string,
-  exerciseId?: string
-): string | null {
-  const previous = getExerciseGhostValues(
-    sessions,
-    { exerciseId, exerciseName },
-    currentSessionId
-  );
-  if (previous?.initialSuggestion) {
-    return `${previous.initialSuggestion.weight} kg × ${previous.initialSuggestion.reps}`;
-  }
-  return previous?.bestSet
-    ? `${previous.bestSet.weight} kg × ${previous.bestSet.reps}`
-    : null;
-}
-
 export const GimnasioView: React.FC<GimnasioViewProps> = ({
   state,
   onUpdateState,
+  storageUserId,
+  onOpenNote,
   initialTab = 'entrenar',
   initialEditingTemplateId = null,
 }) => {
-  const [activeTab, setActiveTab] = useState<'entrenar' | 'historial' | 'progresion'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'entrenar' | 'rutinas' | 'historial' | 'progresion'>(
+    initialEditingTemplateId ? 'rutinas' : initialTab
+  );
   const [weightDate, setWeightDate] = useState(todayISO());
   const [weightKg, setWeightKg] = useState('');
 
@@ -178,6 +168,9 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
   const [templateName, setTemplateName] = useState('');
   const [showBodyComposition, setShowBodyComposition] = useState(false);
+  const launcherRef = useRef<HTMLElement>(null);
+  const bodyHealthDetailsRef = useRef<HTMLDetailsElement>(null);
+  const bodyHealthContentRef = useRef<HTMLDivElement>(null);
   const [showTemplates, setShowTemplates] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(initialEditingTemplateId);
 
@@ -202,6 +195,26 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   });
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [setCompletionMotion, setSetCompletionMotion] = useState<{
+    setKey: string;
+    nonce: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!setCompletionMotion) return;
+    const timeout = window.setTimeout(() => setSetCompletionMotion(null), 1100);
+    return () => window.clearTimeout(timeout);
+  }, [setCompletionMotion]);
+
+  const openBodyComposition = useCallback(() => {
+    setActiveTab('progresion');
+    setShowBodyComposition(true);
+    if (bodyHealthDetailsRef.current) bodyHealthDetailsRef.current.open = true;
+    window.requestAnimationFrame(() => {
+      bodyHealthContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      bodyHealthContentRef.current?.focus({ preventScroll: true });
+    });
+  }, []);
 
   const handleRestTimerFinish = useCallback(() => {
     const timer = state.gym.activeTimer;
@@ -217,6 +230,18 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
           const firstIncomplete = nextEx?.sets?.findIndex((s) => !s.completed) ?? -1;
           setLiveExIdx(nextIdx);
           setLiveSetIdx(firstIncomplete >= 0 ? firstIncomplete : 0);
+        }
+      }
+    } else if (timer.kind === 'set') {
+      const activeSession = getActiveGymSession(state.gym);
+      if (activeSession) {
+        const currentExIdx = typeof timer.exerciseIndex === 'number' ? timer.exerciseIndex : liveExIdx;
+        const currentEx = activeSession.exercises[currentExIdx];
+        if (currentEx) {
+          const firstIncomplete = currentEx.sets?.findIndex((s) => !s.completed) ?? -1;
+          if (firstIncomplete >= 0) {
+            setLiveSetIdx(firstIncomplete);
+          }
         }
       }
     }
@@ -241,6 +266,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   const [completedSummarySession, setCompletedSummarySession] = useState<{
     session: GymSession;
     newPRs: NewPRRecord[];
+    streakIncrease: { previous: number; current: number } | null;
   } | null>(null);
 
   const [selectedExercise, setSelectedExercise] = useState<string>('');
@@ -257,19 +283,23 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   const variacion = weightVariation(state);
   const imc = calcIMC(state);
   const imcCat = imcCategory(imc);
-  const streakDetails = calcGymStreakDetails(state);
-  const streak = streakDetails.streakDays;
   const isRestDayToday =
     (state.gym?.restDays || []).includes(todayISO()) ||
     Boolean(state.checkoutLog?.[todayISO()]?.trainedSkipped);
   const gymSessions = state.gym?.sessions;
   const sortedSessions = useMemo(() => {
-    return [...(gymSessions || [])].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return [...(gymSessions || [])].sort((a, b) =>
+      (b.date || '').localeCompare(a.date || '') ||
+      (b.finishedAt || b.startedAt || '').localeCompare(a.finishedAt || a.startedAt || '')
+    );
   }, [gymSessions]);
 
-  const latestSession = useMemo(() => {
-    return sortedSessions.find(isPerformedGymSession) || null;
-  }, [sortedSessions]);
+  const calendarOverview = useMemo(
+    () => getGymCalendarOverview(state.gym.sessions, todayISO()),
+    [state.gym.sessions]
+  );
+
+  const performedSessionCount = sortedSessions.filter(isPerformedGymSession).length;
 
   const todayCompletedSession = useMemo(
     () => sortedSessions.find((session) => session.date === todayISO() && isPerformedGymSession(session)) || null,
@@ -288,6 +318,9 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   );
 
   const activeWorkoutSession = getActiveGymSession(state.gym);
+  const selectedRoutine = state.gym.routineTemplates.find((routine) => routine.id === sessionTemplate);
+  const scheduledRoutine = getScheduledGymRoutine(state.gym.routineTemplates, todayISO());
+  const gymSettings = getGymSettings(state.gym);
 
   const staleActiveSessions = (state.gym?.sessions || []).filter(
     (s) => s.status === 'active' && s.id !== activeWorkoutSession?.id
@@ -323,13 +356,13 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
         if (draft.checkoutLog?.[today]) {
           draft.checkoutLog[today].trainedSkipped = false;
         }
-        showToast('Descanso cancelado. Racha regular.', 'info');
+        showToast('Descanso cancelado.', 'info');
       } else {
         draft.gym.restDays.push(today);
         if (!draft.checkoutLog) draft.checkoutLog = {};
         if (!draft.checkoutLog[today]) draft.checkoutLog[today] = {};
         draft.checkoutLog[today].trainedSkipped = true;
-        showToast('🛋️ Hoy marcado como descanso. Tu racha está protegida.');
+        showToast('Hoy marcado como descanso. No suma un entrenamiento.');
       }
     });
   };
@@ -367,7 +400,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
       return (
         <div className="bg-[var(--card)] border border-[var(--border)] p-3 rounded-xl shadow-xl text-xs space-y-1 z-50">
           <p className="font-semibold text-[var(--text-soft)]">{item.payload.dateLabel || item.payload.rawDate}</p>
-          <p className="font-mono text-[var(--blue)] font-extrabold text-sm">
+          <p className="tabular-nums text-[var(--blue)] font-extrabold text-sm">
             {item.value} {unit || 'kg'}
           </p>
         </div>
@@ -391,16 +424,29 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
   // Workout sessions
   const handleStartWorkout = (templateId?: string) => {
+    const template = templateId
+      ? state.gym.routineTemplates.find((routine) => routine.id === templateId)
+      : null;
+    if (templateId && !template) {
+      showToast('La rutina seleccionada ya no está disponible.', 'error');
+      return;
+    }
+    if (template && template.exercises.length === 0) {
+      showToast('Agregá al menos un ejercicio a esta rutina antes de iniciarla.', 'error');
+      return;
+    }
+    if (isRestDayToday && !window.confirm('Hoy tenés un descanso registrado. ¿Querés entrenar de todos modos? El descanso seguirá registrado.')) return;
     const today = todayISO();
     let result: ReturnType<typeof startGymSession> | null = null;
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       result = startGymSession(draft.gym, {
         templateId,
         date: today,
-        startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        startedAt: nowTimeHHmm(),
         sessionId: uid(),
       });
     });
+    if (!saved) return;
     setLiveExIdx(0);
     setLiveSetIdx(0);
     setActiveTab('entrenar');
@@ -410,18 +456,32 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
       : 'Entrenamiento activo reanudado.');
   };
 
+  const handleSelectRoutine = (templateId: string) => {
+    setSessionTemplate(templateId);
+    setActiveTab('entrenar');
+    if (window.innerWidth < 640) {
+      window.requestAnimationFrame(() => {
+        launcherRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+  };
+
   const handleFinishWorkout = (sessionId: string) => {
     const sessionToFinish = state.gym.sessions.find((x) => x.id === sessionId);
-    const finishTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const finishTime = nowTimeHHmm();
+    const previousStreak = calcGymStreakDetails(state).streakDays;
+    let currentStreak = previousStreak;
     let result: ReturnType<typeof finishGymSession> | null = null;
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       result = finishGymSession(draft.gym, sessionId, { finishedAt: finishTime });
+      draft.gym.activeTimer = null;
+      if (result?.status === 'completed') currentStreak = calcGymStreakDetails(draft).streakDays;
     });
     if (result?.status === 'no_completed_sets') {
       showToast('Completá al menos una serie antes de finalizar, o descartá la sesión.', 'error');
       return;
     }
-    if (result?.status !== 'completed' || !sessionToFinish) return;
+    if (!saved || result?.status !== 'completed' || !sessionToFinish) return;
 
     const historicalPRs = calcDetailedPRs(state.gym.sessions, sessionId);
     const finishedSnapshot: GymSession = {
@@ -432,6 +492,9 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     const summaryPayload = {
       session: finishedSnapshot,
       newPRs: detectSessionPRs(finishedSnapshot, historicalPRs),
+      streakIncrease: currentStreak > previousStreak
+        ? { previous: previousStreak, current: currentStreak }
+        : null,
     };
     playSound('success');
     setCompletedSummarySession(summaryPayload);
@@ -439,15 +502,17 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
   const handleAddSession = (overrideWeek?: string) => {
     let result: ReturnType<typeof startGymSession> | null = null;
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       result = startGymSession(draft.gym, {
         date: sessionDate || todayISO(),
         weekLabel: overrideWeek || sessionWeekLabel.trim() || undefined,
-        startedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        startedAt: nowTimeHHmm(),
         sessionId: uid(),
       });
     });
+    if (!saved) return;
     setSessionWeekLabel('');
+    if (result?.created) setActiveTab('entrenar');
     showToast(result?.created ? 'Sesión iniciada.' : 'Ya existe una sesión activa; se reanudó esa sesión.');
   };
 
@@ -520,12 +585,15 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     setIndex: number,
     updates: Partial<GymSet>
   ) => {
-    onUpdateState((draft) => {
+    let completedSetKey: string | null = null;
+    const saved = onUpdateState((draft) => {
       const s = draft.gym.sessions.find((x) => x.id === sessionId);
       const ex = s?.exercises[exerciseIndex];
+      const targetSet = ex?.sets[setIndex];
+      const wasCompleted = Boolean(targetSet?.completed);
       const result = updateGymSessionSet(draft.gym, sessionId, { exerciseId: ex?.id, exerciseIndex }, setIndex, updates);
-      if (result.justCompleted) {
-        playSound('success');
+      if (result.updated && shouldPlayCompletionMotion(wasCompleted, Boolean(updates.completed))) {
+        completedSetKey = motionItemKey(ex?.id, targetSet?.id, setIndex);
         const nextTimer = resolveNextRestTimer(
           draft.gym,
           sessionId,
@@ -538,6 +606,13 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
         }
       }
     });
+    if (saved && completedSetKey) {
+      playSound('success');
+      setSetCompletionMotion((current) => ({
+        setKey: completedSetKey as string,
+        nonce: (current?.nonce || 0) + 1,
+      }));
+    }
   };
 
   const handleDeleteSet = (sessionId: string, exerciseIndex: number, setIndex: number) => {
@@ -642,7 +717,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
             equipment: eq,
             muscleGroup: ex.muscleGroup,
             barWeight: eq === 'barra' ? (ex.barWeight ?? 20) : 0,
-            restSeconds: ex.restSeconds || 90,
+            restSeconds: ex.restSeconds,
+            restSecondsMode: ex.restSecondsMode || 'inherit',
             timerEnabled: true,
             sets: ex.sets.map((s) => ({
               id: uid(),
@@ -675,7 +751,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   const handleConfigureTemplateExercise = (
     templateId: string,
     exerciseIndex: number,
-    input: { setsCount: number; reps: number; targetWeight: number; restSeconds: number }
+    input: { setsCount: number; reps: number; targetWeight: number; restSeconds?: number }
   ) => {
     onUpdateState((draft) => {
       const template = draft.gym.routineTemplates.find((candidate) => candidate.id === templateId);
@@ -741,7 +817,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
           equipment: eq,
           muscleGroup: group,
           barWeight: barW,
-          restSeconds: 90,
+          restSecondsMode: 'inherit',
           timerEnabled: true,
           sets: newSets,
           weight,
@@ -807,7 +883,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     : null;
   const livePreviousSet = liveGhost?.sets[liveSafeSetIdx] || null;
   const livePreviousSessionBest = activeWorkoutSession && liveCurrentEx
-    ? getPreviousExerciseStats(state.gym.sessions, activeWorkoutSession.id, liveCurrentEx.name, liveCurrentEx.id)
+    ? getPreviousSessionBestLabel(state.gym.sessions, activeWorkoutSession.id, liveCurrentEx.name, liveCurrentEx.id)
     : null;
 
   const handleLiveAdjustWeight = (delta: number) => {
@@ -836,91 +912,76 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="gym-page space-y-6">
       {/* La sesión activa usa su propio encabezado operativo para priorizar el primer viewport móvil. */}
       {!(activeWorkoutSession && activeTab === 'entrenar') && (
         <PageHeader
           title="Gimnasio"
-          subtitle="Entrená, revisá tu historial y entendé tu progreso."
-          actions={
-            !activeWorkoutSession && activeTab !== 'entrenar' ? (
-            <div className="flex items-center gap-2 flex-wrap">
-              {state.gym.routineTemplates.length > 0 && (
-                <select
-                  value={sessionTemplate}
-                  onChange={(e) => setSessionTemplate(e.target.value)}
-                  className="min-h-11 px-3 text-xs font-semibold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] cursor-pointer outline-none"
-                >
-                  <option value="">En blanco (sin plantilla)</option>
-                  {state.gym.routineTemplates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <button
-                type="button"
-                onClick={() => handleStartWorkout(sessionTemplate || undefined)}
-                className="flex min-h-11 items-center gap-1.5 rounded-xl bg-[var(--blue)] px-3.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-[var(--blue-hover)] active:scale-[0.98] cursor-pointer"
-              >
-                <AppIcon name="dumbbell" className="h-3.5 w-3.5" />
-                <span>Iniciar entrenamiento</span>
-              </button>
-            </div>
-            ) : undefined
-          }
         />
       )}
 
-      {/* Main Navigation Segmented Tabs */}
+      {/* Gym sections */}
       {!(activeWorkoutSession && activeTab === 'entrenar') && (
-      <div className="flex min-w-0 items-center gap-1.5 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-1.5 shadow-2xs">
+      <nav aria-label="Secciones de Gimnasio" className="flex min-w-0 gap-1 overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1 sm:grid sm:grid-cols-4 sm:overflow-visible">
         <button
           type="button"
           onClick={() => setActiveTab('entrenar')}
-          className={`flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-2 text-xs font-bold transition-all cursor-pointer sm:px-3 ${
+          aria-current={activeTab === 'entrenar' ? 'page' : undefined}
+          className={`flex min-h-11 min-w-[4.75rem] flex-1 items-center justify-center gap-1 rounded-lg px-1.5 text-[11px] font-bold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] sm:min-w-0 sm:gap-2 sm:px-3 sm:text-xs ${
             activeTab === 'entrenar'
-              ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
+              ? 'bg-[var(--card)] text-[var(--text)]'
               : 'text-[var(--text-soft)] hover:text-[var(--text)]'
           }`}
         >
-          <AppIcon name="dumbbell" className="h-4 w-4" />
-          <span className="sm:hidden">Hoy</span>
-          <span className="hidden truncate sm:inline">{activeWorkoutSession ? 'Entrenamiento activo' : 'Entrenar hoy'}</span>
+          <AppIcon name="dumbbell" className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <span className="truncate">{activeWorkoutSession ? 'En curso' : 'Entrenar'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveTab('rutinas')}
+          aria-current={activeTab === 'rutinas' ? 'page' : undefined}
+          className={`flex min-h-11 min-w-[4.75rem] flex-1 items-center justify-center gap-1 rounded-lg px-1.5 text-[11px] font-bold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] sm:min-w-0 sm:gap-2 sm:px-3 sm:text-xs ${
+            activeTab === 'rutinas'
+              ? 'bg-[var(--card)] text-[var(--text)]'
+              : 'text-[var(--text-soft)] hover:text-[var(--text)]'
+          }`}
+        >
+          <AppIcon name="list" className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <span>Rutinas</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('historial')}
-          className={`flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-2 text-xs font-bold transition-all cursor-pointer sm:px-3 ${
+          aria-current={activeTab === 'historial' ? 'page' : undefined}
+          className={`flex min-h-11 min-w-[4.75rem] flex-1 items-center justify-center gap-1 rounded-lg px-1.5 text-[11px] font-bold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] sm:min-w-0 sm:gap-2 sm:px-3 sm:text-xs ${
             activeTab === 'historial'
-              ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
+              ? 'bg-[var(--card)] text-[var(--text)]'
               : 'text-[var(--text-soft)] hover:text-[var(--text)]'
           }`}
         >
-          <AppIcon name="calendar" className="h-4 w-4" />
-          <span className="sm:hidden">Historial</span>
-          <span className="hidden truncate sm:inline">Historial</span>
-          <span className="hidden sm:inline-block text-[10px] font-mono px-2 py-0.5 rounded-full bg-[var(--surface-muted)] border border-[var(--border)] text-[var(--text-soft)]">
-            {state.gym.sessions.length}
+          <AppIcon name="history" className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <span className="truncate">Historial</span>
+          <span className="hidden text-[10px] tabular-nums sm:inline-block">
+            {performedSessionCount}
           </span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('progresion')}
-          className={`flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-2 text-xs font-bold transition-all cursor-pointer sm:px-3 ${
+          aria-current={activeTab === 'progresion' ? 'page' : undefined}
+          className={`flex min-h-11 min-w-[4.75rem] flex-1 items-center justify-center gap-1 rounded-lg px-1.5 text-[11px] font-bold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] sm:min-w-0 sm:gap-2 sm:px-3 sm:text-xs ${
             activeTab === 'progresion'
-              ? 'bg-[var(--card)] text-[var(--text)] shadow-xs'
+              ? 'bg-[var(--card)] text-[var(--text)]'
               : 'text-[var(--text-soft)] hover:text-[var(--text)]'
           }`}
         >
-          <AppIcon name="activity" className="h-4 w-4" />
-          <span className="sm:hidden">Progreso</span>
-          <span className="hidden truncate sm:inline">{activeWorkoutSession ? 'Progreso' : 'Progresión y salud'}</span>
+          <AppIcon name="activity" className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <span className="truncate">Progreso</span>
         </button>
-      </div>
+      </nav>
       )}
 
       {activeWorkoutSession && state.gym.activeTimer && activeTab !== 'entrenar' && (
@@ -945,7 +1006,36 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
               previousSet={livePreviousSet}
               previousSessionBest={livePreviousSessionBest}
               previousGhostSets={liveGhost?.sets || null}
+              completionMotion={setCompletionMotion}
               exerciseSuggestions={COMMON_EXERCISE_SUGGESTIONS}
+              activeTimer={state.gym.activeTimer}
+              onAdjustRestTimer={(delta) => {
+                onUpdateState((draft) => {
+                  if (!draft.gym.activeTimer) return;
+                  const res = applyGymRestTimerAdjustment(draft.gym.activeTimer, delta);
+                  if (res.completed) {
+                    handleRestTimerFinish();
+                  } else if (res.timer) {
+                    draft.gym.activeTimer = res.timer;
+                  }
+                });
+              }}
+              onTogglePauseRestTimer={() => {
+                onUpdateState((draft) => {
+                  if (draft.gym.activeTimer) {
+                    draft.gym.activeTimer = toggleGymRestTimerPause(draft.gym.activeTimer);
+                  }
+                });
+              }}
+              onSkipRestTimer={handleRestTimerFinish}
+              onCompleteRestTimer={handleRestTimerFinish}
+              onToggleMinimizeRest={() => {
+                onUpdateState((draft) => {
+                  if (draft.gym.activeTimer) {
+                    draft.gym.activeTimer.minimized = !draft.gym.activeTimer.minimized;
+                  }
+                });
+              }}
               restTimer={
                 state.gym.activeTimer ? (
                   <GymRestTimerBar
@@ -1039,10 +1129,11 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
               {/* Today's Gym Status */}
               <section
                 data-gym-today-status
-                className="relative overflow-hidden rounded-3xl bg-[var(--card)] shadow-sm ring-1 ring-inset ring-[var(--border)]"
+                ref={launcherRef}
+                className="relative scroll-mt-4 overflow-hidden rounded-3xl bg-[var(--card)] shadow-sm ring-1 ring-inset ring-[var(--border)]"
               >
-                <span className="pointer-events-none absolute -right-12 -top-16 h-44 w-44 rounded-full bg-blue-500/[0.07] blur-2xl" />
-                <div className="relative grid lg:grid-cols-[minmax(0,1fr)_auto]">
+                <span className="pointer-events-none absolute -right-12 -top-16 h-44 w-44 rounded-full bg-[#4F46E5]/[0.12] blur-2xl" />
+                <div className="relative grid lg:grid-cols-[minmax(0,1fr)_minmax(19rem,0.8fr)]">
                   <div className="min-w-0 px-5 py-5 sm:px-6 sm:py-6">
                     <div className="flex items-start gap-3">
                       {isTrainedToday && (
@@ -1051,42 +1142,51 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                         </span>
                       )}
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-[var(--text-soft)]">
-                          {isTrainedToday ? 'Sesión de hoy completada' : 'Entrenar hoy'}
-                        </p>
+                        {isTrainedToday && <p className="text-xs font-semibold text-[var(--text-soft)]">Sesión de hoy completada</p>}
                         <h2 className="mt-1 text-xl font-black tracking-tight text-[var(--text)] sm:text-2xl">
                           {isTrainedToday
                             ? todayPresentation?.name || 'Entrenamiento completado'
-                            : isRestDayToday
-                            ? 'Día de descanso activo'
-                            : sessionTemplate
-                            ? state.gym.routineTemplates.find((template) => template.id === sessionTemplate)?.name || 'Rutina personalizada'
-                            : 'Listo para entrenar'}
+                            : '¿Listo para entrenar?'}
                         </h2>
-                        {!isTrainedToday && (
-                          <p className="mt-1 text-sm leading-5 text-[var(--text-soft)]">
-                            {isRestDayToday
-                              ? 'Racha protegida para priorizar recuperación.'
-                              : `${state.gym.routineTemplates.length} rutina${state.gym.routineTemplates.length === 1 ? '' : 's'} lista${state.gym.routineTemplates.length === 1 ? '' : 's'} · Racha de ${streak} días`}
-                          </p>
-                        )}
+                        {isRestDayToday && !isTrainedToday && <p className="mt-2 text-sm leading-5 text-amber-600 dark:text-amber-300">Hoy tenés un descanso registrado. Podés entrenar de todos modos; se te pedirá confirmación.</p>}
                       </div>
                     </div>
 
+                    {!todayPresentation && (
+                      <div className="mt-5 border-t border-[var(--border)] pt-4">
+                        <p className="text-xs font-medium text-[var(--text-soft)]">Entrenamiento a iniciar</p>
+                        <p className="mt-1 text-base font-bold text-[var(--text)]">
+                          {selectedRoutine?.name || (state.gym.routineTemplates.length ? 'Entrenamiento en blanco' : 'Sin rutinas guardadas')}
+                        </p>
+                        {selectedRoutine && <p className="mt-0.5 text-xs text-[var(--text-soft)]">{selectedRoutine.exercises.length} {selectedRoutine.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}{selectedRoutine.days?.length ? ` · ${selectedRoutine.days.map((day) => DAY_LABELS[day]).join(', ')}` : ''}</p>}
+                        {scheduledRoutine && <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--text-soft)]">
+                          <span>{scheduledRoutine.daysAway === 0 ? 'Plan de hoy' : `Próximo plan · ${DAY_LABELS[scheduledRoutine.day]}`}: <strong className="font-medium text-[var(--text)]">{scheduledRoutine.routine.name}</strong></span>
+                          {sessionTemplate !== scheduledRoutine.routine.id && <button type="button" onClick={() => setSessionTemplate(scheduledRoutine.routine.id)} className="min-h-11 font-semibold text-[var(--blue)] underline">Usar esta rutina</button>}
+                        </div>}
+                        {!selectedRoutine && state.gym.routineTemplates.length === 0 && (
+                          <button type="button" onClick={() => { setActiveTab('rutinas'); setShowTemplates(true); }} className="mt-2 min-h-11 rounded-lg pr-2 text-sm font-semibold text-[var(--blue)] hover:underline">
+                            Crear primera rutina
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     {todayPresentation && (
                       <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-[1.4fr_repeat(4,minmax(0,1fr))] sm:items-end">
-                        <div className="col-span-2 sm:col-span-1">
-                          <dt className="text-[11px] font-semibold text-[var(--text-faint)]">Volumen total</dt>
-                          <dd className="mt-1 text-3xl font-black tracking-tight tabular-nums text-[var(--text)] sm:text-4xl">
-                            {todayPresentation.volumeKg.toLocaleString('es-UY')}
-                            <span className="ml-1.5 text-sm font-semibold text-[var(--text-soft)]">kg</span>
-                          </dd>
-                        </div>
+                        {todayPresentation.volumeKg > 0 && (
+                          <div className="col-span-2 sm:col-span-1">
+                            <dt className="text-[11px] font-semibold text-[var(--text-faint)]">Volumen total</dt>
+                            <dd className="mt-1 text-3xl font-black tracking-tight tabular-nums text-[var(--text)] sm:text-4xl">
+                              {todayPresentation.volumeKg.toLocaleString('es-UY')}
+                              <span className="ml-1.5 text-sm font-semibold text-[var(--text-soft)]">kg</span>
+                            </dd>
+                          </div>
+                        )}
                         {[
                           ['Ejercicios', todayPresentation.exerciseCount],
                           ['Series', todayPresentation.completedSetCount],
                           ...(todayPresentation.durationLabel
-                            ? [['Duración', todayPresentation.durationLabel] as [string, string | number]]
+                            ? [['Tiempo registrado', todayPresentation.durationLabel] as [string, string | number]]
                             : []),
                           ...(todayPresentation.prExerciseCount > 0
                             ? [['Mejores marcas', `${todayPresentation.prExerciseCount} PR${todayPresentation.prExerciseCount === 1 ? '' : 's'}`] as [string, string | number]]
@@ -1104,71 +1204,78 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                   </div>
 
                   <div className="flex w-full flex-col gap-2 border-t border-[var(--border)] bg-[var(--surface-muted)]/55 p-4 sm:flex-row sm:items-center lg:w-72 lg:flex-col lg:items-stretch lg:justify-center lg:border-l lg:border-t-0 lg:p-5">
-                    {state.gym.routineTemplates.length > 0 && (
-                      <select
-                        aria-label="Plantilla para el próximo entrenamiento"
-                        value={sessionTemplate}
-                        onChange={(event) => setSessionTemplate(event.target.value)}
-                        className="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-medium text-[var(--text)] outline-none focus:border-[var(--blue)] lg:w-full"
-                      >
-                        <option value="">Entrenamiento en blanco</option>
-                        {state.gym.routineTemplates.map((template) => (
-                          <option key={template.id} value={template.id}>{template.name}</option>
-                        ))}
-                      </select>
-                    )}
-
-                    {!isTrainedToday && (
-                      <button
-                        type="button"
-                        onClick={handleToggleRestDay}
-                        className="min-h-11 rounded-xl px-3 text-sm font-semibold text-[var(--text-soft)] transition-colors hover:bg-[var(--card)] hover:text-[var(--text)]"
-                      >
-                        {isRestDayToday ? 'Cancelar descanso' : 'Descanso hoy'}
-                      </button>
-                    )}
+                    <label className="text-xs font-semibold text-[var(--text-soft)]" htmlFor="gym-routine-choice">Elegir rutina</label>
+                    <select
+                      id="gym-routine-choice"
+                      value={sessionTemplate}
+                      onChange={(event) => setSessionTemplate(event.target.value)}
+                      className="min-h-11 min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-medium text-[var(--text)] outline-none focus:border-[var(--blue)] lg:w-full"
+                    >
+                      <option value="">Entrenamiento en blanco</option>
+                      {state.gym.routineTemplates.map((template) => (
+                        <option key={template.id} value={template.id} disabled={template.exercises.length === 0}>{template.name}{template.exercises.length === 0 ? ' · sin ejercicios' : ''}</option>
+                      ))}
+                    </select>
 
                     <button
                       type="button"
                       onClick={() => handleStartWorkout(sessionTemplate || undefined)}
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--blue)] px-4 text-sm font-bold text-white shadow-xs transition-colors hover:bg-[var(--blue-hover)] active:scale-[0.98]"
+                      disabled={Boolean(selectedRoutine && selectedRoutine.exercises.length === 0)}
+                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--blue)] px-4 text-sm font-bold text-white shadow-xs transition-colors hover:bg-[var(--blue-hover)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <AppIcon name="dumbbell" className="h-4 w-4" />
                       <span>{isTrainedToday ? 'Iniciar otro entrenamiento' : 'Iniciar entrenamiento'}</span>
                     </button>
+                    {!isTrainedToday && (
+                      <button
+                        type="button"
+                        onClick={handleToggleRestDay}
+                        className="min-h-11 rounded-xl px-3 text-sm font-medium text-[var(--text-soft)] transition-colors hover:bg-[var(--card)] hover:text-[var(--text)]"
+                      >
+                        {isRestDayToday ? 'Cancelar descanso' : 'Descanso hoy'}
+                      </button>
+                    )}
                   </div>
                 </div>
               </section>
 
+              {GYM_NOTE_PLACEMENTS_ENABLED && <GymNoteSurface notes={state.notes.postits} storageUserId={storageUserId} privacyMode={state.settings.privacyMode} onOpenNote={onOpenNote} />}
+
+
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 2: RUTINAS */}
+      {activeTab === 'rutinas' && (
+        <div className="space-y-6 animate-in fade-in">
               {/* Routine Templates Manager */}
               <section data-gym-routines className="space-y-4 py-2">
-                <div className="flex items-end justify-between gap-3 px-1">
+                <div className="flex flex-col gap-3 px-1 sm:flex-row sm:items-end sm:justify-between">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold text-[var(--text-soft)]">Tu biblioteca</p>
-                      <h2 className="mt-0.5 text-lg font-black tracking-tight text-[var(--text)]">Rutinas</h2>
-                      <p className="mt-0.5 text-xs text-[var(--text-soft)]">
-                        {state.gym.routineTemplates.length} rutina{state.gym.routineTemplates.length === 1 ? '' : 's'} preparada{state.gym.routineTemplates.length === 1 ? '' : 's'} para entrenar
-                      </p>
+                      <h2 className="text-lg font-black tracking-tight text-[var(--text)]">Rutinas</h2>
+                      <p className="mt-0.5 text-xs text-[var(--text-soft)]">Planes guardados · las sesiones ejecutadas están en Historial.</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end">
                     <button
                       type="button"
                       onClick={() => setIsSettingsModalOpen(true)}
                       className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-bold text-[var(--text-soft)] transition-colors hover:border-[var(--blue)] hover:text-[var(--text)]"
                       title="Configurar descansos automáticos"
                     >
-                      <AppIcon name="clock" className="h-4 w-4" />
+                      <AppIcon name="stopwatch" className="h-4 w-4" />
                       <span>Descansos</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setShowTemplates((v) => !v)}
-                      className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--surface-muted)]"
+                      className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-sm font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--surface-muted)]"
                     >
                       <AppIcon name={showTemplates ? 'x' : 'plus'} className="h-4 w-4" />
-                      {showTemplates ? 'Cancelar' : 'Nueva rutina'}
+                      {showTemplates ? 'Cancelar' : state.gym.routineTemplates.length === 0 ? 'Crear primera rutina' : 'Nueva rutina'}
                     </button>
                   </div>
                 </div>
@@ -1196,50 +1303,53 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
                 <div className="overflow-visible rounded-3xl bg-[var(--card)] shadow-sm ring-1 ring-inset ring-[var(--border)]">
                   {state.gym.routineTemplates.length === 0 && !showTemplates && (
-                    <p className="px-5 py-7 text-sm text-[var(--text-soft)]">
-                      Creá una rutina para iniciar entrenamientos con ejercicios y descansos preparados.
-                    </p>
+                    <div className="px-5 py-6">
+                      <p className="text-sm font-semibold text-[var(--text)]">Todavía no hay rutinas guardadas.</p>
+                      <p className="mt-1 max-w-xl text-sm text-[var(--text-soft)]">Creá un plan con ejercicios, series y cargas objetivo. Las sesiones que hagas después aparecen en Historial.</p>
+                    </div>
                   )}
                   {state.gym.routineTemplates.map((t) => {
                     const isEditing = editingTemplateId === t.id;
+                    const isSelected = sessionTemplate === t.id;
+                    const isEmpty = t.exercises.length === 0;
                     const identity = getRoutineIdentity(t.exercises, t.name, t.appearance);
-                    const showCategory = shouldShowRoutineCategory(t.name, identity.label);
+                    const hasLegacyIcon = Boolean(
+                      t.appearance?.icon
+                      && !ROUTINE_ICON_OPTIONS.some((option) => option.name === t.appearance?.icon)
+                    );
                     return (
-                      <article key={t.id} className="border-b border-[var(--border)] last:border-b-0">
-                        <div className="grid gap-4 p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center sm:p-5">
-                          <div className="flex min-w-0 items-center gap-3 sm:contents">
-                            <RoutineIdentityMark exercises={t.exercises} name={t.name} appearance={t.appearance} />
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <h3 className="truncate text-base font-black tracking-tight text-[var(--text)]">{t.name}</h3>
-                                {showCategory && (
-                                  <span className={`text-[10px] font-semibold ${identity.accent}`}>{identity.label}</span>
-                                )}
-                              </div>
-                              <p className="mt-1 text-xs leading-5 text-[var(--text-soft)]">
-                                {t.exercises.length} ejercicio{t.exercises.length === 1 ? '' : 's'}
-                                {t.days?.length ? ` · ${t.days.map((day) => DAY_LABELS[day].slice(0, 3)).join(', ')}` : ' · Sin días asignados'}
-                              </p>
-                              {t.exercises.length > 0 && (
-                                <p className="mt-1 hidden truncate text-xs text-[var(--text-faint)] sm:block">
-                                  {t.exercises.slice(0, 3).map((exercise) => exercise.name).join(' · ')}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1.5 sm:flex sm:items-center">
-                            <button
+                      <article key={t.id} className={`border-b border-[var(--border)] last:border-b-0 ${isSelected ? 'bg-[var(--blue-soft)]' : ''}`}>
+                        <div className="flex min-w-0 items-center gap-1.5 px-2 py-1.5 sm:gap-3 sm:px-4 sm:py-2">
+                          <button
+                            type="button"
+                            aria-pressed={isSelected}
+                            aria-label={`${isEmpty ? 'Rutina sin ejercicios' : 'Seleccionar rutina'}: ${t.name}`}
+                            disabled={isEmpty}
+                            onClick={() => handleSelectRoutine(t.id)}
+                            className={`flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] ${isEmpty ? 'cursor-not-allowed opacity-75' : 'hover:bg-[var(--surface-muted)]'} ${isSelected ? 'ring-1 ring-inset ring-[var(--blue)]' : ''}`}
+                          >
+                            <RoutineIdentityMark exercises={t.exercises} name={t.name} appearance={t.appearance} compact />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-bold text-[var(--text)] sm:text-base">{t.name}</span>
+                              <span className="mt-0.5 block text-xs leading-4 text-[var(--text-soft)]">
+                                {isEmpty ? 'Sin ejercicios · Editá para empezar' : `${t.exercises.length} ejercicio${t.exercises.length === 1 ? '' : 's'}`}
+                                {!isEmpty && (t.days?.length ? ` · ${t.days.map((day) => DAY_LABELS[day]).join(', ')}` : ' · Sin días asignados')}
+                              </span>
+                            </span>
+                            {isSelected && <span className="shrink-0 text-[11px] font-bold text-[var(--blue)]">Elegida</span>}
+                          </button>
+                          <div className="flex shrink-0 items-center gap-1">
+                            {!isEmpty && <button
                               type="button"
                               onClick={() => handleStartWorkout(t.id)}
-                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--blue)] px-4 text-sm font-bold text-white shadow-xs hover:bg-[var(--blue-hover)]"
+                              className="hidden min-h-11 items-center rounded-xl px-3 text-xs font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)] lg:inline-flex"
                             >
-                              <AppIcon name="play" className="h-4 w-4" />
                               Iniciar
-                            </button>
+                            </button>}
                             <button
                               type="button"
                               onClick={() => setEditingTemplateId(isEditing ? null : t.id)}
-                              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]"
+                              className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl px-2 text-xs font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)] sm:px-3"
                             >
                               <AppIcon name="edit" className="h-4 w-4 text-[var(--text-soft)]" />
                               {isEditing ? 'Cerrar' : 'Editar'}
@@ -1259,6 +1369,35 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                             </details>
                           </div>
                         </div>
+
+                        {!isEmpty && (
+                          <details className="group border-t border-[var(--border)] px-4 sm:px-5">
+                            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)]">
+                              <span>Ejercicios y objetivos</span>
+                              <span className="flex items-center gap-2">
+                                {t.exercises.length} {t.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}
+                                <AppIcon name="chevronDown" className="h-4 w-4 transition-transform group-open:rotate-180" />
+                              </span>
+                            </summary>
+                            <ol className="divide-y divide-[var(--border)] border-t border-[var(--border)] pb-1">
+                              {t.exercises.map((exercise, exerciseIndex) => {
+                                const firstSet = exercise.sets?.[0];
+                                const targetWeight = firstSet?.weight ?? exercise.weight ?? 0;
+                                const loadLabel = targetWeight > 0
+                                  ? `${targetWeight} kg`
+                                  : exercise.equipment === 'corporal' ? 'Peso corporal' : 'Sin carga fijada';
+                                return (
+                                  <li key={exercise.id || `${exercise.name}-${exerciseIndex}`} className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2">
+                                    <span className="min-w-0 flex-1 text-sm font-medium text-[var(--text)]">{exerciseIndex + 1}. {exercise.name}</span>
+                                    <span className="shrink-0 text-xs tabular-nums text-[var(--text-soft)]">
+                                      {exercise.sets?.length || 1} series · {firstSet?.reps ?? 10} reps · {loadLabel}
+                                    </span>
+                                  </li>
+                                );
+                              })}
+                            </ol>
+                          </details>
+                        )}
 
                         {isEditing && (
                           <div data-gym-routine-editor className="space-y-6 border-t border-[var(--border)] bg-[var(--card-subtle)] p-4 animate-in fade-in sm:p-6">
@@ -1332,6 +1471,21 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                   <span className="hidden h-5 w-px bg-[var(--border)] sm:inline-block" aria-hidden="true" />
 
                                   <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Icono de rutina">
+                                    {hasLegacyIcon && t.appearance?.icon && (
+                                      <button
+                                        type="button"
+                                        role="radio"
+                                        aria-checked="true"
+                                        title={ROUTINE_ICON_LABELS[t.appearance.icon] || 'Icono anterior'}
+                                        aria-label={`${ROUTINE_ICON_LABELS[t.appearance.icon] || 'Icono anterior'}; selección conservada`}
+                                        onClick={() => onUpdateState((draft) => {
+                                          updateGymTemplate(draft.gym, t.id, { appearance: { icon: t.appearance?.icon } });
+                                        })}
+                                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-600 ring-2 ring-indigo-500 dark:text-indigo-300"
+                                      >
+                                        <GymIcon icon={identity.icon} decorative className="h-5 w-5" />
+                                      </button>
+                                    )}
                                     {ROUTINE_ICON_OPTIONS.map((opt) => {
                                       const isSelected = t.appearance?.icon === opt.name;
                                       return (
@@ -1351,7 +1505,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                               : 'bg-[var(--surface-muted)] text-[var(--text-soft)] hover:bg-[var(--border)] hover:text-[var(--text)]'
                                           }`}
                                         >
-                                          <AppIcon name={opt.name} className="h-4 w-4" />
+                                          <GymIcon icon={opt.icon} decorative className="h-5 w-5" />
                                         </button>
                                       );
                                     })}
@@ -1368,12 +1522,22 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                               <div className="space-y-3">
                                 {t.exercises.map((ex, exIdx) => {
                                   const exEq = ex.equipment || (ex.barWeight && ex.barWeight > 0 ? 'barra' : 'mancuerna');
+                                  const hasCustomRest = ex.restSecondsMode === 'custom'
+                                    || (ex.restSecondsMode === undefined && typeof ex.restSeconds === 'number' && ex.restSeconds !== 90);
+                                  const isRestDisabled = ex.restSecondsMode === 'disabled' || ex.timerEnabled === false;
                                   return (
                                     <section key={ex.id || exIdx} className="rounded-2xl bg-[var(--card)] p-3 shadow-xs ring-1 ring-inset ring-[var(--border)] sm:p-4">
                                       <div className="flex items-center justify-between gap-3">
                                         <div className="flex min-w-0 items-center gap-3">
-                                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-xs font-black tabular-nums text-[var(--blue)]">
-                                            {String(exIdx + 1).padStart(2, '0')}
+                                          <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-[var(--indigo)]">
+                                            <GymExerciseArtwork
+                                              name={ex.name}
+                                              equipment={ex.equipment || (ex.barWeight && ex.barWeight > 0 ? 'barra' : undefined)}
+                                              compact
+                                            />
+                                            <span className="absolute -bottom-1 -right-1 rounded-md bg-[var(--card)] px-1 text-[9px] font-black tabular-nums text-[var(--text-faint)] ring-1 ring-[var(--border)]">
+                                              {String(exIdx + 1).padStart(2, '0')}
+                                            </span>
                                           </span>
                                           <div className="min-w-0">
                                             <h4 className="truncate text-sm font-bold text-[var(--text)]">{ex.name}</h4>
@@ -1414,7 +1578,6 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                                   setsCount: Number(event.target.value),
                                                   reps: ex.sets[0]?.reps || 10,
                                                   targetWeight: ex.sets[0]?.weight ?? ex.weight ?? 0,
-                                                  restSeconds: ex.restSeconds || 90,
                                                 })}
                                                 className="mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
                                               />
@@ -1430,7 +1593,6 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                                   setsCount: ex.sets.length || 1,
                                                   reps: Number(event.target.value),
                                                   targetWeight: ex.sets[0]?.weight ?? ex.weight ?? 0,
-                                                  restSeconds: ex.restSeconds || 90,
                                                 })}
                                                 className="mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
                                               />
@@ -1446,28 +1608,58 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                                   setsCount: ex.sets.length || 1,
                                                   reps: ex.sets[0]?.reps || 10,
                                                   targetWeight: Number(event.target.value),
-                                                  restSeconds: ex.restSeconds || 90,
                                                 })}
                                                 className="mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
                                               />
                                             </label>
-                                            <label className="text-xs font-medium text-[var(--text-soft)]">
-                                              Descanso (s)
-                                              <input
-                                                type="number"
-                                                min={15}
-                                                max={600}
-                                                step={15}
-                                                value={ex.restSeconds || 90}
-                                                onChange={(event) => handleConfigureTemplateExercise(t.id, exIdx, {
-                                                  setsCount: ex.sets.length || 1,
-                                                  reps: ex.sets[0]?.reps || 10,
-                                                  targetWeight: ex.sets[0]?.weight ?? ex.weight ?? 0,
-                                                  restSeconds: Number(event.target.value),
-                                                })}
-                                                className="mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
-                                              />
-                                            </label>
+                                            <div className="text-xs font-medium text-[var(--text-soft)]">
+                                              <label htmlFor={`rest-mode-${t.id}-${ex.id || exIdx}`}>Descanso (s)</label>
+                                              <select
+                                                id={`rest-mode-${t.id}-${ex.id || exIdx}`}
+                                                value={isRestDisabled ? 'disabled' : (hasCustomRest ? 'custom' : 'inherit')}
+                                                onChange={(event) => {
+                                                  const val = event.target.value;
+                                                  if (val === 'disabled') {
+                                                    handleUpdateTemplateExercise(t.id, exIdx, {
+                                                      restSecondsMode: 'disabled',
+                                                      timerEnabled: false,
+                                                    });
+                                                  } else if (val === 'custom') {
+                                                    handleUpdateTemplateExercise(t.id, exIdx, {
+                                                      restSecondsMode: 'custom',
+                                                      timerEnabled: true,
+                                                      restSeconds: ex.restSeconds && ex.restSeconds > 0 ? ex.restSeconds : gymSettings.restBetweenSetsSeconds,
+                                                    });
+                                                  } else {
+                                                    handleUpdateTemplateExercise(t.id, exIdx, {
+                                                      restSecondsMode: 'inherit',
+                                                      timerEnabled: true,
+                                                    });
+                                                  }
+                                                }}
+                                                className="mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-2 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
+                                              >
+                                                <option value="inherit">General ({gymSettings.restBetweenSetsSeconds} s)</option>
+                                                <option value="custom">Personalizado</option>
+                                                <option value="disabled">Sin descanso</option>
+                                              </select>
+                                              {hasCustomRest && !isRestDisabled && (
+                                                <input
+                                                  aria-label={`Descanso personalizado de ${ex.name} en segundos`}
+                                                  type="number"
+                                                  min={15}
+                                                  max={600}
+                                                  step={15}
+                                                  value={ex.restSeconds || gymSettings.restBetweenSetsSeconds}
+                                                  onChange={(event) => handleUpdateTemplateExercise(t.id, exIdx, {
+                                                    restSecondsMode: 'custom',
+                                                    timerEnabled: true,
+                                                    restSeconds: Math.min(600, Math.max(15, Number(event.target.value) || gymSettings.restBetweenSetsSeconds)),
+                                                  })}
+                                                  className="mt-1 min-h-11 w-full rounded-xl border border-[var(--blue)]/30 bg-[var(--bg-elevated)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
+                                                />
+                                              )}
+                                            </div>
                                       </div>
                                       <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
                                             <select
@@ -1530,70 +1722,10 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                 </div>
               </section>
 
-              {/* Latest Session Card (Quick Glance) */}
-              {latestSession && (
-                <section className="space-y-3">
-                  <div className="flex items-end justify-between gap-3 px-1">
-                    <div>
-                      <p className="text-xs font-semibold text-[var(--text-soft)]">Actividad reciente</p>
-                      <h2 className="mt-0.5 text-lg font-black tracking-tight text-[var(--text)]">
-                        Última sesión
-                      </h2>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('historial')}
-                      className="min-h-11 rounded-lg px-2 text-sm font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--surface-muted)]"
-                    >
-                      Ver historial
-                    </button>
-                  </div>
-                  <LatestWorkoutSession
-                    session={latestSession}
-                    allSessions={sortedSessions}
-                    onFinishWorkout={() => handleFinishWorkout(latestSession.id)}
-                    onDeleteSession={() => handleDeleteSession(latestSession.id)}
-                    onEditSessionDate={(d) => handleEditSessionDate(latestSession.id, d)}
-                    onEditSessionWeek={(w) => handleEditSessionWeek(latestSession.id, w)}
-                    onSaveAsTemplate={() => handleSaveSessionAsTemplate(latestSession)}
-                    onAddExercise={(name, muscle, eq, barW, w, r) =>
-                      handleAddExerciseToSession(latestSession.id, name, muscle, eq, barW, w, r)
-                    }
-                    onDeleteExercise={(exIdx) => handleDeleteExercise(latestSession.id, exIdx)}
-                    onAddSet={(exIdx) => handleAddSet(latestSession.id, exIdx)}
-                    onUpdateSet={(exIdx, setIdx, updates) =>
-                      handleUpdateSet(latestSession.id, exIdx, setIdx, updates)
-                    }
-                    onDeleteSet={(exIdx, setIdx) => handleDeleteSet(latestSession.id, exIdx, setIdx)}
-                    onUpdateExerciseBar={(exIdx, barW) =>
-                      handleUpdateExerciseBar(latestSession.id, exIdx, barW)
-                    }
-                    onUpdateExerciseEquipment={(exIdx, eq, barW) =>
-                      handleUpdateExerciseEquipment(latestSession.id, exIdx, eq, barW)
-                    }
-                    onPropagateExercise={(name, config) =>
-                      handlePropagateExerciseToHistory(name, config)
-                    }
-                    onOpenCalculator={(exIdx, setIdx, initialW, barW) =>
-                      setCalculatorTarget({
-                        sessionId: latestSession.id,
-                        exerciseIndex: exIdx,
-                        setIndex: setIdx,
-                        initialWeight: initialW,
-                        barWeight: barW,
-                      })
-                    }
-                    onOpenHistory={setHistoryExercise}
-                    onEditSessionTimes={(s, f) => handleEditSessionTimes(latestSession.id, s, f)}
-                  />
-                </section>
-              )}
-            </div>
-          )}
         </div>
       )}
 
-      {/* TAB 2: HISTORIAL DE SEMANAS */}
+      {/* TAB 3: SESIONES EJECUTADAS */}
       {activeTab === 'historial' && (
         <div className="space-y-6 animate-in fade-in">
           {staleActiveSessions.length > 0 && (
@@ -1608,8 +1740,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
               <div className="space-y-1.5">
                 {staleActiveSessions.map((s) => (
                   <div key={s.id} className="flex items-center justify-between text-xs bg-[var(--card)] p-2.5 rounded-xl border border-[var(--border)]">
-                    <span className="font-mono font-bold text-[var(--text)]">
-                      {fmtDate(s.date)} — {s.exercises.length} ejercicio(s)
+                    <span className="tabular-nums font-bold text-[var(--text)]">
+                      {fmtDate(s.date)} — {s.exercises.length} {s.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}
                     </span>
                     <div className="flex items-center gap-2">
                       <button
@@ -1669,8 +1801,13 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
           {/* Recent Weeks */}
           {gymHistory.recentWeeks.length === 0 ? (
-            <div className="p-8 text-center bg-[var(--card)] border border-[var(--border)] rounded-2xl text-xs text-[var(--text-faint)]">
-              Todavía no tenés sesiones registradas. Iniciá una sesión desde la pestaña "Entrenar Hoy".
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-5 py-7">
+              <h2 className="text-base font-bold text-[var(--text)]">Sin sesiones ejecutadas</h2>
+              <p className="mt-1 max-w-xl text-sm text-[var(--text-soft)]">Las rutinas son planes. Acá aparecen los entrenamientos con series registradas; todavía no hay sesiones para mostrar.</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button type="button" onClick={() => setActiveTab('entrenar')} className="min-h-11 rounded-xl bg-[var(--text)] px-4 text-sm font-bold text-[var(--bg-elevated)] hover:opacity-90">Preparar entrenamiento</button>
+                <button type="button" onClick={() => setActiveTab('rutinas')} className="min-h-11 rounded-xl px-3 text-sm font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)]">Ver rutinas</button>
+              </div>
             </div>
           ) : (
             gymHistory.recentWeeks.map((week) => (
@@ -1802,7 +1939,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
         </div>
       )}
 
-      {/* TAB 3: PROGRESIÓN & SALUD */}
+      {/* TAB 4: PROGRESIÓN & SALUD */}
       {activeTab === 'progresion' && (
         <div className="space-y-7 animate-in fade-in">
           <section data-gym-progress-overview className="relative overflow-hidden rounded-3xl bg-[var(--card)] shadow-sm ring-1 ring-inset ring-[var(--border)]">
@@ -1811,33 +1948,28 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
               <div>
                 <div className="flex items-center gap-2 text-[var(--blue)]">
                   <AppIcon name="activity" className="h-4 w-4" />
-                  <p className="text-xs font-bold">Frecuencia reciente</p>
+                  <p className="text-xs font-bold">Entrenamientos esta semana</p>
                 </div>
                 <p className="mt-3 flex items-end gap-2 text-[var(--text)]">
                   <span className="text-6xl font-black leading-none tracking-[-0.06em] tabular-nums sm:text-7xl">
-                    {gymProgress.frequency.last7Days.workoutCount}
+                    {calendarOverview.weekCount}
                   </span>
                   <span className="pb-1 text-base font-semibold leading-tight text-[var(--text-soft)]">
-                    sesión{gymProgress.frequency.last7Days.workoutCount === 1 ? '' : 'es'}<br />en 7 días
+                    {calendarOverview.weekCount === 1 ? 'sesión' : 'sesiones'}<br />esta semana
                   </span>
-                </p>
-                <p className="mt-3 text-sm text-[var(--text-soft)]">
-                  {gymProgress.frequency.previous7Days.workoutCount === gymProgress.frequency.last7Days.workoutCount
-                    ? 'Mismo ritmo que los 7 días anteriores.'
-                    : `${Math.abs(gymProgress.frequency.last7Days.workoutCount - gymProgress.frequency.previous7Days.workoutCount)} ${gymProgress.frequency.last7Days.workoutCount > gymProgress.frequency.previous7Days.workoutCount ? 'más' : 'menos'} que en los 7 días anteriores.`}
                 </p>
               </div>
               <dl className="grid grid-cols-2 gap-6 border-t border-[var(--border)] pt-5 lg:min-w-80 lg:border-l lg:border-t-0 lg:pl-7 lg:pt-0">
                 <div>
-                  <dt className="text-xs font-medium text-[var(--text-faint)]">Últimos 30 días</dt>
+                  <dt className="text-xs font-medium text-[var(--text-faint)]">Frecuencia este mes</dt>
                   <dd className="mt-1 text-2xl font-black tabular-nums text-[var(--text)]">
-                    {gymProgress.frequency.last30Days.workoutCount}
+                    {calendarOverview.monthCount}
                     <span className="ml-1 text-xs font-semibold text-[var(--text-soft)]">sesiones</span>
                   </dd>
                 </div>
                 {gymProgress.frequency.last30Days.volume > 0 && (
                   <div>
-                    <dt className="text-xs font-medium text-[var(--text-faint)]">Volumen del período</dt>
+                    <dt className="text-xs font-medium text-[var(--text-faint)]">Volumen en 30 días</dt>
                     <dd className="mt-1 text-2xl font-black tabular-nums text-[var(--text)]">
                       {gymProgress.frequency.last30Days.volume.toLocaleString('es-UY')}
                       <span className="ml-1 text-xs font-semibold text-[var(--text-soft)]">kg</span>
@@ -1847,6 +1979,25 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
               </dl>
             </div>
           </section>
+
+          <button
+            type="button"
+            onClick={openBodyComposition}
+            aria-controls="gym-body-health"
+            className="gym-body-health-shortcut group flex min-h-20 w-full items-center gap-4 rounded-2xl border px-4 py-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] sm:px-5"
+          >
+            <span className="gym-body-health-shortcut-icon" aria-hidden="true">
+              <GymIcon icon="gym-scale" decorative className="h-8 w-8" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-black text-[var(--text)]">Peso y composición corporal</span>
+              <span className="mt-0.5 block text-xs leading-5 text-[var(--text-soft)]">Registrar medidas y revisar la evolución corporal.</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-2 text-xs font-bold text-[var(--accent)]">
+              {peso != null && <span className="privacy-sensitive hidden tabular-nums sm:inline">{peso} kg</span>}
+              <AppIcon name="chevronDown" className="h-4 w-4 -rotate-90 transition-transform group-hover:translate-x-0.5" />
+            </span>
+          </button>
 
           {activeExerciseMetric ? (
             <section data-gym-exercise-progress className="space-y-4">
@@ -1964,7 +2115,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
             </details>
           )}
 
-          <details className="group border-y border-[var(--border)]">
+          <details ref={bodyHealthDetailsRef} id="gym-body-health" className="group border-y border-[var(--border)]">
             <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-1 text-sm font-semibold text-[var(--text)]">
               <span>Salud corporal</span>
               <span className="flex items-center gap-3 text-xs font-medium text-[var(--text-soft)]">
@@ -1972,7 +2123,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                 <AppIcon name="chevronDown" className="h-4 w-4 transition-transform group-open:rotate-180" />
               </span>
             </summary>
-            <div id="qa-focus-peso" className="space-y-5 border-t border-[var(--border)] py-5">
+            <div ref={bodyHealthContentRef} id="qa-focus-peso" tabIndex={-1} className="space-y-5 scroll-mt-24 border-t border-[var(--border)] py-5 outline-none">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-xs text-[var(--text-faint)]">Peso actual</p>
@@ -2074,6 +2225,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
         <WorkoutSummaryModal
           session={completedSummarySession.session}
           newPRs={completedSummarySession.newPRs}
+          streakIncrease={completedSummarySession.streakIncrease}
           onClose={() => setCompletedSummarySession(null)}
         />
       )}
@@ -2338,7 +2490,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                 type="date"
                 value={session.date}
                 onChange={(e) => onEditSessionDate(e.target.value)}
-                className="px-2 py-1 text-xs font-mono font-bold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
+                className="px-2 py-1 text-xs tabular-nums font-bold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
               />
               <input
                 type="text"
@@ -2351,14 +2503,14 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                 type="time"
                 value={session.startedAt || ''}
                 onChange={(e) => onEditSessionTimes?.(e.target.value || null, session.finishedAt || null)}
-                className="px-2 py-1 text-xs font-mono font-bold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
+                className="px-2 py-1 text-xs tabular-nums font-bold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
                 title="Hora de inicio"
               />
               <input
                 type="time"
                 value={session.finishedAt || ''}
                 onChange={(e) => onEditSessionTimes?.(session.startedAt || null, e.target.value || null)}
-                className="px-2 py-1 text-xs font-mono font-bold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
+                className="px-2 py-1 text-xs tabular-nums font-bold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
                 title="Hora de fin"
               />
               <button
@@ -2371,7 +2523,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
             </div>
           ) : (
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-extrabold font-mono text-sm text-[var(--text)]">
+              <span className="font-extrabold tabular-nums text-sm text-[var(--text)]">
                 {fmtDate(session.date)}
               </span>
               {session.weekLabel && (
@@ -2380,7 +2532,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                 </span>
               )}
               {duration.minutes > 0 && (
-                <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-[var(--surface-muted)] text-[var(--text-soft)] border border-[var(--border)] font-mono">
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-[var(--surface-muted)] text-[var(--text-soft)] border border-[var(--border)] tabular-nums">
                   {duration.formatted}
                 </span>
               )}
@@ -2408,7 +2560,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
         {/* Volume & Stats */}
         <div className="flex items-center gap-3">
           <div className="text-right text-xs">
-            <span className="font-mono font-extrabold text-[var(--text)]">{totalVol} kg</span>
+            <span className="tabular-nums font-extrabold text-[var(--text)]">{totalVol} kg</span>
             <span className="text-[10px] text-[var(--text-faint)] block">
               {completedCount}/{setsCount} series
             </span>
@@ -2456,7 +2608,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
           </p>
         ) : (
           session.exercises.map((exercise, exIdx) => {
-            const previousBest = getPreviousExerciseStats(allSessions, session.id, exercise.name, exercise.id);
+            const previousBest = getPreviousSessionBestLabel(allSessions, session.id, exercise.name, exercise.id);
             const exerciseGhost = getExerciseGhostValues(allSessions, {
               exerciseId: exercise.id,
               exerciseName: exercise.name,
@@ -2491,7 +2643,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                       </span>
                     )}
                     {previousBest && (
-                      <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
+                      <span className="text-[10px] tabular-nums text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-md">
                         Ant: {previousBest}
                       </span>
                     )}
@@ -2521,7 +2673,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                         <select
                           value={currentBarWeight}
                           onChange={(e) => onUpdateExerciseBar(exIdx, Number(e.target.value))}
-                          className="bg-[var(--card)] border border-[var(--border)] rounded-md px-1.5 py-0.5 text-xs font-mono font-bold cursor-pointer text-[var(--text)]"
+                          className="bg-[var(--card)] border border-[var(--border)] rounded-md px-1.5 py-0.5 text-xs tabular-nums font-bold cursor-pointer text-[var(--text)]"
                         >
                           <option value={20}>20 kg (Olímpica)</option>
                           <option value={15}>15 kg (Técnica)</option>
@@ -2693,7 +2845,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                               set.completed ? 'bg-emerald-500/5' : 'hover:bg-[var(--card)]/50'
                             }`}
                           >
-                            <td className="py-1.5 font-mono text-[var(--text-soft)]">
+                            <td className="py-1.5 tabular-nums text-[var(--text-soft)]">
                               <div className="flex items-center gap-1">
                                 <span className="font-bold">#{setIdx + 1}</span>
                                 <button
@@ -2763,7 +2915,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                       weight: Number(e.target.value) || 0,
                                     })
                                   }
-                                  className="w-14 px-1 py-1 text-xs font-mono font-bold rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-center"
+                                  className="w-14 px-1 py-1 text-xs tabular-nums font-bold rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-center"
                                 />
                                 <button
                                   type="button"
@@ -2791,7 +2943,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                 )}
                               </div>
                             </td>
-                            <td className="py-1.5 font-mono text-[11px] text-[var(--text-soft)]">
+                            <td className="py-1.5 tabular-nums text-[11px] text-[var(--text-soft)]">
                               {currentEquipment === 'barra' && (
                                 <span
                                   onClick={() =>
@@ -2847,7 +2999,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                       reps: Number(e.target.value) || 0,
                                     })
                                   }
-                                  className="w-11 px-1 py-1 text-xs font-mono font-bold rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-center"
+                                  className="w-11 px-1 py-1 text-xs tabular-nums font-bold rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-center"
                                 />
                                 <button
                                   type="button"
@@ -2905,7 +3057,9 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                     <span>Agregar serie</span>
                   </button>
                   <span className="text-[10px] text-[var(--text-faint)]">
-                    Descanso configurado: {exercise.restSeconds || 90}s
+                    Descanso: {exercise.restSecondsMode === 'custom' && typeof exercise.restSeconds === 'number'
+                      ? `${exercise.restSeconds}s personalizado`
+                      : 'configuración general'}
                   </span>
                 </div>
               </div>
@@ -3015,7 +3169,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
             step="0.5"
             value={newExWeight}
             onChange={(e) => setNewExWeight(e.target.value)}
-            className="w-16 px-2 py-1.5 text-xs font-mono rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
+            className="w-16 px-2 py-1.5 text-xs tabular-nums rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
           />
         </div>
 
@@ -3027,7 +3181,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
             type="number"
             value={newExReps}
             onChange={(e) => setNewExReps(e.target.value)}
-            className="w-14 px-2 py-1.5 text-xs font-mono rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
+            className="w-14 px-2 py-1.5 text-xs tabular-nums rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
           />
         </div>
 
@@ -3127,14 +3281,14 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <time className="text-xs font-semibold text-[var(--text-soft)]" dateTime={session.date}>
-                  {fmtDate(session.date)}
+                  {formatGymSessionDateTime(session)}
                 </time>
                 <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
                   <AppIcon name="check" className="h-3 w-3" />
                   Completada
                 </span>
                 {presentation.durationLabel && (
-                  <span className="text-[10px] font-semibold text-[var(--text-faint)]">
+                  <span className="text-[10px] font-semibold text-[var(--text-faint)]" title="Tiempo entre las horas de inicio y fin guardadas">
                     · {presentation.durationLabel}
                   </span>
                 )}
@@ -3158,13 +3312,15 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
         </div>
 
         <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-[var(--border)]/70 pt-3 sm:grid-cols-[1.2fr_repeat(4,minmax(0,1fr))] sm:items-end">
-          <div className="col-span-2 sm:col-span-1">
-            <dt className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Volumen</dt>
-            <dd className="mt-0.5 text-2xl font-black tracking-tight tabular-nums text-[var(--text)]">
-              {presentation.volumeKg.toLocaleString('es-UY')}
-              <span className="ml-1 text-xs font-semibold text-[var(--text-soft)]">kg</span>
-            </dd>
-          </div>
+          {presentation.volumeKg > 0 && (
+            <div className="col-span-2 sm:col-span-1">
+              <dt className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Volumen</dt>
+              <dd className="mt-0.5 text-2xl font-black tracking-tight tabular-nums text-[var(--text)]">
+                {presentation.volumeKg.toLocaleString('es-UY')}
+                <span className="ml-1 text-xs font-semibold text-[var(--text-soft)]">kg</span>
+              </dd>
+            </div>
+          )}
           <div>
             <dt className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Series realizadas</dt>
             <dd className="mt-0.5 text-base font-black tabular-nums text-[var(--text)]">{presentation.completedSetCount}</dd>
@@ -3175,7 +3331,7 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
           </div>
           {presentation.durationLabel && (
             <div>
-              <dt className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">Duración</dt>
+              <dt className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]" title="Diferencia entre la hora de inicio y la hora de fin guardadas">Tiempo registrado</dt>
               <dd className="mt-0.5 text-base font-black tabular-nums text-[var(--text)]">{presentation.durationLabel}</dd>
             </div>
           )}
@@ -3195,7 +3351,7 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
               <>
                 <span className="font-bold text-[var(--text-faint)]">Mejor serie: </span>
                 <span className="font-semibold text-[var(--text)]">
-                  {presentation.bestSet.exerciseName} · <strong className="font-mono">{presentation.bestSet.weight} kg × {presentation.bestSet.reps}</strong>
+                  {presentation.bestSet.exerciseName} · <strong className="tabular-nums">{presentation.bestSet.weight} kg × {presentation.bestSet.reps}</strong>
                 </span>
               </>
             ) : (
@@ -3224,12 +3380,16 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
               const inferred = inferExerciseEquipment(exercise.name);
               const equipment = exercise.equipment ||
                 (exercise.barWeight && exercise.barWeight > 0 ? 'barra' : inferred.equipment);
-              const previousBest = getPreviousExerciseStats(allSessions, session.id, exercise.name, exercise.id);
+              const previousBest = getPreviousSessionBestLabel(allSessions, session.id, exercise.name, exercise.id);
               return (
                 <section key={exercise.id || exerciseIndex} className="py-4 first:pt-0 last:pb-0">
                   <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                     <div className="flex items-center gap-2.5">
-                      <RoutineIdentityMark exercises={[exercise]} compact />
+                      <GymExerciseArtwork
+                        name={exercise.name}
+                        equipment={exercise.equipment || (exercise.barWeight && exercise.barWeight > 0 ? 'barra' : undefined)}
+                        className="gym-history-exercise-icon"
+                      />
                       <div>
                         <h4 className="text-sm font-bold text-[var(--text)]">{exercise.name}</h4>
                         <p className="text-xs text-[var(--text-soft)]">
@@ -3239,7 +3399,7 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
                     </div>
                     {previousBest && (
                       <p className="text-xs text-[var(--text-soft)] sm:text-right">
-                        Referencia anterior: <span className="font-mono font-semibold text-[var(--text)]">{previousBest}</span>
+                        Referencia anterior: <span className="tabular-nums font-semibold text-[var(--text)]">{previousBest}</span>
                       </p>
                     )}
                   </div>
@@ -3257,7 +3417,7 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
                             `Serie ${setIndex + 1}`
                           )}
                         </span>
-                        <span className="text-right font-mono text-sm font-black tabular-nums text-[var(--text)]">
+                        <span className="text-right text-sm font-black tabular-nums text-[var(--text)]">
                           {Number(set.weight) || 0} kg × {Number(set.reps) || 0}
                         </span>
                         {set.completed ? (

@@ -1,4 +1,40 @@
 import React from 'react';
+import trashSvg from '../assets/icons/icons8/icons8-trash-50.svg?raw';
+import editSvg from '../assets/icons/icons8/icons8-edit-pencil-50.svg?raw';
+import filterSvg from '../assets/icons/icons8/icons8-filter-50.svg?raw';
+import pauseSvg from '../assets/icons/icons8/icons8-pause-50.svg?raw';
+import trophySvg from '../assets/icons/icons8/icons8-trophy-50.svg?raw';
+import chartSvg from '../assets/icons/icons8/icons8-statistics-50.svg?raw';
+import rotateCcwSvg from '../assets/icons/icons8/icons8-undo-50.svg?raw';
+import pinSvg from '../assets/icons/icons8/icons8-pin-50.svg?raw';
+import historySvg from '../assets/icons/icons8/icons8-activity-history-50.svg?raw';
+import transferSvg from '../assets/icons/icons8/icons8-money-transfer-50.svg?raw';
+import incomeSvg from '../assets/icons/icons8/icons8-income-50.svg?raw';
+import examSvg from '../assets/icons/icons8/icons8-exam-50.svg?raw';
+import projectSvg from '../assets/icons/icons8/icons8-project-50.svg?raw';
+import giftSvg from '../assets/icons/icons8/icons8-gift-50.svg?raw';
+import stopwatchSvg from '../assets/icons/icons8/icons8-stopwatch-50.svg?raw';
+import productSvg from '../assets/icons/icons8/icons8-product-50.svg?raw';
+import homeSvg from '../assets/icons/icons8/icons8-home-50.svg?raw';
+import calendarSvg from '../assets/icons/icons8/icons8-task-planning-50.svg?raw';
+import calendarDaysSvg from '../assets/icons/icons8/icons8-today-50.svg?raw';
+import briefcaseSvg from '../assets/icons/icons8/icons8-briefcase-50.svg?raw';
+import storeSvg from '../assets/icons/icons8/icons8-shop-50.svg?raw';
+import walletSvg from '../assets/icons/icons8/icons8-wallet-50.svg?raw';
+import dumbbellSvg from '../assets/icons/icons8/icons8-dumbbell-50.svg?raw';
+import bookSvg from '../assets/icons/icons8/icons8-open-book-50.svg?raw';
+import noteSvg from '../assets/icons/icons8/icons8-note-50.svg?raw';
+import settingsSvg from '../assets/icons/icons8/icons8-settings-50.svg?raw';
+import searchSvg from '../assets/icons/icons8/icons8-search-50.svg?raw';
+import cloudSvg from '../assets/icons/icons8/icons8-cloud-sync-50.svg?raw';
+import plusSvg from '../assets/icons/icons8/icons8-plus-50.svg?raw';
+import touchpadSvg from '../assets/icons/icons8/icons8-touchpad-50.svg?raw';
+import graduationSvg from '../assets/icons/icons8/icons8-graduation-cap-50.svg?raw';
+import aiSvg from '../assets/icons/icons8/icons8-artificial-intelligence-50.svg?raw';
+import taskSvg from '../assets/icons/icons8/icons8-checkmark-50.svg?raw';
+import expenseSvg from '../assets/icons/icons8/icons8-expense-50.svg?raw';
+import reminderSvg from '../assets/icons/icons8/icons8-reminder-50.svg?raw';
+import bellSvg from '../assets/icons/icons8/icons8-bell-50.svg?raw';
 
 export type AppIconName =
   | 'home' | 'calendar' | 'calendarDays' | 'briefcase' | 'repeat' | 'wallet'
@@ -7,13 +43,16 @@ export type AppIconName =
   | 'cloud' | 'check' | 'clock' | 'chart' | 'scale' | 'chevronLeft' | 'chevronRight'
   | 'trophy' | 'play' | 'pause' | 'rotateCcw' | 'filter' | 'kanban' | 'list' | 'arrowRight' | 'arrowUp' | 'trash' | 'edit' | 'flame' | 'trendingUp'
   | 'eye' | 'eyeOff' | 'target' | 'zap' | 'bell' | 'chevronDown' | 'chevronUp' | 'x' | 'checkCircle' | 'activity'
-  | 'lock' | 'unlock' | 'link';
+  | 'lock' | 'unlock' | 'link'
+  | 'store' | 'inbox' | 'lightbulb' | 'touchpad' | 'graduation' | 'ai' | 'task' | 'expense' | 'reminder' | 'pin' | 'history' | 'transfer' | 'income' | 'exam' | 'project' | 'gift' | 'stopwatch' | 'product';
 
 interface AppIconProps extends React.SVGProps<SVGSVGElement> {
   name: AppIconName;
 }
 
-const paths: Record<AppIconName, React.ReactNode> = {
+const paths: Partial<Record<AppIconName, React.ReactNode>> = {
+  inbox: <><path d="M4 4h16l2 12h-5l-2 3H9l-2-3H2z"/><path d="M3 16h4M17 16h4"/></>,
+  lightbulb: <><path d="M9 18h6M10 22h4M8 14.5a6 6 0 1 1 8 0c-.9.8-1 1.4-1 3.5H9c0-2.1-.1-2.7-1-3.5Z"/></>,
   home: <><path d="m3 10 9-7 9 7"/><path d="M5 9v11h14V9"/><path d="M9 20v-6h6v6"/></>,
   calendar: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></>,
   calendarDays: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></>,
@@ -69,18 +108,73 @@ const paths: Record<AppIconName, React.ReactNode> = {
   link: <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>,
 };
 
-export const AppIcon: React.FC<AppIconProps> = ({ name, className = 'h-5 w-5', ...props }) => (
-  <svg
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth={1.8}
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-    className={className}
-    {...props}
-  >
-    {paths[name]}
-  </svg>
-);
+// Icons by Icons8 (https://icons8.com). Original files remain unchanged.
+// Only these statically imported, reviewed assets are inserted as SVG markup.
+const icons8Sources: Partial<Record<AppIconName, string>> = {
+  home: homeSvg,
+  calendar: calendarSvg,
+  calendarDays: calendarDaysSvg,
+  briefcase: briefcaseSvg,
+  store: storeSvg,
+  wallet: walletSvg,
+  dumbbell: dumbbellSvg,
+  book: bookSvg,
+  note: noteSvg,
+  settings: settingsSvg,
+  search: searchSvg,
+  cloud: cloudSvg,
+  plus: plusSvg,
+  touchpad: touchpadSvg,
+  graduation: graduationSvg,
+  ai: aiSvg,
+  task: taskSvg,
+  expense: expenseSvg,
+  reminder: reminderSvg,
+  bell: bellSvg,
+  check: taskSvg,
+  trash: trashSvg,
+  edit: editSvg,
+  filter: filterSvg,
+  pause: pauseSvg,
+  trophy: trophySvg,
+  chart: chartSvg,
+  rotateCcw: rotateCcwSvg,
+  pin: pinSvg,
+  history: historySvg,
+  transfer: transferSvg,
+  income: incomeSvg,
+  exam: examSvg,
+  project: projectSvg,
+  gift: giftSvg,
+  stopwatch: stopwatchSvg,
+  product: productSvg
+};
+const icons8 = Object.fromEntries(Object.entries(icons8Sources).map(([name, source]) => [name, {
+  viewBox: source.match(/viewBox="([^"]+)"/)![1],
+  body: source.replace(/^[\s\S]*?<svg\b[^>]*>/, '').replace(/<\/svg>\s*$/, '')
+    .replace(/(fill|stroke)="(?!none"|currentColor")[^"]+"/g, '$1="currentColor"'),
+}])) as Partial<Record<AppIconName, { viewBox: string; body: string }>>;
+
+export const AppIcon: React.FC<AppIconProps> = ({ name, className = 'h-5 w-5', children, ...props }) => {
+  const asset = icons8[name];
+  const labelled = Boolean(props['aria-label'] || props['aria-labelledby']);
+  return (
+    <svg
+      viewBox={asset?.viewBox ?? '0 0 24 24'}
+      fill={asset ? 'currentColor' : 'none'}
+      stroke={asset ? 'none' : 'currentColor'}
+      strokeWidth={asset ? undefined : 1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden={labelled ? undefined : true}
+      role={labelled ? 'img' : undefined}
+      focusable="false"
+      className={className}
+      data-app-icon={name}
+      {...props}
+    >
+      {children}
+      {asset ? <g dangerouslySetInnerHTML={{ __html: asset.body }} /> : paths[name]}
+    </svg>
+  );
+};

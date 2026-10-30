@@ -3,6 +3,7 @@ import type { LifeOSState, MuscleGroup } from '../types';
 import type { ExerciseMetricTarget } from '../lib/gymMetrics';
 import { inferMuscleGroup } from '../lib/gymMigration';
 import { calculate1RM, getGymProgressMetrics } from '../lib/gymMetrics';
+import { dedupeVisibleGymRecords } from '../lib/gymIdlePresentation';
 import { fmtDate, todayISO } from '../lib/storage';
 import { AppIcon } from './AppIcon';
 
@@ -38,7 +39,7 @@ export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = ({ state,
   const [search, setSearch] = useState('');
 
   const prList = useMemo(() => {
-    return progress.exercises.flatMap((exercise) => {
+    return dedupeVisibleGymRecords(progress.exercises.flatMap((exercise) => {
       const best = exercise.bestSet;
       if (!best) return [];
       const storedMuscle = state.gym.sessions
@@ -58,7 +59,7 @@ export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = ({ state,
         date: best.date,
         est1RM: best.e1RM,
       };
-    }).sort((a, b) => b.weight - a.weight || b.est1RM - a.est1RM);
+    }).sort((a, b) => b.weight - a.weight || b.est1RM - a.est1RM));
   }, [progress.exercises, state.gym.sessions]);
 
   const filteredPRs = useMemo(() => {
@@ -133,7 +134,7 @@ export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = ({ state,
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-2.5 shrink-0 font-mono text-xs">
+                      <div className="flex items-center gap-2.5 shrink-0 tabular-nums text-xs">
                         <strong className="font-extrabold text-[var(--text)]">
                           {item.weight} <span className="text-[10px] font-normal text-[var(--text-soft)]">kg</span>
                         </strong>
@@ -253,7 +254,7 @@ export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = ({ state,
                       >
                         {item.muscle}
                       </span>
-                      <span className="text-[10px] text-[var(--text-faint)] font-mono">
+                      <span className="text-[10px] text-[var(--text-faint)] tabular-nums">
                         {fmtDate(item.date)}
                       </span>
                     </div>
@@ -262,7 +263,7 @@ export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = ({ state,
                       {item.name}
                     </h3>
 
-                    <div className="flex items-baseline justify-between pt-1 border-t border-[var(--border)]/60 font-mono">
+                    <div className="flex items-baseline justify-between pt-1 border-t border-[var(--border)]/60 tabular-nums">
                       <div>
                         <strong className="text-sm font-extrabold text-[var(--text)]">
                           {item.weight} <span className="text-[10px]">kg</span>

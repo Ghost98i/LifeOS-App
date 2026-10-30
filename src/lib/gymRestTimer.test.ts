@@ -6,10 +6,12 @@ import {
   completeGymRestTimer,
   deleteGymSession,
   finishGymSession,
+  getEffectiveExerciseRestSeconds,
   getGymSettings,
   isExerciseCompleted,
   resolveNextRestTimer,
   skipGymRestTimer,
+  setGymRestTimerRemaining,
   updateGymSessionSet,
 } from './gymFlows';
 import { migrateGym } from './gymMigration';
@@ -407,4 +409,157 @@ test('Gym 3.1: exercise.timerEnabled = false no crea timer para ese ejercicio es
   updateGymSessionSet(gym, session.id, 'ex-bench', 1, { completed: true });
   const timer = resolveNextRestTimer(gym, session.id, 'ex-bench', 1);
   assert.equal(timer, null);
+});
+
+test('Gym 3.1: la configuración global produce descansos nuevos de 60/90/180/600 segundos', () => {
+  for (const seconds of [60, 90, 180, 600]) {
+    const { gym, session } = createTestGym();
+    gym.settings = { ...gym.settings, restBetweenSetsSeconds: seconds };
+    const timer = resolveNextRestTimer(gym, session.id, 'ex-bench', 0, 1000);
+    assert.ok(timer);
+    assert.equal(timer.kind, 'set');
+    assert.equal(timer.durationSeconds, seconds);
+    assert.equal(timer.endsAt, 1000 + seconds * 1000);
+  }
+});
+
+test('Gym 3.1: sólo un override explícito de ejercicio reemplaza la configuración global', () => {
+  const { gym, session } = createTestGym();
+  gym.settings = { ...gym.settings, restBetweenSetsSeconds: 60 };
+  const exercise = session.exercises[0];
+
+  exercise.restSeconds = 180;
+  exercise.restSecondsMode = 'inherit';
+  assert.equal(getEffectiveExerciseRestSeconds(exercise, getGymSettings(gym)), 60);
+
+  exercise.restSecondsMode = 'custom';
+  assert.equal(getEffectiveExerciseRestSeconds(exercise, getGymSettings(gym)), 180);
+  const timer = resolveNextRestTimer(gym, session.id, 'ex-bench', 0, 2000);
+  assert.equal(timer?.durationSeconds, 180);
+});
+
+test('Gym 3.1: el default legacy de 90 s hereda global; un valor legacy no-default se preserva', () => {
+  const settings = getGymSettings({ ...createTestGym().gym, settings: { restBetweenSetsSeconds: 600 } });
+  assert.equal(getEffectiveExerciseRestSeconds({ name: 'Legacy', sets: [], restSeconds: 90 }, settings), 600);
+  assert.equal(getEffectiveExerciseRestSeconds({ name: 'Legacy custom', sets: [], restSeconds: 75 }, settings), 75);
+
+  const migrated = migrateGym({
+    sessions: [{
+      id: 'legacy',
+      date: '2026-10-10',
+      status: 'active',
+      exercises: [
+        { name: 'Default antiguo', restSeconds: 90, timerEnabled: true, sets: [] },
+        { name: 'Personalizado antiguo', restSeconds: 75, timerEnabled: true, sets: [] },
+      ],
+    }],
+  });
+  assert.equal(migrated.sessions[0].exercises[0].restSecondsMode, 'inherit');
+  assert.equal(migrated.sessions[0].exercises[1].restSecondsMode, 'custom');
+});
+
+test('Gym 3.1: el descanso entre ejercicios es independiente del descanso entre series', () => {
+  const { gym, session } = createTestGym();
+  gym.settings = {
+    ...gym.settings,
+    restBetweenSetsSeconds: 600,
+    restBetweenExercisesSeconds: 180,
+  };
+  updateGymSessionSet(gym, session.id, 'ex-bench', 1, { completed: true });
+  updateGymSessionSet(gym, session.id, 'ex-bench', 2, { completed: true });
+  const timer = resolveNextRestTimer(gym, session.id, 'ex-bench', 2, 3000);
+  assert.equal(timer?.kind, 'exercise');
+  assert.equal(timer?.durationSeconds, 180);
+  assert.equal(timer?.endsAt, 183000);
+});
+
+test('Gym 3.1: cambiar preferencias no reescribe un countdown activo', () => {
+  const { gym } = createTestGym();
+  gym.activeTimer = {
+    endsAt: 999000,
+    durationSeconds: 90,
+    sessionId: 'test-session-1',
+    kind: 'set',
+  };
+  const before = { ...gym.activeTimer };
+  gym.settings = {
+    ...gym.settings,
+    restBetweenSetsSeconds: 600,
+    showQuickRestAdjustments: false,
+    allowManualRestEditing: true,
+  };
+  assert.deepEqual(gym.activeTimer, before);
+});
+
+test('Gym 3.1: edición manual explícita reemplaza el deadline real sin aceptar negativos', () => {
+  const timer: GymActiveTimer = {
+    endsAt: 61000,
+    durationSeconds: 60,
+    sessionId: 'session-1',
+    kind: 'set',
+  };
+  const edited = setGymRestTimerRemaining(timer, 180, 1000);
+  assert.equal(edited.endsAt, 181000);
+  assert.equal(edited.durationSeconds, 180);
+  const clamped = setGymRestTimerRemaining(timer, -30, 1000);
+  assert.equal(clamped.endsAt, 2000);
+  assert.equal(clamped.durationSeconds, 1);
+});
+
+test('Gym 3.1: migración conserva preferencias nuevas y defaults compatibles', () => {
+  const defaults = migrateGym({});
+  assert.equal(defaults.settings?.showQuickRestAdjustments, true);
+  assert.equal(defaults.settings?.allowManualRestEditing, false);
+
+  const configured = migrateGym({
+    settings: {
+      restBetweenSetsSeconds: 600,
+      restBetweenExercisesSeconds: 180,
+      showQuickRestAdjustments: false,
+      allowManualRestEditing: true,
+    },
+  });
+  assert.equal(configured.settings?.restBetweenSetsSeconds, 600);
+  assert.equal(configured.settings?.showQuickRestAdjustments, false);
+  assert.equal(configured.settings?.allowManualRestEditing, true);
+});
+
+test('Gym 3.1: preferencias y override explícito persisten y sincronizan sin incluir activeTimer', () => {
+  const state = defaultState();
+  state.gym.settings = {
+    ...state.gym.settings,
+    restBetweenSetsSeconds: 600,
+    showQuickRestAdjustments: false,
+    allowManualRestEditing: true,
+  };
+  state.gym.routineTemplates = [{
+    id: 'template-qa',
+    name: 'QA',
+    exercises: [{
+      id: 'exercise-qa',
+      name: 'Press QA',
+      sets: [],
+      restSeconds: 180,
+      restSecondsMode: 'custom',
+    }],
+  }];
+  state.gym.activeTimer = {
+    endsAt: 999999,
+    durationSeconds: 60,
+    sessionId: 'qa-session',
+    kind: 'set',
+  };
+
+  const payload = syncModuleData(state, 'gym') as { gym: Gym };
+  assert.equal(payload.gym.settings?.showQuickRestAdjustments, false);
+  assert.equal(payload.gym.settings?.allowManualRestEditing, true);
+  assert.equal(payload.gym.routineTemplates[0].exercises[0].restSecondsMode, 'custom');
+  assert.equal('activeTimer' in payload.gym, false);
+
+  const restored = migrateGym(JSON.parse(JSON.stringify(payload.gym)));
+  assert.equal(restored.settings?.restBetweenSetsSeconds, 600);
+  assert.equal(restored.settings?.showQuickRestAdjustments, false);
+  assert.equal(restored.settings?.allowManualRestEditing, true);
+  assert.equal(restored.routineTemplates[0].exercises[0].restSecondsMode, 'custom');
+  assert.equal(restored.routineTemplates[0].exercises[0].restSeconds, 180);
 });

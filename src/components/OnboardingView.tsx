@@ -59,8 +59,8 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete }) =>
               className="h-10 w-10 shrink-0 rounded-2xl shadow-xs"
             />
             <div className="flex flex-col">
-              <span className="text-[11px] font-mono font-bold tracking-widest uppercase text-[var(--text-faint)]">
-                LifeOS · Configuración Inicial
+              <span className="text-[11px] font-bold tracking-widest uppercase text-[var(--text-faint)]">
+                Celestian LifeOS · Primeros pasos
               </span>
               <h1 className="text-xl sm:text-2xl font-extrabold text-[var(--text)] tracking-tight">
                 Personalizá tu espacio
@@ -68,7 +68,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ onComplete }) =>
             </div>
           </div>
           <p className="text-xs sm:text-sm text-[var(--text-soft)] leading-relaxed">
-            Elegí qué áreas de tu vida querés gestionar. LifeOS se adapta a tu ritmo: podés activar o desactivar módulos en cualquier momento desde Configuración.
+            Elegí las áreas que querés gestionar. Podés activarlas o cambiarlas desde Configuración.
           </p>
         </header>
 

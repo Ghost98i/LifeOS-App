@@ -1,13 +1,27 @@
 import React, { useMemo, useState } from 'react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import { LifeOSState } from '../types';
-import { fmtMoney, todayISO } from '../lib/storage';
+import { formatMoney, todayISO, diffMoney, sumMoney, sameYear } from '../lib/storage';
 import { getCategoryName } from '../lib/financeCategories';
 import {
   deriveAllMonthlyBudgetStatuses,
   deriveMonthlyBudgetStatus,
 } from '../lib/financeBudget';
+import {
+  calcNetWorth,
+  calcIncomeMonth,
+  calcFixedSpentMonth,
+  calcMonthComparison,
+  calcSpentByCategory,
+  calcSpentByCategoryAllTime,
+  calcCashOutflowMonth,
+  calcTotalAcquisitionsMonth,
+  calcAcquisitionsByCategory,
+  groupTransactionsByMonth,
+  resolveTransactionCurrency,
+} from '../lib/calculations';
 import { AppIcon } from './AppIcon';
+import { ContextualHelp } from './ContextualHelp';
 import { PrivacyAmount } from './PrivacyAmount';
 
 interface FinanceAnalyticsViewProps {
@@ -19,7 +33,8 @@ interface FinanceAnalyticsViewProps {
   fijoMes: number;
   gastoVariable: number;
   totalGastadoAnio: number;
-  gananciaReventa: number;
+  gananciaReventa: number | null;
+  gananciaReventaMoneda: string | null;
   catSpentThisMonth: Record<string, number>;
   catSpentAllTime: Record<string, number>;
   monthlyEvolutionData: { name: string; Gastos: number; Ingresos: number }[];
@@ -49,18 +64,19 @@ function formatMonthTitle(monthIso: string): string {
 
 export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
   state,
-  ingresoMes,
-  gastadoMes,
-  balanceMes,
-  patrimonioNeto,
-  fijoMes,
-  gastoVariable,
-  totalGastadoAnio,
+  ingresoMes: _ingresoMes,
+  gastadoMes: _gastadoMes,
+  balanceMes: _balanceMes,
+  patrimonioNeto: _patrimonioNeto,
+  fijoMes: _fijoMes,
+  gastoVariable: _gastoVariable,
+  totalGastadoAnio: _totalGastadoAnio,
   gananciaReventa,
-  catSpentThisMonth,
-  catSpentAllTime,
-  monthlyEvolutionData,
-  cmp,
+  gananciaReventaMoneda,
+  catSpentThisMonth: _catSpentThisMonth,
+  catSpentAllTime: _catSpentAllTime,
+  monthlyEvolutionData: _monthlyEvolutionData,
+  cmp: _cmp,
   onSetBudget,
   onSetGlobalBudget,
   onOpenCategoryManager,
@@ -69,6 +85,9 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
   const currentMonthIso = useMemo(() => todayISO().slice(0, 7), []);
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthIso);
   const [selectedCurrency, setSelectedCurrency] = useState<string>('UYU');
+
+  // Dual Reading Mode State: 'cash_flow' (salidas reales) vs 'acquisitions' (consumo adquirido devengado)
+  const [analyticsMode, setAnalyticsMode] = useState<'cash_flow' | 'acquisitions'>('cash_flow');
 
   // Inline Budget Editing State
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
@@ -90,9 +109,31 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
   const activeCurrency = allCurrencies.includes(selectedCurrency) ? selectedCurrency : (allCurrencies[0] || 'UYU');
 
   const formatCurr = (val: number) => {
-    if (activeCurrency === 'USD') return `US$ ${Math.round(val).toLocaleString('es-UY')}`;
-    return fmtMoney(val);
+    return formatMoney(val, activeCurrency);
   };
+
+  const activeNetWorth = useMemo(() => {
+    return calcNetWorth(state, activeCurrency);
+  }, [state, activeCurrency]);
+
+  const monthOffset = useMemo(() => {
+    const [sy, sm] = selectedMonth.split('-').map(Number);
+    const [ty, tm] = currentMonthIso.split('-').map(Number);
+    return (sy - ty) * 12 + (sm - tm);
+  }, [selectedMonth, currentMonthIso]);
+
+  // Dual metrics: Cash Outflow vs Acquisitions
+  const cashOutflow = useMemo(() => {
+    return calcCashOutflowMonth(state, monthOffset, activeCurrency);
+  }, [state, monthOffset, activeCurrency]);
+
+  const acquisitions = useMemo(() => {
+    return calcTotalAcquisitionsMonth(state, monthOffset, activeCurrency);
+  }, [state, monthOffset, activeCurrency]);
+
+  const scopedMonthCatAcquisitions = useMemo(() => {
+    return calcAcquisitionsByCategory(state, monthOffset, activeCurrency);
+  }, [state, monthOffset, activeCurrency]);
 
   // Monthly Budget Status Report
   const report = useMemo(() => {
@@ -102,10 +143,42 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
   const configuredCategories = report.categories.filter((c) => c.hasBudget);
   const totalCategoryBudget = configuredCategories.reduce((acc, c) => acc + (c.limit || 0), 0);
   const effectiveLimit = report.globalLimit ?? (totalCategoryBudget > 0 ? totalCategoryBudget : null);
-  const effectiveSpent = report.totalSpent > 0 ? report.totalSpent : gastadoMes;
+  const effectiveSpent = report.totalSpent;
   const effectiveRemaining = effectiveLimit !== null ? effectiveLimit - effectiveSpent : null;
   const effectivePct = effectiveLimit && effectiveLimit > 0 ? (effectiveSpent / effectiveLimit) * 100 : 0;
   const isGlobalOverrun = effectiveLimit !== null && effectiveSpent > effectiveLimit;
+
+  // Currency-scoped metrics
+  const scopedIngreso = useMemo(() => calcIncomeMonth(state, monthOffset, activeCurrency), [state, monthOffset, activeCurrency]);
+  const currentBalanceMes = diffMoney(scopedIngreso, effectiveSpent);
+  const scopedFijoMes = useMemo(() => calcFixedSpentMonth(state, monthOffset, activeCurrency), [state, monthOffset, activeCurrency]);
+  const currentGastoVariable = Math.max(0, diffMoney(effectiveSpent, scopedFijoMes));
+  const currentCmp = useMemo(() => calcMonthComparison(state, activeCurrency), [state, activeCurrency]);
+
+  const scopedTotalGastadoAnio = useMemo(() => {
+    const today = new Date();
+    return (state.finance?.transactions || [])
+      .filter((t) => {
+        if (t.type !== 'gasto' || t.origin === 'adjustment' || !sameYear(t.date, today)) return false;
+        return resolveTransactionCurrency(t, state.finance?.accounts || []) === activeCurrency;
+      })
+      .reduce((s, t) => sumMoney(s, Number(t.amount || 0)), 0);
+  }, [state, activeCurrency]);
+
+  const scopedMonthCatSpent = useMemo(() => calcSpentByCategory(state, monthOffset, activeCurrency), [state, monthOffset, activeCurrency]);
+  const scopedAllTimeCatSpent = useMemo(() => calcSpentByCategoryAllTime(state, activeCurrency), [state, activeCurrency]);
+
+  const scopedMonthlyEvolutionData = useMemo(() => {
+    const groups = groupTransactionsByMonth(state, activeCurrency);
+    return [...groups]
+      .reverse()
+      .slice(-6)
+      .map((g) => ({
+        name: g.label.slice(0, 3),
+        Gastos: g.totalGasto,
+        Ingresos: g.totalIngreso,
+      }));
+  }, [state, activeCurrency]);
 
   const displayCategories = showAllCategories
     ? report.categories
@@ -113,8 +186,9 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
     ? configuredCategories
     : report.categories.slice(0, 8);
 
-  // Category Distribution for Chart
-  const monthCategoriesForChart = Object.entries(catSpentThisMonth)
+  // Category Distribution for Chart (Adapts to Dual Mode)
+  const activeCategorySpentMap = analyticsMode === 'acquisitions' ? scopedMonthCatAcquisitions : scopedMonthCatSpent;
+  const monthCategoriesForChart = Object.entries(activeCategorySpentMap)
     .filter(([_, val]) => Number(val) > 0)
     .map(([catKey, value]) => ({
       name: getCategoryName(state.finance?.categories, catKey),
@@ -125,7 +199,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
   const distinctMonthCategoriesCount = monthCategoriesForChart.length;
 
   // All time categories for disclosure
-  const allTimeCategories = Object.entries(catSpentAllTime)
+  const allTimeCategories = Object.entries(scopedAllTimeCatSpent)
     .filter(([_, val]) => Number(val) > 0)
     .map(([catKey, value]) => ({
       name: getCategoryName(state.finance?.categories, catKey),
@@ -134,14 +208,14 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
     .sort((a, b) => b.value - a.value);
 
   // Historical data check
-  const hasHistoricalData = monthlyEvolutionData.length >= 2;
+  const hasHistoricalData = scopedMonthlyEvolutionData.length >= 2;
   const comparisonText = !hasHistoricalData
     ? 'Primer mes registrado'
-    : cmp.dir === 'flat'
+    : currentCmp.dir === 'flat'
     ? 'similar al mes pasado'
-    : cmp.dir === 'up'
-    ? `▲ ${cmp.pct.toFixed(0)}% más que el mes pasado`
-    : `▼ ${cmp.pct.toFixed(0)}% menos que el mes pasado`;
+    : currentCmp.dir === 'up'
+    ? `▲ ${currentCmp.pct.toFixed(0)}% más que el mes pasado`
+    : `▼ ${currentCmp.pct.toFixed(0)}% menos que el mes pasado`;
 
   // Inline editing handlers
   const startEditCategory = (categoryId: string, currentBudget: number | null) => {
@@ -172,7 +246,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
       return (
         <div className="finance-surface-raised border border-[var(--finance-border)] p-2.5 rounded-xl shadow-xl text-xs space-y-1 z-50">
           <p className="font-bold text-[var(--finance-text-primary)]">{name}</p>
-          <p className="font-mono text-indigo-600 dark:text-indigo-400 font-bold">
+          <p className="tabular-nums text-indigo-600 dark:text-indigo-400 font-bold">
             {formatCurr(Number(value || 0))}
           </p>
         </div>
@@ -192,7 +266,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-sm font-extrabold text-[var(--finance-text-primary)]">
-              Lectura de {formatMonthTitle(selectedMonth)}
+              Resumen del mes
             </h2>
 
             {/* Month Navigator */}
@@ -205,7 +279,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
               >
                 ‹
               </button>
-              <span className="font-bold text-[11px] min-w-[85px] text-center font-mono">
+              <span className="font-bold text-[11px] min-w-[85px] text-center tabular-nums">
                 {formatMonthTitle(selectedMonth)}
               </span>
               <button
@@ -230,7 +304,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
 
             {/* Multi-currency switch if applicable */}
             {allCurrencies.length > 1 && (
-              <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] text-[10px] font-mono font-bold">
+              <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] text-[10px] font-bold">
                 {allCurrencies.map((c) => (
                   <button
                     key={c}
@@ -247,12 +321,41 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                 ))}
               </div>
             )}
+
+            {/* Dual Reading Mode Selector */}
+            <div className="flex items-center gap-0.5 p-0.5 rounded-lg bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] text-[10px] font-bold">
+              <button
+                type="button"
+                onClick={() => setAnalyticsMode('cash_flow')}
+                className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                  analyticsMode === 'cash_flow'
+                    ? 'bg-indigo-600 text-white shadow-2xs'
+                    : 'text-[var(--finance-text-secondary)] hover:text-[var(--finance-text-primary)]'
+                }`}
+                title="Flujo de caja: salidas efectivas de dinero de tus cuentas"
+              >
+                Dinero pagado
+              </button>
+              <button
+                type="button"
+                onClick={() => setAnalyticsMode('acquisitions')}
+                className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                  analyticsMode === 'acquisitions'
+                    ? 'bg-indigo-600 text-white shadow-2xs'
+                    : 'text-[var(--finance-text-secondary)] hover:text-[var(--finance-text-primary)]'
+                }`}
+                title="Compras al contado y financiadas del período"
+              >
+                Compras realizadas
+              </button>
+              <ContextualHelp label="Dinero pagado y compras realizadas">Dinero pagado incluye gastos y cuotas abonadas. Compras realizadas incluye compras al contado y financiadas; no implica que estén pagadas.</ContextualHelp>
+            </div>
           </div>
 
           {/* Semantic Status Badge */}
           {effectiveLimit !== null ? (
             <span
-              className={`text-[10px] font-bold font-mono px-2.5 py-1 rounded-full self-start sm:self-auto ${
+              className={`text-[10px] font-bold tabular-nums px-2.5 py-1 rounded-full self-start sm:self-auto ${
                 isGlobalOverrun
                   ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
                   : effectivePct >= 75
@@ -276,24 +379,58 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
           {/* Columna Principal (7 cols en lg): Gasto del período con Presupuesto Integrado */}
           <div className="lg:col-span-7 space-y-3">
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--finance-text-muted)] block">
-                Gasto del período
-              </span>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--finance-text-muted)] block">
+                  {analyticsMode === 'cash_flow' ? 'Salidas reales de dinero' : 'Compras realizadas del período'}
+                </span>
+                {analyticsMode === 'acquisitions' && acquisitions.financedAcquisitions > 0 && (
+                  <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                    Incluye {formatCurr(acquisitions.financedAcquisitions)} financiado
+                  </span>
+                )}
+                {analyticsMode === 'cash_flow' && cashOutflow.debtPayments > 0 && (
+                  <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                    Incluye {formatCurr(cashOutflow.debtPayments)} en cuotas
+                  </span>
+                )}
+              </div>
               <div className="flex items-baseline gap-3 flex-wrap mt-0.5">
-                <PrivacyAmount as="span" className="font-mono font-black text-3xl sm:text-4xl text-rose-500 tracking-tight">
-                  −{formatCurr(effectiveSpent)}
+                <PrivacyAmount as="span" className="font-black tabular-nums text-3xl sm:text-4xl text-rose-500 tracking-tight">
+                  −{formatCurr(analyticsMode === 'cash_flow' ? cashOutflow.totalOutflow : acquisitions.totalAcquired)}
                 </PrivacyAmount>
                 <span className={`text-xs font-bold ${
                   !hasHistoricalData
                     ? 'text-[var(--finance-text-muted)]'
-                    : cmp.dir === 'up'
+                    : currentCmp.dir === 'up'
                     ? 'text-rose-500'
-                    : cmp.dir === 'down'
+                    : currentCmp.dir === 'down'
                     ? 'text-emerald-500'
                     : 'text-[var(--finance-text-muted)]'
                 }`}>
                   {comparisonText}
                 </span>
+              </div>
+
+              {/* Sub-breakdown without visual noise */}
+              <div className="text-[11px] text-[var(--finance-text-muted)] pt-1 flex items-center gap-2 flex-wrap">
+                {analyticsMode === 'cash_flow' ? (
+                  <>
+                    <span>Gastos operativos: <strong className="text-[var(--finance-text-primary)] tabular-nums">{formatCurr(cashOutflow.operationalSpent)}</strong></span>
+                    <span>·</span>
+                    <span>Pago de cuotas: <strong className="text-[var(--finance-text-primary)] tabular-nums">{formatCurr(cashOutflow.debtPayments)}</strong></span>
+                  </>
+                ) : (
+                  <>
+                    <span>Al contado: <strong className="text-[var(--finance-text-primary)] tabular-nums">{formatCurr(acquisitions.operationalSpent)}</strong></span>
+                    <span>·</span>
+                    <span>Financiado: <strong className="text-[var(--finance-text-primary)] tabular-nums">{formatCurr(acquisitions.financedAcquisitions)}</strong></span>
+                    {acquisitions.financedItems.length > 0 && (
+                      <span className="text-[10px] opacity-75">
+                        ({acquisitions.financedItems.map((i) => `${i.title}: ${formatCurr(i.amount)}`).join(', ')})
+                      </span>
+                    )}
+                  </>
+                )}
               </div>
             </div>
 
@@ -303,11 +440,11 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-[var(--finance-text-muted)] flex items-center gap-1.5">
                     <span>Límite mensual:</span>
-                    <PrivacyAmount as="strong" className="font-mono text-[var(--finance-text-primary)]">
+                    <PrivacyAmount as="strong" className="tabular-nums text-[var(--finance-text-primary)]">
                       {formatCurr(effectiveLimit)}
                     </PrivacyAmount>
                   </span>
-                  <span className={`font-mono font-bold text-xs ${
+                  <span className={`tabular-nums font-bold text-xs ${
                     isGlobalOverrun
                       ? 'text-rose-600 dark:text-rose-400'
                       : 'text-emerald-600 dark:text-emerald-400'
@@ -315,7 +452,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                     <PrivacyAmount as="span">
                       {isGlobalOverrun
                         ? `Excedido por −${formatCurr(Math.abs(effectiveRemaining!))}`
-                        : `${formatCurr(effectiveRemaining!)} disponible`}
+                        : `Restan ${formatCurr(effectiveRemaining!)}`}
                     </PrivacyAmount>
                   </span>
                 </div>
@@ -331,7 +468,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                     style={{ width: `${Math.min(effectivePct, 100)}%` }}
                   />
                 </div>
-                <div className="flex items-center justify-between text-[10px] text-[var(--finance-text-muted)] font-mono">
+                <div className="flex items-center justify-between text-[10px] text-[var(--finance-text-muted)] tabular-nums">
                   <span>{effectivePct.toFixed(0)}% del límite consumido</span>
                   <span>{effectiveRemaining !== null && effectiveRemaining >= 0 ? `${(100 - effectivePct).toFixed(0)}% margen restante` : 'Límite superado'}</span>
                 </div>
@@ -355,36 +492,34 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
 
           {/* Columna Secundaria (5 cols en lg): Balance Neto y Entradas en formato compacto */}
           <div className="lg:col-span-5 lg:border-l lg:border-[var(--finance-border)] lg:pl-6 space-y-4">
-            {/* Balance Neto */}
+            {/* Resultado Operativo Neto (Flujo del mes) */}
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--finance-text-muted)] block">
-                Balance neto del mes
+              <span className="flex items-center gap-1 text-sm font-semibold text-[var(--finance-text-muted)]">
+                Ingresos menos gastos
+                <ContextualHelp label="Ingresos menos gastos">Ingresos registrados menos gastos del presupuesto. Excluye amortizaciones de capital y ajustes de saldo; no representa el dinero disponible en tus cuentas.</ContextualHelp>
               </span>
               <PrivacyAmount
                 as="div"
-                className={`font-mono font-black text-2xl sm:text-3xl tracking-tight mt-0.5 ${
-                  balanceMes < 0 ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'
+                className={`font-black tabular-nums text-2xl sm:text-3xl tracking-tight mt-0.5 ${
+                  currentBalanceMes < 0 ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'
                 }`}
               >
-                {balanceMes >= 0 ? `+${formatCurr(balanceMes)}` : formatCurr(balanceMes)}
+                {currentBalanceMes >= 0 ? `+${formatCurr(currentBalanceMes)}` : formatCurr(currentBalanceMes)}
               </PrivacyAmount>
-              <span className="text-[11px] text-[var(--finance-text-muted)] block mt-0.5">
-                {balanceMes >= 0 ? 'superávit operativo del período' : 'déficit operativo del período'}
-              </span>
             </div>
 
             {/* Ingresos del mes (Métrica secundaria compacta) */}
             <div className="pt-2 border-t border-[var(--finance-border)] flex items-center justify-between text-xs">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--finance-text-muted)] block">
-                  Ingresos operativos
+                  Ingresos registrados
                 </span>
                 <span className="text-[11px] text-[var(--finance-text-muted)]">
                   entradas registradas
                 </span>
               </div>
-              <PrivacyAmount as="span" className="font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">
-                +{formatCurr(ingresoMes)}
+              <PrivacyAmount as="span" className="font-bold tabular-nums text-base text-emerald-600 dark:text-emerald-400">
+                +{formatCurr(scopedIngreso)}
               </PrivacyAmount>
             </div>
           </div>
@@ -395,46 +530,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
           NIVEL 2: Tendencia / Evolución Histórica
           Protagonista claro cuando hay datos multi-mes. Empty state compacto si no.
          ========================================================================= */}
-      <section className="finance-surface rounded-2xl p-4 sm:p-5 space-y-3">
-        <div>
-          <h3 className="text-sm font-extrabold text-[var(--finance-text-primary)]">
-            Evolución histórica (Ingresos vs Gastos)
-          </h3>
-          <p className="text-xs text-[var(--finance-text-muted)]">
-            Comparativa mensual de flujos reales registrados en el sistema
-          </p>
-        </div>
 
-        {hasHistoricalData ? (
-          <div className="h-60 sm:h-64 w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyEvolutionData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <XAxis dataKey="name" tick={{ fill: 'var(--finance-text-muted)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: 'var(--finance-text-muted)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `$${v}`} />
-                <Tooltip content={<CustomChartTooltip />} />
-                <Legend wrapperStyle={{ paddingTop: '8px', fontSize: '11px' }} />
-                <Bar dataKey="Ingresos" fill="#10B981" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Gastos" fill="#EF4444" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        ) : (
-          /* Compact Empty State (No huge void eating screen) */
-          <div className="p-3.5 rounded-xl border border-[var(--finance-border)] bg-[var(--finance-surface-subtle)] flex items-center gap-3 text-xs">
-            <div className="h-7 w-7 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-              <AppIcon name="activity" className="h-4 w-4" />
-            </div>
-            <div>
-              <span className="font-bold text-[var(--finance-text-primary)]">
-                Historial comparativo en desarrollo
-              </span>
-              <p className="text-[11px] text-[var(--finance-text-muted)] mt-0.5">
-                La gráfica de evolución mensual se activará automáticamente a partir del segundo mes con movimientos registrados.
-              </p>
-            </div>
-          </div>
-        )}
-      </section>
 
       {/* =========================================================================
           NIVEL 3: Presupuesto y Desglose por Categorías
@@ -444,10 +540,10 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[var(--finance-border)]">
           <div>
             <h3 className="text-sm font-extrabold text-[var(--finance-text-primary)]">
-              Presupuesto y desglose por categorías
+              Presupuesto por categoría
             </h3>
             <p className="text-xs text-[var(--finance-text-muted)] mt-0.5">
-              Límites asignados frente a consumos reales en {formatMonthTitle(selectedMonth)}
+              Gastos y límites de {formatMonthTitle(selectedMonth)}
             </p>
           </div>
 
@@ -565,7 +661,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                       </td>
 
                       {/* Límite Planificado (Editable in-place) */}
-                      <td className="py-2.5 px-3 font-mono text-[var(--finance-text-secondary)]">
+                      <td className="py-2.5 px-3 tabular-nums text-[var(--finance-text-secondary)]">
                         {isEditing ? (
                           <div className="flex items-center gap-1">
                             <input
@@ -602,12 +698,12 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                       </td>
 
                       {/* Gastado Real */}
-                      <td className="py-2.5 px-3 font-mono font-semibold text-[var(--finance-text-primary)]">
+                      <td className="py-2.5 px-3 tabular-nums font-semibold text-[var(--finance-text-primary)]">
                         <PrivacyAmount>{formatCurr(item.spent)}</PrivacyAmount>
                       </td>
 
                       {/* Restante / Excedido */}
-                      <td className="py-2.5 px-3 font-mono tabular-nums">
+                      <td className="py-2.5 px-3 tabular-nums">
                         {item.hasBudget && item.remaining !== null ? (
                           <span className={item.isExceeded ? 'text-rose-600 dark:text-rose-400 font-bold' : 'text-emerald-600 dark:text-emerald-400'}>
                             <PrivacyAmount>
@@ -637,7 +733,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                                 style={{ width: `${Math.min(item.pct, 100)}%` }}
                               />
                             </div>
-                            <span className={`font-mono font-bold text-[11px] w-9 text-right ${
+                            <span className={`tabular-nums font-bold text-[11px] w-9 text-right ${
                               item.isExceeded
                                 ? 'text-rose-600 dark:text-rose-400'
                                 : item.pct >= 75
@@ -692,7 +788,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                       <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: PALETTE[index % PALETTE.length] }} />
                       <span className="font-semibold text-[var(--finance-text-primary)]">{cat.name}</span>
                     </div>
-                    <div className="flex items-center gap-2 font-mono">
+                    <div className="flex items-center gap-2 tabular-nums">
                       <span className="text-[10px] text-[var(--finance-text-muted)]">{pct.toFixed(0)}%</span>
                       <PrivacyAmount as="span" className="font-bold text-[var(--finance-text-primary)]">
                         {formatCurr(cat.value)}
@@ -710,16 +806,56 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
           NIVEL 4: Estructura Fijo/Variable y Métricas Complementarias (Segundo Nivel)
           Sin cuatro cards independientes: tira tipográfica abierta y ratios compactos.
          ========================================================================= */}
-      <section className="finance-surface rounded-2xl p-4 sm:p-5 space-y-4">
+      <section className="finance-surface rounded-2xl p-4 sm:p-5 space-y-3">
         <div>
           <h3 className="text-sm font-extrabold text-[var(--finance-text-primary)]">
-            Estructura y métricas complementarias
+            Ingresos y gastos por mes
           </h3>
-          <p className="text-xs text-[var(--finance-text-muted)]">
-            Distribución fija vs discrecional, acumulado anual y patrimonio consolidado
-          </p>
         </div>
 
+        {hasHistoricalData ? (
+          <div className="h-48 sm:h-52 w-full pt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={scopedMonthlyEvolutionData} margin={{ top: 10, right: 10, left: 5, bottom: 0 }}>
+                <XAxis dataKey="name" tick={{ fill: 'var(--finance-text-muted)', fontSize: 13 }} axisLine={false} tickLine={false} />
+                <YAxis
+                  width={52}
+                  tick={{ fill: 'var(--finance-text-muted)', fontSize: 13 }}
+                  axisLine={false}
+                  tickLine={false}
+                  tickFormatter={(v) => {
+                    if (Math.abs(v) >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
+                    if (Math.abs(v) >= 1000) return `${Math.round(v / 1000)}k`;
+                    return String(v);
+                  }}
+                />
+                <Tooltip content={<CustomChartTooltip />} cursor={{ fill: 'rgba(99, 102, 241, 0.08)' }} />
+                <Legend wrapperStyle={{ paddingTop: '8px', fontSize: '13px' }} />
+                <Bar dataKey="Ingresos" fill="#10B981" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Gastos" fill="#EF4444" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          /* Compact Empty State (No huge void eating screen) */
+          <div className="p-3.5 rounded-xl border border-[var(--finance-border)] bg-[var(--finance-surface-subtle)] flex items-center gap-3 text-xs">
+            <div className="h-7 w-7 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+              <AppIcon name="activity" className="h-4 w-4" />
+            </div>
+            <div>
+              <span className="font-bold text-[var(--finance-text-primary)]">
+                Todavía no hay meses para comparar
+              </span>
+              <p className="text-[11px] text-[var(--finance-text-muted)] mt-0.5">
+                Se activa al registrar movimientos en un segundo mes.
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <details className="finance-surface rounded-2xl p-4 sm:p-5 space-y-4">
+        <summary className="min-h-11 cursor-pointer text-base font-bold text-[var(--finance-text-primary)]">Más detalles del mes <span className="ml-2 text-sm font-normal text-[var(--finance-text-muted)]">Gastos fijos, patrimonio e histórico</span></summary>
         {/* Fila A: Estructura de Rigidez del Gasto (Fijo vs Variable) */}
         <div className="p-3.5 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] space-y-2 text-xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -728,11 +864,11 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                 <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
                   Gasto Fijo
                 </span>
-                <PrivacyAmount as="span" className="font-mono font-bold text-sm text-[var(--finance-text-primary)]">
-                  {formatCurr(fijoMes)}
+                <PrivacyAmount as="span" className="font-bold tabular-nums text-sm text-[var(--finance-text-primary)]">
+                  {formatCurr(scopedFijoMes)}
                 </PrivacyAmount>
                 <span className="text-[10px] text-[var(--finance-text-muted)] block">
-                  {effectiveSpent > 0 ? `${Math.round((fijoMes / effectiveSpent) * 100)}%` : '0%'} comprometido
+                  {effectiveSpent > 0 ? `${Math.round((scopedFijoMes / effectiveSpent) * 100)}%` : '0%'} del gasto
                 </span>
               </div>
 
@@ -742,21 +878,21 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                 <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
                   Gasto Variable
                 </span>
-                <PrivacyAmount as="span" className="font-mono font-bold text-sm text-[var(--finance-text-primary)]">
-                  {formatCurr(gastoVariable)}
+                <PrivacyAmount as="span" className="font-bold tabular-nums text-sm text-[var(--finance-text-primary)]">
+                  {formatCurr(currentGastoVariable)}
                 </PrivacyAmount>
                 <span className="text-[10px] text-[var(--finance-text-muted)] block">
-                  {effectiveSpent > 0 ? `${Math.round((gastoVariable / effectiveSpent) * 100)}%` : '0%'} discrecional
+                  {effectiveSpent > 0 ? `${Math.round((currentGastoVariable / effectiveSpent) * 100)}%` : '0%'} del gasto
                 </span>
               </div>
             </div>
 
             <div className="text-left sm:text-right">
               <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
-                Ratio de Rigidez
+                Parte fija del gasto
               </span>
-              <span className="font-mono font-bold text-sm text-[var(--finance-text-primary)]">
-                {effectiveSpent > 0 ? `${Math.round((fijoMes / effectiveSpent) * 100)}%` : '0%'} fijo
+              <span className="font-bold tabular-nums text-sm text-[var(--finance-text-primary)]">
+                {effectiveSpent > 0 ? `${Math.round((scopedFijoMes / effectiveSpent) * 100)}%` : '0%'} fijo
               </span>
             </div>
           </div>
@@ -766,12 +902,12 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
             <div className="h-1.5 w-full rounded-full bg-[var(--finance-border)] overflow-hidden flex">
               <div
                 className="h-full bg-indigo-600 transition-all"
-                style={{ width: `${Math.min(Math.round((fijoMes / effectiveSpent) * 100), 100)}%` }}
+                style={{ width: `${Math.min(Math.round((scopedFijoMes / effectiveSpent) * 100), 100)}%` }}
                 title="Gasto fijo"
               />
               <div
                 className="h-full bg-emerald-500 transition-all"
-                style={{ width: `${Math.min(Math.round((gastoVariable / effectiveSpent) * 100), 100)}%` }}
+                style={{ width: `${Math.min(Math.round((currentGastoVariable / effectiveSpent) * 100), 100)}%` }}
                 title="Gasto variable"
               />
             </div>
@@ -782,20 +918,20 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-1 text-xs border-t border-[var(--finance-border)]">
           <div>
             <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
-              Gasto Acumulado Año
+              Gastos del año
             </span>
-            <PrivacyAmount as="span" className="font-mono font-bold text-base text-[var(--finance-text-primary)] block mt-0.5">
-              {formatCurr(totalGastadoAnio)}
+            <PrivacyAmount as="span" className="font-bold tabular-nums text-base text-[var(--finance-text-primary)] block mt-0.5">
+              {formatCurr(scopedTotalGastadoAnio)}
             </PrivacyAmount>
             <span className="text-[10px] text-[var(--finance-text-muted)] block">año en curso</span>
           </div>
 
-          {gananciaReventa > 0 ? (
+          {gananciaReventa !== null && gananciaReventaMoneda === activeCurrency && gananciaReventa > 0 ? (
             <div>
               <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
                 Ganancia Reventa
               </span>
-              <PrivacyAmount as="span" className="font-mono font-bold text-base text-emerald-600 dark:text-emerald-400 block mt-0.5">
+              <PrivacyAmount as="span" className="font-bold tabular-nums text-base text-emerald-600 dark:text-emerald-400 block mt-0.5">
                 +{formatCurr(gananciaReventa)}
               </PrivacyAmount>
               <span className="text-[10px] text-[var(--finance-text-muted)] block">margen neto acumulado</span>
@@ -803,10 +939,10 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
           ) : (
             <div>
               <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
-                Tasa de Cobertura
+                Ingresos destinados a gastos
               </span>
-              <span className="font-mono font-bold text-base text-[var(--finance-text-primary)] block mt-0.5">
-                {ingresoMes > 0 ? `${Math.round((effectiveSpent / ingresoMes) * 100)}%` : '0%'}
+              <span className="font-bold tabular-nums text-base text-[var(--finance-text-primary)] block mt-0.5">
+                {scopedIngreso > 0 ? `${Math.round((effectiveSpent / scopedIngreso) * 100)}%` : '0%'}
               </span>
               <span className="text-[10px] text-[var(--finance-text-muted)] block">gasto vs ingresos</span>
             </div>
@@ -814,12 +950,14 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
 
           <div className="col-span-2 sm:col-span-1">
             <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
-              Patrimonio Consolidado
+              Patrimonio neto
             </span>
-            <PrivacyAmount as="span" className="font-mono font-bold text-base text-[var(--finance-text-primary)] block mt-0.5">
-              {formatCurr(patrimonioNeto)}
+            <PrivacyAmount as="span" className="font-bold tabular-nums text-base text-[var(--finance-text-primary)] block mt-0.5">
+              {formatCurr(activeNetWorth)}
             </PrivacyAmount>
-            <span className="text-[10px] text-[var(--finance-text-muted)] block">activos − pasivos</span>
+            <span className="text-[10px] text-[var(--finance-text-muted)] block">
+              {activeCurrency === 'USD' ? 'cuentas − deudas en USD' : 'activos − pasivos acumulados'}
+            </span>
           </div>
         </div>
 
@@ -838,7 +976,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                 Todo el gasto acumulado en el libro diario
               </p>
             </div>
-            <span className="text-xs text-[var(--finance-text-muted)] font-mono font-bold">
+            <span className="text-xs text-[var(--finance-text-muted)] font-bold">
               {showAllTimeCategories ? 'Ocultar ▴' : 'Ver detalle ▾'}
             </span>
           </button>
@@ -855,7 +993,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                       className="py-1.5 px-2 rounded-lg flex items-center justify-between text-xs hover:bg-[var(--finance-surface-hover)] transition-colors"
                     >
                       <span className="font-medium text-[var(--finance-text-primary)] truncate">{c.name}</span>
-                      <PrivacyAmount as="span" className="font-mono font-bold text-[var(--finance-text-secondary)]">
+                      <PrivacyAmount as="span" className="font-bold tabular-nums text-[var(--finance-text-secondary)]">
                         {formatCurr(c.value)}
                       </PrivacyAmount>
                     </div>
@@ -865,7 +1003,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
             </div>
           )}
         </div>
-      </section>
+      </details>
     </div>
   );
 };

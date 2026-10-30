@@ -11,16 +11,32 @@ import {
   validateTaskDependencies,
   getUnblockedCountIfCompleted,
 } from '../lib/taskDependencies';
+import { focusTargetElement } from '../lib/navigationFocus';
 
 interface ProjectsManagerProps {
   state: LifeOSState;
-  onUpdateState: (updater: (draft: LifeOSState) => void) => void;
+  onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
+  initialFocusId?: string | null;
+  focusNonce?: number;
 }
 
-export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdateState }) => {
+export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdateState, initialFocusId, focusNonce }) => {
   const [filter, setFilter] = useState<'activos' | 'pausados' | 'completados' | 'todos'>('activos');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (initialFocusId) {
+      if (initialFocusId.startsWith('project-task-')) {
+        const taskId = initialFocusId.replace('project-task-', '');
+        const parentProj = (state.projects || []).find((p) => (p.tasks || []).some((t) => t.id === taskId));
+        if (parentProj && parentProj.status !== 'activo' && filter !== 'todos') {
+          setFilter('todos');
+        }
+      }
+      return focusTargetElement(initialFocusId);
+    }
+  }, [initialFocusId, state.projects, focusNonce, filter]);
 
   // Form fields
   const [name, setName] = useState('');
@@ -72,7 +88,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
     const cleanName = name.trim();
     if (!cleanName) return;
 
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       if (!draft.projects) draft.projects = [];
       if (editingProjectId) {
         const p = draft.projects.find((x) => x.id === editingProjectId);
@@ -100,6 +116,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
         });
       }
     });
+    if (saved === false) return;
 
     playSound('click');
     showToast(editingProjectId ? 'Proyecto actualizado.' : 'Proyecto creado.');
@@ -107,28 +124,30 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
   };
 
   const handleUpdateStatus = (id: string, newStatus: ProjectStatus) => {
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       const p = (draft.projects || []).find((x) => x.id === id);
       if (p) {
         p.status = newStatus;
         p.updatedAt = todayISO();
       }
     });
+    if (saved === false) return;
     if (newStatus === 'completado') playSound('success');
     showToast(`Estado cambiado a ${newStatus}.`);
   };
 
   const handleDeleteProject = (id: string) => {
     if (!window.confirm('¿Seguro que querés eliminar este proyecto?')) return;
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       draft.projects = (draft.projects || []).filter((x) => x.id !== id);
     });
+    if (saved === false) return;
     showToast('Proyecto eliminado.', 'info');
   };
 
   const handleSendNextStepToToday = (project: Project) => {
     if (!project.nextStep.trim()) return;
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       draft.todayExtras.push({
         id: uid(),
         date: today,
@@ -138,6 +157,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
         effort: 'medium',
       });
     });
+    if (saved === false) return;
     playSound('success');
     showToast(`Próximo paso agregado a Hoy.`);
   };
@@ -145,7 +165,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
   const handleAddTask = (projectId: string) => {
     const text = (taskInputs[projectId] || '').trim();
     if (!text) return;
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       const p = (draft.projects || []).find((x) => x.id === projectId);
       if (p) {
         if (!p.tasks) p.tasks = [];
@@ -157,6 +177,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
         p.updatedAt = todayISO();
       }
     });
+    if (saved === false) return;
     setTaskInputs((prev) => ({ ...prev, [projectId]: '' }));
   };
 
@@ -178,7 +199,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
       }
     }
 
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       const p = (draft.projects || []).find((x) => x.id === projectId);
       if (p && p.tasks) {
         const t = p.tasks.find((task) => task.id === taskId);
@@ -188,6 +209,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
         }
       }
     });
+    if (saved === false) return;
     playSound('click');
   };
 
@@ -210,7 +232,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
       }
     }
 
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       const proj = (draft.projects || []).find((x) => x.id === projectId);
       const task = proj?.tasks?.find((x) => x.id === taskId);
       if (task) {
@@ -218,10 +240,11 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
         proj.updatedAt = todayISO();
       }
     });
+    if (saved === false) return;
   };
 
   const handleSetTaskDueDate = (projectId: string, taskId: string, dueDate: string) => {
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       const proj = (draft.projects || []).find((x) => x.id === projectId);
       const task = proj?.tasks?.find((x) => x.id === taskId);
       if (task) {
@@ -229,27 +252,30 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
         proj.updatedAt = todayISO();
       }
     });
+    if (saved === false) return;
     setEditingDueDateTaskId(null);
   };
 
   const handleDeleteTask = (projectId: string, taskId: string) => {
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       const p = (draft.projects || []).find((x) => x.id === projectId);
       if (p && p.tasks) {
         p.tasks = p.tasks.filter((task) => task.id !== taskId);
         p.updatedAt = todayISO();
       }
     });
+    if (saved === false) return;
   };
 
   const handleResolveBlocker = (projectId: string) => {
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       const p = (draft.projects || []).find((x) => x.id === projectId);
       if (p) {
         p.blockers = undefined;
         p.updatedAt = todayISO();
       }
     });
+    if (saved === false) return;
     playSound('success');
     showToast('Bloqueo marcado como resuelto.');
   };
@@ -263,10 +289,10 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
             <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600">
               <AppIcon name="target" className="h-4 w-4" />
             </span>
-            <h2 className="text-base font-black text-[var(--text)]">Proyectos & Objetivos</h2>
+            <h2 className="text-base font-black text-[var(--text)]">Proyectos</h2>
           </div>
           <p className="text-xs text-[var(--text-soft)] mt-0.5">
-            Estructura tus metas con objetivo claro, próximo paso ejecutable, tareas y bloqueos.
+            Tareas, próximo paso y bloqueos de cada proyecto.
           </p>
         </div>
 
@@ -279,7 +305,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
           className="px-3.5 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
         >
           <AppIcon name={showCreateForm ? 'x' : 'plus'} className="h-3.5 w-3.5" />
-          <span>{showCreateForm ? 'Cerrar formulario' : '＋ Nuevo Proyecto'}</span>
+          <span>{showCreateForm ? 'Cerrar formulario' : 'Nuevo proyecto'}</span>
         </button>
       </div>
 
@@ -288,7 +314,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
         <form onSubmit={handleSaveProject} className="bg-[var(--card)] border-2 border-blue-500/30 rounded-2xl p-4 sm:p-5 shadow-lg space-y-4 animate-in fade-in">
           <div className="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
             <h3 className="text-sm font-extrabold text-[var(--text)]">
-              {editingProjectId ? 'Editar Proyecto' : 'Crear Nuevo Proyecto'}
+              {editingProjectId ? 'Editar proyecto' : 'Nuevo proyecto'}
             </h3>
             <button
               type="button"
@@ -316,7 +342,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
 
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                Fecha de Revisión Programada
+                Fecha de revisión
               </label>
               <input
                 type="date"
@@ -329,7 +355,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
 
           <div>
             <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-              Objetivo Final Medible (¿Qué define el éxito?)
+              Resultado esperado
             </label>
             <input
               type="text"
@@ -343,7 +369,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                Próximo Paso Inmediato (Acción concreta y ejecutable)
+                Próximo paso
               </label>
               <input
                 type="text"
@@ -356,7 +382,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
 
             <div>
               <label className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 block mb-1">
-                Bloqueos / Obstáculos Identificados (opcional)
+                Bloqueos (opcional)
               </label>
               <input
                 type="text"
@@ -519,7 +545,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                 <div className="p-3 bg-[var(--surface-muted)] rounded-xl border border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--blue)] block mb-0.5">
-                      Próximo Paso Inmediato
+                      Próximo paso
                     </span>
                     <p className="text-xs font-bold text-[var(--text)] truncate">
                       {project.nextStep || 'Sin próximo paso definido.'}
@@ -588,7 +614,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                       Tareas del Proyecto ({completedTasks}/{totalTasks})
                     </span>
                     {totalTasks > 0 && (
-                      <span className="text-[11px] font-mono text-[var(--text-faint)]">
+                      <span className="text-[11px] tabular-nums text-[var(--text-faint)]">
                         {Math.round((completedTasks / totalTasks) * 100)}% completado
                       </span>
                     )}
@@ -606,7 +632,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                       const otherTasksInProject = (project.tasks || []).filter((other) => other.id !== t.id);
 
                       return (
-                        <div key={t.id} className="py-2 border-b border-[var(--border)] last:border-b-0">
+                        <div key={t.id} id={`project-task-${t.id}`} className="py-2 border-b border-[var(--border)] last:border-b-0 rounded-xl px-1.5 transition-all">
                           <div className="flex items-center justify-between gap-2 group">
                             <label className="flex items-center gap-2 cursor-pointer min-w-0 flex-1 flex-wrap">
                               <input

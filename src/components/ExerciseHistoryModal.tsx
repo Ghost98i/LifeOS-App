@@ -107,7 +107,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = ({
             <span className="block text-[9px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
               Peso Máx.
             </span>
-            <strong className="block text-sm font-black text-[var(--text)] font-mono mt-0.5">
+            <strong className="block text-sm font-black text-[var(--text)] tabular-nums mt-0.5">
               {history.prs.maxWeight ? `${history.prs.maxWeight.value} kg` : '—'}
             </strong>
             {history.prs.maxWeight?.reps ? (
@@ -122,7 +122,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = ({
             <span className="block text-[9px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
               1RM Estimado
             </span>
-            <strong className="block text-sm font-black text-blue-600 dark:text-blue-400 font-mono mt-0.5">
+            <strong className="block text-sm font-black text-blue-600 dark:text-blue-400 tabular-nums mt-0.5">
               {history.prs.maxE1RM ? `~${history.prs.maxE1RM.value} kg` : '—'}
             </strong>
             {history.prs.maxE1RM?.weight ? (
@@ -137,7 +137,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = ({
             <span className="block text-[9px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
               Máx. Reps
             </span>
-            <strong className="block text-sm font-black text-[var(--text)] font-mono mt-0.5">
+            <strong className="block text-sm font-black text-[var(--text)] tabular-nums mt-0.5">
               {history.prs.maxReps ? `${history.prs.maxReps.value} reps` : '—'}
             </strong>
             {history.prs.maxReps?.weight ? (
@@ -152,7 +152,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = ({
             <span className="block text-[9px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
               Volumen Máx.
             </span>
-            <strong className="block text-sm font-black text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">
+            <strong className="block text-sm font-black text-emerald-600 dark:text-emerald-400 tabular-nums mt-0.5">
               {history.prs.maxVolume ? `${history.prs.maxVolume.value.toLocaleString('es-UY')}k` : '—'}
             </strong>
             <span className="text-[10px] text-[var(--text-faint)]">en 1 sesión</span>
@@ -243,15 +243,15 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = ({
               {history.recent5.map((sess) => (
                 <div key={sess.sessionId} className="p-3 flex items-center justify-between gap-3 text-xs">
                   <div className="min-w-0 flex-1 space-y-0.5">
-                    <span className="font-extrabold text-[var(--text)] font-mono block">
+                    <span className="font-extrabold text-[var(--text)] tabular-nums block">
                       {fmtDate(sess.date)}
                     </span>
-                    <div className="text-[11px] text-[var(--text-soft)] font-mono truncate">
+                    <div className="text-[11px] text-[var(--text-soft)] tabular-nums truncate">
                       {sess.sets.map((s) => `${s.weight}k × ${s.reps}`).join(' · ')}
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0 font-mono space-y-0.5">
+                  <div className="text-right shrink-0 tabular-nums space-y-0.5">
                     <strong className="block text-xs font-black text-emerald-600 dark:text-emerald-400">
                       {sess.volume.toLocaleString('es-UY')} kg
                     </strong>

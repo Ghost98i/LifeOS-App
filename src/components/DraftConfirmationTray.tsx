@@ -7,7 +7,7 @@ import {
   StudyDraft,
   canConfirmDraft,
 } from '../lib/quickCaptureDrafts';
-import { fmtMoney, todayISO } from '../lib/storage';
+import { fmtMoney, formatMoney, todayISO } from '../lib/storage';
 import { MODULE_NAV_METADATA, isModuleEnabled } from '../lib/moduleVisibility';
 import { AppIcon, AppIconName } from './AppIcon';
 import { PrivacyAmount } from './PrivacyAmount';
@@ -45,42 +45,51 @@ export const DraftConfirmationTray: React.FC<DraftConfirmationTrayProps> = ({
 
   if (!drafts || drafts.length === 0) return null;
 
-  const allValid = drafts.every((d) => canConfirmDraft(state, d).valid);
+  const validDraftsCount = drafts.filter((d) => canConfirmDraft(state, d).valid).length;
+  const allValid = drafts.length > 0 && validDraftsCount === drafts.length;
 
   return (
-    <div className="w-full flex flex-col gap-3 p-3 sm:p-4 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-md animate-fadeIn transition-all">
+    <div className="w-full flex flex-col gap-2.5 p-3 sm:p-3.5 rounded-2xl bg-[var(--surface)] border border-[var(--border)] shadow-md animate-fadeIn transition-all">
       {/* Tray Header */}
       <div className="flex items-center justify-between gap-2 pb-2 border-b border-[var(--border)]/60">
         <div className="flex items-center gap-2">
-          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--accent)]">
+          <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--accent)] shrink-0">
             <AppIcon name="sparkles" className="h-3.5 w-3.5" />
           </div>
           <span className="text-xs sm:text-sm font-bold text-[var(--text)]">
             Borradores detectados
           </span>
-          <span className="px-1.5 py-0.5 text-[11px] font-mono font-bold rounded-full bg-[var(--surface-muted)] text-[var(--text-soft)] border border-[var(--border)]">
+          <span className="px-1.5 py-0.5 text-[11px] tabular-nums font-bold rounded-full bg-[var(--surface-muted)] text-[var(--text-soft)] border border-[var(--border)]">
             {drafts.length}
           </span>
+          {!allValid && (
+            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium hidden sm:inline">
+              ({validDraftsCount} de {drafts.length} listos)
+            </span>
+          )}
         </div>
 
         {/* Global actions if multiple drafts */}
         {drafts.length > 1 && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0">
             {onConfirmAll && (
               <button
                 type="button"
                 onClick={onConfirmAll}
                 disabled={!allValid || isConfirmingAll}
-                className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 active:scale-95 disabled:opacity-40 transition cursor-pointer"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
+                title={allValid ? 'Confirmar todos los borradores' : 'Hay borradores incompletos que requieren revisión antes de confirmar'}
               >
-                {isConfirmingAll ? 'Registrando...' : 'Confirmar todos'}
+                <AppIcon name="check" className="h-3 w-3" />
+                <span>{isConfirmingAll ? 'Registrando...' : 'Confirmar todos'}</span>
               </button>
             )}
             {onDiscardAll && (
               <button
                 type="button"
                 onClick={onDiscardAll}
-                className="px-2 py-1 rounded-lg text-xs font-semibold text-[var(--text-faint)] hover:text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
+                className="px-2.5 py-1 rounded-lg text-xs font-semibold text-[var(--text-soft)] hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/20 transition cursor-pointer"
+                title="Descartar todos los borradores pendientes"
               >
                 Descartar todos
               </button>
@@ -90,7 +99,7 @@ export const DraftConfirmationTray: React.FC<DraftConfirmationTrayProps> = ({
       </div>
 
       {/* List of Draft Cards */}
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-2">
         {drafts.map((draft) => (
           <DraftCard
             key={draft.id}
@@ -147,7 +156,17 @@ const DraftCard: React.FC<DraftCardProps> = ({
 
   const isFinance = draft.kind === 'finance';
   const finDraft = isFinance ? (draft as FinanceDraft) : null;
-  const isCurrencyBlocked = finDraft?.isCurrencyIncompatible || (finDraft?.currency && finDraft.currency !== 'UYU');
+  const draftCurrency = (finDraft?.currency || 'UYU').toUpperCase();
+  const accounts = state.finance?.accounts || [];
+  const hasUsdAccount = accounts.some((a) => (a.currency || 'UYU').toUpperCase() === 'USD');
+  const selectedAccount = finDraft?.accountId ? accounts.find((a) => a.id === finDraft.accountId) : null;
+  const selectedAccCurrency = (selectedAccount?.currency || 'UYU').toUpperCase();
+
+  const isInstallmentBlocked = isFinance && Boolean(finDraft?.installments && finDraft.installments > 1);
+  const isForeignUnsupported = isFinance && draftCurrency !== 'UYU' && draftCurrency !== 'USD';
+  const isMissingUsdAccount = isFinance && draftCurrency === 'USD' && !hasUsdAccount;
+  const isCurrencyMismatch = isFinance && !isMissingUsdAccount && !isForeignUnsupported && Boolean(selectedAccount && draftCurrency !== selectedAccCurrency);
+  const isFinanceCurrencyBlocked = isForeignUnsupported || isMissingUsdAccount || isCurrencyMismatch;
 
   const validation = canConfirmDraft(state, draft);
   const canConfirm = validation.valid;
@@ -159,12 +178,13 @@ const DraftCard: React.FC<DraftCardProps> = ({
   const isNotasEnabled = isModuleEnabled(state, 'notas');
 
   return (
-    <div className="p-3 rounded-xl border border-[var(--border)] bg-[var(--card)] hover:border-[var(--border-hover)] transition-all flex flex-col gap-2">
-      {/* Top row: badge + warnings + quick actions */}
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-1.5 flex-wrap">
+    <div className="p-2.5 sm:p-3 rounded-xl border border-[var(--border)] bg-[var(--card)] hover:border-[var(--border-hover)] transition-all flex flex-col gap-2">
+      {/* Main unified row: Badge + Content on Left/Center, Action Cluster on Right */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+          {/* Badge */}
           <span
-            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold ${meta.badgeClass}`}
+            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold shrink-0 ${meta.badgeClass}`}
           >
             <AppIcon name={meta.icon} className="h-3 w-3" />
             <span>{meta.label}</span>
@@ -172,54 +192,189 @@ const DraftCard: React.FC<DraftCardProps> = ({
 
           {/* Warning: Module Disabled */}
           {!draft.isModuleEnabled && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 shrink-0">
               <AppIcon name="eyeOff" className="h-3 w-3" />
               <span>Módulo {moduleName} desactivado</span>
             </span>
           )}
 
-          {/* Warning: Incompatible Currency */}
-          {isCurrencyBlocked && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30">
-              <span>Moneda no soportada ({finDraft?.currency})</span>
+          {/* Warning: Installment purchase */}
+          {isInstallmentBlocked && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 shrink-0">
+              <span>Compra en cuotas</span>
+            </span>
+          )}
+
+          {/* Warning: Requires USD account (Caso A) */}
+          {isMissingUsdAccount && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30 shrink-0">
+              <span>Requiere cuenta USD</span>
+            </span>
+          )}
+
+          {/* Warning: Currency mismatch (Caso B) */}
+          {isCurrencyMismatch && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30 shrink-0">
+              <span>Moneda incompatible ({draftCurrency} vs {selectedAccCurrency})</span>
+            </span>
+          )}
+
+          {/* Warning: Foreign unsupported */}
+          {isForeignUnsupported && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30 shrink-0">
+              <span>Moneda no soportada ({draftCurrency})</span>
             </span>
           )}
 
           {/* Warning: Account Deleted */}
           {accountDeleted && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30 shrink-0">
               <span>Cuenta inexistente</span>
             </span>
           )}
 
           {/* Warning: Category Archived */}
           {categoryArchived && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30 shrink-0">
               <span>Categoría archivada</span>
             </span>
           )}
 
           {/* Warning: Missing amount */}
           {isMissingAmount && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-rose-500/10 text-rose-700 dark:text-rose-300 border border-rose-500/30 shrink-0">
               <span>Importe requerido</span>
             </span>
           )}
 
           {/* Warning: Missing category */}
           {isMissingCategory && !categoryArchived && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/30 shrink-0">
               <span>Categoría pendiente</span>
             </span>
           )}
+
+          {/* Inline Content Summary */}
+          {!isEditing && (
+            <div className="text-xs sm:text-sm text-[var(--text)] font-medium flex items-center gap-1.5 flex-wrap min-w-0">
+              {draft.kind === 'finance' && (
+                <>
+                  <span className="font-bold text-sm sm:text-base">
+                    {draft.amount !== undefined ? (
+                      <PrivacyAmount>
+                        {formatMoney(draft.amount, draft.currency || 'UYU')}
+                      </PrivacyAmount>
+                    ) : (
+                      <span className="text-rose-500 font-bold">{draft.currency === 'USD' ? 'US$ ?' : '$U ?'}</span>
+                    )}
+                  </span>
+                  <span className="text-[var(--text-faint)]">·</span>
+                  <span className="text-[var(--text-soft)]">
+                    {draft.categoryMatched || draft.category || 'Sin categoría'}
+                  </span>
+                  {draft.accountName && (
+                    <>
+                      <span className="text-[var(--text-faint)]">·</span>
+                      <PrivacyAmount as="span" className="text-[var(--text-faint)]">
+                        {draft.accountName}
+                        {draft.isAccountSuggested ? ' (sugerida)' : ''}
+                      </PrivacyAmount>
+                    </>
+                  )}
+                  {draft.installments && (
+                    <>
+                      <span className="text-[var(--text-faint)]">·</span>
+                      <span className="text-blue-500 font-semibold">{draft.installments} cuotas</span>
+                    </>
+                  )}
+                  <span className="text-[var(--text-faint)]">·</span>
+                  <span className="text-[var(--text-faint)]">{draft.dateLabel || draft.date}</span>
+                </>
+              )}
+
+              {draft.kind === 'task' && (
+                <>
+                  <span className="text-[var(--text)] font-semibold">{draft.text}</span>
+                  {draft.time && (
+                    <>
+                      <span className="text-[var(--text-faint)]">·</span>
+                      <span className="tabular-nums text-blue-500 font-bold">{draft.time}</span>
+                    </>
+                  )}
+                  <span className="text-[var(--text-faint)]">·</span>
+                  <span
+                    className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${
+                      draft.priority === 'alta'
+                        ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                        : draft.priority === 'media'
+                        ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
+                        : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                    }`}
+                  >
+                    {draft.priority}
+                  </span>
+                  <span className="text-[var(--text-faint)]">·</span>
+                  <span className="text-[var(--text-faint)]">{draft.dueDateLabel || draft.dueDate || 'Sin fecha'}</span>
+                </>
+              )}
+
+              {draft.kind === 'study' && (
+                <>
+                  <span className="text-[var(--text)] font-semibold">{draft.subjectName}</span>
+                  <span className="text-[var(--text-faint)]">·</span>
+                  <span className="text-indigo-500 font-bold">{draft.minutes} min</span>
+                  <span className="text-[var(--text-faint)]">·</span>
+                  <span className="text-[var(--text-faint)]">{draft.dateLabel || draft.date}</span>
+                </>
+              )}
+
+              {draft.kind === 'resale' && (
+                <>
+                  <span className="text-[var(--text)] font-semibold">{draft.title}</span>
+                  {draft.price !== undefined && (
+                    <>
+                      <span className="text-[var(--text-faint)]">·</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                        <PrivacyAmount>{fmtMoney(draft.price)}</PrivacyAmount>
+                      </span>
+                    </>
+                  )}
+                </>
+              )}
+
+              {(draft.kind === 'note' || draft.kind === 'idea' || draft.kind === 'inbox' || draft.kind === 'work') && (
+                <span className="text-[var(--text)]">
+                  {'text' in draft ? (draft as any).text : draft.rawText}
+                </span>
+              )}
+
+              {draft.kind === 'agenda' && (
+                <>
+                  <span className="text-[var(--text)] font-semibold">{draft.activity}</span>
+                  {draft.time && (
+                    <>
+                      <span className="text-[var(--text-faint)]">·</span>
+                      <span className="tabular-nums text-blue-500 font-bold">{draft.time}</span>
+                    </>
+                  )}
+                  <span className="text-[var(--text-faint)]">·</span>
+                  <span className="text-[var(--text-faint)]">{draft.dateLabel || draft.date}</span>
+                </>
+              )}
+
+              {draft.notes && (
+                <span className="text-[11px] text-[var(--text-faint)] italic">({draft.notes})</span>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Edit & Discard icon buttons */}
-        <div className="flex items-center gap-1 ml-auto">
+        {/* Action Cluster (aligned together: Edit, Discard, Confirm) */}
+        <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto ml-auto">
           <button
             type="button"
             onClick={onToggleEdit}
-            className={`p-1 rounded-lg text-xs transition cursor-pointer ${
+            className={`p-1.5 rounded-lg text-xs transition cursor-pointer ${
               isEditing
                 ? 'bg-[var(--accent)] text-white'
                 : 'text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)]'
@@ -231,136 +386,25 @@ const DraftCard: React.FC<DraftCardProps> = ({
           <button
             type="button"
             onClick={onDiscard}
-            className="p-1 rounded-lg text-xs text-[var(--text-faint)] hover:text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
+            className="p-1.5 rounded-lg text-xs text-[var(--text-faint)] hover:text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
             title="Descartar borrador"
           >
             <AppIcon name="trash" className="h-3.5 w-3.5" />
           </button>
+          {draft.isModuleEnabled && (
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={!canConfirm || isConfirming}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+              title={canConfirm ? 'Confirmar este borrador' : validation.reason || 'Completá los campos requeridos'}
+            >
+              <AppIcon name="check" className="h-3.5 w-3.5" />
+              <span>{isConfirming ? 'Registrando...' : 'Confirmar'}</span>
+            </button>
+          )}
         </div>
       </div>
-
-      {/* Ambiguity Warning Banner */}
-      {draft.ambiguityWarning && (
-        <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-xs">
-          {draft.ambiguityWarning}
-        </div>
-      )}
-
-      {/* Draft Content Summary */}
-      {!isEditing && (
-        <div className="text-xs sm:text-sm text-[var(--text)] font-medium pl-1 flex flex-col gap-1">
-          {draft.kind === 'finance' && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-bold text-sm sm:text-base">
-                {draft.amount !== undefined ? (
-                  <PrivacyAmount>
-                    {draft.currency && draft.currency !== 'UYU'
-                      ? `${draft.currency} ${Math.round(draft.amount).toLocaleString('es-UY')}`
-                      : fmtMoney(draft.amount)}
-                  </PrivacyAmount>
-                ) : (
-                  <span className="text-rose-500 font-bold">$U ?</span>
-                )}
-              </span>
-              <span className="text-[var(--text-faint)]">·</span>
-              <span className="text-[var(--text-soft)]">
-                {draft.categoryMatched || draft.category || 'Sin categoría'}
-              </span>
-              {draft.accountName && (
-                <>
-                  <span className="text-[var(--text-faint)]">·</span>
-                  <PrivacyAmount as="span" className="text-[var(--text-faint)]">
-                    {draft.accountName}
-                    {draft.isAccountSuggested ? ' (sugerida)' : ''}
-                  </PrivacyAmount>
-                </>
-              )}
-              {draft.installments && (
-                <>
-                  <span className="text-[var(--text-faint)]">·</span>
-                  <span className="text-blue-500 font-semibold">{draft.installments} cuotas</span>
-                </>
-              )}
-              <span className="text-[var(--text-faint)]">·</span>
-              <span className="text-[var(--text-faint)]">{draft.dateLabel || draft.date}</span>
-            </div>
-          )}
-
-          {draft.kind === 'task' && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[var(--text)] font-semibold">{draft.text}</span>
-              {draft.time && (
-                <>
-                  <span className="text-[var(--text-faint)]">·</span>
-                  <span className="font-mono text-blue-500 font-bold">{draft.time}</span>
-                </>
-              )}
-              <span className="text-[var(--text-faint)]">·</span>
-              <span
-                className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${
-                  draft.priority === 'alta'
-                    ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
-                    : draft.priority === 'media'
-                    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                    : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
-                }`}
-              >
-                {draft.priority}
-              </span>
-              <span className="text-[var(--text-faint)]">·</span>
-              <span className="text-[var(--text-faint)]">{draft.dueDateLabel || draft.dueDate || 'Hoy'}</span>
-            </div>
-          )}
-
-          {draft.kind === 'study' && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[var(--text)] font-semibold">{draft.subjectName}</span>
-              <span className="text-[var(--text-faint)]">·</span>
-              <span className="text-indigo-500 font-bold">{draft.minutes} min</span>
-              <span className="text-[var(--text-faint)]">·</span>
-              <span className="text-[var(--text-faint)]">{draft.dateLabel || draft.date}</span>
-            </div>
-          )}
-
-          {draft.kind === 'resale' && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[var(--text)] font-semibold">{draft.title}</span>
-              {draft.price !== undefined && (
-                <>
-                  <span className="text-[var(--text-faint)]">·</span>
-                  <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                    <PrivacyAmount>{fmtMoney(draft.price)}</PrivacyAmount>
-                  </span>
-                </>
-              )}
-            </div>
-          )}
-
-          {(draft.kind === 'note' || draft.kind === 'idea' || draft.kind === 'inbox' || draft.kind === 'work') && (
-            <div className="text-[var(--text)]">
-              {'text' in draft ? (draft as any).text : draft.rawText}
-            </div>
-          )}
-
-          {draft.kind === 'agenda' && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[var(--text)] font-semibold">{draft.activity}</span>
-              {draft.time && (
-                <>
-                  <span className="text-[var(--text-faint)]">·</span>
-                  <span className="font-mono text-blue-500 font-bold">{draft.time}</span>
-                </>
-              )}
-              <span className="text-[var(--text-faint)]">·</span>
-              <span className="text-[var(--text-faint)]">{draft.dateLabel || draft.date}</span>
-            </div>
-          )}
-
-          {draft.notes && (
-            <div className="text-[11px] text-[var(--text-faint)] italic">{draft.notes}</div>
-          )}
-        </div>
-      )}
 
       {/* Inline Editor */}
       {isEditing && (
@@ -372,38 +416,57 @@ const DraftCard: React.FC<DraftCardProps> = ({
         />
       )}
 
-      {/* Incompatible Currency Recovery Bar */}
-      {isCurrencyBlocked && onConvertToInbox && (
-        <div className="mt-1 p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 flex items-center justify-between gap-2 flex-wrap text-xs">
-          <span className="text-rose-800 dark:text-rose-200 text-[11px]">
-            No es posible registrar monedas extranjeras ({finDraft?.currency}). Guardalo en tu Bandeja para conservarlo.
-          </span>
-          <button
-            type="button"
-            onClick={onConvertToInbox}
-            className="px-2.5 py-1 rounded text-xs font-semibold bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 transition cursor-pointer"
-          >
-            Guardar en Bandeja
-          </button>
-        </div>
-      )}
+      {/* Contextual Guidance Banner for Blocked or Warning States (Single, Non-redundant) */}
+      {!canConfirm ? (
+        <div className={`mt-1 p-2.5 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${
+          isFinanceCurrencyBlocked || accountDeleted || categoryArchived
+            ? 'bg-rose-500/10 border-rose-500/20 text-rose-800 dark:text-rose-200'
+            : 'bg-amber-500/10 border-amber-500/25 text-amber-800 dark:text-amber-200'
+        }`}>
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <AppIcon
+              name={!draft.isModuleEnabled ? 'eyeOff' : 'alertCircle'}
+              className="h-3.5 w-3.5 shrink-0 opacity-80"
+            />
+            <span className="text-[11px] leading-snug">
+              {isInstallmentBlocked
+                ? `Compra financiada en ${finDraft?.installments} cuotas. Para proteger tu saldo real, Celestian LifeOS no descuenta el total en un único gasto inmediato.`
+                : isMissingUsdAccount
+                ? 'Necesitás una cuenta en dólares para registrar este movimiento. Podés crearla en Finanzas o guardarlo en tu Bandeja de Entrada.'
+                : isCurrencyMismatch
+                ? `El movimiento es en ${draftCurrency} pero la cuenta seleccionada opera en ${selectedAccCurrency}. Elegí una cuenta en ${draftCurrency} para confirmar.`
+                : isForeignUnsupported
+                ? `Moneda extranjera no soportada (${draftCurrency}). Guardalo en tu Bandeja de Entrada para conservarlo.`
+                : !draft.isModuleEnabled
+                ? `Para registrar en ${moduleName}, activá el módulo o guardalo ${isNotasEnabled ? 'como nota o en bandeja.' : 'en tu bandeja de entrada.'}`
+                : accountDeleted
+                ? 'La cuenta asignada fue eliminada. Elegí otra cuenta para confirmar.'
+                : categoryArchived
+                ? 'La categoría asignada está archivada. Elegí otra categoría para confirmar.'
+                : draft.ambiguityWarning || validation.reason || 'Revisá los datos antes de confirmar.'}
+            </span>
+          </div>
 
-      {/* Module Disabled Recovery Bar */}
-      {!draft.isModuleEnabled && !isCurrencyBlocked && (
-        <div className="mt-1 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-between gap-2 flex-wrap text-xs">
-          <span className="text-amber-800 dark:text-amber-200 text-[11px]">
-            Para registrar en <strong>{moduleName}</strong>, activá el módulo o guardalo{' '}
-            {isNotasEnabled ? 'como nota o en bandeja.' : 'en tu bandeja de entrada.'}
-          </span>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={onEnableModule}
-              className="px-2 py-1 rounded text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white transition cursor-pointer"
-            >
-              Activar {moduleName}
-            </button>
-            {isNotasEnabled ? (
+          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+            {!draft.isModuleEnabled && (
+              <button
+                type="button"
+                onClick={onEnableModule}
+                className="px-2 py-1 rounded text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white transition cursor-pointer"
+              >
+                Activar {moduleName}
+              </button>
+            )}
+            {isCurrencyMismatch && !isEditing && (
+              <button
+                type="button"
+                onClick={onToggleEdit}
+                className="px-2 py-1 rounded text-xs font-semibold bg-[var(--card)] border border-[var(--border)] text-[var(--text)] hover:border-[var(--border-hover)] transition cursor-pointer"
+              >
+                Elegir cuenta {draftCurrency}
+              </button>
+            )}
+            {!draft.isModuleEnabled && isNotasEnabled && onConvertToNote && (
               <button
                 type="button"
                 onClick={onConvertToNote}
@@ -411,33 +474,23 @@ const DraftCard: React.FC<DraftCardProps> = ({
               >
                 Guardar como nota
               </button>
-            ) : onConvertToInbox ? (
+            )}
+            {onConvertToInbox && (
               <button
                 type="button"
                 onClick={onConvertToInbox}
-                className="px-2 py-1 rounded text-xs font-semibold bg-[var(--surface-muted)] text-[var(--text)] hover:bg-[var(--border)] transition cursor-pointer"
+                className="px-2.5 py-1 rounded text-xs font-semibold bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 transition cursor-pointer"
               >
                 Guardar en Bandeja
               </button>
-            ) : null}
+            )}
           </div>
         </div>
-      )}
-
-      {/* Bottom Action Bar */}
-      {draft.isModuleEnabled && (
-        <div className="flex items-center justify-end gap-2 pt-1 border-t border-[var(--border)]/40">
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={!canConfirm || isConfirming}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
-          >
-            <AppIcon name="check" className="h-3.5 w-3.5" />
-            <span>{isConfirming ? 'Registrando...' : 'Confirmar'}</span>
-          </button>
+      ) : draft.ambiguityWarning ? (
+        <div className="mt-1 p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 text-xs">
+          {draft.ambiguityWarning}
         </div>
-      )}
+      ) : null}
     </div>
   );
 };
@@ -469,7 +522,7 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
           {/* Amount */}
           <div className="flex flex-col gap-1">
             <label className="font-semibold text-[var(--text-soft)] text-[11px]">
-              Importe ($U):
+              Importe ({draft.currency === 'USD' ? 'US$' : '$U'}):
             </label>
             <input
               type="number"
@@ -551,7 +604,7 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
               <option value="">Sin especificar...</option>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name}
+                  {a.name} · {a.currency || 'UYU'}
                 </option>
               ))}
             </select>
@@ -635,13 +688,13 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
             </label>
             <input
               type="date"
-              value={draft.dueDate || todayISO()}
+              value={draft.dueDate || ''}
               onChange={(e) => {
                 const d = e.target.value;
                 onUpdateDraft({
                   ...draft,
-                  dueDate: d,
-                  dueDateLabel: d === todayISO() ? 'Hoy' : d,
+                  dueDate: d || undefined,
+                  dueDateLabel: d ? (d === todayISO() ? 'Hoy' : d) : undefined,
                   ambiguityWarning: undefined,
                 } as TaskDraft);
               }}

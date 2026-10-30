@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { getDayCyclePeriod, getDayCycleConfig } from './alpineDayCycle';
+import { getDayCyclePeriod, getDayCycleConfig, getGreetingPrefix, getLocalGreeting } from './alpineDayCycle';
 import { identifyMerchant } from './merchantIdentity';
 import {
   loadTodayCustomization,
@@ -12,49 +12,51 @@ import {
 } from './viewCustomization';
 
 describe('Alpine Day-Cycle Signature', () => {
-  it('determines the correct day cycle period for each hour range', () => {
-    // Dawn: 06:00 to 11:59
-    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 6, 0)), 'dawn');
-    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 11, 59)), 'dawn');
-
-    // Day: 12:00 to 17:59
-    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 12, 0)), 'day');
-    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 14, 30)), 'day');
-    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 17, 59)), 'day');
-
-    // Sunset: 18:00 to 19:59
-    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 18, 0)), 'sunset');
-    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 19, 59)), 'sunset');
-
-    // Night: 20:00 to 05:59
-    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 20, 0)), 'night');
-    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 2, 0)), 'night');
-    assert.equal(getDayCyclePeriod(new Date(2026, 9, 5, 5, 59)), 'night');
-
-    // Number hour directly
-    assert.equal(getDayCyclePeriod(7), 'dawn');
-    assert.equal(getDayCyclePeriod(11), 'dawn');
-    assert.equal(getDayCyclePeriod(12), 'day');
-    assert.equal(getDayCyclePeriod(19), 'sunset');
-    assert.equal(getDayCyclePeriod(20), 'night');
+  it('separates the five local image periods at every requested boundary', () => {
+    const at = (hour: number, minute: number) => new Date(2026, 9, 15, hour, minute);
+    // Noche: 19:30–04:59
+    assert.equal(getDayCyclePeriod(at(19, 30)), 'night');
+    assert.equal(getDayCyclePeriod(at(23, 59)), 'night');
+    assert.equal(getDayCyclePeriod(at(0, 0)), 'night');
+    assert.equal(getDayCyclePeriod(at(4, 59)), 'night');
+    // Madrugada: 05:00–06:59
+    assert.equal(getDayCyclePeriod(at(5, 0)), 'predawn');
+    assert.equal(getDayCyclePeriod(at(6, 59)), 'predawn');
+    // Mañana: 07:00–10:59
+    assert.equal(getDayCyclePeriod(at(7, 0)), 'morning');
+    assert.equal(getDayCyclePeriod(at(10, 59)), 'morning');
+    // Mediodía: 11:00–16:59
+    assert.equal(getDayCyclePeriod(at(11, 0)), 'day');
+    assert.equal(getDayCyclePeriod(at(16, 59)), 'day');
+    // Atardecer: 17:00–19:29
+    assert.equal(getDayCyclePeriod(at(17, 0)), 'sunset');
+    assert.equal(getDayCyclePeriod(at(19, 29)), 'sunset');
   });
 
-  it('generates human greetings and atmospheric metadata for each period', () => {
-    const dawn = getDayCycleConfig('dawn');
-    assert.equal(dawn.label, 'Amanecer');
-    assert.equal(dawn.greeting('Christian'), 'Buenos días, Christian');
-
-    const day = getDayCycleConfig('day');
-    assert.equal(day.label, 'Día');
-    assert.equal(day.greeting('Christian'), 'Buenas tardes, Christian');
-
-    const sunset = getDayCycleConfig('sunset');
-    assert.equal(sunset.label, 'Atardecer');
-    assert.equal(sunset.greeting('Christian'), 'Buenas tardes, Christian');
-
-    const night = getDayCycleConfig('night');
-    assert.equal(night.label, 'Noche');
-    assert.equal(night.greeting(), 'Buenas noches');
+  it('keeps greeting boundaries coherent with the five time periods', () => {
+    const at = (hour: number, minute: number) => new Date(2026, 9, 15, hour, minute);
+    assert.equal(getGreetingPrefix(at(0, 0)), 'Buenas noches');
+    assert.equal(getGreetingPrefix(at(4, 59)), 'Buenas noches');
+    assert.equal(getGreetingPrefix(at(5, 0)), 'Buenos días');
+    assert.equal(getGreetingPrefix(at(6, 59)), 'Buenos días');
+    assert.equal(getGreetingPrefix(at(7, 0)), 'Buenos días');
+    assert.equal(getGreetingPrefix(at(11, 59)), 'Buenos días');
+    assert.equal(getGreetingPrefix(at(12, 0)), 'Buenas tardes');
+    assert.equal(getGreetingPrefix(at(16, 59)), 'Buenas tardes');
+    assert.equal(getGreetingPrefix(at(17, 0)), 'Buenas tardes');
+    assert.equal(getGreetingPrefix(at(19, 29)), 'Buenas tardes');
+    assert.equal(getGreetingPrefix(at(19, 30)), 'Buenas noches');
+    assert.equal(getGreetingPrefix(at(23, 59)), 'Buenas noches');
+    assert.equal(getDayCyclePeriod(at(11, 30)), 'day');
+    assert.equal(getGreetingPrefix(at(11, 30)), 'Buenos días');
+    assert.equal(getDayCyclePeriod(at(19, 15)), 'sunset');
+    assert.equal(getGreetingPrefix(at(19, 15)), 'Buenas tardes');
+    assert.equal(getLocalGreeting(at(12, 0), 'Christian'), 'Buenas tardes, Christian');
+    assert.equal(getDayCycleConfig('predawn').label, 'Madrugada');
+    assert.equal(getDayCycleConfig('morning').label, 'Mañana');
+    assert.equal(getDayCycleConfig('day').label, 'Mediodía');
+    assert.equal(getDayCycleConfig('sunset').label, 'Atardecer');
+    assert.equal(getDayCycleConfig('night').label, 'Noche');
   });
 });
 

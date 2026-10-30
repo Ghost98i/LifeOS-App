@@ -1,4 +1,5 @@
 import type { ExpectedIncome, FinancialCommitment, LifeOSState, Transaction } from '../types';
+import { isCommercialFinanceTransaction } from './financeFlows';
 import { identifyMerchant } from './merchantIdentity';
 
 export type MatchConfidence = 'strong' | 'possible' | 'ambiguous' | 'none';
@@ -302,7 +303,10 @@ export function findMatchCandidates(
   if (tx.commitmentId || tx.expectedIncomeId) {
     return result;
   }
-  if (tx.origin === 'adjustment') {
+  if (tx.origin === 'adjustment' || tx.origin === 'resale_purchase' || tx.origin === 'resale_sale') {
+    return result;
+  }
+  if (isCommercialFinanceTransaction(state, tx)) {
     return result;
   }
 

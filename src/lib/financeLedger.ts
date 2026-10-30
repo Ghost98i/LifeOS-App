@@ -5,6 +5,7 @@ import type {
   LifeOSState,
   Transaction,
 } from '../types';
+import { roundMoney } from './storage';
 
 export type LedgerEventKind = 'transaction' | 'transfer' | 'reconciliation';
 
@@ -150,9 +151,7 @@ export function compareLedgerEvents(a: LedgerEventOrderable, b: LedgerEventOrder
   return a.id.localeCompare(b.id);
 }
 
-function roundMoney(value: number): number {
-  return Math.round(value * 100) / 100;
-}
+
 
 function legacyReconciliationAmbiguities(
   accountId: string,
@@ -319,3 +318,17 @@ export function compareFinanceBalancesShadow(state: LifeOSState): MaterializedBa
     state.finance.reconciliations,
   ));
 }
+
+export function reconstructAllAccountBalances(state: LifeOSState): Record<string, AccountBalanceReconstruction> {
+  const result: Record<string, AccountBalanceReconstruction> = {};
+  for (const account of state.finance.accounts || []) {
+    result[account.id] = reconstructAccountBalance(
+      account,
+      state.finance.transactions,
+      state.finance.transfers,
+      state.finance.reconciliations,
+    );
+  }
+  return result;
+}
+

@@ -122,6 +122,13 @@ export function getExerciseMetricKey(exercise: Pick<Exercise, 'id' | 'name'>): s
   return exercise.id ? `id:${exercise.id}` : normalizeExerciseName(exercise.name);
 }
 
+/** Normalized exercise names are authoritative for cross-session personal records across routines and templates. */
+export function getExercisePRKey(exercise: Pick<Exercise, 'id' | 'name'>): string {
+  const normalized = normalizeExerciseName(exercise.name);
+  if (normalized) return normalized;
+  return exercise.id ? `id:${exercise.id}` : '';
+}
+
 function exerciseMatchesTarget(exercise: Exercise, target: ExerciseMetricTarget): boolean {
   if (target.exerciseId) {
     if (exercise.id) return exercise.id === target.exerciseId;
@@ -546,7 +553,7 @@ export function calcDetailedPRs(
 
   for (const session of sortedSessions) {
     for (const ex of session.exercises || []) {
-      const key = getExerciseMetricKey(ex);
+      const key = getExercisePRKey(ex);
       if (!key) continue;
 
       if (!prs[key]) {
@@ -647,12 +654,23 @@ export function detectSessionPRs(
   const newPRs: NewPRRecord[] = [];
   if (!isPerformedGymSession(session)) return newPRs;
 
+  // Agrupar todas las series realizadas por clave de ejercicio métrico para evitar duplicados en la misma sesión
+  const exercisesByKey = new Map<string, { exerciseName: string; sets: GymSet[] }>();
   for (const ex of session.exercises || []) {
-    const key = getExerciseMetricKey(ex);
+    const key = getExercisePRKey(ex);
     if (!key) continue;
-
-    const oldPR = historicalPRs[key] || {};
     const sets = getPerformedExerciseSets(session, ex);
+    if (sets.length === 0) continue;
+    const existing = exercisesByKey.get(key);
+    if (!existing) {
+      exercisesByKey.set(key, { exerciseName: ex.name, sets: [...sets] });
+    } else {
+      existing.sets.push(...sets);
+    }
+  }
+
+  for (const [key, { exerciseName, sets }] of exercisesByKey.entries()) {
+    const oldPR = historicalPRs[key] || {};
 
     let sessionMaxWeight = 0;
     let sessionMaxWeightReps = 0;
@@ -696,7 +714,7 @@ export function detectSessionPRs(
       const prev = oldPR.maxWeight?.value;
       if (prev === undefined || sessionMaxWeight > prev) {
         newPRs.push({
-          exerciseName: ex.name,
+          exerciseName,
           type: 'maxWeight',
           typeLabel: 'Peso Máximo',
           label: `${sessionMaxWeight} kg (× ${sessionMaxWeightReps})`,
@@ -713,7 +731,7 @@ export function detectSessionPRs(
       const prev = oldPR.maxReps?.value;
       if (prev === undefined || sessionMaxReps > prev) {
         newPRs.push({
-          exerciseName: ex.name,
+          exerciseName,
           type: 'maxReps',
           typeLabel: 'Reps Máximas',
           label: `${sessionMaxReps} reps (@ ${sessionMaxRepsWeight} kg)`,
@@ -730,7 +748,7 @@ export function detectSessionPRs(
       const prev = oldPR.maxE1RM?.value;
       if (prev === undefined || sessionMaxE1RM > prev) {
         newPRs.push({
-          exerciseName: ex.name,
+          exerciseName,
           type: 'maxE1RM',
           typeLabel: '1RM Estimado',
           label: `~${sessionMaxE1RM} kg (${sessionMaxE1RMWeight}k × ${sessionMaxE1RMReps})`,
@@ -747,7 +765,7 @@ export function detectSessionPRs(
       const prev = oldPR.maxVolume?.value;
       if (prev === undefined || sessionVolumeTotal > prev) {
         newPRs.push({
-          exerciseName: ex.name,
+          exerciseName,
           type: 'maxVolume',
           typeLabel: 'Volumen Máximo',
           label: `${sessionVolumeTotal.toLocaleString('es-UY')} kg en sesión`,
@@ -795,8 +813,9 @@ export function getExerciseHistory(
 ): ExerciseHistoryDetails {
   const target = metricTarget(targetValue);
   const allPRs = calcDetailedPRs(sessions);
-  const key = target.exerciseId ? `id:${target.exerciseId}` : normalizeExerciseName(target.exerciseName);
-  const prs = allPRs[key] || {};
+  const normKey = normalizeExerciseName(target.exerciseName);
+  const idKey = target.exerciseId ? `id:${target.exerciseId}` : '';
+  const prs = (normKey ? allPRs[normKey] : undefined) || (idKey ? allPRs[idKey] : undefined) || {};
 
   let equipment: ExerciseEquipment | undefined;
   let barWeight: number | undefined;
@@ -957,6 +976,46 @@ export function getGymProgressMetrics(
  * Valida si un rango horario startedAt -> finishedAt es lógicamente válido.
  * Regla: finishedAt no puede ser anterior a startedAt, salvo cruces legítimos de medianoche.
  */
+/**
+ * Parsea un string horario a minutos transcurridos desde las 00:00 del día.
+ * Soporta formato ISO completo, 24 horas (HH:mm) y 12 horas con AM/PM (incluyendo a. m. / p. m. y espacios finos).
+ */
+export function parseLocalMinutesOfDay(val?: string | null): number | null {
+  if (!val || typeof val !== 'string') return null;
+  const clean = val.trim();
+  if (!clean) return null;
+
+  if (clean.includes('T')) {
+    const d = new Date(clean);
+    if (!Number.isNaN(d.getTime())) return d.getHours() * 60 + d.getMinutes();
+  }
+
+  // Normalizar espacios no separables y espacios finos habituales de toLocaleTimeString
+  const normalized = clean.replace(/[\u202F\u00A0\s]+/g, ' ');
+  const isPM = /p\.?\s*m\.?|pm/i.test(normalized);
+  const isAM = /a\.?\s*m\.?|am/i.test(normalized);
+  const match = normalized.match(/(\d{1,2}):(\d{2})/);
+
+  if (match) {
+    let hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (minutes < 0 || minutes >= 60) return null;
+
+    if (isPM && hours < 12) {
+      hours += 12;
+    } else if (isAM && hours === 12) {
+      hours = 0;
+    }
+    return hours * 60 + minutes;
+  }
+
+  return null;
+}
+
+/**
+ * Valida si un rango horario startedAt -> finishedAt es lógicamente válido.
+ * Regla: finishedAt no puede ser anterior a startedAt, salvo cruces legítimos de medianoche.
+ */
 export function isLogicalTimeRangeValid(
   startedAt?: string | null,
   finishedAt?: string | null
@@ -971,17 +1030,8 @@ export function isLogicalTimeRangeValid(
     }
   }
 
-  const toMinutes = (val: string): number | null => {
-    if (val.includes('T')) {
-      const d = new Date(val);
-      if (!Number.isNaN(d.getTime())) return d.getHours() * 60 + d.getMinutes();
-    }
-    const m = val.match(/(\d{1,2}):(\d{2})/);
-    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
-  };
-
-  const startMin = toMinutes(startedAt);
-  const finishMin = toMinutes(finishedAt);
+  const startMin = parseLocalMinutesOfDay(startedAt);
+  const finishMin = parseLocalMinutesOfDay(finishedAt);
 
   if (startMin !== null && finishMin !== null) {
     if (finishMin < startMin) {
@@ -995,18 +1045,17 @@ export function isLogicalTimeRangeValid(
 
 /**
  * Calcula la duración de una sesión a partir de startedAt y finishedAt.
- * Soporta formatos ISO o formato HH:MM, incluyendo cruce de medianoche y combinaciones mixtas.
+ * Soporta formatos ISO o formato HH:MM (24h y 12h con AM/PM / a. m. / p. m.),
+ * cruces legítimos de medianoche, y fallback automático a las marcas temporales
+ * reales de las series completadas si los campos de sesión faltan o no son válidos.
  */
 export function calculateSessionDuration(
   startedAt?: string | null,
-  finishedAt?: string | null
+  finishedAt?: string | null,
+  session?: GymSession | null
 ): { minutes: number; formatted: string } {
-  if (!startedAt || !finishedAt) {
-    return { minutes: 0, formatted: '0 min' };
-  }
-
-  // Si ambos son ISO completos, la diferencia directa en ms es la más precisa
-  if (startedAt.includes('T') && finishedAt.includes('T')) {
+  // 1. Si ambos son ISO completos, la diferencia directa en ms es la más precisa
+  if (startedAt && finishedAt && startedAt.includes('T') && finishedAt.includes('T')) {
     const startMs = new Date(startedAt).getTime();
     const finishMs = new Date(finishedAt).getTime();
     if (Number.isFinite(startMs) && Number.isFinite(finishMs)) {
@@ -1018,34 +1067,45 @@ export function calculateSessionDuration(
     }
   }
 
-  // Convertir cualquier formato a minutos del día en hora local
-  const toLocalMinutesOfDay = (val: string): number | null => {
-    if (val.includes('T')) {
-      const d = new Date(val);
-      if (!Number.isNaN(d.getTime())) {
-        return d.getHours() * 60 + d.getMinutes();
+  // 2. Parser robusto de minutos del día (24h y 12h con a. m. / p. m.)
+  if (startedAt && finishedAt) {
+    const startMin = parseLocalMinutesOfDay(startedAt);
+    const finishMin = parseLocalMinutesOfDay(finishedAt);
+
+    if (startMin != null && finishMin != null) {
+      let diff = finishMin - startMin;
+      if (diff < 0) {
+        if (startMin >= 18 * 60 && finishMin <= 6 * 60) {
+          diff += 24 * 60; // Cruce de medianoche
+        } else {
+          return { minutes: 0, formatted: '0 min' };
+        }
+      }
+      return formatMinutes(diff);
+    }
+  }
+
+  // 3. Fallback inteligente: si faltan los horarios de cabecera pero la sesión tiene series
+  // con completedAt registrados, computar la duración real a partir de sus timestamps
+  if (session && Array.isArray(session.exercises)) {
+    const timestamps: number[] = [];
+    for (const ex of session.exercises) {
+      for (const set of ex.sets || []) {
+        if (set.completed && set.completedAt) {
+          const t = new Date(set.completedAt).getTime();
+          if (Number.isFinite(t)) timestamps.push(t);
+        }
       }
     }
-    const match = val.match(/(\d{1,2}):(\d{2})/);
-    if (match) {
-      return Number(match[1]) * 60 + Number(match[2]);
-    }
-    return null;
-  };
-
-  const startMin = toLocalMinutesOfDay(startedAt);
-  const finishMin = toLocalMinutesOfDay(finishedAt);
-
-  if (startMin != null && finishMin != null) {
-    let diff = finishMin - startMin;
-    if (diff < 0) {
-      if (startMin >= 18 * 60 && finishMin <= 6 * 60) {
-        diff += 24 * 60; // Cruce de medianoche
-      } else {
-        return { minutes: 0, formatted: '0 min' };
+    if (timestamps.length >= 2) {
+      timestamps.sort((a, b) => a - b);
+      const first = timestamps[0];
+      const last = timestamps[timestamps.length - 1];
+      const diffMin = Math.round((last - first) / 60000);
+      if (diffMin > 0) {
+        return formatMinutes(diffMin);
       }
     }
-    return formatMinutes(diff);
   }
 
   return { minutes: 0, formatted: '0 min' };
@@ -1061,4 +1121,10 @@ function formatMinutes(mins: number): { minutes: number; formatted: string } {
     minutes: mins,
     formatted: m > 0 ? `${h} h ${String(m).padStart(2, '0')} min` : `${h} h`,
   };
+}
+
+export function nowTimeHHmm(date = new Date()): string {
+  const h = String(date.getHours()).padStart(2, '0');
+  const m = String(date.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
 }

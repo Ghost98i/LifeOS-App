@@ -1,33 +1,53 @@
-import type { AppIconName } from '../components/AppIcon';
 import { isRoutineIconName, type Exercise, type RoutineAppearance, type RoutineIconName } from '../types';
+import {
+  GYM_ROUTINE_ICON_OPTIONS,
+  resolveRoutineIconAsset,
+  type GymIconName,
+} from './gymIconRegistry';
 import { inferMuscleGroup } from './gymMigration';
 
 export { isRoutineIconName };
 
 export interface RoutineIdentity {
   label: string;
-  icon: AppIconName;
+  icon: GymIconName;
   surface: string;
   accent: string;
   isCustomIcon: boolean;
+  persistedIcon?: RoutineIconName;
 }
 
-export const ROUTINE_ICON_OPTIONS: Array<{ name: RoutineIconName; label: string }> = [
-  { name: 'dumbbell', label: 'Mancuerna' },
-  { name: 'zap', label: 'Fuerza' },
-  { name: 'flame', label: 'Intensidad' },
-  { name: 'activity', label: 'Cardio' },
-  { name: 'repeat', label: 'Circuito' },
-  { name: 'sparkles', label: 'Movilidad' },
-  { name: 'target', label: 'Foco' },
-  { name: 'shield', label: 'Core' },
-  { name: 'trophy', label: 'Rendimiento' },
-  { name: 'scale', label: 'Carga' },
-];
+export const ROUTINE_ICON_OPTIONS = GYM_ROUTINE_ICON_OPTIONS;
 
-export const ROUTINE_ICON_LABELS: Record<string, string> = Object.fromEntries(
-  ROUTINE_ICON_OPTIONS.map((opt) => [opt.name, opt.label])
-);
+const LEGACY_ROUTINE_ICON_LABELS: Record<string, string> = {
+  dumbbell: 'Mancuerna (anterior)',
+  zap: 'Fuerza (anterior)',
+  flame: 'Intensidad (anterior)',
+  activity: 'Cardio (anterior)',
+  repeat: 'Circuito (anterior)',
+  sparkles: 'Movilidad (anterior)',
+  target: 'Foco (anterior)',
+  shield: 'Core (anterior)',
+  trophy: 'Rendimiento (anterior)',
+  scale: 'Carga (anterior)',
+};
+
+export const ROUTINE_ICON_LABELS: Record<string, string> = {
+  ...LEGACY_ROUTINE_ICON_LABELS,
+  ...Object.fromEntries(ROUTINE_ICON_OPTIONS.map((option) => [option.name, option.label])),
+};
+
+function identity(
+  label: string,
+  icon: GymIconName
+): Omit<RoutineIdentity, 'isCustomIcon'> {
+  return {
+    label,
+    icon,
+    surface: 'from-indigo-500/16 via-violet-500/7 to-transparent',
+    accent: 'text-indigo-600 dark:text-indigo-300',
+  };
+}
 
 export function inferAutomaticRoutineIdentity(
   exercises: Exercise[] = [],
@@ -38,56 +58,38 @@ export function inferAutomaticRoutineIdentity(
     result[group] = (result[group] || 0) + 1;
     return result;
   }, {});
-  const nameIdentity = /pecho/i.test(routineName)
-    ? 'Pecho'
-    : /espalda|dorsal/i.test(routineName)
-      ? 'Espalda'
-      : /pierna|cuádriceps|isquio|glúteo|pantorrilla/i.test(routineName)
-        ? 'Piernas'
-        : /core|abdomen/i.test(routineName)
-          ? 'Core'
-          : null;
+  const nameIdentity = /descanso|recuperacion/i.test(routineName)
+    ? 'Descanso'
+    : /cardio|correr|bicicleta/i.test(routineName)
+      ? 'Cardio'
+      : /pecho/i.test(routineName)
+        ? 'Pecho'
+        : /espalda|dorsal/i.test(routineName)
+          ? 'Espalda'
+          : /pierna|cuádriceps|isquio|glúteo|pantorrilla/i.test(routineName)
+            ? 'Piernas'
+            : /hombro|deltoide/i.test(routineName)
+              ? 'Hombros'
+              : /brazo|bíceps|tríceps/i.test(routineName)
+                ? 'Brazos'
+                : /core|abdomen/i.test(routineName)
+                  ? 'Core'
+                  : null;
   const dominant = nameIdentity || Object.entries(groups).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Entrenamiento';
-  const normalized = dominant.toLocaleLowerCase('es-UY');
+  const normalized = dominant
+    .toLocaleLowerCase('es-UY')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 
-  if (/pierna|cuádriceps|isquio|glúteo|pantorrilla/.test(normalized)) {
-    return {
-      label: dominant,
-      icon: 'activity',
-      surface: 'from-indigo-500/20 via-blue-500/10 to-transparent',
-      accent: 'text-indigo-600 dark:text-indigo-300',
-    };
-  }
-  if (/espalda|dorsal/.test(normalized)) {
-    return {
-      label: dominant,
-      icon: 'repeat',
-      surface: 'from-sky-500/20 via-blue-500/10 to-transparent',
-      accent: 'text-sky-700 dark:text-sky-300',
-    };
-  }
-  if (/pecho/.test(normalized)) {
-    return {
-      label: dominant,
-      icon: 'target',
-      surface: 'from-blue-500/22 via-indigo-500/10 to-transparent',
-      accent: 'text-blue-700 dark:text-blue-300',
-    };
-  }
-  if (/core|abdomen/.test(normalized)) {
-    return {
-      label: dominant,
-      icon: 'shield',
-      surface: 'from-slate-500/20 via-blue-500/8 to-transparent',
-      accent: 'text-slate-700 dark:text-slate-300',
-    };
-  }
-  return {
-    label: dominant,
-    icon: 'dumbbell',
-    surface: 'from-violet-500/18 via-blue-500/8 to-transparent',
-    accent: 'text-violet-700 dark:text-violet-300',
-  };
+  if (/descanso|recuperacion/.test(normalized)) return identity('Descanso', 'gym-rest');
+  if (/cardio/.test(normalized)) return identity('Cardio', 'gym-bike');
+  if (/pierna|cuádriceps|isquio|glúteo|pantorrilla/.test(normalized)) return identity(dominant, 'gym-leg-press');
+  if (/espalda|dorsal/.test(normalized)) return identity(dominant, 'gym-lat-pulldown');
+  if (/pecho/.test(normalized)) return identity(dominant, 'gym-bench-press');
+  if (/hombro|deltoide/.test(normalized)) return identity(dominant, 'gym-shoulder-press');
+  if (/brazo|bíceps|tríceps/.test(normalized)) return identity(dominant, 'gym-dumbbell');
+  if (/core|abdomen/.test(normalized)) return identity(dominant, 'gym-yoga-mat');
+  return identity(dominant, 'gym-dumbbell');
 }
 
 export function getRoutineIdentity(
@@ -95,24 +97,25 @@ export function getRoutineIdentity(
   routineName = '',
   appearance?: RoutineAppearance | null
 ): RoutineIdentity {
-  const autoIdentity = inferAutomaticRoutineIdentity(exercises, routineName);
+  const automatic = inferAutomaticRoutineIdentity(exercises, routineName);
   const iconOverride = appearance?.icon;
   if (iconOverride && isRoutineIconName(iconOverride)) {
     return {
-      ...autoIdentity,
-      icon: iconOverride,
+      ...automatic,
+      icon: resolveRoutineIconAsset(iconOverride),
       isCustomIcon: true,
+      persistedIcon: iconOverride,
     };
   }
   return {
-    ...autoIdentity,
+    ...automatic,
     isCustomIcon: false,
   };
 }
 
 export function resolveRoutineIcon(
   routine: { exercises?: Exercise[]; name?: string; appearance?: RoutineAppearance | null }
-): AppIconName {
+): GymIconName {
   return getRoutineIdentity(routine.exercises || [], routine.name || '', routine.appearance).icon;
 }
 
@@ -139,10 +142,9 @@ export function shouldShowRoutineCategory(routineName: string, categoryLabel: st
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .split(/[^a-z0-9]+/)
-    .map((t) => (t.endsWith('s') ? t.slice(0, -1) : t))
+    .map((token) => (token.endsWith('s') ? token.slice(0, -1) : token))
     .filter(Boolean);
 
   if (tokens.includes(normCategory)) return false;
-
   return true;
 }

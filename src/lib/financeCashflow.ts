@@ -7,7 +7,8 @@ import {
 } from '../types';
 import { getCommitmentOccurrences } from './financialCommitments';
 import { getExpectedIncomeOccurrences } from './calculations';
-import { todayISO } from './storage';
+import { deriveAgreementSchedule } from './financeAgreements';
+import { todayISO, roundMoney } from './storage';
 
 export function parseCivilDate(iso: string): { year: number; month: number; day: number } {
   const parts = iso.split('-');
@@ -51,9 +52,7 @@ export function getCivilWindowBounds(
   return { fromIso, horizonIso: addDaysCivilIso(fromIso, 30) };
 }
 
-function roundMoney(val: number): number {
-  return Math.round(val * 100) / 100;
-}
+
 
 /**
  * Derives current real balance exclusively from account balances (ledger-backed).
@@ -149,7 +148,11 @@ export function getCommittedEventsForWindow(
 
   // 3. Debts
   const debts = state.finance?.debts || [];
+  const agreements = state.finance?.agreements || [];
+  const linkedDebtIds = new Set(agreements.map((a) => a.linkedLegacyDebtId).filter(Boolean));
+
   for (const debt of debts) {
+    if (linkedDebtIds.has(debt.id)) continue;
     const payment = Number(debt.monthlyPayment || 0);
     if (payment <= 0) continue;
     const cur = ((debt as any).currency || 'UYU').toUpperCase();
@@ -177,6 +180,40 @@ export function getCommittedEventsForWindow(
           type: 'committed_expense',
           sourceId: debt.id,
           kind: 'debt',
+        });
+      }
+    }
+  }
+
+  // 4. Financing Agreements (Structured Installment Plans)
+  for (const agr of agreements) {
+    if (agr.status === 'cancelled' || !agr.schedule) continue;
+    const breakdown = deriveAgreementSchedule(agr, state.finance?.transactions || [], fromIso);
+    if (!breakdown || breakdown.remainingBalance <= 0) continue;
+    const cur = (agr.currency || 'UYU').toUpperCase();
+
+    for (const inst of breakdown.installments) {
+      if (inst.status === 'paid' || inst.remainingDue <= 0.005) continue;
+
+      const inWindow = inst.dueDate >= fromIso && inst.dueDate <= horizonIso;
+      const isOverdue = inst.isOverdue || inst.dueDate < fromIso;
+
+      if (inWindow || isOverdue) {
+        events.push({
+          id: `agreement-${agr.id}-cuota-${inst.installmentNumber}`,
+          date: inst.dueDate,
+          label: `${agr.title} (Cuota ${inst.installmentNumber}/${inst.totalInstallments})`,
+          amount: inst.remainingDue,
+          currency: cur,
+          type: 'committed_expense',
+          category: 'Préstamos y deudas',
+          sourceId: agr.id,
+          isOverdue,
+          kind: 'debt',
+          installmentNumber: inst.installmentNumber,
+          totalInstallments: inst.totalInstallments,
+          agreementId: agr.id,
+          isFinancing: true,
         });
       }
     }

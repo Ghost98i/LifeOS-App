@@ -14,7 +14,7 @@ import { AppIcon } from './AppIcon';
 import { isModuleEnabled } from '../lib/moduleVisibility';
 import { DraftConfirmationTray } from './DraftConfirmationTray';
 import { PrivacyAmount } from './PrivacyAmount';
-import { fmtMoney } from '../lib/storage';
+import { fmtMoney, formatMoney } from '../lib/storage';
 
 interface BentoCommandBarProps {
   state: LifeOSState;
@@ -23,6 +23,7 @@ interface BentoCommandBarProps {
   onOpenSearch?: () => void;
   onOpenCapture?: () => void;
   onQuickAction?: (view: ViewType, focusId: string, txType?: 'gasto' | 'ingreso') => void;
+  compactBar?: boolean;
 }
 
 export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
@@ -32,6 +33,7 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
   onOpenSearch,
   onOpenCapture,
   onQuickAction,
+  compactBar = false,
 }) => {
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -180,20 +182,22 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
 
   return (
     <div className="w-full flex flex-col gap-2.5">
-      <div className={`w-full rounded-2xl backdrop-blur-md transition-all duration-200 ${
-        isFocused || input.trim()
-          ? 'border border-indigo-500/45 bg-[var(--card)] p-3 shadow-[0_4px_18px_-12px_rgba(79,70,229,.45)] sm:px-4'
-          : 'border border-[var(--border)] bg-[var(--card)]/85 p-2.5 shadow-[var(--card-shadow)] hover:border-[var(--border-hover)] sm:px-4'
+      <div className={`today-command-bar w-full rounded-2xl backdrop-blur-md transition-all duration-200 ${
+        compactBar
+          ? isFocused || input.trim()
+            ? 'border border-blue-500/45 bg-[var(--card)] px-4 py-2.5 shadow-[0_10px_28px_-18px_rgba(37,99,235,.45)]'
+            : 'border border-[var(--border)] bg-[var(--card)]/90 px-4 py-2.5 shadow-[var(--card-shadow)] hover:border-[var(--border-hover)]'
+          : isFocused || input.trim()
+          ? 'border border-blue-500/45 bg-[var(--card)] p-3 shadow-[0_10px_28px_-18px_rgba(37,99,235,.45)] sm:px-4'
+          : 'border border-[var(--border)] bg-[var(--card)]/88 p-3 shadow-[var(--card-shadow)] hover:border-[var(--border-hover)] sm:px-4'
       }`}>
         <form onSubmit={handleSubmit} className="flex flex-col gap-2">
           <div className="flex items-center gap-2.5">
-            {/* Leading Icon / Custom Signature Capture Spark */}
-            <div className={`relative flex items-center justify-center rounded-xl bg-gradient-to-tr from-indigo-500/15 via-blue-500/10 to-transparent text-indigo-600 dark:text-indigo-400 shrink-0 transition-all ${
-              isFocused || input.trim() ? 'h-8 w-8 ring-2 ring-indigo-500/30 shadow-2xs' : 'h-7 w-7'
+            {/* Quick Capture / Icons8 Touchpad */}
+            <div className={`relative flex items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0 h-8 w-8 transition-all ${
+              isFocused || input.trim() ? 'ring-2 ring-blue-500/30 shadow-2xs' : ''
             }`}>
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" className="transition-transform duration-200" aria-hidden="true">
-                <path d="M8 1.5L9.6 6.4L14.5 8L9.6 9.6L8 14.5L6.4 9.6L1.5 8L6.4 6.4L8 1.5Z" fill="currentColor" fillOpacity={isFocused ? '1' : '0.85'} />
-              </svg>
+              <AppIcon name="touchpad" className="h-[15px] w-[15px] text-[#4F46E5] dark:text-indigo-400 transition-transform duration-200" />
             </div>
 
             {/* Central Input */}
@@ -204,33 +208,31 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
               onKeyDown={handleKeyDown}
-              placeholder={isFocused ? 'Ej. 1200 nafta, repasar física mañana, idea nueva...' : '✦ Capturá algo: gasto, tarea, examen, nota rápida...'}
-              className={`flex-1 min-w-0 bg-transparent font-medium text-[var(--text)] placeholder:text-[var(--text-faint)] outline-none transition-all ${
-                isFocused || input.trim() ? 'text-sm sm:text-base' : 'text-xs sm:text-sm'
-              }`}
+              placeholder={isFocused ? 'Ej. gasto de nafta, repasar física mañana, idea nueva…' : 'Capturá un gasto, tarea, examen o nota…'}
+              className="flex-1 min-w-0 bg-transparent font-medium text-[var(--text)] placeholder:text-[var(--text-faint)] outline-none text-sm sm:text-base transition-all"
             />
 
             {/* Desktop Quick Shortcuts (Search & Universal Modal) */}
-            <div className="hidden sm:flex items-center gap-1.5 shrink-0">
+            <div className={`${compactBar ? 'hidden' : 'hidden sm:flex'} items-center gap-1.5 shrink-0`}>
               {onOpenSearch && (
                 <button
                   type="button"
                   onClick={onOpenSearch}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] text-[10px] font-mono font-bold text-[var(--text-faint)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition cursor-pointer"
-                  title="Abrir paleta de comandos (⌘K)"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] text-[12px] font-mono font-bold text-[var(--text-faint)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition cursor-pointer"
+                  title={typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/i.test(navigator.platform || navigator.userAgent) ? 'Abrir paleta de comandos (⌘K)' : 'Abrir paleta de comandos (Ctrl+K)'}
                 >
-                  <span>⌘K</span>
+                  <span>{typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/i.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K'}</span>
                 </button>
               )}
               {onOpenCapture && (
                 <button
                   type="button"
                   onClick={onOpenCapture}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-indigo-500/25 bg-indigo-500/10 text-[10px] font-bold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/15 transition cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-blue-500/25 bg-blue-500/10 text-[12px] font-bold text-blue-700 dark:text-blue-300 hover:bg-blue-500/15 transition cursor-pointer"
                   title="Abrir ventana de captura universal (C)"
                 >
-                  <AppIcon name="plus" className="h-3 w-3 text-indigo-500" />
-                  <kbd className="font-mono text-[9px] text-indigo-600 dark:text-indigo-400">C</kbd>
+                  <AppIcon name="touchpad" className="h-3 w-3 text-[var(--blue)]" />
+                  <kbd className="font-mono text-[11px] text-blue-600 dark:text-blue-400">C</kbd>
                 </button>
               )}
             </div>
@@ -239,13 +241,11 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
             <button
               type="submit"
               disabled={!input.trim()}
-              className={`flex items-center justify-center rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 hover:brightness-110 active:scale-95 disabled:opacity-25 disabled:pointer-events-none text-white transition-all cursor-pointer shrink-0 shadow-2xs border border-white/10 ${
-                isFocused || input.trim() ? 'h-8 w-8' : 'h-7 w-7'
-              }`}
+              className="flex items-center justify-center rounded-full bg-[var(--blue)] hover:bg-[var(--blue-hover)] active:scale-95 disabled:opacity-25 disabled:pointer-events-none text-white transition-all cursor-pointer shrink-0 shadow-2xs border border-white/10 h-8 w-8"
               aria-label="Capturar"
               title="Capturar y revisar borrador (Enter)"
             >
-              <AppIcon name="arrowUp" className={`${isFocused || input.trim() ? 'h-4 w-4' : 'h-3.5 w-3.5'} text-white`} />
+              <AppIcon name="arrowUp" className="h-4 w-4 text-white" />
             </button>
           </div>
 
@@ -256,7 +256,7 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
                 <LiveDraftPreview draft={liveDrafts[0]} />
               ) : (
                 <div className="flex items-center gap-1.5">
-                  <AppIcon name="sparkles" className="h-3.5 w-3.5 text-indigo-500" />
+                  <AppIcon name="sparkles" className="h-3.5 w-3.5 text-blue-500" />
                   <span>
                     Se detectaron <strong className="text-[var(--text)]">{liveDrafts.length} intenciones</strong> independientes. Presioná <strong className="text-[var(--text)]">Enter</strong> para generar borradores.
                   </span>
@@ -266,7 +266,7 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
           )}
 
           {/* Suggested Shortcut Chips (Recent actions) */}
-          {(isModuleEnabled(state, 'finanzas') || isModuleEnabled(state, 'gimnasio') || isModuleEnabled(state, 'notas')) && (
+          {!compactBar && (isModuleEnabled(state, 'finanzas') || isModuleEnabled(state, 'gimnasio') || isModuleEnabled(state, 'notas')) && (
             <div className="flex items-center justify-between gap-2 pt-1 border-t border-[var(--border)]/60 flex-wrap">
               <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] hidden sm:inline mr-1">
@@ -326,7 +326,7 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
                 )}
               </div>
 
-              <span className="text-[10px] text-[var(--text-faint)] hidden md:inline font-mono">
+              <span className="text-[10px] text-[var(--text-faint)] hidden md:inline">
                 Presioná Enter para capturar
               </span>
             </div>
@@ -359,14 +359,17 @@ const LiveDraftPreview: React.FC<{ draft: CaptureDraft }> = ({ draft }) => {
   if (draft.kind === 'finance') {
     return (
       <div className="flex items-center gap-1.5 flex-wrap">
-        <AppIcon name="wallet" className="h-3.5 w-3.5 text-emerald-500" />
+        <AppIcon
+          name="wallet"
+          className={`h-3.5 w-3.5 ${draft.type === 'ingreso' ? 'text-emerald-500' : 'text-rose-500'}`}
+        />
         <span>
           Detectado como <strong className="text-[var(--text)]">{draft.type === 'ingreso' ? 'Ingreso' : 'Gasto'}</strong>
           {draft.amount !== undefined && (
             <>
               {' '}de{' '}
               <strong className="text-[var(--text)]">
-                <PrivacyAmount>{fmtMoney(draft.amount)}</PrivacyAmount>
+                <PrivacyAmount>{formatMoney(draft.amount, draft.currency || 'UYU')}</PrivacyAmount>
               </strong>
             </>
           )}

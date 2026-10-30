@@ -202,6 +202,13 @@ function triggerClick(el: any) {
   }
 }
 
+function triggerSubmit(el: any) {
+  const props = getReactProps(el);
+  if (typeof props?.onSubmit === 'function') {
+    props.onSubmit({ preventDefault() {}, stopPropagation() {} });
+  }
+}
+
 function getNodeText(node: any): string {
   if (!node) return '';
   if (node.nodeType === 3) return node.data || node.nodeValue || node.textContent || '';
@@ -398,4 +405,146 @@ test('LifeOS — Fase 4: MobileQuickCapture mounted persistence failure: retains
   // Verify: Exactly 1 transaction registered now, balance decreased exactly once
   assert.equal(appState.finance.transactions.length, initialTxCount + 1, 'Transaction must be registered once on retry');
   assert.equal(appState.finance.accounts[0].balance, initialBalance - 1200, 'Balance must decrease exactly once');
+});
+
+test('QC 2.1: MobileQuickCapture Gasto tab routes "pagar 9300 a Jorge" as task and does NOT deduct balance', async () => {
+  const mockDoc = setupMockDom();
+  const container = mockDoc.createElement('div');
+  mockDoc.body.appendChild(container);
+  const root = createRoot(container);
+
+  const appState = defaultState();
+  const initialBalance = appState.finance.accounts[0].balance;
+  const initialTxCount = appState.finance.transactions.length;
+  const initialTaskCount = appState.todayExtras.length;
+
+  await act(async () => {
+    root.render(
+      React.createElement(MobileQuickCapture, {
+        open: true,
+        onClose: () => {},
+        state: appState,
+        initialKind: 'gasto',
+        onUpdateState: (updater) => {
+          updater(appState);
+        },
+      })
+    );
+  });
+
+  // Find fast finance input
+  const inputs = findElements(container, (el) => el.tagName === 'INPUT');
+  const financeInput = inputs.find((i) => (i.attributes?.placeholder || '').includes('500'));
+  assert.ok(financeInput, 'Finance quick input must be present');
+
+  await act(async () => {
+    triggerChange(financeInput, 'pagar 9300 a Jorge');
+  });
+
+  // Submit the form
+  const form = findElements(container, (el) => el.tagName === 'FORM')[0];
+  assert.ok(form, 'Form must be present');
+
+  await act(async () => {
+    triggerSubmit(form);
+  });
+
+  // Assertions:
+  // 1. Balance must NOT be deducted
+  assert.equal(appState.finance.accounts[0].balance, initialBalance, 'El saldo de la cuenta no debe modificarse');
+  // 2. No transaction created
+  assert.equal(appState.finance.transactions.length, initialTxCount, 'No debe crear una transacción');
+  // 3. Task created with text
+  assert.equal(appState.todayExtras.length, initialTaskCount + 1, 'Debe registrar la obligación como tarea');
+  const task = appState.todayExtras[appState.todayExtras.length - 1];
+  assert.ok(task.text.includes('9300'));
+});
+
+test('QC 2.1: MobileQuickCapture Gasto tab saves standard expense directly without duplicates', async () => {
+  const mockDoc = setupMockDom();
+  const container = mockDoc.createElement('div');
+  mockDoc.body.appendChild(container);
+  const root = createRoot(container);
+
+  const appState = defaultState();
+  const initialTxCount = appState.finance.transactions.length;
+
+  await act(async () => {
+    root.render(
+      React.createElement(MobileQuickCapture, {
+        open: true,
+        onClose: () => {},
+        state: appState,
+        initialKind: 'gasto',
+        onUpdateState: (updater) => {
+          updater(appState);
+        },
+      })
+    );
+  });
+
+  const inputs = findElements(container, (el) => el.tagName === 'INPUT');
+  const financeInput = inputs.find((i) => (i.attributes?.placeholder || '').includes('500'));
+  assert.ok(financeInput);
+
+  await act(async () => {
+    triggerChange(financeInput, '800 nafta');
+  });
+
+  const form = findElements(container, (el) => el.tagName === 'FORM')[0];
+  await act(async () => {
+    triggerSubmit(form);
+  });
+
+  // Verify: Exactly 1 transaction registered, balance deducted by 800
+  assert.equal(appState.finance.transactions.length, initialTxCount + 1);
+  const tx = appState.finance.transactions[appState.finance.transactions.length - 1];
+  assert.equal(tx.amount, 800);
+  const targetAcc = appState.finance.accounts.find((a) => a.id === tx.accountId);
+  assert.equal(targetAcc?.balance, -800);
+});
+
+test('QC 2.1: Stream Guard protects parsed finance preview and manual amount input', async () => {
+  const mockDoc = setupMockDom();
+  const container = mockDoc.createElement('div');
+  mockDoc.body.appendChild(container);
+  const root = createRoot(container);
+
+  const appState = defaultState();
+  appState.settings.privacyMode = true;
+
+  await act(async () => {
+    root.render(
+      React.createElement(MobileQuickCapture, {
+        open: true,
+        onClose: () => {},
+        state: appState,
+        initialKind: 'gasto',
+        onUpdateState: () => {},
+      })
+    );
+  });
+
+  // 1. Fast parser preview wrapped in PrivacyAmount (.privacy-amount class)
+  const privacyAmounts = findElements(container, (el) => {
+    const cls = el.attributes?.class || el.className || '';
+    return String(cls).includes('privacy-amount');
+  });
+  assert.ok(privacyAmounts.length > 0, 'La previsualización del gasto debe estar protegida por PrivacyAmount');
+
+  // 2. Switch to manual mode and verify .privacy-sensitive on input
+  const buttons = findElements(container, (el) => el.tagName === 'BUTTON');
+  const manualModeBtn = buttons.find((b) => getNodeText(b).includes('manual'));
+  if (manualModeBtn) {
+    await act(async () => {
+      triggerClick(manualModeBtn);
+    });
+
+    const inputs = findElements(container, (el) => el.tagName === 'INPUT');
+    const manualAmtInput = inputs.find((i) => {
+      const cls = i.attributes?.class || i.className || '';
+      return String(cls).includes('privacy-sensitive');
+    });
+    assert.ok(manualAmtInput, 'El campo manual de monto debe tener la clase privacy-sensitive');
+  }
 });

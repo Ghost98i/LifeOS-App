@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ViewType, LifeOSState } from '../types';
 import { isSoundEnabled, setSoundEnabled, playSound } from '../lib/audio';
 import type { CloudSyncStatus, CloudUser } from '../lib/cloudSync';
@@ -29,7 +29,7 @@ export const QUICK_ACTIONS: { label: string; view: ViewType; focusId: string; tx
   { label: '+ Peso', view: 'gimnasio', focusId: 'qa-focus-peso' },
   { label: '+ Estudio', view: 'estudios', focusId: 'qa-focus-estudio' },
   { label: '+ Postulación', view: 'trabajo', focusId: 'qa-focus-trabajo' },
-  { label: '+ Reventa', view: 'reventa', focusId: 'qa-focus-reventa' },
+  { label: '+ Mi negocio', view: 'reventa', focusId: 'qa-focus-reventa' },
 ];
 
 export const Topbar: React.FC<TopbarProps> = ({
@@ -49,24 +49,41 @@ export const Topbar: React.FC<TopbarProps> = ({
   onCloudSignOut,
 }) => {
   const [soundOn, setSoundOn] = useState(() => isSoundEnabled());
+  useEffect(() => {
+    const syncSound = () => setSoundOn(isSoundEnabled());
+    window.addEventListener('storage', syncSound);
+    window.addEventListener('lifeos-sound-preference', syncSound);
+    return () => {
+      window.removeEventListener('storage', syncSound);
+      window.removeEventListener('lifeos-sound-preference', syncSound);
+    };
+  }, []);
   const [showCloudMenu, setShowCloudMenu] = useState(false);
   const [showQuickMenu, setShowQuickMenu] = useState(false);
   const actions = QUICK_ACTIONS.filter((q) => isModuleEnabled(state, q.view));
   const currentMeta: Record<ViewType, { icon: AppIconName; label: string }> = {
     dashboard: { icon: 'home', label: 'Hoy' }, agenda: { icon: 'calendar', label: 'Agenda' }, calendario: { icon: 'calendarDays', label: 'Calendario' },
-    trabajo: { icon: 'briefcase', label: 'Trabajo' }, reventa: { icon: 'repeat', label: 'Reventa' }, finanzas: { icon: 'wallet', label: 'Finanzas' },
-    gimnasio: { icon: 'dumbbell', label: 'Gimnasio' }, estudios: { icon: 'book', label: 'Estudios' }, notas: { icon: 'note', label: 'Notas' },
-    ia: { icon: 'sparkles', label: 'IA' }, config: { icon: 'settings', label: 'Configuración' }, checkout: { icon: 'moon', label: 'Cerrar día' },
+    trabajo: { icon: 'briefcase', label: 'Trabajo' }, reventa: { icon: 'store', label: 'Mi negocio' }, finanzas: { icon: 'wallet', label: 'Finanzas' },
+    gimnasio: { icon: 'dumbbell', label: 'Gimnasio' }, estudios: { icon: 'graduation', label: 'Estudios' }, notas: { icon: 'note', label: 'Notas' },
+    ia: { icon: 'ai', label: 'IA' }, config: { icon: 'settings', label: 'Configuración' }, checkout: { icon: 'moon', label: 'Cerrar día' },
   };
 
   const toggleSound = () => {
-    const next = !soundOn;
+    const next = !isSoundEnabled();
     setSoundOn(next);
     setSoundEnabled(next);
     if (next) playSound('click');
   };
 
   const syncLed = (() => {
+    if (syncStatus === 'locked') return {
+      dotClass: 'bg-amber-500', label: 'Sincronización bloqueada',
+      textColor: 'text-amber-700 dark:text-amber-300 border-amber-500/40 bg-amber-500/10',
+    };
+    if (syncStatus === 'offline') return {
+      dotClass: 'bg-amber-500', label: 'Sin conexión',
+      textColor: 'text-amber-700 dark:text-amber-300 border-amber-500/40 bg-amber-500/10',
+    };
     if (syncStatus === 'synced') {
       return {
         dotClass: 'bg-emerald-500 dark:bg-emerald-400',
@@ -110,10 +127,10 @@ export const Topbar: React.FC<TopbarProps> = ({
   })();
 
   return (
-    <header className="sticky top-0 z-30 flex min-h-16 items-center gap-3 border-b border-[var(--border)] bg-[var(--topbar)] px-4 py-3 shadow-[var(--chrome-shadow)] backdrop-blur-xl lg:px-7">
+    <header className="sticky top-0 z-30 flex min-h-16 items-center gap-2 sm:gap-3 border-b border-[var(--border)] bg-[var(--topbar)] px-4 py-3 shadow-[var(--chrome-shadow)] backdrop-blur-xl lg:px-7">
       <button
         onClick={onOpenMobileNav}
-        className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--text)] lg:hidden cursor-pointer"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--text)] lg:hidden cursor-pointer"
         aria-label="Abrir menú"
       >
         <AppIcon name="menu" className="h-5 w-5" />
@@ -130,25 +147,24 @@ export const Topbar: React.FC<TopbarProps> = ({
           <AppIcon name="search" className="h-4 w-4 shrink-0 text-[var(--text-faint)] group-hover:text-[var(--text)] transition-colors" />
           <span className="truncate">Buscar o comandos…</span>
         </span>
-        <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded-md border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--text-faint)] shadow-2xs">
-          ⌘K
+        <kbd className="hidden shrink-0 whitespace-nowrap sm:inline-flex items-center gap-0.5 rounded-md border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--text-faint)] shadow-2xs">
+          {typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/i.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K'}
         </kbd>
       </button>
 
-      <div className="flex min-w-0 items-center gap-2 sm:hidden">
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:hidden">
         <img src={lifeOSIcon} alt="" className="h-7 w-7 shrink-0 rounded-lg" />
-        <span className="flex min-w-0 items-center gap-1.5 truncate text-sm font-bold tracking-tight text-[var(--text)]">
-          <AppIcon name={currentMeta[currentView].icon} className="h-4 w-4 shrink-0" />
+        <span className="min-w-0 truncate text-sm font-bold tracking-tight text-[var(--text)]" title={currentMeta[currentView].label}>
           {currentMeta[currentView].label}
         </span>
       </div>
 
-      <div className="flex items-center gap-2 ml-auto">
+      <div className="flex shrink-0 items-center gap-2 ml-auto">
         {/* Stream Guard Button */}
         <button
           onClick={onTogglePrivacy}
           title={state.settings.privacyMode ? "Stream Guard activo (Shift + P) - Clic para mostrar saldos" : "Activar Stream Guard (Shift + P) - Clic para ocultar montos"}
-          className={`flex h-9 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold transition-all cursor-pointer ${
+          className={`hidden sm:flex h-9 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold transition-all cursor-pointer ${
             state.settings.privacyMode
               ? 'border-violet-500/50 bg-violet-500/15 text-violet-600 dark:text-violet-300 shadow-xs'
               : 'border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)]'
@@ -161,7 +177,7 @@ export const Topbar: React.FC<TopbarProps> = ({
           </span>
         </button>
 
-        <button onClick={onOpenSearch} className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-sm sm:hidden cursor-pointer" aria-label="Buscar en LifeOS">
+        <button onClick={onOpenSearch} className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-sm sm:hidden cursor-pointer" aria-label="Buscar en Celestian">
           <AppIcon name="search" className="h-4 w-4"/>
         </button>
 
@@ -170,9 +186,9 @@ export const Topbar: React.FC<TopbarProps> = ({
           <button
             onClick={onOpenCapture}
             title={(state.inbox || []).length > 0 ? `Capturar / Bandeja (${(state.inbox || []).length} pendientes)` : "Capturar (C)"}
-            className="flex h-9 items-center gap-1.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:brightness-105 px-3 text-xs font-bold text-white shadow-xs transition-all active:scale-[0.98] cursor-pointer border border-white/10"
+            className="flex h-9 items-center gap-1.5 rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] px-3 text-xs font-bold text-white shadow-xs transition-all active:scale-[0.98] cursor-pointer"
           >
-            <AppIcon name="plus" className="h-3.5 w-3.5 text-white" />
+            <AppIcon name="touchpad" className="h-3.5 w-3.5 text-white" />
             <span>Capturar</span>
             {(state.inbox || []).length > 0 ? (
               <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-black text-slate-900 animate-pulse">
@@ -242,6 +258,7 @@ export const Topbar: React.FC<TopbarProps> = ({
               }
             }}
             className={`flex h-9 items-center gap-2 rounded-xl border px-2.5 text-xs font-semibold transition-all ${syncLed.textColor} ${cloudConfigured ? 'cursor-pointer hover:opacity-90' : 'cursor-default'}`}
+            aria-label={cloudConfigured && !cloudUser ? 'Conectar con Google' : `Sincronización: ${syncLed.label}`}
             title={
               cloudConfigured
                 ? (!cloudUser ? 'Conectar con Google para sincronizar PC y celular' : (lastSyncedAt && syncStatus === 'synced' ? `${syncLed.label} · Última confirmación: ${lastSyncedAt}` : syncLed.label))
@@ -250,7 +267,7 @@ export const Topbar: React.FC<TopbarProps> = ({
           >
             <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${syncLed.dotClass}`} />
             {cloudConfigured && !cloudUser ? (
-              <span className="inline font-bold text-[11px] sm:text-xs">Conectar</span>
+              <span className="hidden sm:inline font-bold text-[11px] sm:text-xs">Conectar</span>
             ) : (
               <span className="hidden md:inline">{syncLed.label}</span>
             )}
@@ -279,6 +296,7 @@ export const Topbar: React.FC<TopbarProps> = ({
               : 'border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-faint)]'
           }`}
           aria-label={soundOn ? 'Desactivar sonido' : 'Activar sonido'}
+          aria-pressed={soundOn}
         >
           <AppIcon name={soundOn ? 'volume' : 'volumeOff'} className="h-4 w-4" />
         </button>

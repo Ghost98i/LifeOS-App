@@ -1,75 +1,38 @@
-import React, { useState } from 'react';
-import { JobApplication } from '../types';
-import { fmtDate, ESTADO_LABELS } from '../lib/storage';
+import React, { useEffect, useState } from 'react';
+import { JobApplication, JobApplicationType } from '../types';
+import { fmtDate, todayISO } from '../lib/storage';
+import { filterJobApplications, JOB_STAGES, getJobStageLabel } from '../lib/jobApplications';
 import { AppIcon } from './AppIcon';
 
 interface JobKanbanBoardProps {
   applications: JobApplication[];
+  tipo: JobApplicationType;
   onSetEstado: (id: string, newEstado: JobApplication['estado']) => void;
-  onSetNextAction: (id: string, nextAction: string) => void;
-  onSetNextActionDate: (id: string, nextActionDate: string) => void;
+  onEditApplication: (application: JobApplication) => void;
   onDeleteApplication: (id: string) => void;
-  onQuickAddInColumn?: (estado: JobApplication['estado']) => void;
 }
-
-const KANBAN_COLUMNS: {
-  id: JobApplication['estado'];
-  label: string;
-  colorClass: string;
-  dotColor: string;
-  badgeBg: string;
-}[] = [
-  {
-    id: 'pendiente',
-    label: 'Pendiente',
-    colorClass: 'border-slate-300 dark:border-slate-700',
-    dotColor: 'bg-slate-400',
-    badgeBg: 'bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/20',
-  },
-  {
-    id: 'cv_enviado',
-    label: 'CV Enviado',
-    colorClass: 'border-blue-300 dark:border-blue-800',
-    dotColor: 'bg-blue-500',
-    badgeBg: 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20',
-  },
-  {
-    id: 'entrevista',
-    label: 'Entrevista',
-    colorClass: 'border-amber-300 dark:border-amber-800',
-    dotColor: 'bg-amber-500',
-    badgeBg: 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20',
-  },
-  {
-    id: 'oferta',
-    label: 'Oferta',
-    colorClass: 'border-emerald-300 dark:border-emerald-800',
-    dotColor: 'bg-emerald-500',
-    badgeBg: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20',
-  },
-  {
-    id: 'rechazado',
-    label: 'Rechazado',
-    colorClass: 'border-rose-300 dark:border-rose-800',
-    dotColor: 'bg-rose-500',
-    badgeBg: 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20',
-  },
-];
 
 export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
   applications,
+  tipo,
   onSetEstado,
-  onSetNextAction,
-  onSetNextActionDate,
+  onEditApplication,
   onDeleteApplication,
-  onQuickAddInColumn,
 }) => {
+  const columns = JOB_STAGES[tipo];
   const [draggedAppId, setDraggedAppId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<JobApplication['estado'] | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const [selectedStage, setSelectedStage] = useState<JobApplication['estado']>(() =>
+    columns.find(column => applications.some(application => application.estado === column.id))?.id ?? columns[0].id);
 
-  const filteredApps = applications.filter((app) => {
+  useEffect(() => {
+    if (!columns.some((column) => column.id === selectedStage)) {
+      setSelectedStage(columns.find(column => applications.some(application => application.estado === column.id))?.id ?? columns[0].id);
+    }
+  }, [columns, selectedStage, applications]);
+
+  const filteredApps = filterJobApplications(applications, tipo).filter((app) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     return (
@@ -115,12 +78,15 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
     setDragOverColumn(null);
   };
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO();
+  const activeStage = columns.find((column) => column.id === selectedStage) || columns[0];
+  const activeStageApplications = filteredApps.filter((application) => application.estado === activeStage.id);
+  const allActiveStageApplications = applications.filter((application) => application.estado === activeStage.id);
 
   return (
     <div className="space-y-3">
       {/* Kanban Controls Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
+      <div className="flex flex-col items-stretch justify-between gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="relative min-w-[200px] flex-1 max-w-sm">
           <input
             type="text"
@@ -144,18 +110,86 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
           <span className="inline-flex items-center gap-1 font-medium">
             <AppIcon name="filter" className="h-3.5 w-3.5" />
             <span>Total:</span>
-            <strong className="font-mono text-[var(--text)]">{applications.length}</strong>
-          </span>
-          <span className="text-[var(--border)]">|</span>
-          <span className="text-[11px] text-[var(--text-faint)] hidden sm:inline">
-            Arrastrá las tarjetas para cambiar su estado
+            <strong className="tabular-nums text-[var(--text)]">{filteredApps.length}</strong>
           </span>
         </div>
       </div>
 
-      {/* 5-Column Kanban Board Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3 items-start overflow-x-auto pb-2">
-        {KANBAN_COLUMNS.map((col) => {
+      <div className="space-y-3 lg:hidden">
+        <label className="block text-xs font-semibold text-[var(--text-soft)]" htmlFor="job-mobile-stage">
+          Etapa del tablero
+          <select
+            id="job-mobile-stage"
+            aria-label="Etapa del tablero"
+            value={activeStage.id}
+            onChange={(event) => setSelectedStage(event.target.value as JobApplication['estado'])}
+            className="mt-1 min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-semibold text-[var(--text)]"
+          >
+            {columns.map((column) => {
+              const count = filteredApps.filter((application) => application.estado === column.id).length;
+              return <option key={column.id} value={column.id}>{column.label} ({count})</option>;
+            })}
+          </select>
+        </label>
+
+        <section className={`rounded-2xl border bg-[var(--bg-elevated)] ${activeStage.colorClass}`} aria-label={`Etapa ${activeStage.label}`}>
+          <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] bg-[var(--card)] px-3 py-2.5">
+            <h3 className="flex min-w-0 items-center gap-2 text-sm font-bold text-[var(--text)]">
+              <span className={`h-2 w-2 shrink-0 rounded-full ${activeStage.dotColor}`} />
+              <span className="truncate">{activeStage.label}</span>
+            </h3>
+            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-bold tabular-nums ${activeStage.badgeBg}`}>
+              {activeStageApplications.length}
+            </span>
+          </div>
+          <div className="space-y-2.5 p-2.5">
+            {activeStageApplications.map((app) => {
+              const isFollowupDue = Boolean(app.nextActionDate && app.nextActionDate <= today);
+              return (
+                <article key={app.id} className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-xs">
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <h4 className="truncate text-sm font-bold text-[var(--text)]">{app.empresa}</h4>
+                        {app.link && <a href={app.link} target="_blank" rel="noreferrer" className="shrink-0 text-[var(--blue)]" title={tipo === 'concurso' ? 'Abrir publicación o bases' : 'Abrir publicación de la vacante'}><AppIcon name="external-link" className="h-3.5 w-3.5" /></a>}
+                      </div>
+                      <p className="break-words text-xs font-medium text-[var(--text-soft)]">{app.puesto}</p>
+                    </div>
+                    <button type="button" onClick={() => onDeleteApplication(app.id)} className="min-h-10 min-w-10 shrink-0 rounded-lg text-[var(--text-faint)] hover:bg-red-500/10 hover:text-red-500" aria-label={`Eliminar postulación de ${app.empresa}`} title="Eliminar postulación">✕</button>
+                  </div>
+
+                  {(app.reclutador || app.notas) && <div className="mt-2 space-y-1 text-xs text-[var(--text-soft)]">
+                    {app.reclutador && <p className="break-words">Contacto: {app.reclutador}</p>}
+                    {app.notas && <p className="break-words text-xs text-[var(--text-faint)]">{app.notas}</p>}
+                  </div>}
+                  {(app.nextAction || app.nextActionDate) && <div className={`mt-2.5 flex min-w-0 items-start justify-between gap-2 rounded-lg px-2 py-1.5 text-xs ${isFollowupDue ? 'border border-red-500/30 bg-red-500/15 text-red-600 dark:text-red-400' : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'}`}>
+                    <span className="min-w-0 break-words">⏰ {app.nextAction || 'Seguimiento'}</span>
+                    {app.nextActionDate && <span className="shrink-0 text-xs font-bold tabular-nums">{fmtDate(app.nextActionDate)}</span>}
+                  </div>}
+
+                  <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-[var(--border)] pt-2 text-xs">
+                    <span className="shrink-0 tabular-nums text-[var(--text-faint)]">{fmtDate(app.fecha)}</span>
+                    <button type="button" onClick={() => onEditApplication(app)} className="min-h-10 rounded-lg px-3 font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)]">Editar</button>
+                  </div>
+                  <select value={app.estado} onChange={(event) => onSetEstado(app.id, event.target.value as JobApplication['estado'])} aria-label={`Cambiar estado de ${app.empresa}`} className="mt-2 min-h-11 w-full min-w-0 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)]">
+                    {columns.map((stage) => <option key={stage.id} value={stage.id}>{getJobStageLabel(tipo, stage.id)}</option>)}
+                  </select>
+                </article>
+              );
+            })}
+            {activeStageApplications.length === 0 && (
+              <p className="rounded-xl border border-dashed border-[var(--border)] px-3 py-5 text-center text-sm text-[var(--text-faint)]">
+                {allActiveStageApplications.length > 0 ? 'No hay coincidencias con la búsqueda.' : 'Sin postulaciones en esta etapa.'}
+              </p>
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* Panorama with one localized scroll area; mobile uses the stage selector above. */}
+      <div className="hidden w-full min-w-0 max-w-full overflow-x-auto overscroll-x-contain pb-2 touch-pan-x lg:block">
+        <div className="grid w-full min-w-0 grid-flow-col auto-cols-[minmax(240px,1fr)] items-start gap-3">
+        {columns.map((col) => {
           const colApps = filteredApps.filter((a) => a.estado === col.id);
           const isDropTarget = dragOverColumn === col.id;
 
@@ -165,7 +199,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
               onDragOver={(e) => handleDragOver(e, col.id)}
               onDragLeave={() => handleDragLeave(col.id)}
               onDrop={(e) => handleDrop(e, col.id)}
-              className={`flex flex-col rounded-2xl border transition-all duration-150 min-h-[360px] max-h-[780px] overflow-hidden bg-[var(--bg-elevated)] ${
+              className={`flex min-h-[220px] flex-col rounded-2xl border transition-all duration-150 max-h-[780px] overflow-hidden bg-[var(--bg-elevated)] ${
                 isDropTarget
                   ? 'border-[var(--blue)] ring-2 ring-[var(--blue)]/30 bg-[var(--blue-soft)]/20'
                   : 'border-[var(--border)]'
@@ -179,22 +213,12 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                     {col.label}
                   </h3>
                   <span
-                    className={`rounded-full border px-1.5 py-0.2 font-mono text-[10px] font-bold ${col.badgeBg}`}
+                    className={`rounded-full border px-1.5 py-0.2 tabular-nums text-xs font-bold ${col.badgeBg}`}
                   >
                     {colApps.length}
                   </span>
                 </div>
 
-                {onQuickAddInColumn && (
-                  <button
-                    type="button"
-                    onClick={() => onQuickAddInColumn(col.id)}
-                    className="rounded-md p-1 text-[var(--text-faint)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] transition-colors"
-                    title={`Agregar postulación en ${col.label}`}
-                  >
-                    ＋
-                  </button>
-                )}
               </div>
 
               {/* Cards Container */}
@@ -203,7 +227,6 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                   const isBeingDragged = draggedAppId === app.id;
                   const isFollowupDue =
                     app.nextActionDate && app.nextActionDate <= today;
-                  const isEditing = editingCardId === app.id;
 
                   return (
                     <div
@@ -219,7 +242,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                       <div className="flex items-start justify-between gap-1.5">
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-1.5">
-                            <h4 className="truncate font-bold text-xs sm:text-sm text-[var(--text)]">
+                          <h4 className="truncate font-bold text-xs sm:text-sm text-[var(--text)]">
                               {app.empresa}
                             </h4>
                             {app.link && (
@@ -229,7 +252,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                                 rel="noreferrer"
                                 onClick={(e) => e.stopPropagation()}
                                 className="text-[var(--blue)] hover:opacity-80 transition-opacity"
-                                title="Abrir enlace de oferta"
+                                title={tipo === 'concurso' ? 'Abrir publicación o bases' : 'Abrir publicación de la vacante'}
                               >
                                 <AppIcon name="external-link" className="h-3 w-3" />
                               </a>
@@ -238,6 +261,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                           <p className="truncate text-xs font-medium text-[var(--text-soft)]">
                             {app.puesto}
                           </p>
+
                         </div>
 
                         {/* Quick Delete */}
@@ -247,7 +271,8 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                             e.stopPropagation();
                             onDeleteApplication(app.id);
                           }}
-                          className="opacity-0 group-hover:opacity-100 rounded-md p-1 text-[var(--text-faint)] hover:bg-red-500/10 hover:text-red-500 transition-opacity"
+                          className="min-h-9 min-w-9 rounded-md p-1 text-[var(--text-faint)] hover:bg-red-500/10 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                          aria-label={`Eliminar postulación de ${app.empresa}`}
                           title="Eliminar postulación"
                         >
                           ✕
@@ -255,7 +280,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                       </div>
 
                       {/* Recruiter / Notes / Metadata */}
-                      <div className="mt-2 space-y-1 text-[11px] text-[var(--text-soft)]">
+                      <div className="mt-2 space-y-1 text-xs text-[var(--text-soft)]">
                         {app.reclutador && (
                           <div className="flex items-center gap-1 text-[var(--text-faint)]">
                             <AppIcon name="user" className="h-3 w-3 shrink-0" />
@@ -263,85 +288,50 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                           </div>
                         )}
                         {app.notas && (
-                          <p className="line-clamp-2 italic text-[var(--text-faint)] text-[10px]">
+                          <p className="line-clamp-2 italic text-[var(--text-faint)] text-xs">
                             {app.notas}
                           </p>
                         )}
                       </div>
 
                       {/* Next Action & Followup date */}
-                      {isEditing ? (
-                        <div
-                          className="mt-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] p-2 space-y-1.5"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <label className="block text-[9px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-                            Seguimiento
-                          </label>
-                          <input
-                            type="text"
-                            value={app.nextAction || ''}
-                            onChange={(e) => onSetNextAction(app.id, e.target.value)}
-                            placeholder="Acción (ej: mandar mensaje)"
-                            className="w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-[11px] outline-hidden"
-                          />
-                          <input
-                            type="date"
-                            value={app.nextActionDate || ''}
-                            onChange={(e) => onSetNextActionDate(app.id, e.target.value)}
-                            className="w-full rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-[11px] outline-hidden"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setEditingCardId(null)}
-                            className="w-full rounded bg-[var(--blue)] py-0.5 text-[10px] font-bold text-white"
-                          >
-                            Listo
-                          </button>
-                        </div>
-                      ) : (
-                        (app.nextAction || app.nextActionDate) && (
+                      {(app.nextAction || app.nextActionDate) && (
                           <div
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingCardId(app.id);
-                            }}
-                            className={`mt-2.5 flex items-center justify-between rounded-md px-2 py-1 text-[10px] font-medium transition-colors cursor-pointer ${
+                            className={`mt-2.5 flex items-center justify-between rounded-md px-2 py-1 text-xs font-medium transition-colors ${
                               isFollowupDue
                                 ? 'bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400'
                                 : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'
                             }`}
-                            title="Hacé clic para editar seguimiento"
+                            title="Seguimiento asociado a esta postulación"
                           >
                             <span className="truncate flex-1">
                               ⏰ {app.nextAction || 'Seguimiento'}
                             </span>
                             {app.nextActionDate && (
-                              <span className="font-mono text-[9px] font-bold shrink-0 ml-1">
+                              <span className="tabular-nums text-xs font-bold shrink-0 ml-1">
                                 {fmtDate(app.nextActionDate)}
                               </span>
                             )}
                           </div>
-                        )
                       )}
 
                       {/* Card Footer: Date & Stage selector */}
-                      <div className="mt-2.5 pt-2 border-t border-[var(--border)] flex items-center justify-between gap-1 text-[10px]">
-                        <span className="font-mono text-[var(--text-faint)]">
+                      <div className="mt-2.5 border-t border-[var(--border)] pt-2 text-xs">
+                        <span className="tabular-nums text-[var(--text-faint)]">
                           {fmtDate(app.fecha)}
                         </span>
 
-                        <div className="flex items-center gap-1">
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              setEditingCardId(isEditing ? null : app.id);
+                              onEditApplication(app);
                             }}
-                            className="text-[var(--text-faint)] hover:text-[var(--text)] px-1 py-0.5"
-                            title="Editar seguimiento"
+                            className="min-h-9 rounded-md px-2 py-1 text-[var(--blue)] hover:bg-[var(--surface-muted)]"
+                            title="Editar postulación"
                           >
-                            {app.nextAction ? '✏' : '＋seg.'}
+                            Editar
                           </button>
                           {/* Stage Fast Mover Dropdown */}
                           <select
@@ -351,13 +341,10 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                               onSetEstado(app.id, e.target.value as JobApplication['estado']);
                             }}
                             onClick={(e) => e.stopPropagation()}
-                            className="rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-1.5 py-0.5 font-bold text-[10px] text-[var(--text)] outline-hidden cursor-pointer"
+                            aria-label={`Cambiar estado de ${app.empresa}`}
+                            className="min-h-10 min-w-0 flex-1 rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1 font-bold text-xs text-[var(--text)] outline-hidden cursor-pointer"
                           >
-                            {Object.entries(ESTADO_LABELS).map(([k, v]) => (
-                              <option key={k} value={k}>
-                                → {v}
-                              </option>
-                            ))}
+                            {columns.map((stage) => <option key={stage.id} value={stage.id}>{getJobStageLabel(tipo, stage.id)}</option>)}
                           </select>
                         </div>
                       </div>
@@ -368,21 +355,13 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                 {colApps.length === 0 && (
                   <div className="flex h-28 flex-col items-center justify-center rounded-xl border border-dashed border-[var(--border)] p-3 text-center text-xs text-[var(--text-faint)]">
                     <span>Sin postulaciones</span>
-                    {onQuickAddInColumn && (
-                      <button
-                        type="button"
-                        onClick={() => onQuickAddInColumn(col.id)}
-                        className="mt-1 text-[11px] font-medium text-[var(--blue)] hover:underline"
-                      >
-                        ＋ Agregar aquí
-                      </button>
-                    )}
                   </div>
                 )}
               </div>
             </div>
           );
         })}
+        </div>
       </div>
     </div>
   );

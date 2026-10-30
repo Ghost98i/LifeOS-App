@@ -1,5 +1,5 @@
 {
-  "name": "LifeOS",
+  "name": "Celestian LifeOS",
   "description": "Centro de operaciones personal para organización, búsqueda laboral, reventa de hardware, finanzas, gimnasio, estudios e IA.",
   "requestFramePermissions": [
     "geolocation"

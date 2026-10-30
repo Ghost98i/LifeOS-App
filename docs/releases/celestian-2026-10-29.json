@@ -1,0 +1,408 @@
+{
+  "product": "Celestian LifeOS",
+  "publishedVersion": "sites/lifeosanywhere/versions/a6834e05b0a17cff",
+  "hostingRelease": "sites/lifeosanywhere/releases/1793309965220000",
+  "publishedAt": "2026-10-29T21:39:25.220Z",
+  "candidate": "candidate-5de5252d2d00",
+  "candidateId": "20261029T210709Z-t123-5de5252d2d00",
+  "sourceCommitAtPublication": null,
+  "provenance": "Published from a locally validated working tree; consolidated source commit is pending authorization. No private environment, recovery package or personal data is included.",
+  "publicAppFiles": 79,
+  "files": [
+    {
+      "path": "assets/AgendaView-CLvcfj8F.js",
+      "bytes": 53824,
+      "sha256": "14718582a93ef580b9efca3fadc2f2ad22ff286481eadb73ac7d9314c901ffea"
+    },
+    {
+      "path": "assets/CalendarioView-CUs60mtl.js",
+      "bytes": 23710,
+      "sha256": "e60176f388901c0d26ea78a7cc201bf4b193319cacf0700faf4c301ad2cd292e"
+    },
+    {
+      "path": "assets/cervino-panorama-atardecer-D47bsGi0.webp",
+      "bytes": 1644088,
+      "sha256": "9cb881d823baa0b94053db41320fce0aaa77fa9f347ddd6220a78410bc82f864"
+    },
+    {
+      "path": "assets/cervino-panorama-dia-aInEeZpP.webp",
+      "bytes": 1690822,
+      "sha256": "29e9c6f8dd3a6195db5e02320d856478da7f1c2597993e35674f71cb4af48068"
+    },
+    {
+      "path": "assets/cervino-panorama-madrugada-BpKsNnZt.webp",
+      "bytes": 1501632,
+      "sha256": "c7e9de58702d4226f4531ecee3c6699a7852060d9cd0fb563592fe8cb369ce0e"
+    },
+    {
+      "path": "assets/cervino-panorama-manana-BPWx7hJ0.webp",
+      "bytes": 1592320,
+      "sha256": "ca1d0ba8682ea778b67702cfe989c9795f543bcc954da881ae47ec448cdf12e9"
+    },
+    {
+      "path": "assets/cervino-panorama-noche-C_fUdnd_.webp",
+      "bytes": 1743346,
+      "sha256": "c692706db81e4d4482e26ff91c5fcde93360ec526bb557ec4caa798a5a3f8a8f"
+    },
+    {
+      "path": "assets/charts-vendor-CRndDM1m.js",
+      "bytes": 432477,
+      "sha256": "759f8728fbe200801c6d29b4e639fc41e3269d79c482cbbe73c883ed9a347371"
+    },
+    {
+      "path": "assets/CheckoutModal-CRQauywW.js",
+      "bytes": 11403,
+      "sha256": "e284d68c71e1b23eddfb5f9ee89594c63fa31689bf9aef6f93e2bc04c9fc0cf2"
+    },
+    {
+      "path": "assets/CloudConflictModal-DkF8GJaV.js",
+      "bytes": 3949,
+      "sha256": "b953b17175b07447dff3a8b14432215de25f35473343f32f928f6cdbd0360ad6"
+    },
+    {
+      "path": "assets/ConfigView-D46OUOzi.js",
+      "bytes": 92556,
+      "sha256": "d7c29dc37e4e2a0a9ca01c64931ea5eb6f3e897178f4089e29abb72fcded18c0"
+    },
+    {
+      "path": "assets/ContextualHelp-_nzUd3-e.js",
+      "bytes": 3661,
+      "sha256": "d837eaeb18307735a14efb36e024ce7e7f135027cd23b046b90a8d70826b1a2c"
+    },
+    {
+      "path": "assets/dotlottie-player-vUNKgFai.wasm",
+      "bytes": 1238072,
+      "sha256": "92822207905406eee4f0785e8d4a99a504a24db6f658abfaec074a9420471b25"
+    },
+    {
+      "path": "assets/EstudiosView-CKenKqj_.js",
+      "bytes": 54387,
+      "sha256": "2c2353f526bf3278d477dd5002b3dd5a172c3b4621e47f8f58ff68a8da4e67d9"
+    },
+    {
+      "path": "assets/FinanzasView-DZdX70RV.js",
+      "bytes": 282051,
+      "sha256": "a6ef72953ba9e09ba50e8ca283b4ced32f15c316596b5bcfb8bf8a6fffe832ab"
+    },
+    {
+      "path": "assets/firebase-vendor-DHeLGhS2.js",
+      "bytes": 782492,
+      "sha256": "47deb0a6163dd7fe7efad6324b6dfa7d2f59fd0c348d0fbe0a1fb861f9b3de67"
+    },
+    {
+      "path": "assets/GimnasioView-BjgKU_87.js",
+      "bytes": 191765,
+      "sha256": "76a04e7a3713b2bc69029a226e4ca5460476d8d6701a71d731a61e134c6d0e8c"
+    },
+    {
+      "path": "assets/GlobalSearchModal-C5CeBySv.js",
+      "bytes": 39734,
+      "sha256": "982daa17197f175ea525d132e2bed40e95421c47ba1bce155b19974add2bcca6"
+    },
+    {
+      "path": "assets/IAView-Ba2xcNIe.js",
+      "bytes": 20392,
+      "sha256": "8dee0b3bf663e906c3b8a0859865c2bca3ccf9ec12acc2ad6b548eaab83c0fb5"
+    },
+    {
+      "path": "assets/index-CwbseyN2.js",
+      "bytes": 170892,
+      "sha256": "14a62434017e872a8ae2125bd24d09588a20f4f1d57333369f48959273efac57"
+    },
+    {
+      "path": "assets/index-D44LlXNM.css",
+      "bytes": 226601,
+      "sha256": "b065cc1a512f95fecb9309d1343f215625448540128589380fad1f746e158f3d"
+    },
+    {
+      "path": "assets/index-DalLIlZe.js",
+      "bytes": 757078,
+      "sha256": "b026c8e6871d3d7ebb53d481e0623615020f1da8b3a723b8529cd2967b44248d"
+    },
+    {
+      "path": "assets/instrument-sans-latin-ext-wght-normal-B5bTHO_g.woff2",
+      "bytes": 11144,
+      "sha256": "c4fcfea41f2c1cfeea9211fa43679845454a1d0e0d7e95e069c7e73c4ae302d2"
+    },
+    {
+      "path": "assets/instrument-sans-latin-wght-normal-BbzFLZTg.woff2",
+      "bytes": 30092,
+      "sha256": "2ee17598a98d8a59e4df8152d015bec9ab8e4d5672cc0ab42bef806b568e3971"
+    },
+    {
+      "path": "assets/lifeos-icon-DIOtFwaD.png",
+      "bytes": 29503,
+      "sha256": "1b42769d69fdc49c15c7bfa850cfc63614abbdf32a8ceefcae7a331efb2e0142"
+    },
+    {
+      "path": "assets/motion-DtpafRVX.js",
+      "bytes": 109,
+      "sha256": "3bab4f76687292f2d6d9a4c1f04fa40504aff2757883f034c8c6dbb98ce00c07"
+    },
+    {
+      "path": "assets/NotasView-CPai90Nb.js",
+      "bytes": 69417,
+      "sha256": "1be4b33a70726f55828bee5997c6dedcb8416a01304bb181023abb4011e90d40"
+    },
+    {
+      "path": "assets/notePlacements-DYiZ55PB.js",
+      "bytes": 1351,
+      "sha256": "6970123c6a8c3e4888f08b33dc09ce604c5be1b6264719ae6e6e33159a2fcf3e"
+    },
+    {
+      "path": "assets/notesFlows-_vc3p1JE.js",
+      "bytes": 3975,
+      "sha256": "d722f27a4950bc4810dd5cad41aa73b783b4cfeb47031cb82e4a5c664e4997fa"
+    },
+    {
+      "path": "assets/OnboardingView-oWQVVueu.js",
+      "bytes": 4748,
+      "sha256": "c5b9499ff912676d09d5d15a6f84c4b9d48d4457fb72a248ef1d90aa97255b73"
+    },
+    {
+      "path": "assets/PageHeader-bev6W6bo.js",
+      "bytes": 606,
+      "sha256": "651045c0732acbe77282903e56955db06ec5fb191473db39a128b30c92d265e3"
+    },
+    {
+      "path": "assets/react-vendor-3cUfQKQW.js",
+      "bytes": 223647,
+      "sha256": "15398bc72f82ae94d62181c13b4f5d41f0e640afd2879a0edf3e212cc3bf53a3"
+    },
+    {
+      "path": "assets/resaleFlows-BeoQNqUZ.js",
+      "bytes": 4292,
+      "sha256": "07124a7e8c4b8f8c76625fd8bdc072de01c15565299a18f4b54e257c5bf9d517"
+    },
+    {
+      "path": "assets/ReventaView-DltDILAY.js",
+      "bytes": 145925,
+      "sha256": "853dd839eeea69ad49c32f5a1293591d75af5269b55a6c2a2dd05cad0683f755"
+    },
+    {
+      "path": "assets/TrabajoView-BJW7RAT_.js",
+      "bytes": 33031,
+      "sha256": "344059e33738f6053712e0580aa62ad8e69b7bf2e3402f56a3b6d8f0e5a49d4a"
+    },
+    {
+      "path": "assets/useDialogFocus-Bl7fsyGO.js",
+      "bytes": 1517,
+      "sha256": "855a4e07a25b2dad6fe60678a42ee8710ccb7db4d7298a84489c594c55980281"
+    },
+    {
+      "path": "assets/workbox-window.prod.es5-BBnX5xw4.js",
+      "bytes": 5748,
+      "sha256": "cadd21be4a88598a4dec91a26a025df0a5790ff6baec54a884e401c3f5c95557"
+    },
+    {
+      "path": "creditos.html",
+      "bytes": 3169,
+      "sha256": "0d2ef62a42714caa0dfc7d01e0df07f80759849b5fda6dd78e283bb11cfe1217"
+    },
+    {
+      "path": "gym-icons/v1/adjustable-bench.svg",
+      "bytes": 10791,
+      "sha256": "3c5cfcdee23fba12103ec3e9840c9eed2a73f153dcf99bb21883eb1ab12380b0"
+    },
+    {
+      "path": "gym-icons/v1/barbell.svg",
+      "bytes": 1895,
+      "sha256": "6d9938077aa5a070a0bdd986bddf21eb2ddca4c1eb3611be6a6b45143c72b410"
+    },
+    {
+      "path": "gym-icons/v1/bench-press.svg",
+      "bytes": 3466,
+      "sha256": "598bd2ea334f8c4c538bc9f47949702226ee11debf07a8452ac52647935ecb55"
+    },
+    {
+      "path": "gym-icons/v1/bike.svg",
+      "bytes": 3727,
+      "sha256": "c413f7da769167e18f0bfdf9ef29c3124100ad760fe4ab1e5fbcb7578f2e35ff"
+    },
+    {
+      "path": "gym-icons/v1/cable-machine.svg",
+      "bytes": 2622,
+      "sha256": "10ce18f9b398ff0bc902867fc316ecc380b2a0bf4c8572245c8b5c492a645384"
+    },
+    {
+      "path": "gym-icons/v1/dumbbell.svg",
+      "bytes": 1683,
+      "sha256": "804371cf79daba60b4074c1e5ec439c62ad705ca7eb53cd07660e3e9a7a2ff18"
+    },
+    {
+      "path": "gym-icons/v1/incline-bench-press.svg",
+      "bytes": 4213,
+      "sha256": "84b61f1b59467ac820bd6ccabe0a91f242cf0ada58d88d0c12b57e2785d65fc2"
+    },
+    {
+      "path": "gym-icons/v1/lat-pulldown.svg",
+      "bytes": 2557,
+      "sha256": "c2c2e8e7eea17dc6f787f73eb1c84882e0693b476d22315f42ef0eb1e447e472"
+    },
+    {
+      "path": "gym-icons/v1/leg-press.svg",
+      "bytes": 3540,
+      "sha256": "50c00f58eb004acc87702154fe0189f5576f76c3de89f548117f22a6d7b66351"
+    },
+    {
+      "path": "gym-icons/v1/pec-deck.svg",
+      "bytes": 2711,
+      "sha256": "8151883d848dd8d3ae9ce04c57e15b2c034ee42c039c8241e68bfa69b32f1f1e"
+    },
+    {
+      "path": "gym-icons/v1/power-tower.svg",
+      "bytes": 5226,
+      "sha256": "dc74dd433aafce275a2d934e2bcf115d507be19eeaeb64abebe9cd3f3185ef30"
+    },
+    {
+      "path": "gym-icons/v1/pull-ups.svg",
+      "bytes": 1520,
+      "sha256": "feaabb92d8957968dd73a9adf56ff918481fe1d9f1004a5175ba8a42411d22c8"
+    },
+    {
+      "path": "gym-icons/v1/README.md",
+      "bytes": 757,
+      "sha256": "ebd01ee38bfc5a95b4572e8546c889ea94fad7f1e939533cc55e5ac2baa27b5b"
+    },
+    {
+      "path": "gym-icons/v1/rest.svg",
+      "bytes": 4120,
+      "sha256": "157c2b3a625981ebcf6b29cf438388f8deba24397ac627a3a6b7634f038c7c8d"
+    },
+    {
+      "path": "gym-icons/v1/scale.svg",
+      "bytes": 2421,
+      "sha256": "e27721d5da71b571bd9295f0589503b80fa9df7b033fb06dac46a7939635884c"
+    },
+    {
+      "path": "gym-icons/v1/seated-row.svg",
+      "bytes": 4063,
+      "sha256": "16f056326075af08623d5f806d16c6b66f53260a68ad5aa0675e5e5ac5d7dabf"
+    },
+    {
+      "path": "gym-icons/v1/shoulder-press.svg",
+      "bytes": 3100,
+      "sha256": "5e66c05a107ebe60e7f1c517747b6058a269a40b91da04955c7bbede160749dd"
+    },
+    {
+      "path": "gym-icons/v1/squat-rack.svg",
+      "bytes": 3517,
+      "sha256": "25aa0c27c12faa8b86f683599996165895d54fe1f9f0782f43b0c032c5f0aee1"
+    },
+    {
+      "path": "gym-icons/v1/timer.svg",
+      "bytes": 4206,
+      "sha256": "0961782e633d522e1bce9c285867ebdfc92ed816bf323bd40223f8708650b622"
+    },
+    {
+      "path": "gym-icons/v1/treadmill.svg",
+      "bytes": 2018,
+      "sha256": "fbf8dddf5e68defe5dc4566137bfe7840fe7b158bc0851323c9366eac35baf51"
+    },
+    {
+      "path": "gym-icons/v1/water.svg",
+      "bytes": 2840,
+      "sha256": "0cdfb7e115a2c67a4cd6aa5054fe51aed9313165aa07bd21ba4016d80e2ca93a"
+    },
+    {
+      "path": "gym-icons/v1/workout-calendar.svg",
+      "bytes": 8197,
+      "sha256": "925616f6e163268078bb844c1c24c1f183ec9f890166054e920bfab559623d01"
+    },
+    {
+      "path": "gym-icons/v1/yoga-mat.svg",
+      "bytes": 947,
+      "sha256": "5262ad2acfef273897fef013c4020cce77441abb66ee6c1c9764c9033c9967ae"
+    },
+    {
+      "path": "index.html",
+      "bytes": 902,
+      "sha256": "391a3af0f7930a2e25e8192ecdb08471a233c714c0039ff185d76b5124a7d577"
+    },
+    {
+      "path": "lifeos-icon-16.png",
+      "bytes": 871,
+      "sha256": "2a58d000c0ad90ff02db140267d3b3d47fb95b18698061b48c219e1d2b8f6bec"
+    },
+    {
+      "path": "lifeos-icon-180.png",
+      "bytes": 26576,
+      "sha256": "80c822b5efbd56fc4a9e84f902655672c7affd047b39101fc6325f8914b3bf0f"
+    },
+    {
+      "path": "lifeos-icon-192.png",
+      "bytes": 29503,
+      "sha256": "1b42769d69fdc49c15c7bfa850cfc63614abbdf32a8ceefcae7a331efb2e0142"
+    },
+    {
+      "path": "lifeos-icon-32.png",
+      "bytes": 1651,
+      "sha256": "5654880b1b76ee867fbca722ba8b622c4f804d2982879cc882f8ed9130438f04"
+    },
+    {
+      "path": "lifeos-icon-512.png",
+      "bytes": 199402,
+      "sha256": "dc71df3583e0f4719268c008b4f908453bf6389e8ce431ee116e736063c0fc9d"
+    },
+    {
+      "path": "manifest.webmanifest",
+      "bytes": 811,
+      "sha256": "6a45af98b4f303b2a2188106f0d640d36c8e0edbad6bc16e44b31cc39bae90b9"
+    },
+    {
+      "path": "motion/gym-pr-trophy.lottie",
+      "bytes": 21113,
+      "sha256": "6c484a86f18e0d4fec28f0ef607c64b6d25c1719fc64bf37678956b820feb6c2"
+    },
+    {
+      "path": "motion/gym-streak-fire.lottie",
+      "bytes": 1759,
+      "sha256": "124c88699a34a05129866abaa4c0932ec85338a3a8208de27fcf22872f850df7"
+    },
+    {
+      "path": "motion/gym-workout-success.lottie",
+      "bytes": 1197,
+      "sha256": "850d75b857c16f23549cd59fdd1e1f8dd7700f2895e4deeee7a98aaace72b9da"
+    },
+    {
+      "path": "motion/lifeos-micro-check-fast-violet.json",
+      "bytes": 21653,
+      "sha256": "9de6e28c2ca99eee1ca24906ac0e319b9e83c638f591f804b4777f37afb13fa9"
+    },
+    {
+      "path": "motion/lifeos-micro-check-violet.json",
+      "bytes": 6554,
+      "sha256": "74fc1650f15b6eb34ab128c2906854c26a469698e56bf02e31eece2838be4b47"
+    },
+    {
+      "path": "motion/lifeos-task-completed.svg",
+      "bytes": 1156,
+      "sha256": "5f95c6d93ff70fa9bb3787d3a5edc1d4642b228832d2384447e997161b1cf0be"
+    },
+    {
+      "path": "motion/lifeos-task-completion.json",
+      "bytes": 11537,
+      "sha256": "4a52841849428e3d60a077dd9ca2fcf7dd96a6a69ce14e54ad016bf59a500989"
+    },
+    {
+      "path": "motion/lifeos-task-pending.svg",
+      "bytes": 757,
+      "sha256": "bd4a4bb182c0187fd0ba8cefc5238f3600b3900bd3db5c2565228c4186f24948"
+    },
+    {
+      "path": "motion/README.md",
+      "bytes": 2060,
+      "sha256": "9697d791494eca6df2877b117a92c73c29f384c19fe88aa89f523db71d538b90"
+    },
+    {
+      "path": "sw.js",
+      "bytes": 6329,
+      "sha256": "e361ed7aa8fb400dbf86d31c668f20fef2aaf966b152a710c524a49ab2f6d21b"
+    },
+    {
+      "path": "workbox-2fbc6a65.js",
+      "bytes": 15026,
+      "sha256": "39c2e6ae44c3f29666f6a328b6523bf13a053a1d95c74af8ddea82b1045b0b6e"
+    }
+  ]
+}

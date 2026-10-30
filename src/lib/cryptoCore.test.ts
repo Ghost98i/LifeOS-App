@@ -480,31 +480,60 @@ test('Seguridad & Hosting — Validación estática de CSP y Permissions-Policy 
   assert.ok(fs.existsSync(firebaseJsonPath), 'firebase.json debe existir');
 
   const content = JSON.parse(fs.readFileSync(firebaseJsonPath, 'utf8'));
-  const htmlHeadersConfig = content.hosting.headers.find((h: any) => h.source === '**/*.@(html|webmanifest)');
-  assert.ok(htmlHeadersConfig, 'Debe haber configuración de headers para HTML y webmanifest');
+  type HeaderRule = { regex: string; headers: { key: string; value: string }[] };
+  const rules = content.hosting.headers as HeaderRule[];
+  // Hosting matches the original URL before rewrites and applies matching headers
+  // in declaration order. These RE2 patterns use the same basic syntax as RegExp;
+  // the HTTP regression also exercises Firebase's actual matcher.
+  for (const rule of rules) assert.equal(typeof rule.regex, 'string', 'Cada selector actual debe ser una regex válida');
+  const effectiveHeaders = (resource: string) => Object.fromEntries(rules
+    .filter(rule => new RegExp(rule.regex).test(new URL(resource, 'https://local.invalid').pathname))
+    .flatMap(rule => rule.headers.map(header => [header.key.toLowerCase(), header.value])));
+  const documents = ['/', '/index.html', '/creditos.html', '/manifest.webmanifest',
+    '/agenda', '/trabajo', '/reventa', '/finanzas', '/config', '/config/recuperacion',
+    '/finanzas?mes=2026-10', '/ruta-profunda/inexistente'];
+  for (const resource of documents) {
+    const headers = effectiveHeaders(resource);
+    assert.equal(headers['cache-control'], 'no-cache, no-store, must-revalidate', resource);
+    assert.equal(headers['x-content-type-options'], 'nosniff', resource);
+    assert.equal(headers['x-frame-options'], 'DENY', resource);
+    assert.equal(headers['referrer-policy'], 'strict-origin-when-cross-origin', resource);
+    const permissions = Object.fromEntries((headers['permissions-policy'] ?? '').split(',').map(entry => entry.trim().split('=')));
+    assert.equal(permissions.geolocation, '(self)', `${resource}: geolocation solo self`);
+    for (const feature of ['camera', 'microphone', 'payment']) assert.equal(permissions[feature], '()', `${resource}: ${feature} bloqueado`);
 
-  const headers = htmlHeadersConfig.headers;
-  const cspHeader = headers.find((h: any) => h.key === 'Content-Security-Policy');
-  const permHeader = headers.find((h: any) => h.key === 'Permissions-Policy');
-
-  assert.ok(cspHeader, 'Content-Security-Policy debe estar configurada');
-  assert.ok(permHeader, 'Permissions-Policy debe estar configurada');
-
-  const cspValue = cspHeader.value as string;
-  const permValue = permHeader.value as string;
-
-  // 1. Permissions-Policy debe permitir geolocation exclusivamente para self
-  assert.ok(permValue.includes('geolocation=(self)'), 'geolocation debe estar permitida para (self)');
-  assert.ok(permValue.includes('camera=()'), 'camera debe estar restringida a ()');
-  assert.ok(permValue.includes('microphone=()'), 'microphone debe estar restringida a ()');
-
-  // 2. CSP connect-src debe incluir api.open-meteo.com y geocoding-api.open-meteo.com
-  assert.ok(cspValue.includes('https://api.open-meteo.com'), 'connect-src debe incluir https://api.open-meteo.com');
-  assert.ok(cspValue.includes('https://geocoding-api.open-meteo.com'), 'connect-src debe incluir https://geocoding-api.open-meteo.com');
-
-  // 3. No abrir https: genérico ni comodines globales inseguros
-  assert.ok(!cspValue.includes(" 'unsafe-eval'"), "No debe contener 'unsafe-eval' general en script-src");
-  assert.ok(!cspValue.includes('https:;'), 'connect-src o default-src no debe tener https: comodín');
+    const csp = headers['content-security-policy'];
+    assert.ok(csp, `${resource}: CSP obligatoria`);
+    const directives = Object.fromEntries(csp.split(';').map(entry => entry.trim().split(/\s+/)).filter(entry => entry[0]).map(([key, ...values]) => [key, values]));
+    assert.deepEqual(directives['default-src'], ["'self'"], resource);
+    assert.deepEqual(directives['object-src'], ["'none'"], resource);
+    assert.deepEqual(directives['base-uri'], ["'self'"], resource);
+    assert.deepEqual(directives['script-src'], ["'self'", "'wasm-unsafe-eval'"], resource);
+    assert.deepEqual(directives['script-src-elem'], ["'self'", 'https://apis.google.com/js/api.js', 'https://apis.google.com/_/scs/abc-static/_/js/'], resource);
+    for (const endpoint of ['https://api.open-meteo.com', 'https://geocoding-api.open-meteo.com']) {
+      assert.ok(directives['connect-src']?.includes(endpoint), `${resource}: connect-src incluye ${endpoint}`);
+    }
+    for (const values of Object.values(directives)) {
+      assert.ok(!values.includes("'unsafe-eval'"), `${resource}: sin unsafe-eval general`);
+      assert.ok(!values.includes('*') && !values.includes('https:') && !values.includes('http:'), `${resource}: sin orígenes globales`);
+    }
+  }
+  for (const resource of ['/agenda', '/trabajo', '/reventa', '/finanzas', '/config', '/config/recuperacion', '/ruta-profunda/inexistente']) {
+    const rewrite = content.hosting.rewrites.find((rule: { regex: string }) => new RegExp(rule.regex).test(resource));
+    assert.equal(rewrite?.destination, '/index.html', `${resource}: conserva la entrada SPA`);
+  }
+  for (const resource of ['/sw.js', '/registerSW.js']) {
+    assert.equal(effectiveHeaders(resource)['cache-control'], 'no-cache', resource);
+    assert.equal(effectiveHeaders(resource)['x-frame-options'], 'DENY', resource);
+  }
+  for (const resource of ['/assets/app.hash.js', '/assets/nested/app.hash.css']) {
+    assert.equal(effectiveHeaders(resource)['cache-control'], 'public, max-age=31536000, immutable', resource);
+    assert.ok(effectiveHeaders(resource)['content-security-policy'], resource);
+  }
+  // Near misses must not accidentally acquire the service worker or asset cache.
+  for (const resource of ['/swXjs', '/sw.js.map', '/nested/sw.js', '/registerSW.js.map', '/assets-like/app.js']) {
+    assert.equal(effectiveHeaders(resource)['cache-control'], 'no-cache, no-store, must-revalidate', resource);
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -1102,4 +1131,33 @@ test('Fase 8.2b: Mixed migration — estado parcialmente migrado no rompe el cli
   assert.deepEqual(decodedResultMap['finance'], rawFinance);
   assert.deepEqual(decodedResultMap['notes'], rawNotes);
   assert.deepEqual(decodedResultMap['agenda'], rawAgenda);
+});
+
+test('Revisión Final: cryptoSession.subscribe reacciona de forma inmediata a setUnlocked, lock y persistencia', async () => {
+  let callCount = 0;
+  const unsubscribe = cryptoSession.subscribe(() => {
+    callCount++;
+  });
+
+  try {
+    const rawMdek = new Uint8Array(32);
+    crypto.getRandomValues(rawMdek);
+    const sessionKey = await crypto.subtle.importKey('raw', rawMdek, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+
+    // 1. setUnlocked must trigger subscription
+    cryptoSession.setUnlocked(sessionKey, 'test-user-sub');
+    assert.equal(callCount, 1);
+    assert.equal(cryptoSession.isUnlocked('test-user-sub'), true);
+
+    // 2. lock must trigger subscription
+    cryptoSession.lock();
+    assert.equal(callCount, 2);
+    assert.equal(cryptoSession.isUnlocked('test-user-sub'), false);
+  } finally {
+    unsubscribe();
+  }
+
+  // 3. Unsubscribed listener is no longer called
+  cryptoSession.lock();
+  assert.equal(callCount, 2);
 });

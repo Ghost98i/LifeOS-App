@@ -91,11 +91,15 @@ export function addNote(state: LifeOSState, input: CreateNoteInput): Postit {
 /**
  * Updates an existing note by ID
  */
-export function updateNote(state: LifeOSState, id: string, updates: UpdateNoteInput): Postit {
+export function updateNote(state: LifeOSState, id: string, updates: UpdateNoteInput, expected?: Postit): Postit {
   const postits = state.notes?.postits || [];
   const note = postits.find((n) => n.id === id);
   if (!note) {
     throw new Error('Nota no encontrada.');
+  }
+
+  if (expected && JSON.stringify(note) !== JSON.stringify(expected)) {
+    throw new Error('Esta nota cambió mientras la editabas. Tu texto sigue en el editor; copialo antes de volver a abrir la versión actual.');
   }
 
   if (updates.text !== undefined) {
@@ -208,12 +212,13 @@ export function getSortedNotes(
     filter?: 'active' | 'archived' | 'all';
     includeArchived?: boolean;
     searchQuery?: string;
+    order?: 'pinned' | 'recent';
   }
 ): Postit[] {
   const filter = options?.includeArchived
     ? 'all'
     : options?.filter || 'active';
-  const query = (options?.searchQuery || '').trim().toLowerCase();
+  const terms = normalizeNoteSearch(options?.searchQuery || '').split(/\s+/).filter(Boolean);
 
   return [...notes]
     .filter((n) => {
@@ -222,24 +227,28 @@ export function getSortedNotes(
       if (filter === 'archived' && !n.archived) return false;
 
       // Query filter
-      if (query) {
-        const titleMatch = (n.title || '').toLowerCase().includes(query);
-        const textMatch = (n.text || '').toLowerCase().includes(query);
-        const tagMatch = (n.tags || []).some((t) => t.toLowerCase().includes(query));
-        return titleMatch || textMatch || tagMatch;
+      if (terms.length) {
+        const content = normalizeNoteSearch([n.title, n.text, ...(n.tags || []), n.date].join(' '));
+        return terms.every((term) => content.includes(term));
       }
       return true;
     })
     .sort((a, b) => {
       // 1. Pinned first
-      if (a.pinned && !b.pinned) return -1;
-      if (!a.pinned && b.pinned) return 1;
+      if (options?.order !== 'recent') {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+      }
 
       // 2. UpdatedAt / Date descending
       const timeA = getNoteTimestamp(a);
       const timeB = getNoteTimestamp(b);
       return timeB - timeA;
     });
+}
+
+export function normalizeNoteSearch(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
 }
 
 /**

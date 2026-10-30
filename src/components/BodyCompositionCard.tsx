@@ -55,7 +55,7 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state,
           </span>
           <div>
             <h2 className="text-sm font-bold text-[var(--text)]">Composición Corporal</h2>
-            <div className="text-[11px] text-[var(--text-soft)] font-mono">
+            <div className="text-[11px] text-[var(--text-soft)] tabular-nums">
               {latestWeight ? `${latestWeight.kg} kg` : 'Sin peso'} · {latestWaist ? `${latestWaist.waist} cm cintura` : 'Sin cintura'}
             </div>
           </div>
@@ -105,7 +105,7 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state,
                 value={weight}
                 onChange={(e) => setWeight(e.target.value)}
                 placeholder={latestWeight ? String(latestWeight.kg) : '80.0'}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs font-mono text-[var(--text)] outline-hidden focus:border-[var(--blue)]"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs tabular-nums text-[var(--text)] outline-hidden focus:border-[var(--blue)]"
               />
             </label>
             <label>
@@ -121,7 +121,7 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state,
                 value={waist}
                 onChange={(e) => setWaist(e.target.value)}
                 placeholder={latestWaist ? String(latestWaist.waist) : '85.0'}
-                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs font-mono text-[var(--text)] outline-hidden focus:border-[var(--blue)]"
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs tabular-nums text-[var(--text)] outline-hidden focus:border-[var(--blue)]"
               />
             </label>
           </div>
@@ -151,7 +151,7 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state,
             <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
               Grasa · RFM
             </span>
-            <strong className="mt-0.5 block text-lg font-mono font-extrabold text-[var(--text)]">
+            <strong className="mt-0.5 block text-lg tabular-nums font-extrabold text-[var(--text)]">
               {estimate.rfmPercent.toFixed(1)}%
             </strong>
           </div>
@@ -159,7 +159,7 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state,
             <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
               Masa Grasa
             </span>
-            <strong className="mt-0.5 block text-lg font-mono font-extrabold text-[var(--text)]">
+            <strong className="mt-0.5 block text-lg tabular-nums font-extrabold text-[var(--text)]">
               {estimate.fatMassKg.toFixed(1)} kg
             </strong>
           </div>
@@ -167,7 +167,7 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state,
             <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
               Masa Magra
             </span>
-            <strong className="mt-0.5 block text-lg font-mono font-extrabold text-[var(--text)]">
+            <strong className="mt-0.5 block text-lg tabular-nums font-extrabold text-[var(--text)]">
               {estimate.leanMassKg.toFixed(1)} kg
             </strong>
           </div>
@@ -175,7 +175,7 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state,
             <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
               FFMI
             </span>
-            <strong className="mt-0.5 block text-lg font-mono font-extrabold text-[var(--text)]">
+            <strong className="mt-0.5 block text-lg tabular-nums font-extrabold text-[var(--text)]">
               {estimate.ffmi.toFixed(1)}
             </strong>
           </div>
@@ -189,8 +189,8 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state,
       )}
 
       {estimate && (
-        <div className="text-[10px] text-[var(--text-faint)]">
-          Mediciones: peso del {fmtDate(estimate.weight.date)} y cintura del {fmtDate(estimate.waist.date)}.
+        <div className="text-xs text-[var(--text-soft)]">
+          Estimaciones de composición corporal, no mediciones clínicas. Calculadas con peso del {fmtDate(estimate.weight.date)} y cintura del {fmtDate(estimate.waist.date)}.
         </div>
       )}
     </section>

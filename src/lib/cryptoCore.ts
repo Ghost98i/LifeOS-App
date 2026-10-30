@@ -591,6 +591,11 @@ export function saveWrappedKeyEnvelope(envelope: WrappedKeyEnvelope, userId?: st
   try {
     const key = getWrappedKeyStorageKey(userId);
     localStorage.setItem(key, JSON.stringify(envelope));
+    try {
+      cryptoSession.notify();
+    } catch {
+      // ignore
+    }
   } catch (e) {
     console.error('Error saving wrapped key envelope:', e);
   }
@@ -616,6 +621,11 @@ export function clearWrappedKeyEnvelope(userId?: string | null): void {
   try {
     const key = getWrappedKeyStorageKey(userId);
     localStorage.removeItem(key);
+    try {
+      cryptoSession.notify();
+    } catch {
+      // ignore
+    }
   } catch (e) {
     console.error('Error clearing wrapped key envelope:', e);
   }
@@ -882,6 +892,31 @@ export type CryptoSessionState = 'locked' | 'unlocked' | 'unconfigured';
 class CryptoSessionManager {
   private activeMdek: CryptoKey | null = null;
   private currentUserId: string | null = null;
+  private listeners: Set<() => void> = new Set();
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  notify(): void {
+    this.listeners.forEach((listener) => {
+      try {
+        listener();
+      } catch (err) {
+        console.error('[CryptoSession] Error in listener:', err);
+      }
+    });
+    if (typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(new CustomEvent('lifeos-crypto-session-change'));
+      } catch {
+        // ignore
+      }
+    }
+  }
 
   getState(userId?: string | null): CryptoSessionState {
     const targetUser = userId || null;
@@ -907,11 +942,13 @@ class CryptoSessionManager {
   setUnlocked(key: CryptoKey, userId?: string | null): void {
     this.activeMdek = key;
     this.currentUserId = userId || null;
+    this.notify();
   }
 
   lock(): void {
     this.activeMdek = null;
     this.currentUserId = null;
+    this.notify();
   }
 }
 

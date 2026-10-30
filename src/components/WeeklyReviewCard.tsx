@@ -10,9 +10,10 @@ interface WeeklyReviewCardProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => void;
   onNavigate: (view: ViewType) => void;
+  borderLess?: boolean;
 }
 
-export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ state, onUpdateState, onNavigate }) => {
+export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ state, onUpdateState, onNavigate, borderLess }) => {
   const exceptions = weeklyReviewExceptions(state);
   const reviewed = reviewedThisWeek(state);
   const needsReview = !reviewed;
@@ -29,7 +30,7 @@ export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ state, onUpd
 
   return (
     <>
-      <section className="flex items-center gap-3 border-t border-[var(--border)]/70 px-1 py-2">
+      <section className={`flex items-center gap-3 px-1 py-1 ${borderLess ? '' : 'border-t border-[var(--border)]/70'}`}>
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">
           <AppIcon name="rotateCcw" className="h-3.5 w-3.5" />
         </span>

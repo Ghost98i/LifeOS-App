@@ -94,7 +94,10 @@ test('la referencia primaria distingue la última ejecución de la mejor serie',
   const html = renderActiveGym();
 
   assert.match(html, /Última vez · serie 1/);
-  assert.match(html, /Mejor serie de esa sesión/);
+  assert.match(html, /Mejor serie efectiva de esa sesión: 72.5 kg × 6/);
+  assert.match(html, /70 kg × 8/);
+  assert.match(html, /Peso total/);
+  assert.match(html, /Salir sin finalizar · conservar sesión/);
   assert.match(html, /Después: Remo con barra/);
 });
 

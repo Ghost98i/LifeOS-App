@@ -1,6 +1,18 @@
-import { LifeOSState, DayKey } from '../types';
+import {
+  LifeOSState,
+  DayKey,
+  InstallmentSchedule,
+  InstallmentFrequency,
+  FinancedAcquisition,
+  AttentionDismissalRecord,
+  AttentionDismissalStatus,
+} from '../types';
+import { assertCommercialTransition } from './commercialTransition';
 import { migrateGym } from './gymMigration';
 import { DEFAULT_FINANCE_CATEGORIES, normalizeCategories } from './financeCategories';
+import { isAttentionOccurrenceEligible } from './todayAttention';
+import { type CommercialIssue, type CommercialSet } from './commercialContract';
+import { reconstructDurableCommercial, validateDurableCommercial, type ReconstructedCommercial } from './commercialDurable';
 
 export const DAYS: DayKey[] = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
 export const DAY_LABELS: Record<DayKey, string> = {
@@ -91,17 +103,191 @@ export function uid(): string {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
-export function todayISO(): string {
-  const d = new Date();
+export function localISODate(d: Date): string {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 
+export function todayISO(): string {
+  return localISODate(new Date());
+}
+
+/**
+ * Converts a monetary amount to integer cents safely.
+ * Uses exponential representation to avoid IEEE-754 scaling issues (e.g. 1.005 * 100).
+ */
+export function toCents(val: number | string | undefined | null): number {
+  const n = typeof val === 'string' ? parseFloat(val) : Number(val);
+  if (!Number.isFinite(n)) return 0;
+  const sign = n < 0 ? -1 : 1;
+  const abs = Math.abs(n);
+  return sign * Math.round(Number(`${abs}e2`));
+}
+
+/**
+ * Converts integer cents back to floating-point number.
+ */
+export function fromCents(cents: number): number {
+  if (!Number.isFinite(cents)) return 0;
+  return Number(`${cents}e-2`);
+}
+
+/**
+ * Rounds a monetary amount cleanly to 2 decimal places.
+ */
+export function roundMoney(val: number | string | undefined | null): number {
+  const n = typeof val === 'string' ? parseFloat(val) : Number(val);
+  if (!Number.isFinite(n)) return 0;
+  return fromCents(toCents(n));
+}
+
+/**
+ * Calculates the exact difference (a - b) in cents, eliminating IEEE-754 representation noise.
+ */
+export function diffMoney(a: number | string | undefined | null, b: number | string | undefined | null): number {
+  return fromCents(toCents(a) - toCents(b));
+}
+
+/**
+ * Calculates the exact sum of multiple monetary amounts via integer cents.
+ */
+export function sumMoney(...args: (number | string | undefined | null | Iterable<number | string | undefined | null>)[]): number {
+  let totalCents = 0;
+  for (const arg of args) {
+    if (arg != null && typeof arg === 'object' && Symbol.iterator in (arg as any)) {
+      for (const item of (arg as Iterable<any>)) {
+        totalCents += toCents(item);
+      }
+    } else {
+      totalCents += toCents(arg as number | string | undefined | null);
+    }
+  }
+  return fromCents(totalCents);
+}
+
+/**
+ * Parses user-typed decimal input, supporting both comma and dot as decimal separators,
+ * while preventing ambiguous 3-digit inputs (e.g. 249,505) from being converted to thousands.
+ */
+export function parseDecimalInput(raw: string): { value: number | null; error?: string } {
+  const str = (raw || '').trim();
+  if (!str) return { value: null, error: 'Ingresá un importe.' };
+
+  if (!/^-?[\d\s.,]+$/.test(str)) {
+    return { value: null, error: 'Formato numérico no válido.' };
+  }
+
+  const clean = str.replace(/\s+/g, '');
+  const dotCount = (clean.match(/\./g) || []).length;
+  const commaCount = (clean.match(/,/g) || []).length;
+
+  let normalized = clean;
+
+  if (dotCount > 0 && commaCount > 0) {
+    const lastDot = clean.lastIndexOf('.');
+    const lastComma = clean.lastIndexOf(',');
+    if (lastComma > lastDot) {
+      // Uruguayan format: 1.234,56
+      const intPart = clean.slice(0, lastComma).replace(/\./g, '');
+      const decPart = clean.slice(lastComma + 1);
+      if (decPart.length > 2) {
+        return { value: null, error: 'Los importes financieros admiten hasta 2 decimales.' };
+      }
+      normalized = intPart + '.' + decPart;
+    } else {
+      // International format: 1,234.56
+      const intPart = clean.slice(0, lastDot).replace(/,/g, '');
+      const decPart = clean.slice(lastDot + 1);
+      if (decPart.length > 2) {
+        return { value: null, error: 'Los importes financieros admiten hasta 2 decimales.' };
+      }
+      normalized = intPart + '.' + decPart;
+    }
+  } else if (commaCount === 1 && dotCount === 0) {
+    const [intPart, decPart = ''] = clean.split(',');
+    if (decPart.length > 2) {
+      return { value: null, error: 'Los importes financieros admiten hasta 2 decimales.' };
+    }
+    normalized = intPart + '.' + decPart;
+  } else if (dotCount === 1 && commaCount === 0) {
+    const [intPart, decPart = ''] = clean.split('.');
+    if (decPart.length > 2) {
+      if (decPart === '000' || (decPart.endsWith('00') && intPart.length <= 3)) {
+        normalized = intPart + decPart;
+      } else {
+        return { value: null, error: 'Importe ambiguo con más de dos decimales. Revisá los separadores.' };
+      }
+    } else {
+      normalized = intPart + '.' + decPart;
+    }
+  } else if (dotCount > 1 && commaCount === 0) {
+    normalized = clean.replace(/\./g, '');
+  } else if (commaCount > 1 && dotCount === 0) {
+    normalized = clean.replace(/,/g, '');
+  }
+
+  const num = Number(normalized);
+  if (!Number.isFinite(num)) {
+    return { value: null, error: 'Número inválido.' };
+  }
+  return { value: roundMoney(num) };
+}
+
+export interface FormatMoneyOptions {
+  /** If true, always shows 2 decimals even for integer amounts (e.g. "$U 1.250,00"). Default: false */
+  forceDecimals?: boolean;
+  /** Custom fallback text if amount is invalid/null. Default: shows "$U 0" or "US$ 0" */
+  fallback?: string;
+  /** If true, does not prepend the currency symbol (e.g. "1.250" or "1.250,50"). Default: false */
+  noSymbol?: boolean;
+}
+
+/**
+ * Canonical monetary formatter for LifeOS.
+ * - Respects Uruguayan conventions: dot for thousands, comma for decimals.
+ * - UYU symbol: "$U ", USD symbol: "US$ ".
+ * - Never truncates significant non-zero cents ($U 249,50 or $U 0,01).
+ * - Avoids duplicate currency prefixes and handles negative numbers cleanly.
+ */
+export function formatMoney(
+  amount: number | string | undefined | null,
+  currency: string | null = 'UYU',
+  options: FormatMoneyOptions = {},
+): string {
+  const num = typeof amount === 'string' ? parseFloat(amount) : Number(amount);
+  const cur = (currency || 'UYU').toUpperCase();
+  const prefix = cur === 'USD' ? 'US$ ' : '$U ';
+
+  if (!Number.isFinite(num)) {
+    return options.fallback ?? (options.noSymbol ? '0' : prefix + '0');
+  }
+
+  const cents = toCents(num);
+  const isNegative = cents < 0;
+  const absNum = Math.abs(fromCents(cents));
+  const hasCents = (cents % 100) !== 0;
+  const decimals = (hasCents || options.forceDecimals) ? 2 : 0;
+
+  const formattedNum = absNum.toLocaleString('es-UY', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+
+  const signStr = isNegative ? '−' : '';
+  if (options.noSymbol) {
+    return signStr + formattedNum;
+  }
+  return signStr + prefix + formattedNum;
+}
+
+/**
+ * Compatible wrapper defaulting to UYU.
+ * Preserves cents without rounding to whole integers.
+ */
 export function fmtMoney(n: number | string | undefined | null): string {
-  const val = Number(n) || 0;
-  return '$U ' + Math.round(val).toLocaleString('es-UY');
+  return formatMoney(n, 'UYU');
 }
 
 export function fmtDate(iso?: string | null): string {
@@ -262,6 +448,7 @@ export function defaultState(): LifeOSState {
       subscriptions: [],
       expectedIncomes: [],
       commitments: [],
+      agreements: [],
       minCushion: 5000,
       cushionEnabled: true,
       heroDisplayMode: 'actual',
@@ -277,9 +464,11 @@ export function defaultState(): LifeOSState {
         restBetweenSetsSeconds: 120,
         restBetweenExercisesSeconds: 180,
         autoTimerEnabled: true,
+        showQuickRestAdjustments: true,
+        allowManualRestEditing: false,
       },
     },
-    study: { subjects: [], exams: [], studyLog: [] },
+    study: { subjects: [], exams: [], studyLog: [], activeSession: null },
     streaming: { sessions: [], monthlyGoal: 12, preStreamChecklist: [], contentPipeline: [] },
     jobs: { opportunities: [], applications: [] },
     resale: { opportunities: [], inventory: [] },
@@ -289,7 +478,7 @@ export function defaultState(): LifeOSState {
     projects: [],
     inbox: [],
     notes: { postits: [], shopping: [], links: [], possessions: [] },
-    settings: { darkMode: false, lastBackupAt: null, hiddenTabs: ['ia'], onboardingCompleted: false, lastWeeklyReviewAt: null },
+    settings: { darkMode: false, lastBackupAt: null, hiddenTabs: ['ia'], onboardingCompleted: false, lastWeeklyReviewAt: null, dismissedAttentionKeys: [], attentionDismissals: {} },
     checkoutLog: {},
   };
 }
@@ -317,6 +506,8 @@ export function hasMeaningfulData(state: LifeOSState): boolean {
   ];
 
   return Boolean(
+    (state.resale && Object.prototype.hasOwnProperty.call(state.resale, 'commercial'))
+      ||
     state.profile?.name?.trim()
       || (state.profile?.height !== undefined && state.profile?.height !== def.profile.height)
       || state.profile?.bodyCompositionSex
@@ -335,6 +526,204 @@ export function hasMeaningfulData(state: LifeOSState): boolean {
       || Object.keys(state.checkoutLog || {}).length > 0
       || Object.keys(state.taskLog || {}).length > 0
   );
+}
+
+/**
+ * Normalizes an InstallmentSchedule preserving real contractual properties
+ * or returning null if missing, incomplete, or invalid.
+ */
+export function normalizeInstallmentSchedule(raw: any): InstallmentSchedule | null {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const totalInstallments = typeof raw.totalInstallments === 'number' && Number.isFinite(raw.totalInstallments)
+    ? Math.max(1, Math.round(raw.totalInstallments))
+    : (typeof raw.count === 'number' && Number.isFinite(raw.count) ? Math.max(1, Math.round(raw.count)) : 0);
+
+  const installmentAmount = typeof raw.installmentAmount === 'number' && Number.isFinite(raw.installmentAmount) && raw.installmentAmount > 0
+    ? roundMoney(raw.installmentAmount)
+    : 0;
+
+  const rawFirstDate = typeof raw.firstDueDate === 'string' ? raw.firstDueDate.trim() : '';
+  const firstDueDate = /^\d{4}-\d{2}-\d{2}$/.test(rawFirstDate.slice(0, 10))
+    ? rawFirstDate.slice(0, 10)
+    : null;
+
+  if (totalInstallments <= 0 || installmentAmount <= 0 || !firstDueDate) {
+    return null;
+  }
+
+  const rawDueDay = typeof raw.dueDay === 'number' && Number.isFinite(raw.dueDay)
+    ? Math.round(raw.dueDay)
+    : parseInt(firstDueDate.split('-')[2], 10);
+  const dueDay = Math.min(31, Math.max(1, Number.isFinite(rawDueDay) ? rawDueDay : 1));
+
+  const frequency: InstallmentFrequency = ['monthly', 'biweekly', 'weekly'].includes(raw.frequency)
+    ? raw.frequency
+    : 'monthly';
+
+  return {
+    totalInstallments,
+    installmentAmount,
+    firstDueDate,
+    dueDay,
+    frequency,
+  };
+}
+
+/**
+ * Normalizes a FinancedAcquisition preserving real contractual properties
+ * or returning null if missing, incomplete, or invalid.
+ */
+export function normalizeFinancedAcquisition(raw: any): FinancedAcquisition | null {
+  if (!raw || typeof raw !== 'object') return null;
+
+  const rawDate = typeof raw.acquisitionDate === 'string' ? raw.acquisitionDate.trim() : '';
+  const acquisitionDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate.slice(0, 10))
+    ? rawDate.slice(0, 10)
+    : null;
+
+  const category = typeof raw.category === 'string' && raw.category.trim().length > 0
+    ? raw.category.trim()
+    : 'Varios';
+
+  const totalPurchaseAmount = typeof raw.totalPurchaseAmount === 'number' && Number.isFinite(raw.totalPurchaseAmount) && raw.totalPurchaseAmount > 0
+    ? roundMoney(raw.totalPurchaseAmount)
+    : 0;
+
+  if (!acquisitionDate || totalPurchaseAmount <= 0) {
+    return null;
+  }
+
+  return {
+    acquisitionDate,
+    category,
+    totalPurchaseAmount,
+  };
+}
+
+export function pruneAttentionDismissals(
+  dismissals: Record<string, AttentionDismissalRecord>,
+  state?: LifeOSState,
+  referenceDateIso?: string
+): Record<string, AttentionDismissalRecord> {
+  const refDate = referenceDateIso || todayISO();
+  const pruned: Record<string, AttentionDismissalRecord> = {};
+  const maxActiveAgeMs = 90 * 24 * 60 * 60 * 1000;
+  const now = Date.now();
+
+  for (const [key, record] of Object.entries(dismissals)) {
+    if (!record || typeof record.updatedAt !== 'number' || (record.status !== 'dismissed' && record.status !== 'active')) {
+      continue;
+    }
+
+    if (state) {
+      const isEligible = isAttentionOccurrenceEligible(key, state, refDate);
+      if (isEligible) {
+        // Protected: occurrence is still alive and eligible!
+        // Preserves 'active' as a persistent tombstone against ancient dismissals from disconnected replicas.
+        // Preserves 'dismissed' so living overdue matters remain silenced.
+        pruned[key] = record;
+        continue;
+      }
+
+      // Occurrence is NO LONGER eligible (completed, paid, or date passed)
+      if (record.status === 'active') {
+        // Active status for an inactive occurrence can be pruned if older than 30 days
+        if (now - record.updatedAt > 30 * 24 * 60 * 60 * 1000) {
+          continue;
+        }
+        pruned[key] = record;
+        continue;
+      }
+
+      // If dismissed on an ineligible occurrence, prune if past retention window
+      const parts = key.split(':');
+      const prefix = parts[0];
+
+      if (prefix === 'backup_urgent' || prefix === 'weekly_review_due') {
+        const date = parts[1];
+        if (date && daysBetween(date, refDate) > 14) {
+          continue;
+        }
+        pruned[key] = record;
+        continue;
+      }
+
+      if (prefix === 'study_exam' || prefix === 'agenda_event') {
+        const date = parts[2];
+        if (date && date < refDate && daysBetween(date, refDate) > 14) {
+          continue;
+        }
+        pruned[key] = record;
+        continue;
+      }
+
+      if (
+        prefix === 'finance_commitment' ||
+        prefix === 'finance_agreement' ||
+        prefix === 'project_task' ||
+        prefix === 'today_extra'
+      ) {
+        const dueDate = prefix === 'finance_agreement' ? parts[3] : parts[2];
+        if (dueDate && dueDate < refDate && daysBetween(dueDate, refDate) > 30) {
+          continue;
+        }
+        pruned[key] = record;
+        continue;
+      }
+
+      pruned[key] = record;
+      continue;
+    }
+
+    // Fallback when state is not provided
+    if (record.status === 'active') {
+      if (now - record.updatedAt > maxActiveAgeMs) {
+        continue;
+      }
+      pruned[key] = record;
+      continue;
+    }
+
+    const parts = key.split(':');
+    const prefix = parts[0];
+
+    if (prefix === 'backup_urgent' || prefix === 'weekly_review_due') {
+      const date = parts[1];
+      if (date && daysBetween(date, refDate) > 14) {
+        continue;
+      }
+      pruned[key] = record;
+      continue;
+    }
+
+    if (prefix === 'study_exam' || prefix === 'agenda_event') {
+      const date = parts[2];
+      if (date && date < refDate && daysBetween(date, refDate) > 14) {
+        continue;
+      }
+      pruned[key] = record;
+      continue;
+    }
+
+    if (
+      prefix === 'finance_commitment' ||
+      prefix === 'finance_agreement' ||
+      prefix === 'project_task' ||
+      prefix === 'today_extra'
+    ) {
+      const dueDate = prefix === 'finance_agreement' ? parts[3] : parts[2];
+      if (dueDate && dueDate < refDate && daysBetween(dueDate, refDate) > 30) {
+        continue;
+      }
+      pruned[key] = record;
+      continue;
+    }
+
+    pruned[key] = record;
+  }
+
+  return pruned;
 }
 
 export function normalizeStoredState(raw: unknown): LifeOSState {
@@ -497,6 +886,35 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
             updatedAt: typeof c.updatedAt === 'string' ? c.updatedAt : undefined,
           }))
       : [],
+    agreements: Array.isArray(rawFinance.agreements)
+      ? rawFinance.agreements
+          .filter((a: any) => a && typeof a === 'object' && String(a.title || a.name || '').trim().length > 0)
+          .map((a: any) => ({
+            id: typeof a.id === 'string' ? a.id : uid(),
+            title: String(a.title || a.name || '').trim(),
+            creditorName: String(a.creditorName || a.creditor || 'Contraparte').trim(),
+            currency: (typeof a.currency === 'string' && a.currency.toUpperCase() === 'USD') ? 'USD' : 'UYU',
+            initialRemainingBalance: typeof a.initialRemainingBalance === 'number' && Number.isFinite(a.initialRemainingBalance) && a.initialRemainingBalance >= 0
+              ? roundMoney(a.initialRemainingBalance)
+              : (typeof a.amount === 'number' && Number.isFinite(a.amount) ? roundMoney(a.amount) : 0),
+            initialReferenceDate: typeof a.initialReferenceDate === 'string' ? a.initialReferenceDate : (typeof a.createdAt === 'string' ? a.createdAt.slice(0, 10) : todayISO()),
+            originalPrincipal: typeof a.originalPrincipal === 'number' && Number.isFinite(a.originalPrincipal) && a.originalPrincipal > 0
+              ? roundMoney(a.originalPrincipal)
+              : null,
+            priorPaidAmount: typeof a.priorPaidAmount === 'number' && Number.isFinite(a.priorPaidAmount) && a.priorPaidAmount >= 0
+              ? roundMoney(a.priorPaidAmount)
+              : null,
+            notes: typeof a.notes === 'string' ? a.notes.trim() : null,
+            status: ['active', 'settled', 'cancelled'].includes(a.status) ? a.status : 'active',
+            settledAt: typeof a.settledAt === 'string' ? a.settledAt : null,
+            linkedLegacyDebtId: typeof a.linkedLegacyDebtId === 'string' ? a.linkedLegacyDebtId : null,
+            schedule: normalizeInstallmentSchedule(a.schedule),
+            acquisition: normalizeFinancedAcquisition(a.acquisition),
+            createdAt: typeof a.createdAt === 'string' ? a.createdAt : new Date().toISOString(),
+            updatedAt: typeof a.updatedAt === 'string' ? a.updatedAt : new Date().toISOString(),
+            deletedAt: typeof a.deletedAt === 'string' ? a.deletedAt : null,
+          }))
+      : [],
     minCushion: typeof rawFinance.minCushion === 'number' && Number.isFinite(rawFinance.minCushion)
       ? rawFinance.minCushion
       : rawFinance.minCushion === null ? null : 5000,
@@ -600,7 +1018,14 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
     dailyContext: Array.isArray(candidate.dailyContext) ? candidate.dailyContext : [],
     finance,
     gym,
-    study: { ...def.study, ...(candidate.study || {}) },
+    study: {
+      ...def.study,
+      ...(candidate.study || {}),
+      subjects: Array.isArray(candidate.study?.subjects) ? candidate.study.subjects : [],
+      exams: Array.isArray(candidate.study?.exams) ? candidate.study.exams : [],
+      studyLog: Array.isArray(candidate.study?.studyLog) ? candidate.study.studyLog : [],
+      activeSession: candidate.study?.activeSession || null,
+    },
     streaming: {
       ...def.streaming,
       ...(candidate.streaming || {}),
@@ -609,6 +1034,7 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
       contentPipeline: Array.isArray(candidate.streaming?.contentPipeline) ? candidate.streaming.contentPipeline : [],
     },
     jobs,
+    // Preserve an optional commercial payload verbatim, including malformed data, for recovery.
     resale: { ...def.resale, ...(candidate.resale || {}) },
     ideas: Array.isArray(candidate.ideas) ? candidate.ideas : [],
     calendarEvents: Array.isArray(candidate.calendarEvents) ? candidate.calendarEvents : [],
@@ -628,16 +1054,97 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
       if (typeof rawSettings.lastWeeklyReviewAt === 'string') {
         lastWeeklyReviewAt = rawSettings.lastWeeklyReviewAt.slice(0, 10);
       }
+      const rawDismissals: Record<string, AttentionDismissalRecord> = {};
+      if (rawSettings.attentionDismissals && typeof rawSettings.attentionDismissals === 'object') {
+        for (const [k, v] of Object.entries(rawSettings.attentionDismissals as Record<string, any>)) {
+          if (v && typeof v === 'object' && typeof v.updatedAt === 'number') {
+            const status: AttentionDismissalStatus = v.status === 'active' ? 'active' : 'dismissed';
+            rawDismissals[k] = { status, updatedAt: v.updatedAt };
+          }
+        }
+      }
+
+      if (Array.isArray(rawSettings.dismissedAttentionKeys)) {
+        for (const k of rawSettings.dismissedAttentionKeys) {
+          if (typeof k === 'string' && k.length > 0 && !rawDismissals[k]) {
+            rawDismissals[k] = { status: 'dismissed', updatedAt: 1 };
+          }
+        }
+      }
+
+      const attentionDismissals = pruneAttentionDismissals(rawDismissals, candidate as LifeOSState);
+      const dismissedAttentionKeys = Object.entries(attentionDismissals)
+        .filter(([_, rec]) => rec.status === 'dismissed')
+        .map(([k]) => k)
+        .sort();
+
       return {
         ...def.settings,
         ...rawSettings,
         lastWeeklyReviewAt,
         hiddenTabs: Array.isArray(rawSettings.hiddenTabs) ? rawSettings.hiddenTabs : [...def.settings.hiddenTabs],
         onboardingCompleted,
+        dismissedAttentionKeys,
+        attentionDismissals,
       };
     })(),
     checkoutLog: candidate.checkoutLog && typeof candidate.checkoutLog === 'object' ? candidate.checkoutLog : {},
   };
+}
+
+export type StoredCommercialRead =
+  | { status: 'absent'; original: undefined; reconstructed: null; issues: CommercialIssue[] }
+  | { status: 'valid'; original: unknown; reconstructed: ReconstructedCommercial | null; issues: CommercialIssue[] }
+  | { status: 'blocked'; original: unknown; reconstructed: null; issues: CommercialIssue[] };
+
+/** Read only: keep the exact payload separately from any reconstructed view. */
+export function readStoredCommercial(raw: unknown): StoredCommercialRead {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { status: 'absent', original: undefined, reconstructed: null, issues: [] };
+  const resale = (raw as { resale?: unknown }).resale;
+  if (!resale || typeof resale !== 'object' || Array.isArray(resale) ||
+      !Object.prototype.hasOwnProperty.call(resale, 'commercial')) return { status: 'absent', original: undefined, reconstructed: null, issues: [] };
+  const commercial = (resale as { commercial: unknown }).commercial;
+  const invalid = (): StoredCommercialRead => ({ status: 'blocked', original: commercial, reconstructed: null,
+    issues: [{ category: 'structure', code: 'invalid_collection', entity: 'operation', id: 'commercial' }] });
+  if (!commercial || typeof commercial !== 'object' || Array.isArray(commercial) ||
+      !Array.isArray((commercial as CommercialSet).items) ||
+      !Array.isArray((commercial as CommercialSet).operations) ||
+      !Array.isArray((commercial as CommercialSet).movements)) return invalid();
+  try {
+    const result = validateDurableCommercial(commercial as CommercialSet);
+    const issues: CommercialIssue[] = result.issues.map((issue) => ({
+      category: 'structure', code: issue.code, entity: 'operation', id: issue.id,
+      ...(issue.reference ? { reference: issue.reference } : {}),
+    }));
+    return result.valid
+      ? { status: 'valid', original: commercial, reconstructed: reconstructDurableCommercial(commercial as CommercialSet), issues }
+      : { status: 'blocked', original: commercial, reconstructed: null, issues };
+  } catch {
+    return invalid();
+  }
+}
+
+export function inspectStoredCommercial(raw: unknown): { present: boolean; valid: boolean; issues: CommercialIssue[] } {
+  const read = readStoredCommercial(raw);
+  return { present: read.status !== 'absent', valid: read.status !== 'blocked', issues: read.issues };
+}
+
+/** Never replace a payload already loaded with a different or missing one by an incidental save. */
+export function changesStoredCommercial(before: unknown, after: unknown): boolean {
+  const left = readStoredCommercial(before);
+  if (left.status === 'absent') return false;
+  const right = readStoredCommercial(after);
+  return right.status === 'absent' || JSON.stringify(left.original) !== JSON.stringify(right.original);
+}
+
+export function commercialHydrationBlock(current: unknown, incoming: unknown): string | null {
+  const source = readStoredCommercial(current);
+  const destination = readStoredCommercial(incoming);
+  if (source.status === 'blocked' || destination.status === 'blocked')
+    return 'Los datos comerciales no superan la validación y requieren revisión.';
+  if (changesStoredCommercial(current, incoming))
+    return 'Las versiones comerciales difieren; se conservaron ambas para revisión.';
+  return null;
 }
 
 function getDefaultRecoveryDescription(action: RecoveryAction): string {
@@ -661,10 +1168,10 @@ export function parseBackupJSON(text: string): LifeOSState {
   try {
     parsed = JSON.parse(text);
   } catch {
-    throw new Error('El archivo no parece pertenecer a LifeOS.');
+    throw new Error('El archivo no parece pertenecer a Celestian LifeOS.');
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('El archivo no parece pertenecer a LifeOS.');
+    throw new Error('El archivo no parece pertenecer a Celestian LifeOS.');
   }
 
   // Support envelope: { meta: ..., state: ... } or { state: ... }
@@ -675,7 +1182,7 @@ export function parseBackupJSON(text: string): LifeOSState {
   const knownKeys = ['profile', 'agenda', 'finance', 'gym', 'notes', 'tasksRecurring', 'study', 'streaming', 'jobs', 'resale', 'schemaVersion'];
   const hasRecognizedKey = knownKeys.some((k) => k in candidate);
   if (!hasRecognizedKey) {
-    throw new Error('El archivo no parece pertenecer a LifeOS.');
+    throw new Error('El archivo no parece pertenecer a Celestian LifeOS.');
   }
   const normalized = normalizeStoredState(candidate);
   if (candidate?.settings?.onboardingCompleted === undefined) {
@@ -701,6 +1208,10 @@ export function inspectBackupJSON(text: string): BackupPreviewSummary {
   }
   if (!rawState?.finance?.commitments && (normalized.finance?.commitments?.length || 0) === 0) {
     warnings.push('El archivo no contiene compromisos financieros ni cuotas modernas.');
+  }
+  const commercial = inspectStoredCommercial(rawState);
+  if (commercial.present && !commercial.valid) {
+    warnings.push(`Mi negocio contiene operaciones comerciales inconsistentes (${commercial.issues.map((issue) => issue.code).join(', ')}). Se conservarán sin modificarlas.`);
   }
 
   return {
@@ -790,6 +1301,11 @@ export function saveRecoveryState(
 ): boolean {
   try {
     const key = getRecoveryKey(userId);
+    const existing = localStorage.getItem(key);
+    if (existing) {
+      const parsed = JSON.parse(existing);
+      if (changesStoredCommercial(parsed?.state ?? parsed, state)) return false;
+    }
     const meta: RecoveryMetadata = {
       savedAt: new Date().toISOString(),
       action,
@@ -832,11 +1348,27 @@ export function loadStoredState(userId?: string | null): { state: LifeOSState; b
   return { state: def, backend: 'ninguno' };
 }
 
-export function saveStoredState(state: LifeOSState, userId?: string | null): boolean {
+export function hasPersistedCommercial(userId?: string | null): boolean {
+  try {
+    const raw = localStorage.getItem(getStorageKey(userId));
+    return Boolean(raw && readStoredCommercial(JSON.parse(raw)).status !== 'absent');
+  } catch {
+    // An unreadable local state cannot be safely replaced by a new full-state write.
+    return true;
+  }
+}
+
+export function saveStoredState(state: LifeOSState, userId?: string | null, commercialBase?: LifeOSState): boolean {
   try {
     const key = getStorageKey(userId);
-    localStorage.setItem(key, JSON.stringify(state));
-    return true;
+    const previous = localStorage.getItem(key);
+    if (commercialBase) {
+      if (previous !== JSON.stringify(commercialBase)) return false;
+      assertCommercialTransition(commercialBase, state);
+    } else if (previous && changesStoredCommercial(JSON.parse(previous), state)) return false;
+    const serialized = JSON.stringify(state);
+    localStorage.setItem(key, serialized);
+    return localStorage.getItem(key) === serialized;
   } catch (e) {
     console.error('Error saving to localStorage:', e);
     return false;

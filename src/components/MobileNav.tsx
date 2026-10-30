@@ -43,7 +43,20 @@ export const MobileNav: React.FC<MobileNavProps> = ({
     }`;
   const moreActive = !['dashboard', slot2?.id, slot4?.id].filter(Boolean).includes(currentView);
 
+  const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+
   const syncLed = (() => {
+    if (!isOnline || syncStatus === 'offline') {
+      return {
+        dotClass: 'bg-amber-400 dark:bg-amber-400',
+        label: 'Sin conexión a internet',
+        textColor: 'text-amber-700 dark:text-amber-300',
+      };
+    }
+    if (syncStatus === 'locked') return {
+      dotClass: 'bg-amber-500', label: 'Sincronización bloqueada',
+      textColor: 'text-amber-700 dark:text-amber-300',
+    };
     if (syncStatus === 'synced') {
       return {
         dotClass: 'bg-emerald-400 dark:bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]',
@@ -68,20 +81,20 @@ export const MobileNav: React.FC<MobileNavProps> = ({
     if (syncStatus === 'error') {
       return {
         dotClass: 'bg-rose-500 animate-pulse',
-        label: 'Error al subir',
+        label: 'Error al sincronizar',
         textColor: 'text-rose-700 dark:text-rose-300',
       };
     }
     if (cloudConfigured && !cloudUser) {
       return {
-        dotClass: 'bg-blue-400 dark:bg-blue-400 animate-pulse',
-        label: 'Toca para conectar Google',
-        textColor: 'text-blue-600 dark:text-blue-400 font-bold',
+        dotClass: 'bg-slate-400 dark:bg-slate-500',
+        label: 'Modo local',
+        textColor: 'text-[var(--text-faint)]',
       };
     }
     return {
       dotClass: 'bg-slate-400 dark:bg-slate-500',
-      label: 'Offline (Local)',
+      label: 'Modo local',
       textColor: 'text-[var(--text-faint)]',
     };
   })();
@@ -152,7 +165,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
           className="relative mx-2 -mt-5 flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md active:scale-95 transition-transform cursor-pointer border border-white/20"
           aria-label="Captura rápida"
         >
-          <AppIcon name="plus" className="h-6 w-6 text-white" />
+          <AppIcon name="touchpad" className="h-6 w-6 text-white" />
           {inboxCount > 0 && (
             <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-black text-slate-900 border-2 border-[var(--card)] animate-pulse">
               {inboxCount}

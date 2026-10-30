@@ -21,6 +21,22 @@ test('el buscador ignora tildes y cubre agenda, rutinas y suscripciones', () => 
   assert.equal(searchLifeOS(state, 'musica premium')[0].view, 'finanzas');
 });
 
+test('el buscador identifica concursos públicos por organismo, tipo y etapa', () => {
+  const state = defaultState();
+  state.jobs.applications.push({
+    id: 'llamado-1',
+    tipo: 'concurso',
+    empresa: 'Ministerio de Salud Pública',
+    puesto: 'Administrativo III',
+    estado: 'lista_prelacion',
+    fecha: '2026-10-20',
+  });
+  const result = searchLifeOS(state, 'concurso público');
+  assert.equal(result[0]?.view, 'trabajo');
+  assert.match(result[0]?.title || '', /Concurso público/);
+  assert.match(result[0]?.subtitle || '', /Lista de prelación/);
+});
+
 test('ranking de relevancia prioriza coincidencia exacta y por título sobre campos secundarios', () => {
   const state = defaultState();
   // 1. Nota con "Redes" en contenido secundario pero título diferente

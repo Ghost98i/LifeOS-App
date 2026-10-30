@@ -33,16 +33,23 @@ export function evaluateCushionStatus(
   currentBalance: number,
   minProjectedBalance: number,
   minCushion?: number | null,
-  cushionEnabled?: boolean
+  cushionEnabled?: boolean,
+  accountsCount?: number
 ): CushionEvaluation {
-  if (cushionEnabled === false || minCushion === null || minCushion === undefined || Number(minCushion) <= 0) {
+  if (
+    cushionEnabled === false ||
+    minCushion === null ||
+    minCushion === undefined ||
+    Number(minCushion) <= 0 ||
+    accountsCount === 0
+  ) {
     return {
       status: 'disabled',
       currentBalance,
       minProjectedBalance,
       minCushion: null,
       shortfall: 0,
-      message: 'Colchón financiero desactivado.',
+      message: accountsCount === 0 ? 'Sin cuentas configuradas.' : 'Colchón financiero desactivado.',
     };
   }
 

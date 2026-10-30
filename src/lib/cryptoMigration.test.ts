@@ -25,6 +25,7 @@ import {
   setCloudKeyEnvelope,
   resolvePendingRotation,
   getRotationPendingState,
+  isSyntheticTestingAllowed,
 } from './cryptoMigration';
 import { defaultState, loadRecoveryState, saveRecoveryState } from './storage';
 import { SYNC_MODULES, type SyncModuleKey } from './syncModel';
@@ -750,4 +751,105 @@ test('Fase 8.4d: Data Safety — Snapshots de recuperación y exportación de ba
   assert.equal(exportedJson.includes('CryptoEnvelope'), false, 'CryptoEnvelope encontrado en backup export');
 });
 
+test('Revisión Final: isSyntheticTestingAllowed aísla estrictamente clientes públicos', () => {
+  // 1. In Node environment with no window, returns false
+  const prevWindow = (globalThis as any).window;
+  delete (globalThis as any).window;
+  assert.equal(isSyntheticTestingAllowed(), false);
 
+  // 2. In public domain (e.g. celestian.lifeos.app or firebaseapp.com), returns false
+  (globalThis as any).window = {
+    location: {
+      hostname: 'celestian.lifeos.app',
+    },
+  };
+  assert.equal(isSyntheticTestingAllowed(), false);
+
+  (globalThis as any).window = {
+    location: {
+      hostname: 'celestian-lifeos.web.app',
+    },
+  };
+  assert.equal(isSyntheticTestingAllowed(), false);
+
+  // 3. In localhost or 127.0.0.1, returns true for automated test runners
+  (globalThis as any).window = {
+    location: {
+      hostname: 'localhost',
+    },
+  };
+  assert.equal(isSyntheticTestingAllowed(), true);
+
+  (globalThis as any).window = {
+    location: {
+      hostname: '127.0.0.1',
+    },
+  };
+  assert.equal(isSyntheticTestingAllowed(), true);
+
+  // Restore
+  if (prevWindow) {
+    (globalThis as any).window = prevWindow;
+  } else {
+    delete (globalThis as any).window;
+  }
+});
+
+test('Migración: un ciphertext ilegible, incluso marcado como completado, jamás se sobrescribe', async () => {
+  for (const checkpointed of [false, true]) {
+    const userId = `migration-integrity-${checkpointed}`;
+    const keys = await provisionZeroKnowledgeKeys(userId);
+    const otherKeys = await provisionZeroKnowledgeKeys(`${userId}-other`);
+    const remote = await encryptSyncModule({ profile: { name: 'Remoto' } }, otherKeys.sessionMdek, 'profile', userId);
+    let writes = 0;
+    let promoted = false;
+    await assert.rejects(executeE2EEMigration(userId, defaultState(), keys.sessionMdek, {
+      capabilityHandlers: {
+        getKeyEnvelope: async () => keys.envelope,
+        getCapability: async () => ({ version: 1, minimumSyncProtocolVersion: 2, encryptionState: 'mixed', encryptedModules: checkpointed ? ['profile'] : [], updatedAt: '' }),
+        setCapability: async (_user, capability) => { if (capability.encryptionState === 'encrypted') promoted = true; },
+        getModule: async () => ({ isEncrypted: true, data: remote, revision: 'remote-revision' }),
+      },
+      customWriter: async () => { writes++; throw new Error('No debe escribir'); },
+    }), CryptoDecryptionError);
+    assert.equal(writes, 0);
+    assert.equal(promoted, false);
+  }
+});
+
+test('Migración: una lectura fallida y cambios remotos pendientes detienen la publicación', async () => {
+  for (const networkFailure of [false, true]) {
+    const userId = `migration-read-${networkFailure}`;
+    const keys = await provisionZeroKnowledgeKeys(userId);
+    let writes = 0;
+    await assert.rejects(executeE2EEMigration(userId, defaultState(), keys.sessionMdek, {
+      capabilityHandlers: {
+        getKeyEnvelope: async () => keys.envelope,
+        getCapability: async () => null,
+        setCapability: async () => {},
+        getModule: async () => {
+          if (networkFailure) throw new Error('Sin conexión sintética');
+          return { isEncrypted: false, data: { profile: { name: 'Otro dispositivo' } }, revision: 'remote-2' };
+        },
+      },
+      customWriter: async () => { writes++; throw new Error('No debe escribir'); },
+    }), networkFailure ? /Sin conexión/ : /cambios remotos pendientes/);
+    assert.equal(writes, 0);
+  }
+});
+
+test('Migración: sin copia preventiva durable no se lee ni modifica la nube', async () => {
+  const originalStorage = globalThis.localStorage;
+  const keys = await provisionZeroKnowledgeKeys('migration-no-disk');
+  let remoteCalls = 0;
+  globalThis.localStorage = { getItem: () => null, setItem: () => { throw new Error('QuotaExceeded'); } } as any;
+  try {
+    await assert.rejects(executeE2EEMigration('migration-no-disk', defaultState(), keys.sessionMdek, {
+      capabilityHandlers: {
+        getKeyEnvelope: async () => { remoteCalls++; return keys.envelope; },
+        getCapability: async () => { remoteCalls++; return null; }, setCapability: async () => { remoteCalls++; },
+      },
+    }), /copia preventiva/);
+    assert.equal(remoteCalls, 0);
+  } finally { globalThis.localStorage = originalStorage; }
+});

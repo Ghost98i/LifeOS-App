@@ -216,7 +216,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
                     min={barWeight}
                     value={totalWeight}
                     onChange={(e) => setTotalWeight(Math.max(0, Number(e.target.value)))}
-                    className="flex-1 px-3 py-2 text-base font-mono font-bold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden"
+                    className="flex-1 px-3 py-2 text-base tabular-nums font-bold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden"
                   />
                   <div className="flex gap-1">
                     {[+2.5, +5, +10, -5, -2.5].map((delta) => (
@@ -224,7 +224,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
                         key={delta}
                         type="button"
                         onClick={() => setTotalWeight((prev) => Math.max(barWeight, prev + delta))}
-                        className="px-2 py-2 text-xs font-mono font-bold rounded-lg border border-[var(--border)] bg-[var(--bg)] hover:bg-[var(--surface-muted)] text-[var(--text)] cursor-pointer"
+                        className="px-2 py-2 text-xs tabular-nums font-bold rounded-lg border border-[var(--border)] bg-[var(--bg)] hover:bg-[var(--surface-muted)] text-[var(--text)] cursor-pointer"
                       >
                         {delta > 0 ? `+${delta}` : delta}
                       </button>
@@ -237,13 +237,13 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
               <div className="p-4 rounded-xl bg-[var(--bg)] border border-[var(--border)] space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-[var(--text-soft)]">Peso en discos (total):</span>
-                  <span className="font-mono font-bold text-sm text-[var(--text)]">
+                  <span className="tabular-nums font-bold text-sm text-[var(--text)]">
                     {Math.max(0, totalWeight - barWeight)} kg
                   </span>
                 </div>
                 <div className="flex items-center justify-between border-t border-[var(--border)] pt-2">
                   <span className="text-xs font-bold text-[var(--blue)]">Colocar por cada lado:</span>
-                  <span className="font-mono font-extrabold text-base text-[var(--blue)]">
+                  <span className="tabular-nums font-extrabold text-base text-[var(--blue)]">
                     {result.perSideKg} kg
                   </span>
                 </div>
@@ -258,7 +258,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
                       {result.plates.map((p) => (
                         <span
                           key={p.kg}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-mono font-black border ${p.color} shadow-2xs flex items-center gap-1`}
+                          className={`px-2.5 py-1 rounded-lg text-xs tabular-nums font-black border ${p.color} shadow-2xs flex items-center gap-1`}
                         >
                           <span>{p.count}×</span>
                           <span>{p.kg} kg</span>
@@ -306,7 +306,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
                       key={plate.kg}
                       type="button"
                       onClick={() => handleAddPlateManual(plate.kg)}
-                      className={`py-2 px-1 rounded-xl text-xs font-mono font-bold border transition-transform active:scale-95 cursor-pointer shadow-xs flex flex-col items-center ${plate.color}`}
+                      className={`py-2 px-1 rounded-xl text-xs tabular-nums font-bold border transition-transform active:scale-95 cursor-pointer shadow-xs flex flex-col items-center ${plate.color}`}
                     >
                       <span>+{plate.kg}</span>
                       <span className="text-[9px] opacity-75">kg</span>
@@ -319,7 +319,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
               <div className="p-4 rounded-xl bg-[var(--bg)] border border-[var(--border)] space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-[var(--text)]">Discos colocados (por lado):</span>
-                  <span className="font-mono font-bold text-xs text-[var(--blue)]">
+                  <span className="tabular-nums font-bold text-xs text-[var(--blue)]">
                     {manualPlatesPerSide.reduce((a, b) => a + b, 0)} kg / lado
                   </span>
                 </div>
@@ -336,7 +336,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
                         type="button"
                         onClick={() => handleRemovePlateManual(idx)}
                         title="Tocar para quitar este disco"
-                        className="px-2 py-1 rounded-lg text-xs font-mono font-bold bg-[var(--card)] border border-[var(--border)] text-[var(--text)] hover:border-rose-500 hover:text-rose-500 cursor-pointer shadow-2xs group flex items-center gap-1"
+                        className="px-2 py-1 rounded-lg text-xs tabular-nums font-bold bg-[var(--card)] border border-[var(--border)] text-[var(--text)] hover:border-rose-500 hover:text-rose-500 cursor-pointer shadow-2xs group flex items-center gap-1"
                       >
                         <span>{kg} kg</span>
                         <span className="text-[10px] text-[var(--text-faint)] group-hover:text-rose-500">✕</span>
@@ -347,7 +347,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
 
                 <div className="flex items-center justify-between border-t border-[var(--border)] pt-2.5">
                   <span className="text-xs font-bold text-[var(--text-soft)]">Peso Total Resultante:</span>
-                  <span className="font-mono text-xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                  <span className="tabular-nums text-xl font-extrabold text-emerald-600 dark:text-emerald-400">
                     {totalWeight} kg
                   </span>
                 </div>

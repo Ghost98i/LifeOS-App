@@ -1,30 +1,33 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import type { LifeOSState, ViewType } from '../types';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { LifeOSState, ViewType, AttentionDismissalRecord } from '../types';
+import type { TodayItem } from '../lib/calculations';
+import type { TodayAgendaEntry } from '../lib/todayOverview';
 import { playSound } from '../lib/audio';
-import { TodayFocus } from './TodayFocus';
 import { PersonalContextCard } from './PersonalContextCard';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
 import { AppIcon } from './AppIcon';
 import { BentoCommandBar } from './BentoCommandBar';
 import { AlpineDayCycleBackdrop } from './visual/AlpineDayCycleBackdrop';
-import { getDayCycleConfig, getDayCyclePeriod } from '../lib/alpineDayCycle';
-import { daysBetween, todayISO, uid } from '../lib/storage';
-import { todayItems } from '../lib/calculations';
+import { getDayCyclePeriod, getLocalGreeting } from '../lib/alpineDayCycle';
+import { fmtDate, todayISO, uid } from '../lib/storage';
+import { getTodayAgendaEntries, getPastPendingExtras, getFutureScheduledExtras } from '../lib/todayOverview';
 import { showToast } from '../lib/toast';
-import { adoptSmartDailyPriorities } from '../lib/smartPriorities';
 import { formatRelativeTime, getActivityTimeline } from '../lib/activityTimeline';
-import { getDashboardNotes } from '../lib/notesFlows';
+import type { ActivityTimelineItem } from '../lib/activityTimeline';
 import { isModuleEnabled } from '../lib/moduleVisibility';
-import { isWeeklyReviewDue } from '../lib/review';
-import { TodayNotesSection } from './TodayNotesSection';
+import { TodayAgendaSection } from './TodayAgendaSection';
+import { getTodayAttentionItems, getDismissedAttentionItems, nextAttentionDismissalTimestamp, type AttentionItem } from '../lib/todayAttention';
+import { DismissedAttentionModal } from './DismissedAttentionModal';
 
-const MAX_VISIBLE_TASKS = 6;
-
-const fmtDate = (iso?: string): string => {
-  if (!iso) return '';
-  const [year, month, day] = iso.split('-').map(Number);
-  return new Date(year, month - 1, day).toLocaleDateString('es-UY', { day: 'numeric', month: 'short' });
-};
+// The material and outline are painted directly on one normalized SVG contour.
+const OBSERVATORY_PANEL_PATH = [
+  'M 0.065 0 H 0.8',
+  'C 0.855 0 0.885 0.025 0.902 0.105',
+  'C 0.936 0.265 0.965 0.6 0.995 0.88',
+  'C 1.004 0.964 0.984 1 0.94 1',
+  'H 0.065 C 0.029 1 0 0.96 0 0.91',
+  'V 0.09 C 0 0.04 0.029 0 0.065 0 Z',
+].join(' ');
 
 const activityModuleToView: Record<string, ViewType> = {
   finance: 'finanzas',
@@ -33,17 +36,42 @@ const activityModuleToView: Record<string, ViewType> = {
   resale: 'reventa',
   task: 'agenda',
   inbox: 'notas',
+  note: 'notas',
+  jobs: 'trabajo',
+};
+
+const activityModuleLabel: Record<ActivityTimelineItem['module'], string> = {
+  finance: 'Finanzas',
+  gym: 'Gym',
+  study: 'Estudios',
+  task: 'Tarea',
+  resale: 'Reventa',
+  inbox: 'Bandeja',
+  checkout: 'Cierre del día',
+  note: 'Nota',
+  jobs: 'Trabajo',
+};
+
+const formatActivityWhen = (timestamp: string): string => {
+  const relative = formatRelativeTime(timestamp);
+  if (timestamp.length <= 10 || Number.isNaN(Date.parse(timestamp))) return relative;
+  const time = new Date(timestamp).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' });
+  return `${relative} · ${time}`;
 };
 
 interface DashboardViewProps {
   state: LifeOSState;
-  onUpdateState: (updater: (draft: LifeOSState) => void) => void;
+  onUpdateState: (updater: (draft: LifeOSState) => void) => boolean;
   onNavigate: (view: ViewType) => void;
   onExportJSON: () => void;
   onOpenSearch?: () => void;
   onOpenCapture?: () => void;
   onOpenQuickNote?: () => void;
+  onOpenNote?: (noteId: string) => void;
   onQuickAction?: (view: ViewType, focusId: string, txType?: 'gasto' | 'ingreso') => void;
+  onNavigateToRecord?: (view: ViewType, options?: { tab?: string; focusId?: string; date?: string }) => void;
+  initialFocusId?: string | null;
+  focusNonce?: number;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -53,176 +81,557 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onExportJSON,
   onOpenSearch,
   onOpenCapture,
-  onOpenQuickNote,
+  onOpenQuickNote: _onOpenQuickNote,
+  onOpenNote,
   onQuickAction,
+  onNavigateToRecord,
+  initialFocusId,
+  focusNonce,
 }) => {
-  const [extraText, setExtraText] = useState('');
-  const [extraPriority, setExtraPriority] = useState<'alta' | 'media' | 'baja'>('media');
-  const [taskFilter, setTaskFilter] = useState<'all' | 'pending' | 'done'>('all');
+  const observatoryId = useId();
   const [backupDismissed, setBackupDismissed] = useState(false);
-
   const [now, setNow] = useState(() => new Date());
-  const dayPeriod = getDayCyclePeriod(now);
-  const dayConfig = getDayCycleConfig(dayPeriod);
+  const [completionMotion, setCompletionMotion] = useState<{ taskId: string; nonce: number } | null>(null);
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 60_000);
-    return () => window.clearInterval(timer);
+    let timer: number | undefined;
+    const scheduleNextMinute = () => {
+      const delay = 60_000 - (Date.now() % 60_000);
+      timer = window.setTimeout(() => {
+        setNow(new Date());
+        scheduleNextMinute();
+      }, delay);
+    };
+    const refreshClock = () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      setNow(new Date());
+      scheduleNextMinute();
+    };
+    const handleVisibility = () => { if (document.visibilityState === 'visible') refreshClock(); };
+    scheduleNextMinute();
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', refreshClock);
+    return () => {
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', refreshClock);
+    };
   }, []);
 
-  const todayIso = todayISO();
-  const formattedDate = (() => {
-    const value = now.toLocaleDateString('es-UY', {
-      weekday: 'long',
-      day: 'numeric',
-      month: 'long',
-    });
-    return value.charAt(0).toUpperCase() + value.slice(1);
-  })();
+  useEffect(() => {
+    if (!completionMotion) return;
+    const timeout = window.setTimeout(() => setCompletionMotion(null), 1200);
+    return () => window.clearTimeout(timeout);
+  }, [completionMotion]);
 
-  const items = useMemo(() => todayItems(state, todayIso), [state, todayIso]);
+  const todayIso = todayISO();
+  const dayPeriod = getDayCyclePeriod(now);
+  const formattedTime = now.toLocaleTimeString('es-UY', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  });
+  const localDateIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const fullWeekday = now.toLocaleDateString('es-UY', { weekday: 'long' });
+  const capitalizedWeekday = fullWeekday.charAt(0).toUpperCase() + fullWeekday.slice(1);
+  const fullMonth = now.toLocaleDateString('es-UY', { month: 'long' }).toLocaleLowerCase('es-UY');
+  const formattedFullDate = `${capitalizedWeekday} ${now.getDate()} de ${fullMonth}`;
+
+  const agendaEntries = useMemo(() => getTodayAgendaEntries(state, todayIso), [state, todayIso]);
+  const pastPendingExtras = useMemo(
+    () => getPastPendingExtras(state, todayIso),
+    [state, todayIso]
+  );
+  const futureScheduledExtras = useMemo(
+    () => getFutureScheduledExtras(state, todayIso),
+    [state, todayIso]
+  );
   const recentActivity = useMemo(
-    () => getActivityTimeline(state, 10)
-      .filter((activity) => {
-        const view = activityModuleToView[activity.module];
-        return !view || isModuleEnabled(state, view);
-      })
-      .slice(0, 4),
+    () => getActivityTimeline(state, Number.MAX_SAFE_INTEGER, { hideAmounts: true, privacyMode: state.settings.privacyMode })
+        .filter((activity) => {
+          const view = activityModuleToView[activity.module];
+          return !view || isModuleEnabled(state, view);
+        })
+        .slice(0, 5),
     [state]
   );
-  const dashboardNotes = useMemo(() => getDashboardNotes(state.notes?.postits || []), [state.notes?.postits]);
+  const activityStripRef = useRef<HTMLDivElement>(null);
+  const [activityEdges, setActivityEdges] = useState({ left: false, right: false });
 
-  const daysSinceBackup = state.settings.lastBackupAt
-    ? daysBetween(state.settings.lastBackupAt, todayIso)
-    : null;
-  const backupUrgent = daysSinceBackup === null || daysSinceBackup >= 3;
-  const weeklyReviewNeedsAttention = isWeeklyReviewDue(state, todayIso);
-  const showAttention = (backupUrgent && !backupDismissed) || weeklyReviewNeedsAttention;
-  const todayPriorities = (state.dailyPriorities || []).filter((priority) => priority.date === todayIso);
+  useEffect(() => {
+    const strip = activityStripRef.current;
+    if (!strip) return;
+    const updateEdges = () => {
+      const left = strip.scrollLeft > 1;
+      const right = strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1;
+      setActivityEdges((previous) => previous.left === left && previous.right === right ? previous : { left, right });
+    };
+    updateEdges();
+    strip.addEventListener('scroll', updateEdges, { passive: true });
+    window.addEventListener('resize', updateEdges);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateEdges);
+    observer?.observe(strip);
+    strip.querySelectorAll<HTMLElement>('.today-activity-item').forEach((child) => observer?.observe(child));
+    return () => {
+      strip.removeEventListener('scroll', updateEdges);
+      window.removeEventListener('resize', updateEdges);
+      observer?.disconnect();
+    };
+  }, [recentActivity]);
 
-  const filteredItems = items.filter((item) => {
-    if (taskFilter === 'pending') return !item.done;
-    if (taskFilter === 'done') return item.done;
-    return true;
-  });
-  const visibleItems = filteredItems.slice(0, MAX_VISIBLE_TASKS);
-  const hiddenItemsCount = Math.max(0, filteredItems.length - visibleItems.length);
-  const pendingItemsCount = items.filter((item) => !item.done).length;
-
-  const handleAddPriority = (text: string) => {
-    onUpdateState((draft) => {
-      if (!draft.dailyPriorities) draft.dailyPriorities = [];
-      const existing = draft.dailyPriorities.filter((priority) => priority.date === todayIso);
-      const usedRanks = existing.map((priority) => priority.rank || 0);
-      const nextRank = [1, 2, 3].find((rank) => !usedRanks.includes(rank)) || existing.length + 1;
-      draft.dailyPriorities.push({ id: uid(), date: todayIso, text: text.trim(), done: false, rank: nextRank });
-    });
-    showToast('Prioridad agregada para hoy.');
+  const scrollActivity = (direction: -1 | 1) => {
+    const strip = activityStripRef.current;
+    if (!strip) return;
+    strip.scrollBy({ left: direction * Math.max(240, strip.clientWidth * 0.75), behavior: 'smooth' });
   };
 
-  const handleSmartSuggestPriorities = () => {
-    onUpdateState((draft) => {
-      const count = adoptSmartDailyPriorities(draft, 3);
-      if (count > 0) {
-        playSound('success');
-        showToast(`${count} prioridad(es) adoptadas según tus urgencias y vencimientos.`);
-      } else {
-        showToast('No se detectaron urgencias adicionales para hoy.', 'info');
+  const [showDismissedModal, setShowDismissedModal] = useState(false);
+
+  const attentionItems = useMemo(
+    () => getTodayAttentionItems(state, { todayIso, backupDismissed, now }),
+    [state, todayIso, backupDismissed, now]
+  );
+
+  const dismissedAttentionItems = useMemo(
+    () => getDismissedAttentionItems(state, { todayIso, backupDismissed, now }),
+    [state, todayIso, backupDismissed, now]
+  );
+
+  const handleAttentionAction = (item: AttentionItem) => {
+    if (onNavigateToRecord) {
+      onNavigateToRecord(item.targetView, {
+        tab: item.targetTab,
+        focusId: item.targetFocusId,
+        date: item.dueDate,
+      });
+    } else {
+      onNavigate(item.targetView);
+    }
+  };
+
+  const handleDismissAttention = (item: AttentionItem) => {
+    if (onUpdateState((draft) => {
+      if (!draft.settings) {
+        draft.settings = { darkMode: false, hiddenTabs: [], onboardingCompleted: false, dismissedAttentionKeys: [], attentionDismissals: {} };
       }
-    });
+      const prevRec = draft.settings.attentionDismissals?.[item.dismissKey];
+      const nextTimestamp = nextAttentionDismissalTimestamp(prevRec);
+      const nextDismissals = {
+        ...(draft.settings.attentionDismissals || {}),
+        [item.dismissKey]: { status: 'dismissed' as const, updatedAt: nextTimestamp },
+      };
+      draft.settings.attentionDismissals = nextDismissals;
+      draft.settings.dismissedAttentionKeys = Object.entries(nextDismissals)
+        .filter(([_, rec]) => (rec as AttentionDismissalRecord)?.status === 'dismissed')
+        .map(([k]) => k)
+        .sort();
+    }) === false) return;
+    if (item.signalKind === 'backup_urgent') {
+      setBackupDismissed(true);
+    }
+    showToast('Aviso descartado.', 'info');
   };
 
-  const handleTogglePriority = (priority: typeof todayPriorities[number]) => {
-    playSound('success');
-    onUpdateState((draft) => {
-      const target = (draft.dailyPriorities || []).find((item) => item.id === priority.id);
-      if (target) target.done = !target.done;
-    });
+  const handleRestoreAttentionItem = (item: AttentionItem) => {
+    if (onUpdateState((draft) => {
+      if (!draft.settings) return;
+      const prevRec = draft.settings.attentionDismissals?.[item.dismissKey];
+      const nextTimestamp = nextAttentionDismissalTimestamp(prevRec);
+      const nextDismissals = {
+        ...(draft.settings.attentionDismissals || {}),
+        [item.dismissKey]: { status: 'active' as const, updatedAt: nextTimestamp },
+      };
+      draft.settings.attentionDismissals = nextDismissals;
+      draft.settings.dismissedAttentionKeys = Object.entries(nextDismissals)
+        .filter(([_, rec]) => (rec as AttentionDismissalRecord)?.status === 'dismissed')
+        .map(([k]) => k)
+        .sort();
+    }) === false) return;
+    if (item.signalKind === 'backup_urgent') {
+      setBackupDismissed(false);
+    }
+    showToast('Aviso restaurado.', 'success');
   };
 
-  const handleRemovePriority = (id: string) => {
-    onUpdateState((draft) => {
-      draft.dailyPriorities = (draft.dailyPriorities || []).filter((priority) => priority.id !== id);
-    });
+  const handleRestoreAllDismissed = () => {
+    const now = Date.now();
+    if (onUpdateState((draft) => {
+      if (!draft.settings) return;
+      const nextDismissals = { ...(draft.settings.attentionDismissals || {}) };
+      for (const item of dismissedAttentionItems) {
+        const prevRec = draft.settings.attentionDismissals?.[item.dismissKey];
+        const nextTimestamp = nextAttentionDismissalTimestamp(prevRec, now);
+        nextDismissals[item.dismissKey] = { status: 'active' as const, updatedAt: nextTimestamp };
+      }
+      draft.settings.attentionDismissals = nextDismissals;
+      draft.settings.dismissedAttentionKeys = Object.entries(nextDismissals)
+        .filter(([_, rec]) => (rec as AttentionDismissalRecord)?.status === 'dismissed')
+        .map(([k]) => k)
+        .sort();
+    }) === false) return;
+    setBackupDismissed(false);
+    showToast('Todos los avisos fueron restaurados.', 'success');
   };
+  const dayClosed = Boolean(state.checkoutLog?.[todayIso]?.closedAt);
 
-  const handleAddExtra = (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!extraText.trim()) return;
-    onUpdateState((draft) => {
-      if (!draft.todayExtras) draft.todayExtras = [];
-      draft.todayExtras.push({ id: uid(), date: todayIso, text: extraText.trim(), done: false, priority: extraPriority });
-    });
-    setExtraText('');
-    showToast('Tarea agregada para hoy.');
-  };
-
-  const handleToggleItem = (item: ReturnType<typeof todayItems>[number]) => {
+  const handleToggleItem = (item: TodayItem, entryKey?: string): boolean => {
     if (!item.done && item.isBlocked && item.blockingTaskNames?.length) {
       const blockers = item.blockingTaskNames.map((name) => `• ${name}`).join('\n');
-      const proceed = window.confirm(
-        `Esta tarea depende de requisitos aún no completados:\n\n${blockers}\n\n¿Deseas marcarla como completada de todos modos?`
-      );
-      if (!proceed) return;
+      if (!window.confirm(`Esta tarea depende de requisitos aún no completados:\n\n${blockers}\n\n¿Deseas marcarla como completada de todos modos?`)) return false;
     }
 
-    playSound('success');
-    if (!item.done && item.unblocksCount && item.unblocksCount > 0) {
-      showToast(`Tarea completada. Desbloqueaste ${item.unblocksCount} tarea(s).`, 'success');
-    }
-
-    onUpdateState((draft) => {
-      const iso = todayISO();
+    const nextCompleted = !item.done;
+    let applied = false;
+    const saved = onUpdateState((draft) => {
       if (item.kind === 'toggle-task-today') {
         if (!draft.taskLog) draft.taskLog = {};
-        if (!draft.taskLog[iso]) draft.taskLog[iso] = {};
-        draft.taskLog[iso][item.id] = !draft.taskLog[iso][item.id];
+        if (!draft.taskLog[todayIso]) draft.taskLog[todayIso] = {};
+        draft.taskLog[todayIso][item.id] = nextCompleted;
+        applied = true;
       } else if (item.kind === 'toggle-extra-today') {
         const extra = (draft.todayExtras || []).find((candidate) => candidate.id === item.id);
-        if (extra) extra.done = !extra.done;
+        if (extra) {
+          extra.done = nextCompleted;
+          applied = true;
+        }
+      } else if (item.kind === 'toggle-project-task') {
+        for (const project of draft.projects || []) {
+          const task = (project.tasks || []).find((candidate) => candidate.id === item.id);
+          if (task) {
+            task.done = nextCompleted;
+            applied = true;
+            break;
+          }
+        }
       } else if (item.kind === 'complete-followup') {
         const application = (draft.jobs?.applications || []).find((candidate) => candidate.id === item.id);
         if (application) {
           application.nextAction = '';
           application.nextActionDate = '';
+          applied = true;
         }
       }
     });
+    if (!saved || !applied) return false;
+    if (nextCompleted) {
+      playSound('success');
+      if (entryKey) {
+        setCompletionMotion((prev) => ({ taskId: entryKey, nonce: (prev?.nonce || 0) + 1 }));
+      }
+      if (item.unblocksCount) showToast(`Actividad completada. Desbloqueaste ${item.unblocksCount} tarea(s).`, 'success');
+    }
+    return true;
   };
 
-  const handleDeleteExtra = (id: string) => {
-    onUpdateState((draft) => {
-      draft.todayExtras = (draft.todayExtras || []).filter((item) => item.id !== id);
+  const handleToggleAgendaEntry = (entry: TodayAgendaEntry) => {
+    if (entry.source === 'priority' && entry.priorityId) {
+      const nextCompleted = !entry.done;
+      let applied = false;
+      const saved = onUpdateState((draft) => {
+        const target = (draft.dailyPriorities || []).find((priority) => priority.id === entry.priorityId);
+        if (target) { target.done = nextCompleted; applied = true; }
+      });
+      if (saved && applied && nextCompleted) {
+        playSound('success');
+        setCompletionMotion((prev) => ({ taskId: entry.key, nonce: (prev?.nonce || 0) + 1 }));
+      }
+      return;
+    }
+    if (entry.todayItem) handleToggleItem(entry.todayItem, entry.key);
+  };
+
+  const handleToggleFocus = (entry: TodayAgendaEntry) => {
+    if (onUpdateState((draft) => {
+      if (!draft.dailyPriorities) draft.dailyPriorities = [];
+      if (entry.priorityId) {
+        draft.dailyPriorities = draft.dailyPriorities.filter((priority) => priority.id !== entry.priorityId);
+        return;
+      }
+      const todayPriorities = draft.dailyPriorities.filter((priority) => priority.date === todayIso);
+      if (todayPriorities.length >= 3) {
+        showToast('Ya tenés tres prioridades para hoy.', 'info');
+        return;
+      }
+      const usedRanks = todayPriorities.map((priority) => priority.rank || 0);
+      const rank = [1, 2, 3].find((candidate) => !usedRanks.includes(candidate)) || todayPriorities.length + 1;
+      draft.dailyPriorities.push({ id: uid(), date: todayIso, text: entry.label, done: entry.done, rank });
+    }) === false) return;
+  };
+
+  const handleToggleExtraDirect = (extraId: string) => {
+    let completed = false;
+    const saved = onUpdateState((draft) => {
+      const extra = (draft.todayExtras || []).find((x) => x.id === extraId);
+      if (extra) {
+        extra.done = !extra.done;
+        completed = extra.done;
+      }
     });
+    if (saved && completed) {
+      playSound('success');
+      showToast('Actividad completada.', 'success');
+    }
   };
 
-  const handleActivityNavigate = (module: string) => {
-    onNavigate(activityModuleToView[module] || 'dashboard');
+  const handleRescheduleExtra = (extraId: string, newDate: string) => {
+    const saved = onUpdateState((draft) => {
+      const extra = (draft.todayExtras || []).find((x) => x.id === extraId);
+      if (extra) {
+        extra.date = newDate;
+      }
+    });
+    if (saved) {
+      showToast(newDate === todayIso ? 'Tarea programada para hoy.' : `Tarea reprogramada para el ${fmtDate(newDate)}.`, 'info');
+    }
   };
+
+  const isMovingAllPastRef = useRef(false);
+
+  const handleMoveAllPastToToday = () => {
+    if (isMovingAllPastRef.current) return;
+    if (!pastPendingExtras.length) return;
+    const count = pastPendingExtras.length;
+    let confirmed = false;
+    try {
+      confirmed = typeof window !== 'undefined' && typeof window.confirm === 'function'
+        ? window.confirm(
+            `¿Mover ${count === 1 ? 'la tarea pendiente anterior' : `las ${count} tareas pendientes anteriores`} a la agenda de hoy?\n\nLas fechas límite (si las tienen) no se modificarán.`
+          )
+        : true;
+    } catch {
+      confirmed = true;
+    }
+    if (!confirmed) return;
+
+    isMovingAllPastRef.current = true;
+    try {
+      let movedCount = 0;
+      const saved = onUpdateState((draft) => {
+        for (const extra of draft.todayExtras || []) {
+          if (extra.date < todayIso && !extra.done) {
+            extra.date = todayIso;
+            movedCount++;
+          }
+        }
+      });
+      if (saved && movedCount > 0) {
+        showToast(`${movedCount === 1 ? '1 tarea movida' : `${movedCount} tareas movidas`} a hoy.`, 'success');
+      }
+    } finally {
+      isMovingAllPastRef.current = false;
+    }
+  };
+
+  const handleActivityNavigate = (activity: ActivityTimelineItem) => {
+    if (activity.module === 'note' && activity.recordId && onOpenNote) onOpenNote(activity.recordId);
+    else onNavigate(activityModuleToView[activity.module] || 'dashboard');
+  };
+  const openAgendaDestination = () => {
+    if (isModuleEnabled(state, 'agenda')) onNavigate('agenda');
+    else if (isModuleEnabled(state, 'calendario')) onNavigate('calendario');
+  };
+  const agendaOpenLabel = isModuleEnabled(state, 'agenda') ? 'Abrir Agenda' : isModuleEnabled(state, 'calendario') ? 'Abrir Calendario' : null;
 
   return (
-    <div className="relative space-y-5 sm:space-y-6">
-      <header className="relative isolate flex min-h-[184px] overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--hero-bg)] px-5 py-6 shadow-[var(--card-shadow)] sm:min-h-[224px] lg:min-h-[236px] sm:px-8 sm:py-8">
+    <div className="today-shell relative mx-auto flex w-full flex-col gap-3 sm:gap-4">
+      <header
+        data-hero-period={dayPeriod}
+        className="today-hero order-1 relative isolate flex min-h-[310px] overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--hero-bg)] px-3 py-3 sm:min-h-[360px] sm:rounded-[26px] sm:px-8 sm:py-6 lg:min-h-[410px] xl:min-h-[430px] 2xl:min-h-[450px]"
+      >
         <AlpineDayCycleBackdrop forcePeriod={dayPeriod} compact />
-        <div className="relative z-10 flex w-full flex-col justify-between gap-8 sm:flex-row sm:items-end">
-          <div className="max-w-[72%] space-y-1.5 sm:max-w-[58%]">
-            <h1 className="text-2xl font-bold tracking-[-0.04em] text-[var(--text)] sm:text-[2.65rem] sm:leading-[1.05]">
-              {dayConfig.greeting(state.profile?.name || state.settings?.userName || '')}
+        <div className="relative z-10 flex w-full flex-col items-start justify-between gap-2.5 sm:gap-3">
+          {!dayClosed ? (
+            <button type="button" onClick={() => onNavigate('checkout')} aria-label="Cerrar el día" className="today-hero-action inline-flex shrink-0 self-end items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[12px] font-medium tracking-[-0.01em] transition sm:px-3 sm:py-1.5"><AppIcon name="moon" className="h-3.5 w-3.5 opacity-85" /><span className="hidden sm:inline">Cerrar el día</span></button>
+          ) : (
+            <span className="today-hero-closed inline-flex shrink-0 self-end items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[12px] font-medium tracking-[-0.01em] sm:px-3 sm:py-1.5"><AppIcon name="check" className="h-3.5 w-3.5" />Día cerrado</span>
+          )}
+          <section className="today-observatory-panel" aria-label="Observatorio Celestiva, momento actual">
+            <svg className="today-observatory-shape" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+              <defs>
+                <linearGradient id={`${observatoryId}-material`} x1="0" y1="0" x2="1" y2="0.6" gradientUnits="objectBoundingBox">
+                  <stop offset="0" stopColor="var(--observatory-ink)" />
+                  <stop offset="0.62" stopColor="var(--observatory-smoke)" />
+                  <stop offset="1" stopColor="var(--observatory-edge)" />
+                </linearGradient>
+                <radialGradient id={`${observatoryId}-light`} cx="0.08" cy="0" r="1" gradientTransform="scale(1 0.85)" gradientUnits="objectBoundingBox">
+                  <stop offset="0" stopColor="#657cb8" stopOpacity="0.16" />
+                  <stop offset="0.7" stopColor="#657cb8" stopOpacity="0" />
+                </radialGradient>
+                <linearGradient id={`${observatoryId}-rim`} x1="0" y1="0" x2="1" y2="1" gradientUnits="objectBoundingBox">
+                  <stop offset="0" stopColor="#b3c7ef" stopOpacity="0.34" />
+                  <stop offset="0.65" stopColor="#b3c7ef" stopOpacity="0.23" />
+                  <stop offset="1" stopColor="#b3c7ef" stopOpacity="0.15" />
+                </linearGradient>
+              </defs>
+              <path d={OBSERVATORY_PANEL_PATH} fill={`url(#${observatoryId}-material)`} />
+              <path d={OBSERVATORY_PANEL_PATH} fill={`url(#${observatoryId}-light)`} />
+              <path d={OBSERVATORY_PANEL_PATH} fill="none" stroke={`url(#${observatoryId}-rim)`} strokeWidth="1" vectorEffect="non-scaling-stroke" />
+            </svg>
+            <div className="today-observatory-kicker">
+              <AppIcon name="sparkles" className="h-3.5 w-3.5 shrink-0" />
+              <span>Celestian LifeOS · Hoy</span>
+            </div>
+            <time className="today-observatory-clock" dateTime={`${localDateIso}T${formattedTime}`}>
+              {formattedTime}
+            </time>
+            <time className="today-observatory-date" dateTime={localDateIso}>
+              {formattedFullDate}
+            </time>
+            <div className="today-observatory-divider" aria-hidden="true" />
+            <h1 className="today-observatory-greeting">
+              {getLocalGreeting(now, state.profile?.name || state.settings?.userName || '')}
             </h1>
-            <p className="text-xs font-medium text-[var(--text-soft)] sm:text-[13px]">{formattedDate}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => onNavigate('checkout')}
-            className="inline-flex w-fit items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)]/55 px-3 py-1.5 text-xs font-semibold text-[var(--text-soft)] backdrop-blur-md transition hover:border-[var(--border-hover)] hover:bg-[var(--card)]/75 hover:text-[var(--text)]"
-          >
-            <AppIcon name="moon" className="h-3.5 w-3.5" />
-            Cerrar el día
-          </button>
+          </section>
         </div>
       </header>
 
-      <div className="hidden sm:block">
+      {attentionItems.length > 0 && (
+        <section
+          className="today-attention order-3 rounded-2xl border border-amber-500/20 bg-amber-500/[0.03] px-3.5 py-2.5 space-y-2.5"
+          aria-labelledby="today-attention-title"
+        >
+          <h2 id="today-attention-title" className="sr-only">
+            Atención ahora
+          </h2>
+          {attentionItems.map((item, idx) => {
+            if (item.signalKind === 'backup_urgent') {
+              return (
+                <div
+                  key={item.id}
+                  className={`flex items-center gap-3 ${idx > 0 ? 'pt-2.5 border-t border-[var(--border)]/70' : ''}`}
+                >
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                    <AppIcon name="shield" className="h-3.5 w-3.5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <strong className="block text-[13px] font-semibold text-[var(--text)]">
+                      {item.title}
+                    </strong>
+                    <span className="block truncate text-[12px] sm:text-[13px] text-[var(--text-faint)]">
+                      {item.detail}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onExportJSON}
+                    className="rounded-lg px-2 py-1 text-[13px] font-bold text-[var(--blue)] hover:underline cursor-pointer"
+                  >
+                    Exportar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDismissAttention(item)}
+                    className="p-1 text-[var(--text-faint)] hover:text-rose-500 rounded-lg hover:bg-rose-500/10 transition cursor-pointer"
+                    aria-label="Descartar aviso de backup"
+                    title="Descartar aviso"
+                  >
+                    <AppIcon name="x" className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              );
+            }
+
+            if (item.signalKind === 'weekly_review_due') {
+              return (
+                <div
+                  key={item.id}
+                  className={idx > 0 ? 'pt-2.5 border-t border-[var(--border)]/70' : ''}
+                >
+                  <WeeklyReviewCard
+                    state={state}
+                    onUpdateState={onUpdateState}
+                    onNavigate={onNavigate}
+                    borderLess={true}
+                  />
+                </div>
+              );
+            }
+
+            const iconName = (() => {
+              switch (item.signalKind) {
+                case 'financial_commitment_due':
+                case 'financial_agreement_due':
+                  return 'wallet';
+                case 'task_overdue':
+                  return 'clock';
+                case 'exam_upcoming':
+                  return 'book';
+                case 'agenda_event_soon':
+                case 'agenda_event_tomorrow':
+                  return 'calendarDays';
+                default:
+                  return 'bell';
+              }
+            })();
+
+            const badgeStyle = (() => {
+              switch (item.urgency) {
+                case 'critical':
+                  return 'bg-rose-500/10 text-rose-600 dark:text-rose-400';
+                case 'urgent':
+                  return 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
+                case 'warning':
+                  return 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
+                default:
+                  return 'bg-blue-500/10 text-blue-600 dark:text-blue-400';
+              }
+            })();
+
+            return (
+              <div
+                key={item.id}
+                className={`flex items-center gap-3 ${idx > 0 ? 'pt-2.5 border-t border-[var(--border)]/70' : ''}`}
+              >
+                <span
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${badgeStyle}`}
+                >
+                  <AppIcon name={iconName} className="h-3.5 w-3.5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <strong className="block text-[13px] font-semibold text-[var(--text)]">
+                    {item.title}
+                  </strong>
+                  <span className="block truncate text-[12px] sm:text-[13px] text-[var(--text-faint)]">
+                    {item.detail}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleAttentionAction(item)}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 text-[12px] sm:text-[13px] font-bold text-[var(--blue)] hover:underline cursor-pointer"
+                >
+                  <span>{item.actionLabel}</span>
+                  <AppIcon name="arrowRight" className="h-3 w-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDismissAttention(item)}
+                  className="p-1 text-[var(--text-faint)] hover:text-rose-500 rounded-lg hover:bg-rose-500/10 transition cursor-pointer"
+                  aria-label={`Descartar aviso: ${item.title}`}
+                  title="Descartar aviso"
+                >
+                  <AppIcon name="x" className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            );
+          })}
+          {dismissedAttentionItems.length > 0 && (
+            <div className="flex items-center justify-end pt-1 border-t border-[var(--border)]/40 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setShowDismissedModal(true)}
+                className="inline-flex items-center gap-1 text-[var(--text-faint)] hover:text-[var(--text)] transition underline cursor-pointer"
+                aria-label={`Ver ${dismissedAttentionItems.length} aviso(s) descartado(s)`}
+              >
+                <span>{dismissedAttentionItems.length === 1 ? '1 aviso descartado' : `${dismissedAttentionItems.length} avisos descartados`}</span>
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* 2. Quick Capture: Barra horizontal MUY compacta (100% ancho en escritorio, oculta en móvil) */}
+      <div className="order-2 hidden sm:block">
         <BentoCommandBar
           state={state}
           onUpdateState={onUpdateState}
@@ -230,150 +639,110 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           onOpenSearch={onOpenSearch}
           onOpenCapture={onOpenCapture}
           onQuickAction={onQuickAction}
+          compactBar
         />
       </div>
 
-      {showAttention && (
-        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 shadow-[var(--card-shadow)]" aria-labelledby="today-attention-title">
-          <h2 id="today-attention-title" className="px-1 pb-1.5 text-[10px] font-semibold text-[var(--text-faint)]">Requiere atención</h2>
-          {backupUrgent && !backupDismissed && (
-            <div className="flex items-center gap-3 border-t border-[var(--border)]/70 px-1 py-2">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                <AppIcon name="shield" className="h-3.5 w-3.5" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <strong className="block text-xs font-semibold text-[var(--text)]">Backup pendiente</strong>
-                <span className="block truncate text-[10px] text-[var(--text-soft)] sm:text-[11px]">
-                  {daysSinceBackup === null ? 'Todavía no exportaste una copia de tus datos locales' : `La última copia fue hace ${daysSinceBackup} días`}
-                </span>
-              </div>
-              <button type="button" onClick={onExportJSON} className="shrink-0 rounded-lg px-2 py-1 text-[10px] font-bold text-indigo-600 transition hover:bg-[var(--surface-muted)] dark:text-indigo-400">Exportar</button>
-              <button type="button" onClick={() => setBackupDismissed(true)} className="shrink-0 p-1 text-[var(--text-faint)] transition hover:text-[var(--text)]" aria-label="Descartar aviso de backup">
-                <AppIcon name="x" className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-          {weeklyReviewNeedsAttention && <WeeklyReviewCard state={state} onUpdateState={onUpdateState} onNavigate={onNavigate} />}
-        </section>
-      )}
-
-      <div className="flex flex-col gap-7 lg:flex-row lg:items-start lg:gap-8">
-        <div className="contents min-w-0 lg:block lg:flex-[1.65] lg:space-y-7">
-          <div className="order-1">
-            <TodayFocus priorities={todayPriorities} onAdd={handleAddPriority} onToggle={handleTogglePriority} onRemove={handleRemovePriority} onSmartSuggest={handleSmartSuggestPriorities} />
-          </div>
-
-          <section className="order-2 space-y-4 border-y border-[var(--border)] py-5" aria-labelledby="today-tasks-title">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <AppIcon name="check" className="h-4 w-4 text-indigo-500" />
-                  <h2 id="today-tasks-title" className="text-base font-bold text-[var(--text)]">Tareas de hoy</h2>
-                </div>
-                <p className="mt-0.5 text-[11px] text-[var(--text-soft)]">{pendingItemsCount === 0 ? 'No quedan tareas pendientes' : `${pendingItemsCount} pendientes`}</p>
-              </div>
-
-              <div className="flex items-center gap-1 text-[10px] font-semibold">
-                {([['all', `Todas ${items.length}`], ['pending', `Pendientes ${pendingItemsCount}`], ['done', `Hechas ${items.length - pendingItemsCount}`]] as const).map(([filter, label]) => (
-                  <button key={filter} type="button" onClick={() => setTaskFilter(filter)} className={`rounded-lg px-2 py-1 transition ${taskFilter === filter ? 'bg-[var(--surface-muted)] text-[var(--text)]' : 'text-[var(--text-faint)] hover:text-[var(--text-soft)]'}`}>{label}</button>
-                ))}
-              </div>
-            </div>
-
-            <form onSubmit={handleAddExtra} className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-3">
-              <input type="text" value={extraText} onChange={(event) => setExtraText(event.target.value)} placeholder="Agregar una tarea para hoy" className="min-w-[170px] flex-1 bg-transparent px-1 py-1.5 text-xs text-[var(--text)] outline-none placeholder:text-[var(--text-faint)]" />
-              <select value={extraPriority} onChange={(event) => setExtraPriority(event.target.value as typeof extraPriority)} className="rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-1.5 text-[10px] font-medium text-[var(--text-soft)] outline-none" aria-label="Prioridad de la nueva tarea">
-                <option value="alta">Alta</option><option value="media">Media</option><option value="baja">Baja</option>
-              </select>
-              <button type="submit" disabled={!extraText.trim()} className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-[10px] font-bold text-white transition hover:bg-indigo-500 disabled:opacity-40">
-                <AppIcon name="plus" className="h-3 w-3" />Agregar
-              </button>
-            </form>
-
-            <div className="divide-y divide-[var(--border)]/70">
-              {visibleItems.length === 0 ? (
-                <p className="py-8 text-center text-xs text-[var(--text-faint)]">
-                  {taskFilter === 'pending' ? 'No hay tareas pendientes en este momento.' : taskFilter === 'done' ? 'Todavía no completaste tareas hoy.' : 'No tenés actividades registradas para hoy.'}
-                </p>
-              ) : visibleItems.map((item) => (
-                <div key={item.id} className="group flex items-center gap-3 px-1 py-3">
-                  <button type="button" onClick={() => handleToggleItem(item)} className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border text-xs transition ${item.done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-[var(--border-hover)] text-transparent hover:border-indigo-500'}`} title={item.done ? 'Marcar pendiente' : 'Marcar completada'}>
-                    <AppIcon name="check" className="h-3 w-3" />
-                  </button>
-                  <button type="button" onClick={() => handleToggleItem(item)} className={`min-w-0 flex-1 truncate text-left text-xs sm:text-sm ${item.done ? 'font-normal text-[var(--text-faint)] line-through' : 'font-medium text-[var(--text)]'}`}>{item.text}</button>
-                  {!item.done && item.isBlocked && <span className="rounded-md bg-rose-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-rose-500" title={item.blockingTaskNames?.join(', ')}>Bloqueada</span>}
-                  {item.dueDate && <span className={`shrink-0 text-[9px] font-semibold ${item.dueDate < todayIso ? 'text-rose-500' : item.dueDate === todayIso ? 'text-amber-500' : 'text-[var(--text-faint)]'}`}>{item.dueDate === todayIso ? 'Hoy' : fmtDate(item.dueDate)}</span>}
-                  <span className="hidden shrink-0 text-[9px] capitalize text-[var(--text-faint)] sm:inline">{item.source}</span>
-                  {item.source === 'extra' && (
-                    <button type="button" onClick={() => handleDeleteExtra(item.id)} className="shrink-0 p-1 text-[var(--text-faint)] transition hover:text-rose-500 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100" aria-label={`Eliminar ${item.text}`}>
-                      <AppIcon name="x" className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            {(hiddenItemsCount > 0 || items.length > 0) && (
-              <button type="button" onClick={() => onNavigate('agenda')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 transition hover:text-indigo-500 dark:text-indigo-400">
-                {hiddenItemsCount > 0 ? `Ver ${hiddenItemsCount} más en Agenda` : 'Abrir Agenda'}<AppIcon name="arrowRight" className="h-3 w-3" />
-              </button>
-            )}
-          </section>
-
-        </div>
-
-        <aside className="contents min-w-0 lg:block lg:flex-1 lg:space-y-7">
-          <div className="order-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-[var(--card-shadow)] sm:p-5">
-            <TodayNotesSection
-              pinnedNotes={dashboardNotes.pinned}
-              recentNotes={dashboardNotes.recent}
-              privacyMode={state.settings.privacyMode}
-              onNavigate={() => onNavigate('notas')}
-              onAddNote={() => {
-                if (onOpenQuickNote) onOpenQuickNote();
-                else if (onOpenCapture) onOpenCapture();
-                else onNavigate('notas');
-              }}
-            />
-          </div>
-          <div className="order-4">
-            <PersonalContextCard state={state} onUpdateState={onUpdateState} />
-          </div>
-        </aside>
+      {/* 3. Fila Principal: Agenda de hoy (izquierda) + Estado (derecha) */}
+      <div className="order-4 grid grid-cols-1 items-start gap-3 sm:gap-4 xl:grid-cols-2">
+        <TodayAgendaSection
+          entries={agendaEntries}
+          pastPendingTasks={pastPendingExtras}
+          futureScheduledTasks={futureScheduledExtras}
+          onToggle={handleToggleAgendaEntry}
+          onToggleFocus={handleToggleFocus}
+          onOpenAgenda={openAgendaDestination}
+          onOpenEntry={(entry) => onNavigate(entry.navigationTarget || 'agenda')}
+          onToggleExtra={handleToggleExtraDirect}
+          onRescheduleExtra={handleRescheduleExtra}
+          onMoveAllPastToToday={handleMoveAllPastToToday}
+          initialFocusId={initialFocusId}
+          focusNonce={focusNonce}
+          openLabel={agendaOpenLabel}
+          completionMotion={completionMotion}
+          todayIso={todayIso}
+        />
+        <PersonalContextCard
+          state={state}
+          onUpdateState={onUpdateState}
+          onNavigate={onNavigate}
+        />
       </div>
 
+      {/* 4. Actividad reciente */}
       {recentActivity.length > 0 && (
-        <section className="space-y-3 border-y border-[var(--border)] py-4" aria-labelledby="recent-activity-title">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <AppIcon name="activity" className="h-4 w-4 text-[var(--text-soft)]" />
-              <h2 id="recent-activity-title" className="text-sm font-bold text-[var(--text)]">Actividad reciente</h2>
+        <section className="today-activity-surface order-5 rounded-2xl border border-[var(--border)] p-3.5 sm:px-5 sm:py-3 shadow-[var(--card-shadow)]" aria-labelledby="recent-activity-title">
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="today-section-icon"><AppIcon name="activity" className="h-3.5 w-3.5" /></span>
+                <h2 id="recent-activity-title" className="text-base font-bold text-[var(--text)]">Actividad reciente</h2>
+              </div>
+              {(activityEdges.left || activityEdges.right) && (
+                <div className="hidden items-center gap-1 sm:flex" aria-label="Desplazar actividad reciente">
+                  <button type="button" onClick={() => scrollActivity(-1)} disabled={!activityEdges.left} className="today-carousel-control" aria-label="Actividades anteriores"><AppIcon name="chevronLeft" className="h-4 w-4" /></button>
+                  <button type="button" onClick={() => scrollActivity(1)} disabled={!activityEdges.right} className="today-carousel-control" aria-label="Actividades siguientes"><AppIcon name="chevronRight" className="h-4 w-4" /></button>
+                </div>
+              )}
             </div>
-            <span className="text-[10px] text-[var(--text-faint)]">Últimos cambios</span>
-          </div>
-          <div className="grid divide-y divide-[var(--border)]/70 lg:grid-cols-2 lg:gap-x-8 lg:divide-y-0">
-            {recentActivity.map((activity) => (
-              <button key={activity.id} type="button" onClick={() => handleActivityNavigate(activity.module)} className="group flex w-full items-center gap-3 border-b border-[var(--border)]/70 py-2.5 text-left last:border-b-0 lg:[&:nth-last-child(-n+2)]:border-b-0">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--surface-muted)] text-[var(--text-soft)]"><AppIcon name={activity.iconName} className="h-3.5 w-3.5" /></span>
-                <span className="min-w-0 flex-1"><span className="block truncate text-xs font-medium text-[var(--text)] group-hover:text-indigo-500">{activity.title}</span>{activity.subtitle && <span className="block truncate text-[10px] text-[var(--text-faint)]">{activity.subtitle}</span>}</span>
-                <span className="shrink-0 text-[9px] text-[var(--text-faint)]">{formatRelativeTime(activity.timestamp)}</span>
-              </button>
-            ))}
+
+            <div
+              ref={activityStripRef}
+              className="today-activity-items flex gap-2 overflow-x-auto overscroll-x-contain"
+              role="region"
+              aria-label="Actividad reciente, desplazamiento horizontal"
+              tabIndex={activityEdges.left || activityEdges.right ? 0 : -1}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                  event.preventDefault();
+                  scrollActivity(event.key === 'ArrowLeft' ? -1 : 1);
+                }
+              }}
+            >
+              {recentActivity.map((activity) => (
+                <button
+                  key={activity.id}
+                  type="button"
+                  onClick={() => handleActivityNavigate(activity)}
+                  aria-label={`${activity.module === 'note' ? 'Abrir nota' : `Abrir módulo ${activityModuleToView[activity.module] || 'Hoy'}`}: ${activity.title}. ${formatRelativeTime(activity.timestamp)}`}
+                  className="today-activity-item group flex items-start gap-2.5 rounded-xl bg-[var(--card-subtle)] px-3 py-2.5 text-left transition hover:bg-[var(--surface-muted)] cursor-pointer"
+                >
+                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--blue)]">
+                    <AppIcon name={activity.iconName} className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-baseline justify-between gap-x-2">
+                      <span className="text-[11px] font-semibold text-[var(--text-soft)]">{activity.badgeText || activityModuleLabel[activity.module]}</span>
+                      <time dateTime={activity.timestamp} className="text-[11px] text-[var(--text-soft)]">{formatActivityWhen(activity.timestamp)}</time>
+                    </span>
+                    <span className="block text-sm font-medium leading-snug text-[var(--text)] break-words group-hover:text-[var(--blue)]">{activity.title}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         </section>
       )}
+
+      <DismissedAttentionModal
+        open={showDismissedModal}
+        onClose={() => setShowDismissedModal(false)}
+        dismissedItems={dismissedAttentionItems}
+        onRestoreItem={handleRestoreAttentionItem}
+        onRestoreAll={handleRestoreAllDismissed}
+      />
     </div>
   );
 };
 
 export const DashboardSkeleton: React.FC = () => (
-  <div className="space-y-6 animate-pulse">
-    <div className="h-[184px] sm:h-[224px] lg:h-[236px] rounded-3xl border border-[var(--border)] bg-[var(--hero-bg)]" />
-    <div className="h-16 rounded-2xl border border-[var(--border)] bg-[var(--card)]" />
-    <div className="flex flex-col gap-7 lg:flex-row lg:gap-8">
-      <div className="space-y-7 lg:flex-[1.7]"><div className="h-64 border-y border-[var(--border)] bg-[var(--card)]/30" /><div className="h-72 border-y border-[var(--border)] bg-[var(--card)]/30" /></div>
-      <div className="space-y-7 lg:flex-1"><div className="h-64 rounded-2xl border border-[var(--border)] bg-[var(--card)]" /><div className="h-24 border-y border-[var(--border)] bg-[var(--card)]/30" /></div>
+  <div className="mx-auto w-full space-y-4 sm:space-y-5 animate-pulse">
+    <div className="h-[142px] rounded-3xl border border-[var(--border)] bg-[var(--hero-bg)]" />
+    <div className="h-12 rounded-2xl border border-[var(--border)] bg-[var(--card)] hidden sm:block" />
+    <div className="grid gap-3 sm:gap-4 xl:grid-cols-2">
+      <div className="h-[480px] rounded-2xl border border-[var(--border)] bg-[var(--card)]" />
+      <div className="h-[480px] rounded-2xl border border-[var(--border)] bg-[var(--card)]" />
     </div>
-    <div className="h-28 border-y border-[var(--border)] bg-[var(--card)]/20" />
+    <div className="h-14 rounded-2xl border border-[var(--border)] bg-[var(--card)]" />
   </div>
 );

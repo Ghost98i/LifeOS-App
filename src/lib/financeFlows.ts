@@ -8,6 +8,7 @@ import type {
   Transaction,
 } from '../types';
 import { advanceCommitmentDueDate, advanceExpectedIncomeDate } from './financialCommitments';
+import { syncAgreementStatusOnLedgerChange } from './financeAgreements';
 import { deriveCycleIdentity } from './financeMatching';
 import {
   compareLedgerEvents,
@@ -17,7 +18,7 @@ import {
   reconstructAccountBalanceBeforeEvent,
 } from './financeLedger';
 import { createFinanceRevisionOrder, createFinanceRevisionOrderAfter } from './financeRevision';
-import { todayISO, uid } from './storage';
+import { todayISO, uid, roundMoney, diffMoney } from './storage';
 
 export interface TransferInput {
   fromAccountId: string;
@@ -34,13 +35,17 @@ export interface TransactionInput {
   category: string;
   fixed?: Transaction['fixed'];
   date?: string;
+  operationTime?: string | null;
   note?: string;
   accountId: string | null;
   origin?: Transaction['origin'];
   reviewStatus?: Transaction['reviewStatus'];
   reviewed?: boolean;
   commitmentId?: string | null;
+  expectedIncomeId?: string | null;
+  matchedCycle?: string | null;
   currency?: string;
+  agreementId?: string | null;
 }
 
 function affectedAccountIds(accountIds: Array<string | null | undefined>): string[] {
@@ -88,14 +93,25 @@ function materializeAccounts(state: LifeOSState, accountIds: string[]): void {
 }
 
 export function addTransaction(state: LifeOSState, input: TransactionInput): Transaction {
-  const amount = Number(input.amount);
+  const amount = roundMoney(input.amount);
   if (!Number.isFinite(amount) || amount <= 0) throw new Error('Ingresá un monto mayor a cero.');
   if (!input.accountId || !state.finance.accounts.some((account) => account.id === input.accountId)) {
     throw new Error('Elegí una cuenta válida.');
   }
   if (!input.category.trim()) throw new Error('Elegí una categoría.');
 
+  const account = state.finance.accounts.find((a) => a.id === input.accountId);
+  if (!account) throw new Error('Elegí una cuenta válida.');
+  const accountCurrency = (account.currency || 'UYU').trim().toUpperCase();
+  const txCurrency = (input.currency || accountCurrency).trim().toUpperCase();
+  if (txCurrency !== accountCurrency) {
+    throw new Error(`Moneda incompatible: el movimiento (${txCurrency}) no coincide con la moneda de la cuenta (${accountCurrency}).`);
+  }
+
   const date = input.date || todayISO();
+  if (input.operationTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.operationTime)) {
+    throw new Error('Ingresá una hora válida en formato HH:mm.');
+  }
   assertAccountsCanMaterialize(state, [input.accountId]);
 
   const reviewStatus = input.reviewStatus !== undefined
@@ -104,6 +120,7 @@ export function addTransaction(state: LifeOSState, input: TransactionInput): Tra
 
   const transaction: Transaction = {
     id: input.id || uid(),
+    createdAt: new Date().toISOString(),
     effectiveOrder: nextFinanceEffectiveOrder(state, date),
     revisionOrder: createFinanceRevisionOrder(),
     type: input.type,
@@ -111,13 +128,17 @@ export function addTransaction(state: LifeOSState, input: TransactionInput): Tra
     category: input.category.trim(),
     fixed: input.fixed || 'variable',
     date,
+    operationTime: input.operationTime || null,
     note: input.note?.trim() || '',
     accountId: input.accountId,
     origin: input.origin || 'manual',
     reviewStatus,
     reviewed: reviewStatus === 'reviewed',
     commitmentId: input.commitmentId || null,
-    currency: input.currency || (state.finance.accounts.find((a) => a.id === input.accountId)?.currency) || 'UYU',
+    expectedIncomeId: input.expectedIncomeId || null,
+    matchedCycle: input.matchedCycle || null,
+    agreementId: input.agreementId || null,
+    currency: txCurrency,
   };
   state.finance.transactions.push(transaction);
   materializeAccounts(state, [input.accountId]);
@@ -130,6 +151,8 @@ export interface ConfirmFinancialCommitmentInput {
   accountId?: string | null;
   date?: string;
   updateFutureAmount?: boolean;
+  targetCycle?: string | null;
+  allowAdvance?: boolean;
 }
 
 export function confirmFinancialCommitment(
@@ -142,17 +165,18 @@ export function confirmFinancialCommitment(
   const total = commitment.totalInstallments || commitment.totalOccurrences || null;
   const curInst = commitment.currentInstallment || 1;
   const txDate = input.date || todayISO();
-  const settlementKey = total
+  const currentCommitmentCycle = total
     ? `inst-${curInst}`
     : commitment.frequency === 'once'
       ? 'once'
       : `cycle-${commitment.nextDueDate}`;
+  const settlementKey = input.targetCycle || currentCommitmentCycle;
   const deterministicTxId = `settle-${commitment.id}-${settlementKey}`;
 
-  // Idempotency check: if already settled by this deterministic id or lastSettledTxId
+  // 1. Idempotency check: strictly scoped to this occurrence / cycle
   const existingTx = state.finance.transactions.find((tx) =>
     tx.id === deterministicTxId ||
-    (tx.commitmentId === commitment.id && tx.id === commitment.lastSettledTxId)
+    (tx.commitmentId === commitment.id && tx.matchedCycle === settlementKey)
   );
   if (existingTx) {
     return existingTx;
@@ -165,8 +189,37 @@ export function confirmFinancialCommitment(
     throw new Error('El compromiso ya fue pagado y finalizado.');
   }
 
+  // 2. Validación de coherencia del ciclo solicitado:
+  // settlementKey debe corresponder al ciclo vigente o a una ocurrencia ya liquidada
+  const isSettledCycle = commitment.settledTxIds?.some((id) => {
+    const t = state.finance.transactions.find((tx) => tx.id === id);
+    return t?.matchedCycle === settlementKey;
+  });
+  if (settlementKey !== currentCommitmentCycle && !isSettledCycle) {
+    throw new Error(`El ciclo especificado (${settlementKey}) no corresponde al ciclo vigente ni a una ocurrencia liquidada.`);
+  }
+
+  // 3. Control contable de pago anticipado por fecha (compromisos recurrentes con fecha):
+  const isRecurringCycle = commitment.frequency !== 'once' && !total && settlementKey.startsWith('cycle-');
+  const cycleDate = isRecurringCycle ? settlementKey.replace('cycle-', '') : null;
+  const isAdvance = Boolean(isRecurringCycle && cycleDate && cycleDate > txDate);
+
+  if (isAdvance && !input.allowAdvance) {
+    throw new Error(`El pago del ciclo ${settlementKey} vence el ${cycleDate}. Para pagarlo por adelantado en ${txDate}, confirmá explícitamente el pago anticipado.`);
+  }
+
   const amount = input.amount ?? Number(commitment.amount);
   const accountId = input.accountId || commitment.accountId || state.finance.accounts[0]?.id || null;
+  if (!accountId) throw new Error('Elegí una cuenta válida.');
+  const targetAccount = state.finance.accounts.find((a) => a.id === accountId);
+  if (!targetAccount) throw new Error('Elegí una cuenta válida.');
+
+  const accountCurrency = (targetAccount.currency || 'UYU').trim().toUpperCase();
+  const comCurrency = (commitment.currency || 'UYU').trim().toUpperCase();
+  if (accountCurrency !== comCurrency) {
+    throw new Error(`Moneda incompatible: el compromiso (${comCurrency}) no coincide con la moneda de la cuenta de débito (${accountCurrency}).`);
+  }
+
   const advanced = advanceCommitmentDueDate(commitment);
   const installmentLabel = total ? ` (Cuota ${curInst}/${total})` : '';
 
@@ -177,9 +230,11 @@ export function confirmFinancialCommitment(
     category: commitment.category || 'Varios',
     fixed: 'fijo',
     accountId,
+    currency: comCurrency,
     date: txDate,
     note: `Pago de compromiso: ${commitment.name}${installmentLabel}`,
     commitmentId: commitment.id,
+    matchedCycle: settlementKey,
     reviewStatus: 'reviewed',
     reviewed: true,
   });
@@ -199,6 +254,10 @@ export interface ConfirmExpectedIncomeInput {
   expectedIncomeId: string;
   accountId?: string | null;
   date?: string;
+  amount?: number;
+  matchedTransactionId?: string | null;
+  targetCycle?: string | null;
+  allowAdvance?: boolean;
 }
 
 export function confirmExpectedIncome(
@@ -208,30 +267,127 @@ export function confirmExpectedIncome(
   const income = (state.finance.expectedIncomes || []).find((item) => item.id === input.expectedIncomeId);
   if (!income) throw new Error('El ingreso previsto ya no existe.');
 
+  // Camino A: Vincular un cobro existente
+  if (input.matchedTransactionId) {
+    const res = linkTransactionToExpectedIncome(state, input.matchedTransactionId, income.id, input.targetCycle);
+    return res.transaction;
+  }
+
+  // Si está pausado (recurrente con active: false), exigir reanudar antes de confirmar
+  if (!income.active && income.frequency !== 'once') {
+    throw new Error('El ingreso previsto está pausado. Reanudalo antes de confirmar el cobro.');
+  }
+
   const accountId = input.accountId || income.accountId || state.finance.accounts[0]?.id || null;
+  if (!accountId) throw new Error('Elegí una cuenta válida.');
+  const targetAccount = state.finance.accounts.find((a) => a.id === accountId);
+  if (!targetAccount) throw new Error('Elegí una cuenta válida.');
+
+  const accountCurrency = (targetAccount.currency || 'UYU').trim().toUpperCase();
+  const incomeCurrency = (income.currency || 'UYU').trim().toUpperCase();
+  if (accountCurrency !== incomeCurrency) {
+    throw new Error(`Moneda incompatible: la previsión (${incomeCurrency}) no coincide con la moneda de la cuenta de destino (${accountCurrency}).`);
+  }
+
+  const txDate = input.date || todayISO();
+  const amount = input.amount !== undefined ? Number(input.amount) : Number(income.amount);
+
+  // Clave determinista de ciclo vigente
+  const currentIncomeCycle = income.frequency === 'once' ? 'once' : `cycle-${income.startDate}`;
+  const targetCycle = input.targetCycle || currentIncomeCycle;
+  const deterministicTxId = `settle-inc-${income.id}-${targetCycle}`;
+
+  // 1. Idempotency directa: si este ciclo exacto ya fue liquidado
+  const existingTx = state.finance.transactions.find((tx) =>
+    tx.id === deterministicTxId ||
+    (tx.expectedIncomeId === income.id && tx.matchedCycle === targetCycle)
+  );
+  if (existingTx) {
+    return existingTx;
+  }
+
+  // 2. Validación de coherencia del ciclo solicitado:
+  // Si targetCycle no es el ciclo vigente ni un ciclo ya liquidado registrado
+  const isSettledCycle = income.settledTxIds?.some((id) => {
+    const t = state.finance.transactions.find((tx) => tx.id === id);
+    return t?.matchedCycle === targetCycle;
+  });
+  if (targetCycle !== currentIncomeCycle && !isSettledCycle) {
+    throw new Error(`El ciclo especificado (${targetCycle}) no corresponde al ciclo vigente ni a un ciclo liquidado.`);
+  }
+
+  // 3. Control contable de cobro anticipado por fecha (sin depender de ventanas heurísticas fijas):
+  // Para ingresos únicos ('once') no existe ciclo subsiguiente susceptible de adelantarse inadvertidamente.
+  const isRecurringCycle = income.frequency !== 'once' && targetCycle.startsWith('cycle-');
+  const cycleDate = isRecurringCycle ? targetCycle.replace('cycle-', '') : null;
+  const isAdvance = Boolean(isRecurringCycle && cycleDate && cycleDate > txDate);
+
+  if (isAdvance && !input.allowAdvance) {
+    throw new Error(`El cobro del ciclo ${targetCycle} vence el ${cycleDate}. Para cobrarlo por adelantado en ${txDate}, confirmá explícitamente la acción de cobro anticipado.`);
+  }
+
   const advanced = advanceExpectedIncomeDate(income);
   const transaction = addTransaction(state, {
+    id: deterministicTxId,
     type: 'ingreso',
-    amount: Number(income.amount),
+    amount,
     category: income.category || 'Varios',
     fixed: 'variable',
     accountId,
-    date: input.date || todayISO(),
+    currency: incomeCurrency,
+    date: txDate,
     note: `Previsión confirmada: ${income.name}`,
+    expectedIncomeId: income.id,
+    matchedCycle: targetCycle,
+    origin: 'manual',
+    reviewStatus: 'reviewed',
+    reviewed: true,
   });
 
-  Object.assign(income, advanced, { updatedAt: new Date().toISOString() });
+  const settledTxIds = income.settledTxIds ? [...income.settledTxIds, transaction.id] : [transaction.id];
+
+  Object.assign(income, advanced, {
+    lastSettledTxId: transaction.id,
+    settledTxIds,
+    updatedAt: new Date().toISOString(),
+  });
+
   return transaction;
 }
 
-function transactionDependency(state: LifeOSState, transaction: Transaction): string | null {
+export function isCommercialFinanceTransaction(
+  state: Pick<LifeOSState, 'resale'> | undefined | null,
+  transactionOrId: Transaction | string,
+): boolean {
+  const txId = typeof transactionOrId === 'string' ? transactionOrId : transactionOrId.id;
+  if (!txId) return false;
+  if (txId.startsWith('commercial:')) return true;
+  return Boolean(
+    state?.resale?.commercial?.business?.financeLinks?.some(
+      (link) => link.transactionId === txId
+    )
+  );
+}
+
+export function getTransactionLockReason(state: LifeOSState, transaction: Transaction): string | null {
   if (transaction.origin === 'adjustment' || state.finance.reconciliations.some((item) => item.adjustmentTxId === transaction.id)) {
     return 'Es un ajuste de conciliación. Volvé a conciliar la cuenta para corregir el saldo.';
   }
-  if (state.resale.inventory.some((item) => [item.purchaseTxId, item.saleTxId, item.feeTxId, item.financeTxId].includes(transaction.id))) {
+  if (
+    transaction.origin === 'resale_purchase' ||
+    transaction.origin === 'resale_sale' ||
+    state.resale.inventory.some((item) => [item.purchaseTxId, item.saleTxId, item.feeTxId, item.financeTxId].includes(transaction.id))
+  ) {
     return 'Está vinculado a una reventa. Editá o eliminá la operación desde Reventa.';
   }
+  if (isCommercialFinanceTransaction(state, transaction)) {
+    return 'Este movimiento pertenece a Mi negocio. Para corregirlo, anularlo o registrar una devolución o reembolso, gestioná la operación desde Mi negocio.';
+  }
   return null;
+}
+
+function transactionDependency(state: LifeOSState, transaction: Transaction): string | null {
+  return getTransactionLockReason(state, transaction);
 }
 
 export function deleteTransaction(state: LifeOSState, transactionId: string): void {
@@ -239,7 +395,48 @@ export function deleteTransaction(state: LifeOSState, transactionId: string): vo
   if (!transaction) return;
   const dependency = transactionDependency(state, transaction);
   if (dependency) throw new Error(dependency);
+  const agreementId = transaction.agreementId;
+  const expectedIncomeId = transaction.expectedIncomeId;
+  const commitmentId = transaction.commitmentId;
   removeTransaction(state, transaction);
+  if (agreementId) {
+    syncAgreementStatusOnLedgerChange(state, agreementId);
+  }
+  if (expectedIncomeId) {
+    const income = (state.finance.expectedIncomes || []).find((item) => item.id === expectedIncomeId);
+    if (income) {
+      if (income.settledTxIds) {
+        income.settledTxIds = income.settledTxIds.filter((id) => id !== transaction.id);
+      }
+      if (income.lastSettledTxId === transaction.id) {
+        income.lastSettledTxId = income.settledTxIds && income.settledTxIds.length > 0
+          ? income.settledTxIds[income.settledTxIds.length - 1]
+          : undefined;
+      }
+      if (income.frequency === 'once' && !income.active) {
+        income.active = true;
+      }
+      income.updatedAt = new Date().toISOString();
+    }
+  }
+  if (commitmentId) {
+    const commitment = (state.finance.commitments || []).find((item) => item.id === commitmentId);
+    if (commitment) {
+      if (commitment.settledTxIds) {
+        commitment.settledTxIds = commitment.settledTxIds.filter((id) => id !== transaction.id);
+      }
+      if (commitment.lastSettledTxId === transaction.id) {
+        commitment.lastSettledTxId = commitment.settledTxIds && commitment.settledTxIds.length > 0
+          ? commitment.settledTxIds[commitment.settledTxIds.length - 1]
+          : undefined;
+      }
+      if (commitment.frequency === 'once' && !commitment.active) {
+        commitment.active = true;
+        commitment.status = 'pending';
+      }
+      commitment.updatedAt = new Date().toISOString();
+    }
+  }
 }
 
 function removeTransaction(state: LifeOSState, transaction: Transaction): void {
@@ -265,13 +462,63 @@ export function updateTransaction(state: LifeOSState, transactionId: string, inp
   if (!transaction) throw new Error('El movimiento ya no existe.');
   const dependency = transactionDependency(state, transaction);
   if (dependency) throw new Error(dependency);
-  const amount = Number(input.amount);
+  const amount = roundMoney(input.amount);
   if (!Number.isFinite(amount) || amount <= 0) throw new Error('Ingresá un monto mayor a cero.');
   if (!input.accountId || !state.finance.accounts.some((account) => account.id === input.accountId)) throw new Error('Elegí una cuenta válida.');
   if (!input.category.trim()) throw new Error('Elegí una categoría.');
 
+  const targetAccount = state.finance.accounts.find((account) => account.id === input.accountId)!;
+  const targetAccCurrency = (targetAccount.currency || 'UYU').trim().toUpperCase();
+  const txCurrency = (input.currency || transaction.currency || targetAccCurrency).trim().toUpperCase();
+  if (txCurrency !== targetAccCurrency) {
+    throw new Error(`Moneda incompatible: el movimiento (${txCurrency}) no coincide con la moneda de la cuenta (${targetAccCurrency}).`);
+  }
+
+  // Protección de movimientos vinculados a previsión de cobro
+  if (transaction.expectedIncomeId) {
+    if (input.type !== 'ingreso') {
+      throw new Error('No podés cambiar el tipo a gasto en un movimiento vinculado a una previsión de cobro. Desvinculá el cobro antes de modificarlo.');
+    }
+    const income = (state.finance.expectedIncomes || []).find((i) => i.id === transaction.expectedIncomeId);
+    if (income) {
+      const incCurrency = (income.currency || 'UYU').trim().toUpperCase();
+      if (txCurrency !== incCurrency) {
+        throw new Error(`Moneda incompatible: no podés cambiar la moneda a ${txCurrency} porque este movimiento está vinculado a una previsión en ${incCurrency}. Desvinculá el cobro primero.`);
+      }
+    }
+  }
+
+  // Protección de movimientos vinculados a compromiso
+  if (transaction.commitmentId) {
+    if (input.type !== 'gasto') {
+      throw new Error('No podés cambiar el tipo a ingreso en un movimiento vinculado a un compromiso. Desvinculá el pago antes de modificarlo.');
+    }
+    const commitment = (state.finance.commitments || []).find((c) => c.id === transaction.commitmentId);
+    if (commitment) {
+      const comCurrency = (commitment.currency || 'UYU').trim().toUpperCase();
+      if (txCurrency !== comCurrency) {
+        throw new Error(`Moneda incompatible: no podés cambiar la moneda a ${txCurrency} porque este movimiento está vinculado a un compromiso en ${comCurrency}. Desvinculá el pago primero.`);
+      }
+    }
+  }
+
   const previousAccountId = transaction.accountId;
+  const previousAgreementId = transaction.agreementId;
+  const targetAgreementId = input.agreementId !== undefined ? input.agreementId : transaction.agreementId;
   const date = input.date || todayISO();
+  if (input.operationTime && !/^([01]\d|2[0-3]):[0-5]\d$/.test(input.operationTime)) {
+    throw new Error('Ingresá una hora válida en formato HH:mm.');
+  }
+
+  if (targetAgreementId) {
+    const agreement = (state.finance.agreements || []).find((a) => a.id === targetAgreementId);
+    if (agreement && agreement.initialReferenceDate && date < agreement.initialReferenceDate) {
+      throw new Error(
+        `La fecha del movimiento (${date}) no puede ser anterior a la fecha de corte del acuerdo (${agreement.initialReferenceDate}). El saldo inicial declarado ya contempla los pagos anteriores a esa fecha.`
+      );
+    }
+  }
+
   const accountIds = affectedAccountIds([previousAccountId, input.accountId]);
   assertAccountsCanMaterialize(state, accountIds);
   const effectiveOrder = date === transaction.date && transaction.effectiveOrder
@@ -289,6 +536,7 @@ export function updateTransaction(state: LifeOSState, transactionId: string, inp
     category: input.category.trim(),
     fixed: input.fixed !== undefined ? input.fixed : transaction.fixed,
     date,
+    operationTime: input.operationTime !== undefined ? input.operationTime : transaction.operationTime,
     effectiveOrder,
     revisionOrder,
     note: input.note?.trim() || '',
@@ -296,9 +544,18 @@ export function updateTransaction(state: LifeOSState, transactionId: string, inp
     reviewStatus,
     reviewed: reviewStatus === 'reviewed',
     commitmentId: input.commitmentId !== undefined ? input.commitmentId : transaction.commitmentId,
+    expectedIncomeId: input.expectedIncomeId !== undefined ? input.expectedIncomeId : transaction.expectedIncomeId,
+    matchedCycle: input.matchedCycle !== undefined ? input.matchedCycle : transaction.matchedCycle,
+    agreementId: input.agreementId !== undefined ? input.agreementId : transaction.agreementId,
     currency: input.currency !== undefined ? input.currency : transaction.currency,
   });
   materializeAccounts(state, accountIds);
+  if (transaction.agreementId) {
+    syncAgreementStatusOnLedgerChange(state, transaction.agreementId);
+  }
+  if (previousAgreementId && previousAgreementId !== transaction.agreementId) {
+    syncAgreementStatusOnLedgerChange(state, previousAgreementId);
+  }
   return transaction;
 }
 
@@ -308,37 +565,12 @@ export function computeAccountBalance(
   transfers: FinanceTransfer[] = [],
   reconciliations: AccountReconciliation[] = []
 ): number {
-  const accountRecons = (reconciliations || [])
-    .filter((r) => r.accountId === account.id)
-    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-
-  const latestRecon = accountRecons[0] || null;
-
-  if (latestRecon) {
-    let balance = Number(latestRecon.actualBalance || 0);
-
-    for (const tx of transactions || []) {
-      if (tx.accountId !== account.id) continue;
-      if (latestRecon.adjustmentTxId && tx.id === latestRecon.adjustmentTxId) continue;
-
-      if ((tx.date || '') > (latestRecon.date || '')) {
-        const amount = Number(tx.amount || 0);
-        if (tx.type === 'ingreso') balance += amount;
-        else balance -= amount;
-      }
-    }
-
-    for (const tr of transfers || []) {
-      if ((tr.date || '') > (latestRecon.date || '')) {
-        const amount = Number(tr.amount || 0);
-        if (tr.toAccountId === account.id) balance += amount;
-        if (tr.fromAccountId === account.id) balance -= amount;
-      }
-    }
-
-    return Math.round(balance * 100) / 100;
+  const reconstruction = reconstructAccountBalance(account, transactions, transfers, reconciliations);
+  if (reconstruction.balance !== null) {
+    return reconstruction.balance;
   }
 
+  // Graceful fallback for legacy accounts missing initialBalance
   let totalDelta = 0;
   for (const tx of transactions || []) {
     if (tx.accountId !== account.id) continue;
@@ -352,19 +584,32 @@ export function computeAccountBalance(
     if (tr.fromAccountId === account.id) totalDelta -= amount;
   }
 
-  const base = typeof account.initialBalance === 'number' && Number.isFinite(account.initialBalance)
-    ? account.initialBalance
-    : Number(account.balance || 0) - totalDelta;
+  const inferredInitial = Number(account.balance || 0) - totalDelta;
+  const fallback = reconstructAccountBalance(
+    { ...account, initialBalance: inferredInitial },
+    transactions,
+    transfers,
+    reconciliations
+  );
+  if (fallback.balance !== null) {
+    return fallback.balance;
+  }
 
-  return Math.round((base + totalDelta) * 100) / 100;
+  return Math.round(Number(account.balance || 0) * 100) / 100;
 }
 
-export function addAccount(state: LifeOSState, nameInput: string, balanceInput: number): Account {
+export function addAccount(
+  state: LifeOSState,
+  nameInput: string,
+  balanceInput: number,
+  currencyInput?: string
+): Account {
   const name = nameInput.trim();
-  const balance = Number(balanceInput);
+  const balance = roundMoney(balanceInput);
   if (!name) throw new Error('Escribí un nombre para la cuenta.');
   if (!Number.isFinite(balance)) throw new Error('Ingresá un saldo inicial válido.');
-  const account: Account = { id: uid(), name, balance, initialBalance: balance };
+  const normalizedCur = currencyInput?.trim() ? currencyInput.trim().toUpperCase() : 'UYU';
+  const account: Account = { id: uid(), name, balance, initialBalance: balance, currency: normalizedCur };
   state.finance.accounts.push(account);
   return account;
 }
@@ -372,23 +617,33 @@ export function addAccount(state: LifeOSState, nameInput: string, balanceInput: 
 export function deleteAccount(state: LifeOSState, accountId: string): void {
   const account = state.finance.accounts.find((item) => item.id === accountId);
   if (!account) return;
-  if (state.finance.accounts.length <= 1) throw new Error('LifeOS necesita al menos una cuenta.');
+  if (state.finance.accounts.length <= 1) throw new Error('Celestian LifeOS necesita al menos una cuenta.');
 
   const hasHistory = state.finance.transactions.some((item) => item.accountId === accountId)
     || state.finance.transfers.some((item) => item.fromAccountId === accountId || item.toAccountId === accountId)
     || state.finance.reconciliations.some((item) => item.accountId === accountId)
-    || state.resale.inventory.some((item) => item.purchaseAccountId === accountId || item.saleAccountId === accountId);
+    || state.resale.inventory.some((item) => item.purchaseAccountId === accountId || item.saleAccountId === accountId)
+    || Boolean(state.resale.commercial?.business?.financeLinks?.some((link) => link.choice.accountId === accountId));
   if (hasHistory) throw new Error('Esta cuenta tiene movimientos vinculados. Conservála para no romper el historial.');
   state.finance.accounts = state.finance.accounts.filter((item) => item.id !== accountId);
 }
 
 export function addTransfer(state: LifeOSState, input: TransferInput): FinanceTransfer {
-  const amount = Number(input.amount);
+  const amount = roundMoney(input.amount);
   if (!Number.isFinite(amount) || amount <= 0) throw new Error('Ingresá un monto válido.');
   if (!input.fromAccountId || !input.toAccountId) throw new Error('Elegí las dos cuentas.');
   if (input.fromAccountId === input.toAccountId) throw new Error('Las cuentas deben ser diferentes.');
-  if (!state.finance.accounts.some((account) => account.id === input.fromAccountId)) throw new Error('La cuenta de origen ya no existe.');
-  if (!state.finance.accounts.some((account) => account.id === input.toAccountId)) throw new Error('La cuenta de destino ya no existe.');
+
+  const fromAccount = state.finance.accounts.find((account) => account.id === input.fromAccountId);
+  const toAccount = state.finance.accounts.find((account) => account.id === input.toAccountId);
+  if (!fromAccount) throw new Error('La cuenta de origen ya no existe.');
+  if (!toAccount) throw new Error('La cuenta de destino ya no existe.');
+
+  const fromCurrency = (fromAccount.currency || 'UYU').toUpperCase();
+  const toCurrency = (toAccount.currency || 'UYU').toUpperCase();
+  if (fromCurrency !== toCurrency) {
+    throw new Error(`No se permiten transferencias entre monedas distintas (${fromCurrency} → ${toCurrency}) sin tasa de conversión.`);
+  }
 
   const date = input.date || todayISO();
   const accountIds = affectedAccountIds([input.fromAccountId, input.toAccountId]);
@@ -427,7 +682,7 @@ export interface ReconciliationInput {
 export function reconcileAccount(state: LifeOSState, input: ReconciliationInput): AccountReconciliation {
   const account = state.finance.accounts.find((item) => item.id === input.accountId);
   if (!account) throw new Error('La cuenta ya no existe.');
-  const actualBalance = Number(input.actualBalance);
+  const actualBalance = roundMoney(input.actualBalance);
   if (!Number.isFinite(actualBalance)) throw new Error('Ingresá el saldo real.');
 
   const date = input.date || todayISO();
@@ -462,17 +717,19 @@ export function reconcileAccount(state: LifeOSState, input: ReconciliationInput)
     state.finance.reconciliations,
   );
   if (systemBalance === null) throw new Error('La cuenta necesita un saldo inicial conocido antes de reconstruir su saldo.');
-  const difference = actualBalance - systemBalance;
+  const difference = diffMoney(actualBalance, systemBalance);
   reconciliation.systemBalance = systemBalance;
   reconciliation.difference = difference;
 
   if (difference !== 0) {
     const transaction: Transaction = {
       id: uid(),
+      createdAt: new Date().toISOString(),
       effectiveOrder: nextFinanceEffectiveOrder(state, date),
       revisionOrder: reconciliation.revisionOrder,
       type: difference > 0 ? 'ingreso' : 'gasto',
       amount: Math.abs(difference),
+      currency: account.currency || 'UYU',
       category: 'Ajuste de saldo',
       fixed: 'variable',
       date,
@@ -518,7 +775,7 @@ export function updateReconciliation(state: LifeOSState, reconciliationId: strin
   if (input.accountId !== reconciliation.accountId) throw new Error('La cuenta de una conciliación existente no se puede cambiar.');
   const account = state.finance.accounts.find((item) => item.id === input.accountId);
   if (!account) throw new Error('La cuenta ya no existe.');
-  const actualBalance = Number(input.actualBalance);
+  const actualBalance = roundMoney(input.actualBalance);
   if (!Number.isFinite(actualBalance)) throw new Error('Ingresá el saldo real.');
   assertAccountsCanMaterialize(state, [account.id], true);
   const nextDate = input.date || reconciliation.date;
@@ -547,14 +804,15 @@ export function updateReconciliation(state: LifeOSState, reconciliationId: strin
     state.finance.reconciliations,
   );
   if (systemBalance === null) throw new Error('La cuenta necesita un saldo inicial conocido antes de reconstruir su saldo.');
-  const difference = actualBalance - systemBalance;
+  const difference = diffMoney(actualBalance, systemBalance);
   if (difference === 0 && adjustment) {
     state.finance.transactions = state.finance.transactions.filter((item) => item.id !== adjustment?.id);
     adjustment = undefined;
   } else if (difference !== 0) {
     if (!adjustment) {
       adjustment = {
-        id: uid(), effectiveOrder: nextFinanceEffectiveOrder(state, nextDate), revisionOrder, type: difference > 0 ? 'ingreso' : 'gasto', amount: Math.abs(difference),
+        id: uid(), createdAt: new Date().toISOString(), effectiveOrder: nextFinanceEffectiveOrder(state, nextDate), revisionOrder, type: difference > 0 ? 'ingreso' : 'gasto', amount: Math.abs(difference),
+        currency: account.currency || 'UYU',
         category: 'Ajuste de saldo', fixed: 'variable', date: nextDate,
         note: input.note?.trim() || `Conciliación de ${account.name}`, accountId: account.id, origin: 'adjustment',
       };
@@ -562,6 +820,7 @@ export function updateReconciliation(state: LifeOSState, reconciliationId: strin
     } else {
       Object.assign(adjustment, {
         type: difference > 0 ? 'ingreso' : 'gasto', amount: Math.abs(difference),
+        currency: account.currency || 'UYU',
         date: nextDate,
         effectiveOrder: dateChanged || !adjustment.effectiveOrder
           ? nextFinanceEffectiveOrder(state, nextDate)
@@ -588,6 +847,8 @@ export function updateReconciliation(state: LifeOSState, reconciliationId: strin
 export function markTransactionReviewed(state: LifeOSState, transactionId: string): Transaction {
   const transaction = state.finance.transactions.find((item) => item.id === transactionId);
   if (!transaction) throw new Error('El movimiento ya no existe.');
+  const dependency = transactionDependency(state, transaction);
+  if (dependency) throw new Error(dependency);
   transaction.reviewStatus = 'reviewed';
   transaction.reviewed = true;
   transaction.revisionOrder = createFinanceRevisionOrderAfter(transaction.revisionOrder);
@@ -598,7 +859,7 @@ export function markMultipleTransactionsReviewed(state: LifeOSState, transaction
   const reviewedTxs: Transaction[] = [];
   for (const id of transactionIds) {
     const tx = state.finance.transactions.find((item) => item.id === id);
-    if (tx) {
+    if (tx && !transactionDependency(state, tx)) {
       tx.reviewStatus = 'reviewed';
       tx.reviewed = true;
       tx.revisionOrder = createFinanceRevisionOrderAfter(tx.revisionOrder);
@@ -611,6 +872,8 @@ export function markMultipleTransactionsReviewed(state: LifeOSState, transaction
 export function ignoreTransactionReview(state: LifeOSState, transactionId: string): Transaction {
   const transaction = state.finance.transactions.find((item) => item.id === transactionId);
   if (!transaction) throw new Error('El movimiento ya no existe.');
+  const dependency = transactionDependency(state, transaction);
+  if (dependency) throw new Error(dependency);
   transaction.reviewStatus = 'ignored';
   transaction.reviewed = false;
   transaction.revisionOrder = createFinanceRevisionOrderAfter(transaction.revisionOrder);
@@ -621,7 +884,7 @@ export function resolveTransactionDuplicate(state: LifeOSState, duplicateTxId: s
   deleteTransaction(state, duplicateTxId);
   if (keepTxId) {
     const keepTx = state.finance.transactions.find((item) => item.id === keepTxId);
-    if (keepTx) {
+    if (keepTx && !transactionDependency(state, keepTx)) {
       keepTx.reviewStatus = 'reviewed';
       keepTx.reviewed = true;
       keepTx.revisionOrder = createFinanceRevisionOrderAfter(keepTx.revisionOrder);
@@ -636,8 +899,32 @@ export function linkTransactionToCommitment(
 ): { transaction: Transaction; commitment: FinancialCommitment } {
   const transaction = state.finance.transactions.find((item) => item.id === transactionId);
   if (!transaction) throw new Error('El movimiento ya no existe.');
+  const dependency = transactionDependency(state, transaction);
+  if (dependency) throw new Error(dependency);
   const commitment = (state.finance.commitments || []).find((item) => item.id === commitmentId);
   if (!commitment) throw new Error('El compromiso ya no existe.');
+
+  // Invariante de Dominio: Solo movimientos de gasto
+  if (transaction.type !== 'gasto') {
+    throw new Error('Solo se pueden vincular movimientos de tipo gasto a un compromiso.');
+  }
+
+  // Invariante de Dominio: Moneda compatible
+  const txCurrency = (transaction.currency || 'UYU').trim().toUpperCase();
+  const comCurrency = (commitment.currency || 'UYU').trim().toUpperCase();
+  if (txCurrency !== comCurrency) {
+    throw new Error(`Moneda incompatible: el movimiento (${txCurrency}) no coincide con el compromiso (${comCurrency}).`);
+  }
+
+  // Invariante de Dominio: Cuenta válida y compatibilidad de moneda
+  const account = state.finance.accounts.find((a) => a.id === transaction.accountId);
+  if (!account) {
+    throw new Error('La cuenta del movimiento ya no existe.');
+  }
+  const accCurrency = (account.currency || 'UYU').trim().toUpperCase();
+  if (accCurrency !== comCurrency) {
+    throw new Error(`Moneda incompatible: la cuenta del movimiento (${accCurrency}) no coincide con el compromiso (${comCurrency}).`);
+  }
 
   // Idempotency: if already linked to this commitment and already settled
   if (
@@ -686,11 +973,36 @@ export function linkTransactionToExpectedIncome(
   state: LifeOSState,
   transactionId: string,
   expectedIncomeId: string,
+  targetCycle?: string | null,
 ): { transaction: Transaction; expectedIncome: ExpectedIncome } {
   const transaction = state.finance.transactions.find((item) => item.id === transactionId);
   if (!transaction) throw new Error('El movimiento ya no existe.');
+  const dependency = transactionDependency(state, transaction);
+  if (dependency) throw new Error(dependency);
   const income = (state.finance.expectedIncomes || []).find((item) => item.id === expectedIncomeId);
   if (!income) throw new Error('El ingreso previsto ya no existe.');
+
+  // Invariante de Dominio 1: Solo movimientos de ingreso
+  if (transaction.type !== 'ingreso') {
+    throw new Error('Solo se pueden vincular movimientos de tipo ingreso a una previsión de cobro.');
+  }
+
+  // Invariante de Dominio 2: Moneda de la transacción vs previsión
+  const txCurrency = (transaction.currency || 'UYU').trim().toUpperCase();
+  const incCurrency = (income.currency || 'UYU').trim().toUpperCase();
+  if (txCurrency !== incCurrency) {
+    throw new Error(`Moneda incompatible: el movimiento (${txCurrency}) no coincide con la previsión (${incCurrency}).`);
+  }
+
+  // Invariante de Dominio 3: Cuenta existente y moneda de la cuenta
+  const account = state.finance.accounts.find((a) => a.id === transaction.accountId);
+  if (!account) {
+    throw new Error('La cuenta del movimiento ya no existe.');
+  }
+  const accCurrency = (account.currency || 'UYU').trim().toUpperCase();
+  if (accCurrency !== incCurrency) {
+    throw new Error(`Moneda incompatible: la cuenta del movimiento (${accCurrency}) no coincide con la previsión (${incCurrency}).`);
+  }
 
   // Idempotency: if already linked to this income and settled
   if (
@@ -709,7 +1021,18 @@ export function linkTransactionToExpectedIncome(
     throw new Error('El ingreso previsto ya fue finalizado.');
   }
 
-  const settlementKey = income.frequency === 'once' ? 'once' : `cycle-${income.startDate}`;
+  const currentIncomeCycle = income.frequency === 'once' ? 'once' : `cycle-${income.startDate}`;
+  const settlementKey = targetCycle || currentIncomeCycle;
+
+  // Invariante de Dominio 4: Si el ciclo ya está liquidado por otra transacción
+  if (income.settledTxIds && income.settledTxIds.length > 0) {
+    const conflictingTx = state.finance.transactions.find(
+      (t) => t.expectedIncomeId === income.id && t.matchedCycle === settlementKey && t.id !== transaction.id
+    );
+    if (conflictingTx) {
+      throw new Error(`El ciclo ${settlementKey} ya fue liquidado por otro movimiento.`);
+    }
+  }
 
   transaction.expectedIncomeId = income.id;
   transaction.matchedCycle = settlementKey;
@@ -736,6 +1059,8 @@ export function rejectTransactionMatch(
 ): Transaction {
   const transaction = state.finance.transactions.find((item) => item.id === transactionId);
   if (!transaction) throw new Error('El movimiento ya no existe.');
+  const dependency = transactionDependency(state, transaction);
+  if (dependency) throw new Error(dependency);
 
   let resolvedCycleKey = cycleKey;
   if (!resolvedCycleKey) {

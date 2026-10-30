@@ -52,7 +52,7 @@ test('legacy → auto: plantilla sin metadata visual se comporta como auto', () 
   assert.equal(template.appearance, undefined);
   const identity = getRoutineIdentity(template.exercises, template.name, template.appearance);
   assert.equal(identity.isCustomIcon, false);
-  assert.equal(identity.icon, 'activity'); // Piernas -> activity
+  assert.equal(identity.icon, 'gym-leg-press');
 });
 
 test('auto mantiene icono derivado según musculatura dominante y nombre', () => {
@@ -60,35 +60,35 @@ test('auto mantiene icono derivado según musculatura dominante y nombre', () =>
     [{ id: '1', name: 'Press banca', muscleGroup: 'Pecho', sets: [] }],
     'Rutina A'
   );
-  assert.equal(chestIdentity.icon, 'target');
+  assert.equal(chestIdentity.icon, 'gym-bench-press');
   assert.equal(chestIdentity.label, 'Pecho');
 
   const backIdentity = inferAutomaticRoutineIdentity(
     [{ id: '2', name: 'Dominadas', muscleGroup: 'Espalda', sets: [] }],
     'Rutina B'
   );
-  assert.equal(backIdentity.icon, 'repeat');
+  assert.equal(backIdentity.icon, 'gym-lat-pulldown');
   assert.equal(backIdentity.label, 'Espalda');
 
   const legsIdentity = inferAutomaticRoutineIdentity(
     [{ id: '3', name: 'Sentadilla', muscleGroup: 'Piernas', sets: [] }],
     'Rutina C'
   );
-  assert.equal(legsIdentity.icon, 'activity');
+  assert.equal(legsIdentity.icon, 'gym-leg-press');
   assert.equal(legsIdentity.label, 'Piernas');
 
   const coreIdentity = inferAutomaticRoutineIdentity(
     [{ id: '4', name: 'Plancha', muscleGroup: 'Core', sets: [] }],
     'Rutina D'
   );
-  assert.equal(coreIdentity.icon, 'shield');
+  assert.equal(coreIdentity.icon, 'gym-yoga-mat');
   assert.equal(coreIdentity.label, 'Core');
 
   const defaultIdentity = inferAutomaticRoutineIdentity(
     [{ id: '5', name: 'Movilidad general', muscleGroup: 'Otros', sets: [] }],
     'General'
   );
-  assert.equal(defaultIdentity.icon, 'dumbbell');
+  assert.equal(defaultIdentity.icon, 'gym-dumbbell');
 });
 
 test('override persiste: asignar icono personalizable actualiza el template y se duplica limpiamente', () => {
@@ -115,8 +115,26 @@ test('override gana sobre auto: si existe override se usa el icono elegido', () 
 
   const identity = getRoutineIdentity(template.exercises, template.name, template.appearance);
   assert.equal(identity.isCustomIcon, true);
-  assert.equal(identity.icon, 'flame');
+  assert.equal(identity.icon, 'gym-bike');
+  assert.equal(identity.persistedIcon, 'flame');
   assert.equal(identity.label, 'Pecho'); // Preserva pertenencia muscular
+});
+
+test('los nuevos identificadores estables usan el mismo contrato de apariencia', () => {
+  const gym = createGymWithTemplate();
+  const updated = updateGymTemplate(gym, 'tpl-chest', {
+    appearance: { icon: 'gym-rest' },
+  });
+  assert.equal(updated, true);
+  assert.deepEqual(gym.routineTemplates[0].appearance, { icon: 'gym-rest' });
+
+  const identity = getRoutineIdentity(
+    gym.routineTemplates[0].exercises,
+    gym.routineTemplates[0].name,
+    gym.routineTemplates[0].appearance
+  );
+  assert.equal(identity.icon, 'gym-rest');
+  assert.equal(identity.persistedIcon, 'gym-rest');
 });
 
 test('volver a auto elimina override limpiamente', () => {
@@ -137,7 +155,7 @@ test('volver a auto elimina override limpiamente', () => {
     gym.routineTemplates[0].appearance
   );
   assert.equal(identity.isCustomIcon, false);
-  assert.equal(identity.icon, 'target'); // Regresa a auto
+  assert.equal(identity.icon, 'gym-bench-press');
 });
 
 test('sync concurrente converge con semántica Lamport y aisla la apariencia', () => {
@@ -210,7 +228,7 @@ test('limpieza de redundancias en metadata de rutinas', () => {
 test('catálogo de iconos curados no contiene emojis y todos son válidos', () => {
   assert.ok(ROUTINE_ICON_OPTIONS.length >= 8 && ROUTINE_ICON_OPTIONS.length <= 12);
   for (const opt of ROUTINE_ICON_OPTIONS) {
-    assert.match(opt.name, /^[a-zA-Z0-9]+$/);
+    assert.match(opt.name, /^gym-[a-z0-9-]+$/);
     assert.ok(opt.label.length > 0);
   }
 });
@@ -224,7 +242,7 @@ test('iconos desconocidos no rompen la app y caen limpiamente a auto sin generar
     invalidAppearance
   );
   assert.equal(identity.isCustomIcon, false);
-  assert.equal(identity.icon, 'target'); // Cae al heurístico automático de pecho
+  assert.equal(identity.icon, 'gym-bench-press');
 
   // 2. En migración de datos con icono desconocido
   const legacyWithUnknown = {
