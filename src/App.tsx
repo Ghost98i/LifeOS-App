@@ -1,6 +1,7 @@
 import { validateDurableCommercial } from './lib/commercialDurable';
+import { reconcileFinancePublication } from './lib/financeSyncReconciliation';
 import { assertCommercialTransition } from './lib/commercialTransition';
-import React, { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { ViewType, LifeOSState } from './types';
 import { commercialHydrationBlock, changesStoredCommercial, defaultState, hasPersistedCommercial, loadRecoveryState, loadStoredState, parseBackupJSON, readStoredCommercial, saveRecoveryState, saveStoredState, todayISO } from './lib/storage';
 import {
@@ -77,6 +78,7 @@ import {
   saveTombstones,
 } from './lib/syncMerge';
 import { nextFinanceDeletionTimestamp } from './lib/financeRevision';
+import { detectFinanceSnapshotRegression } from './lib/financeSnapshotIntegrity';
 import { stampGymMutation } from './lib/gymSync';
 
 import { AppIcon } from './components/AppIcon';
@@ -269,10 +271,40 @@ export default function App() {
   const conflictPendingRef = useRef(false);
   const resaleWriteBlockedRef = useRef(readStoredCommercial(state).status === 'blocked');
   const gymWriteBlockedRef = useRef(false);
+  const financeWriteBlockedRef = useRef(false);
+  const financePublicationRef = useRef<symbol | null>(null);
+  const financeRecoveryAttemptsRef = useRef(0);
   const resaleConflictRecordRef = useRef<ResaleConflictRecord | null>(null);
   const resaleResolutionInProgressRef = useRef(false);
   const consecutiveDivergenceCountRef = useRef<number>(0);
   const deviceIdRef = useRef(getOrCreateDeviceId());
+
+  // Explicit demo-only diagnostics: no production financial payloads are logged.
+  const traceFinanceSync = useCallback((event: string, detail: Record<string, unknown> = {}) => {
+    if (!import.meta.env.DEV || import.meta.env.VITE_FIREBASE_PROJECT_ID !== 'demo-lifeos' || import.meta.env.VITE_FINANCE_SYNC_TRACE !== '1') return;
+    console.info('[FinanceSyncTrace]', JSON.stringify({ event, at: Date.now(),
+      localIds: stateRef.current.finance.transactions.map(tx => tx.id),
+      baseIds: (baselineDataRef.current.finance as { finance?: LifeOSState['finance'] } | undefined)?.finance?.transactions.map(tx => tx.id),
+      revision: revisionsRef.current.finance, pending: pendingRevisionsRef.current.finance,
+      queued: [...queuedModulesRef.current], blocked: financeWriteBlockedRef.current,
+      ...detail }));
+  }, []);
+
+  const blockFinanceConflict = useCallback((remoteState: LifeOSState, remoteRevisions: SyncRevisionMap, conflicts: SyncConflictItem[]) => {
+    traceFinanceSync('blocked', { conflicts: conflicts.map(item => item.id), remoteIds: remoteState.finance.transactions.map(tx => tx.id), remoteRevision: remoteRevisions.finance });
+    const userId = cloudUserRef.current?.uid;
+    financeWriteBlockedRef.current = true;
+    conflictPendingRef.current = true;
+    queuedModulesRef.current.add('finance');
+    if (userId) {
+      saveSyncRecoverySnapshot(userId, 'local', stateRef.current);
+      saveSyncRecoverySnapshot(userId, 'remote', remoteState);
+      if (baselineDataRef.current.finance) saveSyncRecoverySnapshot(userId, 'base', buildStateFromModules(baselineDataRef.current));
+    }
+    setCloudConflict({ remoteState, modules: ['finance'], remoteRevisions, conflicts });
+    setSyncStatus('conflict');
+    showToast('La versión recibida de Finanzas podría perder movimientos o restaurar datos anteriores. Conservamos la copia local; revisá el conflicto.', 'error');
+  }, [traceFinanceSync]);
 
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
@@ -285,6 +317,15 @@ export default function App() {
         event.data.userId === storageUserIdRef.current &&
         event.data.state
       ) {
+        if (financeWriteBlockedRef.current) return;
+        const tabTombstones = { ...loadTombstones(event.data.userId) };
+        for (const [id, timestamp] of Object.entries(tombstonesRef.current)) tabTombstones[id] = Math.max(tabTombstones[id] || 0, Number(timestamp));
+        const financeConflicts = detectFinanceSnapshotRegression(stateRef.current.finance, event.data.state.finance, tabTombstones);
+        if (financeConflicts.length) {
+          blockFinanceConflict(event.data.state, {}, financeConflicts);
+          return;
+        }
+        tombstonesRef.current = tabTombstones;
         const diagnostic = commercialHydrationBlock(stateRef.current, event.data.state);
         if (diagnostic) {
           setResaleConflictReason(diagnostic);
@@ -300,7 +341,7 @@ export default function App() {
       channel.close();
       tabChannelRef.current = null;
     };
-  }, []);
+  }, [blockFinanceConflict]);
 
   const applyRemoteState = (remoteState: LifeOSState, userId = storageUserIdRef.current) => {
     const diagnostic = commercialHydrationBlock(stateRef.current, remoteState);
@@ -320,6 +361,11 @@ export default function App() {
     if (!saved && syncModuleFingerprint(stateRef.current, 'gym') !== syncModuleFingerprint(nextState, 'gym')) {
       setSyncStatus('error');
       showToast('No se pudo guardar la versión recibida de Gimnasio. Se conservó la copia local.', 'error');
+      return false;
+    }
+    if (!saved && syncModuleFingerprint(stateRef.current, 'finance') !== syncModuleFingerprint(nextState, 'finance')) {
+      setSyncStatus('error');
+      showToast('No se pudo guardar la versión recibida de Finanzas. Se conservó la copia local.', 'error');
       return false;
     }
     if (!saved && (readStoredCommercial(nextState).status !== 'absent' || readStoredCommercial(stateRef.current).status !== 'absent' || hasPersistedCommercial(userId))) {
@@ -348,7 +394,9 @@ export default function App() {
       const latest = revisions?.at(-1);
       return latest ? [[module, latest]] : [];
     })) as SyncRevisionMap;
-    return { ...revisionsRef.current, ...pending };
+    // A transactional Finance writer may only use a confirmed server parent.
+    // An offline preparation is not a server revision, even after a safe merge.
+    return { ...revisionsRef.current, ...pending, finance: revisionsRef.current.finance };
   };
 
   const blockResaleConflict = (
@@ -407,12 +455,21 @@ export default function App() {
     const user = cloudUserRef.current;
     const currentState = stateRef.current;
     const modules = [...queuedModulesRef.current];
+    if (financeWriteBlockedRef.current && modules.includes('finance')) {
+      setSyncStatus('conflict');
+      return;
+    }
     if (gymWriteBlockedRef.current && modules.includes('gym')) {
       setSyncStatus('conflict');
       return;
     }
     if (resaleWriteBlockedRef.current && modules.includes('resale')) {
       setSyncStatus('conflict');
+      return;
+    }
+    if (modules.includes('finance') && financePublicationRef.current) {
+      // Leave the intent queued. Completion/recovery schedules the latest state.
+      syncTimerRef.current = null;
       return;
     }
     queuedModulesRef.current.clear();
@@ -425,6 +482,10 @@ export default function App() {
     setSyncStatus(navigator.onLine ? 'saving' : 'offline');
 
     const expectedRevisions = optimisticRevisionMap();
+    const financePublication = modules.includes('finance') ? Symbol('finance-publication') : null;
+    if (financePublication) financePublicationRef.current = financePublication;
+    let financeReadyToFlush = false;
+    if (modules.includes('finance')) traceFinanceSync('publish-start', { expectedRevision: expectedRevisions.finance });
     void writeCloudModulesGuarded(user.uid, currentState, modules, deviceIdRef.current, expectedRevisions, tombstonesRef.current)
       .then((res) => {
         if (!isCurrentSession()) { void res.completion.catch(() => {}); return; }
@@ -467,7 +528,7 @@ export default function App() {
           pendingRevisionsRef.current[write.module] = [...(pendingRevisionsRef.current[write.module] || []), write.revision];
         });
 
-        void res.completion
+        return res.completion
           .then(() => {
             if (!isCurrentSession()) return;
             retryAttemptRef.current = 0;
@@ -478,8 +539,13 @@ export default function App() {
             }
             res.writes.forEach((write) => {
               failedSyncModulesRef.current.delete(write.module);
-              baselineDataRef.current[write.module] = syncModuleData(currentState, write.module);
+              if (write.module !== 'finance') baselineDataRef.current[write.module] = syncModuleData(currentState, write.module);
             });
+            // Only the corresponding server head establishes the baseline.
+            // An older completion must not overwrite a newer listener baseline.
+            financeReadyToFlush = true;
+            if (financePublication) financeRecoveryAttemptsRef.current = 0;
+            if (modules.includes('finance')) traceFinanceSync('publish-complete', { writes: res.writes });
             saveCloudBaselineData(user.uid, baselineDataRef.current);
             setFailedSyncModules([...failedSyncModulesRef.current]);
             if (failedSyncModulesRef.current.size === 0 && !resaleWriteBlockedRef.current) {
@@ -487,21 +553,82 @@ export default function App() {
                 queued: queuedModulesRef.current.size > 0,
                 pending: Object.keys(pendingRevisionsRef.current).some(module => !!pendingRevisionsRef.current[module as SyncModuleKey]?.length),
                 failed: failedSyncModulesRef.current.size > 0,
-                blocked: gymWriteBlockedRef.current || resaleWriteBlockedRef.current,
+                blocked: gymWriteBlockedRef.current || resaleWriteBlockedRef.current || financeWriteBlockedRef.current,
               });
               setSyncStatus(status);
               if (status === 'synced') setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
             }
           })
-          .catch((err) => {
+          .catch(async (err) => {
             if (!isCurrentSession()) return;
             if (err instanceof CloudRevisionConflict) {
+              traceFinanceSync('publish-stale', { writes: res.writes });
               res.writes.forEach((write) => {
                 const remaining = (pendingRevisionsRef.current[write.module] || []).filter((revision) => revision !== write.revision);
                 if (remaining.length) pendingRevisionsRef.current[write.module] = remaining;
                 else delete pendingRevisionsRef.current[write.module];
                 queuedModulesRef.current.add(write.module);
               });
+              if (financePublication) {
+                setSyncStatus(navigator.onLine ? 'connecting' : 'offline');
+                try {
+                  const recoveryAttempt = ++financeRecoveryAttemptsRef.current;
+                  const observedRevision = revisionsRef.current.finance;
+                  const fresh = await fetchFreshCloudModules(user.uid);
+                  if (!isCurrentSession() || financeWriteBlockedRef.current) return;
+                  if (fresh.lockedModules.includes('finance') || fresh.corruptedModules.includes('finance') || !fresh.moduleData.finance || !fresh.remoteRevisions.finance) {
+                    failedSyncModulesRef.current.add('finance');
+                    setFailedSyncModules([...failedSyncModulesRef.current]);
+                    setSyncStatus(fresh.lockedModules.includes('finance') ? 'locked' : 'error');
+                    return;
+                  }
+                  // A listener may have processed a later commit while this read
+                  // was decoding. Never roll its confirmed baseline back.
+                  if (recoveryAttempt <= 3 && revisionsRef.current.finance !== observedRevision && revisionsRef.current.finance !== fresh.remoteRevisions.finance) {
+                    financeReadyToFlush = true;
+                    return;
+                  }
+                  for (const [id, timestamp] of Object.entries(fresh.tombstones)) {
+                    tombstonesRef.current[id] = Math.max(tombstonesRef.current[id] || 0, timestamp);
+                  }
+                  saveTombstones(user.uid, tombstonesRef.current);
+                  const result = reconcileFinancePublication(stateRef.current, fresh.moduleData.finance, fresh.remoteRevisions.finance, baselineDataRef.current.finance, tombstonesRef.current);
+                  if (result.conflicts.length) {
+                    blockFinanceConflict(buildStateFromModules({ finance: fresh.moduleData.finance }), fresh.remoteRevisions, result.conflicts);
+                    return;
+                  }
+                  if (recoveryAttempt > 3) {
+                    blockFinanceConflict(buildStateFromModules({ finance: fresh.moduleData.finance }), fresh.remoteRevisions, [{
+                      id: 'conflict-finance-publication-churn', module: 'finance', entityType: 'entity', entityId: 'finance',
+                      label: 'Finanzas cambió repetidamente durante la publicación; revisá ambas versiones.',
+                      localSummary: 'Cambios locales conservados', remoteSummary: 'Última versión del servidor conservada',
+                      localValue: syncModuleData(stateRef.current, 'finance'), remoteValue: fresh.moduleData.finance,
+                    }]);
+                    return;
+                  }
+                  if (!applyRemoteState(result.state, user.uid)) return;
+                  baselineDataRef.current.finance = result.confirmed.data;
+                  persistRevisionMap(user.uid, { ...revisionsRef.current, finance: result.confirmed.revision });
+                  persistBaselines(user.uid, { ...baselinesRef.current, finance: result.confirmed.fingerprint });
+                  saveCloudBaselineData(user.uid, baselineDataRef.current);
+                  failedSyncModulesRef.current.delete('finance');
+                  setFailedSyncModules([...failedSyncModulesRef.current]);
+                  if (!result.needsUpload) queuedModulesRef.current.delete('finance');
+                  traceFinanceSync('stale-reconciled', { remoteRevision: result.confirmed.revision, needsUpload: result.needsUpload });
+                  financeReadyToFlush = true;
+                  setSyncStatus(cloudStatusWithLocalChanges(navigator.onLine ? 'synced' : 'offline', {
+                    queued: queuedModulesRef.current.size > 0, pending: Object.keys(pendingRevisionsRef.current).some(module => Boolean(pendingRevisionsRef.current[module as SyncModuleKey]?.length)),
+                    failed: failedSyncModulesRef.current.size > 0, blocked: gymWriteBlockedRef.current || resaleWriteBlockedRef.current || financeWriteBlockedRef.current,
+                  }));
+                } catch (recoveryError) {
+                  if (!isCurrentSession()) return;
+                  console.error('[CloudSync] No se pudo reconciliar la publicación financiera rechazada:', recoveryError);
+                  failedSyncModulesRef.current.add('finance');
+                  setFailedSyncModules([...failedSyncModulesRef.current]);
+                  setSyncStatus(navigator.onLine ? 'error' : 'offline');
+                }
+                return;
+              }
               setSyncStatus('conflict');
               return;
             }
@@ -599,6 +726,13 @@ export default function App() {
             }
           }, delay);
         }
+      })
+      .finally(() => {
+        if (!isCurrentSession() || !financePublication || financePublicationRef.current !== financePublication) return;
+        financePublicationRef.current = null;
+        if (financeReadyToFlush && queuedModulesRef.current.size > 0 && !financeWriteBlockedRef.current && !resaleWriteBlockedRef.current && !gymWriteBlockedRef.current) {
+          queueCloudSave(stateRef.current, [...queuedModulesRef.current]);
+        }
       });
   };
 
@@ -610,6 +744,10 @@ export default function App() {
     }
     modules.forEach((module) => queuedModulesRef.current.add(module));
     queuedStateRef.current = nextState;
+    if (financeWriteBlockedRef.current && queuedModulesRef.current.has('finance')) {
+      setSyncStatus('conflict');
+      return;
+    }
     if (gymWriteBlockedRef.current && queuedModulesRef.current.has('gym')) {
       setSyncStatus('conflict');
       return;
@@ -633,6 +771,10 @@ export default function App() {
     const previous = stateRef.current;
     const draft = structuredClone(previous) as LifeOSState;
     updater(draft);
+    if (financeWriteBlockedRef.current && syncModuleFingerprint(previous, 'finance') !== syncModuleFingerprint(draft, 'finance')) {
+      showToast('Revisá el conflicto de Finanzas antes de registrar otro movimiento. Conservá el formulario para reintentar.', 'error');
+      return false;
+    }
     if (commercialCommand) {
       if (!cloudUserRef.current || storageUserIdRef.current !== cloudUserRef.current.uid
         || !cryptoSession.isUnlocked(cloudUserRef.current.uid) || resaleWriteBlockedRef.current)
@@ -748,6 +890,8 @@ export default function App() {
       if (previousUser) cryptoSession.lock();
       cloudUserRef.current = user;
       pendingRevisionsRef.current = {};
+      financePublicationRef.current = null;
+      financeRecoveryAttemptsRef.current = 0;
       failedSyncModulesRef.current.clear();
       setFailedSyncModules([]);
       queuedModulesRef.current.clear();
@@ -761,6 +905,7 @@ export default function App() {
       legacyReadUserRef.current = null;
       resaleWriteBlockedRef.current = false;
       gymWriteBlockedRef.current = false;
+      financeWriteBlockedRef.current = false;
       setCloudConflict(null);
       resaleConflictRecordRef.current = null;
       setResaleRecoveryStatus('none');
@@ -900,6 +1045,13 @@ export default function App() {
         const classification = classifyInitialModuleChanges(localState, remoteState, revisionsRef.current, baselinesRef.current, remoteRevisions);
         const localModules = classification.local;
         const conflictModules = classification.conflicts;
+        if (classification.remote.includes('finance')) {
+          const financeConflicts = detectFinanceSnapshotRegression(localState.finance, remoteState.finance, tombstonesRef.current);
+          if (financeConflicts.length) {
+            blockFinanceConflict(remoteState, remoteRevisions, financeConflicts);
+            return;
+          }
+        }
         if (conflictModules.includes('resale')) {
           blockResaleConflict(conflictModules, 'Cambios simultáneos de Mi negocio requieren revisión.',
             Object.fromEntries(conflictModules.map((module) => [module, syncModuleData(remoteState, module)])), remoteRevisions);
@@ -921,8 +1073,8 @@ export default function App() {
         classification.remote.forEach((module) => {
           mergedState = applySyncModule(mergedState, module, syncModuleData(remoteState, module));
           nextRevisions[module] = remoteRevisions[module];
-          nextBaselines[module] = syncModuleFingerprint(remoteState, module);
-          nextBaselineData[module] = syncModuleData(remoteState, module);
+          nextBaselines[module] = syncModuleFingerprint(module === 'finance' ? remoteState : mergedState, module);
+          nextBaselineData[module] = syncModuleData(module === 'finance' ? remoteState : mergedState, module);
         });
 
         const initialConflicts: SyncConflictItem[] = [];
@@ -939,11 +1091,12 @@ export default function App() {
             initialConflicts.push(...conflicts);
           }
           nextRevisions[module] = remoteRevisions[module];
-          nextBaselines[module] = syncModuleFingerprint(mergedState, module);
-          nextBaselineData[module] = syncModuleData(mergedState, module);
+          nextBaselines[module] = syncModuleFingerprint(remoteState, module);
+          nextBaselineData[module] = syncModuleData(remoteState, module);
         });
 
         if (initialConflicts.length > 0) {
+          if (initialConflicts.some((conflict) => conflict.module === 'finance')) financeWriteBlockedRef.current = true;
           if (initialConflicts.some((conflict) => conflict.module === 'gym')) gymWriteBlockedRef.current = true;
           saveSyncRecoverySnapshot(cloudUser.uid, 'local', localState);
           saveSyncRecoverySnapshot(cloudUser.uid, 'remote', remoteState);
@@ -978,6 +1131,11 @@ export default function App() {
       if (localHasData && !remoteHasData) {
         uploadAll(localState);
       } else if (remoteHasData) {
+        const financeConflicts = detectFinanceSnapshotRegression(localState.finance, remoteState.finance, tombstonesRef.current);
+        if (financeConflicts.length) {
+          blockFinanceConflict(remoteState, remoteRevisions, financeConflicts);
+          return;
+        }
         const gymConflicts = detectGymSessionConflicts(localState.gym, remoteState.gym, (baselineDataRef.current.gym as { gym: LifeOSState['gym'] } | undefined)?.gym, true);
         if (gymConflicts.length) {
           blockGymConflict(remoteState, remoteRevisions, gymConflicts);
@@ -1112,6 +1270,20 @@ export default function App() {
             setSyncStatus('conflict');
             return;
           }
+          if (financeWriteBlockedRef.current) {
+            setSyncStatus('conflict');
+            return;
+          }
+
+          // Initial hydration needs deletion evidence too; it used to discard
+          // the encrypted payload's tombstones before deciding to replace data.
+          for (const head of decodedHeads) {
+            const markers = (head.data as { _tombstones?: Record<string, number> } | null)?._tombstones;
+            for (const [id, timestamp] of Object.entries(markers || {})) {
+              if (Number.isFinite(timestamp) && timestamp > (tombstonesRef.current[id] || 0)) tombstonesRef.current[id] = timestamp;
+            }
+          }
+          saveTombstones(cloudUser.uid, tombstonesRef.current);
 
           if (initializedUserRef.current !== cloudUser.uid) {
             if (snapshot.fromCache && navigator.onLine) {
@@ -1162,6 +1334,7 @@ export default function App() {
             }
 
             const pureHeadData = extractPureModuleData(head.data);
+            if (head.module === 'finance') traceFinanceSync('snapshot', { remoteRevision: head.revision, remoteIds: (pureHeadData as { finance: LifeOSState['finance'] }).finance.transactions.map(tx => tx.id), fromCache: head.fromCache, pendingWrites: head.pendingWrites });
             const pendingRevisions = pendingRevisionsRef.current[head.module] || [];
             const knownRevision = nextRevisions[head.module] || null;
 
@@ -1223,6 +1396,13 @@ export default function App() {
               : false;
 
             if (pendingRevisions.length === 0 && !localDirty) {
+              if (head.module === 'finance') {
+                const financeConflicts = detectFinanceSnapshotRegression(nextState.finance, (pureHeadData as { finance: LifeOSState['finance'] }).finance, tombstonesRef.current);
+                if (financeConflicts.length) {
+                  blockFinanceConflict(buildStateFromModules({ finance: pureHeadData }), { finance: head.revision }, financeConflicts);
+                  return;
+                }
+              }
               if (head.module === 'gym') {
                 const gymConflicts = detectGymSessionConflicts(nextState.gym, (pureHeadData as { gym: LifeOSState['gym'] }).gym,
                   (baselineDataRef.current.gym as { gym: LifeOSState['gym'] } | undefined)?.gym, true);
@@ -1240,7 +1420,9 @@ export default function App() {
             }
 
             // Concurrent modification: perform 3-way merge with conflict detection!
-            const { state: mergedWithModule, conflicts: moduleConflicts } = mergeSyncModuleWithConflicts(
+            const { state: mergedWithModule, conflicts: moduleConflicts } = head.module === 'finance'
+              ? reconcileFinancePublication(nextState, pureHeadData, head.revision, baselineDataRef.current.finance, tombstonesRef.current)
+              : mergeSyncModuleWithConflicts(
               nextState,
               head.module,
               pureHeadData,
@@ -1249,6 +1431,10 @@ export default function App() {
             );
 
             if (moduleConflicts.length > 0) {
+              if (head.module === 'finance') {
+                blockFinanceConflict(buildStateFromModules({ finance: pureHeadData }), { finance: head.revision }, moduleConflicts);
+                return;
+              }
               if (head.module === 'resale') {
                 blockResaleConflict([...queuedModulesRef.current, 'resale'], 'La mezcla de Mi negocio tiene conflictos.',
                   { resale: pureHeadData }, { resale: head.revision });
@@ -1281,7 +1467,8 @@ export default function App() {
             nextState = mergedWithModule;
             nextRevisions[head.module] = head.revision;
             nextBaselines[head.module] = remoteFingerprint;
-            baselineDataRef.current[head.module] = syncModuleData(nextState, head.module);
+            baselineDataRef.current[head.module] = head.module === 'finance' ? pureHeadData : syncModuleData(nextState, head.module);
+            if (head.module === 'finance') traceFinanceSync('merged', { remoteRevision: head.revision, mergedIds: nextState.finance.transactions.map(tx => tx.id) });
             appliedRemote = true;
 
             const mergedFingerprint = syncModuleFingerprint(nextState, head.module);
@@ -1304,7 +1491,7 @@ export default function App() {
             queued: queuedModulesRef.current.size > 0,
             pending: Object.keys(pendingRevisionsRef.current).some(module => !!pendingRevisionsRef.current[module as SyncModuleKey]?.length),
             failed: failedSyncModulesRef.current.size > 0,
-            blocked: gymWriteBlockedRef.current || resaleWriteBlockedRef.current,
+            blocked: gymWriteBlockedRef.current || resaleWriteBlockedRef.current || financeWriteBlockedRef.current,
           });
           setSyncStatus(statusAfterFailures);
           if (statusAfterFailures === 'synced') {
@@ -1622,6 +1809,11 @@ export default function App() {
   };
 
   const handleForceSync = async () => {
+    if (financeWriteBlockedRef.current) {
+      setSyncStatus('conflict');
+      showToast('Finanzas conserva un conflicto pendiente. Revisá las versiones antes de sincronizar.', 'error');
+      return;
+    }
     const sessionEpoch = cloudSessionEpochRef.current;
     const isCurrentSession = () => sessionEpoch === cloudSessionEpochRef.current && cloudUserRef.current?.uid === cloudUser?.uid;
     if (resaleWriteBlockedRef.current) {
@@ -1736,6 +1928,7 @@ export default function App() {
   };
 
   const handleRetrySync = () => {
+    if (financeWriteBlockedRef.current) { setSyncStatus('conflict'); return; }
     if (resaleWriteBlockedRef.current) { setSyncStatus('conflict'); return; }
     if (gymWriteBlockedRef.current) { setSyncStatus('conflict'); return; }
     retryAttemptRef.current = 0;
@@ -1746,9 +1939,9 @@ export default function App() {
   const handleUseLocalState = () => {
     if (!cloudUser || !cloudConflict) return;
     if (cloudConflict.modules.includes('resale') || resaleWriteBlockedRef.current) return;
-    if (cloudConflict.modules.includes('gym') && !saveSyncRecoverySnapshot(cloudUser.uid, 'remote', cloudConflict.remoteState)) {
+    if ((cloudConflict.modules.includes('gym') || cloudConflict.modules.includes('finance')) && !saveSyncRecoverySnapshot(cloudUser.uid, 'remote', cloudConflict.remoteState)) {
       setSyncStatus('conflict');
-      showToast('No se pudo guardar la copia remota del entrenamiento. La resolución sigue bloqueada.', 'error');
+      showToast('No se pudo guardar la copia remota. La resolución sigue bloqueada.', 'error');
       return;
     }
     resaleWriteBlockedRef.current = false;
@@ -1770,6 +1963,7 @@ export default function App() {
     initializedUserRef.current = cloudUser.uid;
     conflictPendingRef.current = false;
     gymWriteBlockedRef.current = false;
+    financeWriteBlockedRef.current = false;
     failedSyncModulesRef.current.clear();
     setFailedSyncModules([]);
     setCloudConflict(null);
@@ -1779,9 +1973,9 @@ export default function App() {
   const handleUseCloudState = () => {
     if (!cloudUser || !cloudConflict) return;
     if (cloudConflict.modules.includes('resale') || resaleWriteBlockedRef.current) return;
-    if (cloudConflict.modules.includes('gym') && !saveSyncRecoverySnapshot(cloudUser.uid, 'local', stateRef.current)) {
+    if ((cloudConflict.modules.includes('gym') || cloudConflict.modules.includes('finance')) && !saveSyncRecoverySnapshot(cloudUser.uid, 'local', stateRef.current)) {
       setSyncStatus('conflict');
-      showToast('No se pudo guardar la copia local del entrenamiento. La resolución sigue bloqueada.', 'error');
+      showToast('No se pudo guardar la copia local. La resolución sigue bloqueada.', 'error');
       return;
     }
     resaleWriteBlockedRef.current = false;
@@ -1805,6 +1999,7 @@ export default function App() {
     initializedUserRef.current = cloudUser.uid;
     conflictPendingRef.current = false;
     gymWriteBlockedRef.current = false;
+    financeWriteBlockedRef.current = false;
     const needsMigration = cloudConflict.needsMigration;
     setCloudConflict(null);
     if (needsMigration) queueCloudSave(remoteWithLocalResale, [...SYNC_MODULES]);
@@ -2244,11 +2439,12 @@ export default function App() {
                   initialFocusId={initialFocusId}
                   initialDate={initialAgendaDate}
                   focusNonce={focusNonce}
+                  onNavigateToRecord={handleNavigateToRecord}
                 />
               )}
 
               {currentView === 'calendario' && (
-                <CalendarioView state={state} onUpdateState={updateState} onNavigate={handleNavigate} />
+                <CalendarioView state={state} onUpdateState={updateState} onNavigate={handleNavigate} onNavigateToRecord={handleNavigateToRecord} />
               )}
 
               {currentView === 'trabajo' && (

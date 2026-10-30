@@ -67,6 +67,9 @@ export function parseUniversalIntent(
   }
 
   // 2. Ideas: Priority for idea prefixes / keywords ("idea:", "ideas:", "idea de ...", "ideas para ...", starts with "idea")
+  const explicitTask = trimmed.match(/^(?:(?:crear|cre[aá]|agregar|agreg[aá])\s+(?:una\s+)?)?tarea\s*:\s*(.*)$/i);
+  if (explicitTask) return parseTaskIntent(explicitTask[1].trim());
+
   if (/^ideas?:\s*/i.test(trimmed)) {
     const text = trimmed.replace(/^ideas?:\s*/i, '').trim();
     return { kind: 'idea', text };

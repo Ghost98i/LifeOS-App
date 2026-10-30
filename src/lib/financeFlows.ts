@@ -57,6 +57,11 @@ function assertAccountsCanMaterialize(
   accountIds: string[],
   allowAmbiguousReconciliationChange = false,
 ): void {
+  const eventIds = new Set<string>();
+  for (const event of [...state.finance.transactions, ...state.finance.transfers, ...state.finance.reconciliations]) {
+    if (eventIds.has(event.id)) throw new Error('Hay operaciones financieras con el mismo ID. Conservá los datos y revisá su identidad antes de modificar el libro.');
+    eventIds.add(event.id);
+  }
   for (const accountId of accountIds) {
     const account = state.finance.accounts.find((item) => item.id === accountId);
     if (!account) throw new Error('La cuenta ya no existe.');
@@ -95,6 +100,34 @@ function materializeAccounts(state: LifeOSState, accountIds: string[]): void {
 export function addTransaction(state: LifeOSState, input: TransactionInput): Transaction {
   const amount = roundMoney(input.amount);
   if (!Number.isFinite(amount) || amount <= 0) throw new Error('Ingresá un monto mayor a cero.');
+  // Identity belongs to a user operation, never to its name/amount/date. A retry
+  // must reuse its ID; a separate legitimate operation must receive a new one.
+  if (input.id) {
+    const existing = state.finance.transactions.filter((tx) => tx.id === input.id);
+    if (existing.length > 1) throw new Error('El ID tiene varios movimientos; conservá los datos y revisá su identidad.');
+    if (existing.length === 1) {
+      const tx = existing[0];
+      const account = state.finance.accounts.find((item) => item.id === tx.accountId);
+      const sameOperation = tx.type === input.type && roundMoney(tx.amount) === amount
+        && tx.accountId === input.accountId && tx.category === input.category.trim()
+        && tx.date === (input.date || tx.date)
+        && (tx.note || '') === (input.note?.trim() || '')
+        && tx.fixed === (input.fixed || 'variable')
+        && (tx.operationTime || null) === (input.operationTime || null)
+        && (tx.currency || account?.currency || 'UYU').toUpperCase() === (input.currency || account?.currency || 'UYU').trim().toUpperCase()
+        && (input.origin === undefined || tx.origin === input.origin)
+        && (tx.commitmentId || null) === (input.commitmentId || null)
+        && (tx.expectedIncomeId || null) === (input.expectedIncomeId || null)
+        && (tx.matchedCycle || null) === (input.matchedCycle || null)
+        && (tx.agreementId || null) === (input.agreementId || null);
+      if (!sameOperation) throw new Error('El ID ya pertenece a otro movimiento o fue editado. Volvé a abrir el formulario para registrar una operación independiente.');
+      return tx;
+    }
+    if (state.finance.transfers.some((item) => item.id === input.id)
+      || state.finance.reconciliations.some((item) => item.id === input.id)) {
+      throw new Error('El ID ya pertenece a otra operación financiera.');
+    }
+  }
   if (!input.accountId || !state.finance.accounts.some((account) => account.id === input.accountId)) {
     throw new Error('Elegí una cuenta válida.');
   }
@@ -119,7 +152,7 @@ export function addTransaction(state: LifeOSState, input: TransactionInput): Tra
     : (input.reviewed ? 'reviewed' : 'pending');
 
   const transaction: Transaction = {
-    id: input.id || uid(),
+    id: input.id || globalThis.crypto?.randomUUID?.() || uid(),
     createdAt: new Date().toISOString(),
     effectiveOrder: nextFinanceEffectiveOrder(state, date),
     revisionOrder: createFinanceRevisionOrder(),

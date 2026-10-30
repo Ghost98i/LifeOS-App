@@ -6,6 +6,7 @@ import { isModuleEnabled } from './moduleVisibility';
 import { addTransaction } from './financeFlows';
 
 export interface QuickTransactionInput {
+  id?: string;
   type: 'gasto' | 'ingreso';
   amount: number;
   accountId?: string | null;
@@ -48,6 +49,7 @@ export function addQuickTransaction(state: LifeOSState, input: QuickTransactionI
   }
 
   return addTransaction(state, {
+    id: input.id,
     type: input.type,
     amount,
     currency: input.currency,

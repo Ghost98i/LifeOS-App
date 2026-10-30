@@ -503,6 +503,31 @@ export function parseSingleClauseDraft(
     };
   }
 
+  // Explicit task intent wins over financial words contained in its title.
+  const explicitTask = trimmed.match(/^(?:(?:crear|cre[aá]|agregar|agreg[aá])\s+(?:una\s+)?)?tarea\s*:\s*(.*)$/i);
+  if (explicitTask) {
+    const date = extractRelativeDate(explicitTask[1], referenceDate, 'future');
+    const text = cleanPunctuation(date.cleanedText);
+    return { id: draftId, rawText: trimmed, kind: 'task', text, priority: 'media', dueDate: date.date,
+      dueDateLabel: date.dateLabel, ambiguityWarning: date.ambiguityWarning, targetModule: 'dashboard', isModuleEnabled: true,
+      missingFields: text ? undefined : ['title'] };
+  }
+  // Keep explicit financial prefixes in the existing reviewed finance pipeline.
+  const explicitFinance = trimmed.match(/^(gasto|ingreso)\s*:\s*(.*)$/i);
+  if (explicitFinance) {
+    const parsed = parseSingleClauseDraft(`${explicitFinance[1].toLowerCase() === 'gasto' ? 'gasté' : 'cobré'} ${explicitFinance[2]}`, state, referenceDate);
+    return { ...parsed, id: draftId, rawText: trimmed };
+  }
+  const explicitEvent = trimmed.match(/^(?:evento|acontecimiento)\s*:\s*(.*)$/i);
+  if (explicitEvent) {
+    const time = explicitEvent[1].match(/\b(?:[01]?\d|2[0-3]):[0-5]\d\b/)?.[0];
+    const date = extractRelativeDate(time ? explicitEvent[1].replace(new RegExp(`(?:\\ba\\s+las\\s+)?${time}`, 'i'), ' ') : explicitEvent[1], referenceDate, 'future');
+    const activity = cleanPunctuation(date.cleanedText);
+    return { id: draftId, rawText: trimmed, kind: 'agenda', activity, time: time?.padStart(5, '0'), date: date.date || referenceDate,
+      dateLabel: date.dateLabel || 'Hoy', ambiguityWarning: date.ambiguityWarning, targetModule: 'agenda', isModuleEnabled: isModuleEnabled(state, 'agenda'),
+      missingFields: activity ? undefined : ['title'] };
+  }
+
   // 1b. Ideas: "idea: ...", "ideas: ...", "idea para ...", "me gustaría algún día ..."
   if (/^ideas?:\s*/i.test(trimmed) || /^me\s+gustar[ií]a\s+alg[uú]n\s+d[ií]a\b/i.test(trimmed)) {
     const text = trimmed.replace(/^ideas?:\s*/i, '').trim();
@@ -1111,6 +1136,7 @@ export function confirmCaptureDraft(
       }
 
       const tx = addQuickTransaction(draftState, {
+        id: `capture-${draft.id}`,
         type: draft.type,
         amount: draft.amount,
         currency: draftCurrency,

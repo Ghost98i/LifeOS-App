@@ -1231,9 +1231,10 @@ export async function fetchFreshCloudModules(
   remoteRevisions: SyncRevisionMap;
   lockedModules: SyncModuleKey[];
   corruptedModules: SyncModuleKey[];
+  tombstones: Record<string, number>;
 }> {
   if (!cloudSyncConfigured) {
-    return { moduleData: {}, remoteRevisions: {}, lockedModules: [], corruptedModules: [] };
+    return { moduleData: {}, remoteRevisions: {}, lockedModules: [], corruptedModules: [], tombstones: {} };
   }
 
   const snapshot = await getDocsFromServer(modulesCollection(userId));
@@ -1242,6 +1243,7 @@ export async function fetchFreshCloudModules(
   const remoteRevisions: SyncRevisionMap = {};
   const lockedModules: SyncModuleKey[] = [];
   const corruptedModules: SyncModuleKey[] = [];
+  const tombstones: Record<string, number> = {};
 
   for (const moduleDoc of snapshot.docs) {
     if (!isSyncModuleKey(moduleDoc.id)) continue;
@@ -1261,9 +1263,13 @@ export async function fetchFreshCloudModules(
     } else if (decodeRes.mode === 'corrupted') {
       corruptedModules.push(module);
     } else {
+      const markers = (decodeRes.data as { _tombstones?: Record<string, number> } | null)?._tombstones;
+      for (const [id, timestamp] of Object.entries(markers || {})) {
+        if (Number.isFinite(timestamp) && timestamp > (tombstones[id] || 0)) tombstones[id] = timestamp;
+      }
       moduleData[module] = extractPureModuleData(decodeRes.data);
     }
   }
 
-  return { moduleData, remoteRevisions, lockedModules, corruptedModules };
+  return { moduleData, remoteRevisions, lockedModules, corruptedModules, tombstones };
 }

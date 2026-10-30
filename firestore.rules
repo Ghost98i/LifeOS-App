@@ -289,7 +289,7 @@ service cloud.firestore {
           && request.resource.data.parentRevision == null
         ))
         && (module != 'finance' || validFinanceCommercialWrite(userId))
-        && (module != 'finance' || !userHasCommercialResale(userId) || (
+        && (module != 'finance' || (
           ('parentRevision' in request.resource.data)
           && request.resource.data.parentRevision == null
         ));
@@ -307,7 +307,7 @@ service cloud.firestore {
         ))
         && (module != 'finance' || (preservesFinanceProtocol() && validFinanceCommercialWrite(userId)
           && preservesFinanceCommercial()))
-        && (module != 'finance' || !userHasCommercialResale(userId) || (
+        && (module != 'finance' || (
           ('parentRevision' in request.resource.data)
           && request.resource.data.parentRevision is string
           && ('revision' in resource.data)

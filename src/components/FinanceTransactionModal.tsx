@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import { Transaction, Account } from '../types';
-import { todayISO, parseDecimalInput } from '../lib/storage';
+import { todayISO, parseDecimalInput, uid } from '../lib/storage';
 import { AppIcon } from './AppIcon';
 
 export interface FinanceTransactionModalProps {
   open: boolean;
   onClose: () => void;
   onSubmit: (data: {
+    id: string;
     type: 'gasto' | 'ingreso';
     amount: number;
     category: string;
@@ -44,6 +45,8 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
   const [note, setNote] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const operationId = useRef<string | null>(null);
+  useEffect(() => { if (!open) operationId.current = null; }, [open]);
   useDialogFocus(open, dialogRef, onClose, '#finance-movement-trigger');
 
   const selectedAccount = accounts.find((a) => a.id === accountId);
@@ -60,7 +63,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
         setDate(editingTransaction.date);
         setOperationTime(editingTransaction.operationTime || '');
         setNote(editingTransaction.note || '');
-        setShowAdvanced(Boolean(editingTransaction.note || editingTransaction.operationTime || editingTransaction.fixed === 'fijo' || editingTransaction.date !== todayISO()));
+        setShowAdvanced(Boolean(editingTransaction.operationTime || editingTransaction.fixed === 'fijo' || editingTransaction.date !== todayISO()));
       } else {
         setType(initialType);
         setAmount('');
@@ -91,6 +94,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
     }
 
     onSubmit({
+      id: editingTransaction?.id || (operationId.current ??= globalThis.crypto?.randomUUID?.() || uid()),
       type,
       amount: parsed.value,
       category: category.trim(),
@@ -241,6 +245,15 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
             </div>
           </div>
 
+          <div>
+            <label htmlFor="finance-tx-note" className="text-xs font-semibold text-[var(--text-soft)] block mb-1">
+              {type === 'gasto' ? '¿En qué gastaste? (opcional)' : '¿De dónde proviene? (opcional)'}
+            </label>
+            <input id="finance-tx-note" type="text" value={note} onChange={(e) => setNote(e.target.value)}
+              placeholder={type === 'gasto' ? 'Ej: Jamón, queso, almuerzo…' : 'Ej: Sueldo, venta, devolución…'}
+              className="w-full px-3 py-2.5 text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]" />
+          </div>
+
           {/* Progressive Disclosure Toggle */}
           <div className="pt-1">
             <button
@@ -248,7 +261,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
               onClick={() => setShowAdvanced(!showAdvanced)}
               className="text-xs font-semibold text-[var(--blue)] hover:underline flex items-center gap-1 cursor-pointer"
             >
-              <span>{showAdvanced ? 'Ocultar detalles adicionales ▴' : 'Más detalles (fecha, hora, fijos, notas) ▾'}</span>
+              <span>{showAdvanced ? 'Ocultar detalles adicionales ▴' : 'Más detalles (fecha, hora, fijos) ▾'}</span>
             </button>
           </div>
 
@@ -298,19 +311,6 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
                 />
               </div>
 
-              <div>
-                <label htmlFor="finance-tx-note" className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
-                  Nota / Detalle (Opcional)
-                </label>
-                <input
-                  id="finance-tx-note"
-                  type="text"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Ej: Almuerzo de trabajo, nafta, ferretería..."
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
-                />
-              </div>
             </div>
           )}
 

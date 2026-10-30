@@ -12,6 +12,9 @@ import {
 } from 'recharts';
 import { DayKey, Exercise, ExerciseEquipment, GymSession, GymSet, LifeOSState, MuscleGroup, RoutineAppearance } from '../types';
 import { GymRestTimerBar } from './GymRestTimerBar';
+import { GymActivityCalendar } from './GymActivityCalendar';
+import { GymWorkoutLauncher } from './GymWorkoutLauncher';
+import { useGymLauncher } from '../hooks/useGymLauncher';
 import { GymNoteSurface } from './GymNoteSurface';
 import { GYM_NOTE_PLACEMENTS_ENABLED } from '../lib/notePlacements';
 import { ActiveWorkoutView } from './ActiveWorkoutView';
@@ -51,7 +54,7 @@ import {
   sortedWeight,
 } from '../lib/calculations';
 import { buildGymHistory } from '../lib/gymHistory';
-import { buildGymSessionPresentation, formatGymSessionDateTime, getGymCalendarOverview, getPreviousSessionBestLabel, getScheduledGymRoutine } from '../lib/gymIdlePresentation';
+import { buildGymSessionPresentation, formatGymSessionDateTime, getGymCalendarOverview, getPreviousSessionBestLabel } from '../lib/gymIdlePresentation';
 import {
   EXERCISE_EQUIPMENT_OPTIONS,
   inferExerciseEquipment,
@@ -164,10 +167,13 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
   const [sessionDate, setSessionDate] = useState(todayISO());
   const [sessionWeekLabel, setSessionWeekLabel] = useState('');
-  const [sessionTemplate, setSessionTemplate] = useState('');
+  const { today: launcherToday, plan: launcherPlan, select: setSessionTemplate } = useGymLauncher(state, activeTab);
+  const sessionTemplate = launcherPlan.templateId;
 
   const [templateName, setTemplateName] = useState('');
   const [showBodyComposition, setShowBodyComposition] = useState(false);
+  const [calendarHistorySessionId, setCalendarHistorySessionId] = useState<string | null>(null);
+  const historyRootRef = useRef<HTMLDivElement>(null);
   const launcherRef = useRef<HTMLElement>(null);
   const bodyHealthDetailsRef = useRef<HTMLDetailsElement>(null);
   const bodyHealthContentRef = useRef<HTMLDivElement>(null);
@@ -283,9 +289,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   const variacion = weightVariation(state);
   const imc = calcIMC(state);
   const imcCat = imcCategory(imc);
-  const isRestDayToday =
-    (state.gym?.restDays || []).includes(todayISO()) ||
-    Boolean(state.checkoutLog?.[todayISO()]?.trainedSkipped);
+  const isRestDayToday = launcherPlan.explicitRest;
   const gymSessions = state.gym?.sessions;
   const sortedSessions = useMemo(() => {
     return [...(gymSessions || [])].sort((a, b) =>
@@ -302,8 +306,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   const performedSessionCount = sortedSessions.filter(isPerformedGymSession).length;
 
   const todayCompletedSession = useMemo(
-    () => sortedSessions.find((session) => session.date === todayISO() && isPerformedGymSession(session)) || null,
-    [sortedSessions]
+    () => sortedSessions.find((session) => session.date === launcherToday && isPerformedGymSession(session)) || null,
+    [sortedSessions, launcherToday]
   );
 
   const todayPresentation = useMemo(
@@ -313,13 +317,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     [sortedSessions, todayCompletedSession]
   );
 
-  const isTrainedToday = (state.gym?.sessions || []).some(
-    (s) => s.date === todayISO() && isPerformedGymSession(s)
-  );
-
   const activeWorkoutSession = getActiveGymSession(state.gym);
-  const selectedRoutine = state.gym.routineTemplates.find((routine) => routine.id === sessionTemplate);
-  const scheduledRoutine = getScheduledGymRoutine(state.gym.routineTemplates, todayISO());
   const gymSettings = getGymSettings(state.gym);
 
   const staleActiveSessions = (state.gym?.sessions || []).filter(
@@ -351,8 +349,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
       if (!draft.gym) draft.gym = { sessions: [], exercises: [], routineTemplates: [], weight: [] } as any;
       if (!draft.gym.restDays) draft.gym.restDays = [];
       const idx = draft.gym.restDays.indexOf(today);
-      if (idx >= 0) {
-        draft.gym.restDays.splice(idx, 1);
+      if (idx >= 0 || draft.checkoutLog?.[today]?.trainedSkipped) {
+        if (idx >= 0) draft.gym.restDays.splice(idx, 1);
         if (draft.checkoutLog?.[today]) {
           draft.checkoutLog[today].trainedSkipped = false;
         }
@@ -867,6 +865,25 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     return buildGymHistory(state.gym.sessions);
   }, [state.gym.sessions]);
 
+  const calendarRestDates = useMemo(() => [
+    ...(state.gym.restDays || []),
+    ...Object.keys(state.checkoutLog || {}).filter(date => state.checkoutLog?.[date]?.trainedSkipped),
+  ], [state.gym.restDays, state.checkoutLog]);
+
+  useEffect(() => {
+    if (activeTab !== 'historial' || !calendarHistorySessionId) return;
+    const root = historyRootRef.current;
+    const target = root && [...root.querySelectorAll<HTMLElement>('[data-gym-history-session]')]
+      .find(element => element.dataset.gymHistorySession === calendarHistorySessionId);
+    if (!target) return;
+    for (let parent = target.parentElement; parent && parent !== root; parent = parent.parentElement) {
+      if (parent instanceof HTMLDetailsElement) parent.open = true;
+    }
+    target.scrollIntoView({ block: 'start', behavior: 'auto' });
+    target.focus({ preventScroll: true });
+    setCalendarHistorySessionId(null);
+  }, [activeTab, calendarHistorySessionId]);
+
   // Calculations for live workout
   const liveSafeExIdx = activeWorkoutSession
     ? Math.max(0, Math.min(liveExIdx, activeWorkoutSession.exercises.length - 1))
@@ -926,6 +943,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('entrenar')}
+          aria-label={activeWorkoutSession ? 'Continuar entrenamiento' : undefined}
           aria-current={activeTab === 'entrenar' ? 'page' : undefined}
           className={`flex min-h-11 min-w-[4.75rem] flex-1 items-center justify-center gap-1 rounded-lg px-1.5 text-[11px] font-bold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] sm:min-w-0 sm:gap-2 sm:px-3 sm:text-xs ${
             activeTab === 'entrenar'
@@ -934,7 +952,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
           }`}
         >
           <AppIcon name="dumbbell" className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          <span className="truncate">{activeWorkoutSession ? 'En curso' : 'Entrenar'}</span>
+          <span className="truncate">{activeWorkoutSession ? 'Continuar' : 'Entrenar'}</span>
         </button>
 
         <button
@@ -1126,118 +1144,16 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
           ) : (
             /* NO ACTIVE WORKOUT: TODAY LAUNCHER */
             <div className="space-y-6">
-              {/* Today's Gym Status */}
-              <section
-                data-gym-today-status
-                ref={launcherRef}
-                className="relative scroll-mt-4 overflow-hidden rounded-3xl bg-[var(--card)] shadow-sm ring-1 ring-inset ring-[var(--border)]"
-              >
-                <span className="pointer-events-none absolute -right-12 -top-16 h-44 w-44 rounded-full bg-[#4F46E5]/[0.12] blur-2xl" />
-                <div className="relative grid lg:grid-cols-[minmax(0,1fr)_minmax(19rem,0.8fr)]">
-                  <div className="min-w-0 px-5 py-5 sm:px-6 sm:py-6">
-                    <div className="flex items-start gap-3">
-                      {isTrainedToday && (
-                        <span className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
-                          <AppIcon name="check" className="h-5 w-5" />
-                        </span>
-                      )}
-                      <div className="min-w-0">
-                        {isTrainedToday && <p className="text-xs font-semibold text-[var(--text-soft)]">Sesión de hoy completada</p>}
-                        <h2 className="mt-1 text-xl font-black tracking-tight text-[var(--text)] sm:text-2xl">
-                          {isTrainedToday
-                            ? todayPresentation?.name || 'Entrenamiento completado'
-                            : '¿Listo para entrenar?'}
-                        </h2>
-                        {isRestDayToday && !isTrainedToday && <p className="mt-2 text-sm leading-5 text-amber-600 dark:text-amber-300">Hoy tenés un descanso registrado. Podés entrenar de todos modos; se te pedirá confirmación.</p>}
-                      </div>
-                    </div>
-
-                    {!todayPresentation && (
-                      <div className="mt-5 border-t border-[var(--border)] pt-4">
-                        <p className="text-xs font-medium text-[var(--text-soft)]">Entrenamiento a iniciar</p>
-                        <p className="mt-1 text-base font-bold text-[var(--text)]">
-                          {selectedRoutine?.name || (state.gym.routineTemplates.length ? 'Entrenamiento en blanco' : 'Sin rutinas guardadas')}
-                        </p>
-                        {selectedRoutine && <p className="mt-0.5 text-xs text-[var(--text-soft)]">{selectedRoutine.exercises.length} {selectedRoutine.exercises.length === 1 ? 'ejercicio' : 'ejercicios'}{selectedRoutine.days?.length ? ` · ${selectedRoutine.days.map((day) => DAY_LABELS[day]).join(', ')}` : ''}</p>}
-                        {scheduledRoutine && <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--text-soft)]">
-                          <span>{scheduledRoutine.daysAway === 0 ? 'Plan de hoy' : `Próximo plan · ${DAY_LABELS[scheduledRoutine.day]}`}: <strong className="font-medium text-[var(--text)]">{scheduledRoutine.routine.name}</strong></span>
-                          {sessionTemplate !== scheduledRoutine.routine.id && <button type="button" onClick={() => setSessionTemplate(scheduledRoutine.routine.id)} className="min-h-11 font-semibold text-[var(--blue)] underline">Usar esta rutina</button>}
-                        </div>}
-                        {!selectedRoutine && state.gym.routineTemplates.length === 0 && (
-                          <button type="button" onClick={() => { setActiveTab('rutinas'); setShowTemplates(true); }} className="mt-2 min-h-11 rounded-lg pr-2 text-sm font-semibold text-[var(--blue)] hover:underline">
-                            Crear primera rutina
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    {todayPresentation && (
-                      <dl className="mt-6 grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-[1.4fr_repeat(4,minmax(0,1fr))] sm:items-end">
-                        {todayPresentation.volumeKg > 0 && (
-                          <div className="col-span-2 sm:col-span-1">
-                            <dt className="text-[11px] font-semibold text-[var(--text-faint)]">Volumen total</dt>
-                            <dd className="mt-1 text-3xl font-black tracking-tight tabular-nums text-[var(--text)] sm:text-4xl">
-                              {todayPresentation.volumeKg.toLocaleString('es-UY')}
-                              <span className="ml-1.5 text-sm font-semibold text-[var(--text-soft)]">kg</span>
-                            </dd>
-                          </div>
-                        )}
-                        {[
-                          ['Ejercicios', todayPresentation.exerciseCount],
-                          ['Series', todayPresentation.completedSetCount],
-                          ...(todayPresentation.durationLabel
-                            ? [['Tiempo registrado', todayPresentation.durationLabel] as [string, string | number]]
-                            : []),
-                          ...(todayPresentation.prExerciseCount > 0
-                            ? [['Mejores marcas', `${todayPresentation.prExerciseCount} PR${todayPresentation.prExerciseCount === 1 ? '' : 's'}`] as [string, string | number]]
-                            : []),
-                        ].map(([label, value]) => (
-                          <div key={label}>
-                            <dt className="text-[11px] font-semibold text-[var(--text-faint)]">{label}</dt>
-                            <dd className={`mt-1 text-xl font-black tabular-nums ${label === 'Mejores marcas' ? 'text-amber-600 dark:text-amber-300' : 'text-[var(--text)]'}`}>
-                              {value}
-                            </dd>
-                          </div>
-                        ))}
-                      </dl>
-                    )}
-                  </div>
-
-                  <div className="flex w-full flex-col gap-2 border-t border-[var(--border)] bg-[var(--surface-muted)]/55 p-4 sm:flex-row sm:items-center lg:w-72 lg:flex-col lg:items-stretch lg:justify-center lg:border-l lg:border-t-0 lg:p-5">
-                    <label className="text-xs font-semibold text-[var(--text-soft)]" htmlFor="gym-routine-choice">Elegir rutina</label>
-                    <select
-                      id="gym-routine-choice"
-                      value={sessionTemplate}
-                      onChange={(event) => setSessionTemplate(event.target.value)}
-                      className="min-h-11 min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-medium text-[var(--text)] outline-none focus:border-[var(--blue)] lg:w-full"
-                    >
-                      <option value="">Entrenamiento en blanco</option>
-                      {state.gym.routineTemplates.map((template) => (
-                        <option key={template.id} value={template.id} disabled={template.exercises.length === 0}>{template.name}{template.exercises.length === 0 ? ' · sin ejercicios' : ''}</option>
-                      ))}
-                    </select>
-
-                    <button
-                      type="button"
-                      onClick={() => handleStartWorkout(sessionTemplate || undefined)}
-                      disabled={Boolean(selectedRoutine && selectedRoutine.exercises.length === 0)}
-                      className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--blue)] px-4 text-sm font-bold text-white shadow-xs transition-colors hover:bg-[var(--blue-hover)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <AppIcon name="dumbbell" className="h-4 w-4" />
-                      <span>{isTrainedToday ? 'Iniciar otro entrenamiento' : 'Iniciar entrenamiento'}</span>
-                    </button>
-                    {!isTrainedToday && (
-                      <button
-                        type="button"
-                        onClick={handleToggleRestDay}
-                        className="min-h-11 rounded-xl px-3 text-sm font-medium text-[var(--text-soft)] transition-colors hover:bg-[var(--card)] hover:text-[var(--text)]"
-                      >
-                        {isRestDayToday ? 'Cancelar descanso' : 'Descanso hoy'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </section>
+              <GymWorkoutLauncher
+                launcherRef={launcherRef}
+                plan={launcherPlan}
+                routines={state.gym.routineTemplates}
+                completed={todayPresentation}
+                onSelect={setSessionTemplate}
+                onStart={() => { if (launcherPlan.canStart) handleStartWorkout(sessionTemplate || undefined); }}
+                onToggleRest={handleToggleRestDay}
+                onEditRoutine={(id) => { setActiveTab('rutinas'); if (id) setEditingTemplateId(id); else setShowTemplates(true); }}
+              />
 
               {GYM_NOTE_PLACEMENTS_ENABLED && <GymNoteSurface notes={state.notes.postits} storageUserId={storageUserId} privacyMode={state.settings.privacyMode} onOpenNote={onOpenNote} />}
 
@@ -1246,6 +1162,14 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
           )}
         </div>
       )}
+
+      {!activeWorkoutSession && <div hidden={activeTab !== 'entrenar'}>
+        <GymActivityCalendar
+          sessions={state.gym.sessions}
+          restDates={calendarRestDates}
+          onOpenSession={(sessionId) => { setCalendarHistorySessionId(sessionId); setActiveTab('historial'); }}
+        />
+      </div>}
 
       {/* TAB 2: RUTINAS */}
       {activeTab === 'rutinas' && (
@@ -1727,7 +1651,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
       {/* TAB 3: SESIONES EJECUTADAS */}
       {activeTab === 'historial' && (
-        <div className="space-y-6 animate-in fade-in">
+        <div ref={historyRootRef} className="space-y-6 animate-in fade-in">
           {staleActiveSessions.length > 0 && (
             <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
               <div className="flex items-center justify-between">
@@ -1823,6 +1747,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                   {week.sessions.map((session) => (
                     <LatestWorkoutSession
                       key={session.id}
+                      initiallyExpanded={session.id === calendarHistorySessionId}
                       session={session}
                       allSessions={state.gym.sessions}
                       onFinishWorkout={() => handleFinishWorkout(session.id)}
@@ -1893,6 +1818,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                     {month.weeks.flatMap((w) => w.sessions).map((session) => (
                       <LatestWorkoutSession
                         key={session.id}
+                        initiallyExpanded={session.id === calendarHistorySessionId}
                         session={session}
                         allSessions={state.gym.sessions}
                         onFinishWorkout={() => handleFinishWorkout(session.id)}
@@ -3204,9 +3130,9 @@ const EQUIPMENT_LABELS: Record<ExerciseEquipment, string> = {
   corporal: 'Peso corporal',
 };
 
-const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
+const LatestWorkoutSession: React.FC<WorkoutSessionCardProps & { initiallyExpanded?: boolean }> = (props) => {
   const { session, allSessions, onDeleteSession, onSaveAsTemplate } = props;
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(Boolean(props.initiallyExpanded));
   const [isEditing, setIsEditing] = useState(false);
   const presentation = useMemo(
     () => buildGymSessionPresentation(session, allSessions),
@@ -3270,6 +3196,9 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps> = (props) => {
     <article
       data-latest-session-summary
       data-history-session-summary
+      data-gym-history-session={session.id}
+      tabIndex={-1}
+      style={{ scrollMarginTop: 96 }}
       className="overflow-visible rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xs transition-all hover:border-[var(--border-strong)]"
     >
       <div className="p-3.5 sm:p-5">

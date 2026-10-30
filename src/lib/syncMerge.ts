@@ -537,6 +537,29 @@ function mergeFinanceEventCollection<T extends VersionedFinanceEvent>(
   onConflict?: (conflict: SyncConflictItem) => void,
   label = 'Evento financiero',
 ): T[] {
+  // Never silently collapse already-persisted identity collisions through Map.
+  // The production conflict path preserves local/remote recovery snapshots.
+  const duplicatedIds = new Set<string>();
+  for (const collection of [local, remote, baseline || []]) {
+    const seen = new Set<string>();
+    for (const item of collection) {
+      if (seen.has(item.id)) duplicatedIds.add(item.id);
+      seen.add(item.id);
+    }
+  }
+  for (const id of duplicatedIds) {
+    if (!onConflict) throw new Error(`ID financiero repetido (${id}); se requiere revisión sin modificar los datos originales.`);
+    onConflict({
+      id: `conflict-finance-identity-${id}`,
+      module: 'finance', entityType: 'entity', entityId: id,
+      label: `${label}: identidad repetida`,
+      localSummary: 'Revisar identidad; conservar copia local',
+      remoteSummary: 'Revisar identidad; conservar copia remota',
+      localValue: local.filter(item => item.id === id),
+      remoteValue: remote.filter(item => item.id === id),
+      baseValue: baseline?.filter(item => item.id === id),
+    });
+  }
   const localMap = new Map(local.map((item) => [item.id, item]));
   const remoteMap = new Map(remote.map((item) => [item.id, item]));
   const baseMap = new Map((baseline || []).map((item) => [item.id, item]));
@@ -556,10 +579,18 @@ function mergeFinanceEventCollection<T extends VersionedFinanceEvent>(
     if (candidates.length === 1) {
       const candidate = candidates[0];
       const otherSideDeleted = Boolean(baseItem) && (!localItem || !remoteItem);
-      if (otherSideDeleted && tombstoneTime === 0 && canonicalStringify(candidate) === canonicalStringify(baseItem)) {
-        continue;
-      }
-      if (otherSideDeleted && onConflict && canonicalStringify(candidate) !== canonicalStringify(baseItem)) {
+      if (otherSideDeleted && tombstoneTime === 0) {
+        // An old snapshot also lacks later events. Absence alone cannot prove a
+        // financial deletion, even when the surviving version matches baseline.
+        if (!onConflict) throw new Error(`Falta evidencia de eliminación del evento financiero ${id}; conservá ambas versiones.`);
+        onConflict({
+          id: `conflict-finance-missing-${id}`, module: 'finance', entityType: 'delete_vs_modify', entityId: id,
+          label: `${label}: ausencia sin eliminación confirmada`,
+          localSummary: localItem ? 'Movimiento conservado' : 'Ausente sin evidencia de eliminación',
+          remoteSummary: remoteItem ? 'Movimiento conservado' : 'Ausente sin evidencia de eliminación',
+          localValue: localItem || null, remoteValue: remoteItem || null, baseValue: baseItem,
+        });
+      } else if (otherSideDeleted && onConflict && canonicalStringify(candidate) !== canonicalStringify(baseItem)) {
         onConflict({
           id: `conflict-del-finance-${id}`,
           module: 'finance',
@@ -2318,6 +2349,9 @@ export function mergeModuleData(
   const result = mergeModuleDataWithConflicts(module, localData, remoteData, baselineData, tombstones);
   if (module === 'resale' && result.conflicts.length > 0) {
     throw new Error('La mezcla comercial de Mi negocio está bloqueada y requiere conservar ambas versiones.');
+  }
+  if (module === 'finance' && result.conflicts.some(item => item.id.startsWith('conflict-finance-identity-') || item.id.startsWith('conflict-finance-missing-'))) {
+    throw new Error('La mezcla financiera contiene un ID repetido o una ausencia sin evidencia de eliminación y requiere conservar ambas versiones.');
   }
   return result.data;
 }

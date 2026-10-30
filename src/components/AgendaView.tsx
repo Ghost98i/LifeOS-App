@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { LifeOSState, DayKey, EffortLevel, TaskRecurring } from '../types';
+import { LifeOSState, DayKey, EffortLevel, TaskRecurring, ViewType } from '../types';
 import {
   DAYS,
   DAY_LABELS,
@@ -19,6 +19,7 @@ import { CompletionCheckMark } from './visual/CompletionCheckMark';
 import { agendaWeek, editedWeeklyBlockTime, isCurrentWeek, parseLocalDateISO, shiftWeek, validatePunctualEvent, validateWeeklyBlock, weekDates } from '../lib/agendaWeek';
 import { isModuleEnabled } from '../lib/moduleVisibility';
 import { focusTargetElement } from '../lib/navigationFocus';
+import { agendaTaskFocusId, datedTaskDestination } from '../lib/datedAgendaTasks';
 
 interface AgendaViewProps {
   state: LifeOSState;
@@ -26,6 +27,7 @@ interface AgendaViewProps {
   initialFocusId?: string | null;
   initialDate?: string | null;
   focusNonce?: number;
+  onNavigateToRecord?: (view: ViewType, options?: { tab?: string; focusId?: string; date?: string }) => void;
 }
 
 const recurrenceHint = (freq: TaskRecurring['freq'], days: DayKey[] = []) => {
@@ -40,6 +42,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
   initialFocusId,
   initialDate,
   focusNonce,
+  onNavigateToRecord,
 }) => {
   const [taskName, setTaskName] = useState('');
   const [taskFreq, setTaskFreq] = useState<'daily' | '2-3x' | 'weekly'>('daily');
@@ -49,6 +52,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
   const [weekReference, setWeekReference] = useState(() => new Date());
   const [mobileDay, setMobileDay] = useState(() => (new Date().getDay() + 6) % 7);
   const [weekViewMode, setWeekViewMode] = useState<'grid' | 'focused'>('focused');
+  const [wideWeekView, setWideWeekView] = useState(() => window.matchMedia('(min-width: 640px)').matches);
   const [activeSection, setActiveSection] = useState<'semana' | 'rutinas'>('semana');
   const [showRoutineForm, setShowRoutineForm] = useState(false);
   const [templateAction, setTemplateAction] = useState<'load' | 'clear' | null>(null);
@@ -66,6 +70,14 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
   const calendarEnabled = isModuleEnabled(state, 'calendario');
   const weeklyBlockCount = DAYS.reduce((total, day) => total + (state.agenda?.[day]?.length || 0), 0);
   const suggestedBlockCount = DAYS.reduce((total, day) => total + TEMPLATE_ESTUDIANTE[day].length, 0);
+
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 640px)');
+    const update = () => setWideWeekView(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     const refreshDate = () => setTodayIso(todayISO());
@@ -407,6 +419,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       ...item.blocks.map((block) => ({ key: `block-${block.id}`, id: block.id, label: block.activity, time: block.time, kind: 'block' as const, block })),
       ...item.routines.map((routine) => ({ key: `routine-${routine.id}`, id: routine.id, label: routine.name, time: routine.time, kind: 'routine' as const, routine })),
       ...item.events.map((event) => ({ key: `event-${event.id}`, id: event.id, label: event.name, time: event.time, kind: 'event' as const, event })),
+      ...item.tasks.map((task) => ({ key: `task-${task.key}`, id: task.id, label: task.name, time: task.time, kind: 'task' as const, task })),
     ];
     const timed = entries.filter((entry) => entry.time).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
     const untimedScheduled = entries.filter((entry) => !entry.time && entry.kind !== 'routine');
@@ -416,8 +429,8 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
 
   const renderEntry = (entry: ReturnType<typeof getDayEntries>['entries'][number], item: typeof days[number]) => {
     const canEditEvent = entry.kind === 'event' && calendarEnabled && state.calendarEvents.some((event) => event.id === entry.id && !event.recurring);
-    const completed = item.date === todayIso && entry.kind !== 'event' && Boolean(state.taskLog?.[todayIso]?.[entry.id]);
-    const domId = entry.kind === 'event' ? `agenda-event-${entry.id}` : `agenda-${entry.key}`;
+    const completed = entry.kind === 'task' ? entry.task.done : item.date === todayIso && entry.kind !== 'event' && Boolean(state.taskLog?.[todayIso]?.[entry.id]);
+    const domId = entry.kind === 'task' ? agendaTaskFocusId(entry.task, item.date) : entry.kind === 'event' ? `agenda-event-${entry.id}` : `agenda-${entry.key}`;
     return (
       <div
         key={entry.key}
@@ -429,7 +442,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             {entry.time}
           </span>
         )}
-        {item.date === todayIso && entry.kind !== 'event' ? (
+        {item.date === todayIso && (entry.kind === 'block' || entry.kind === 'routine') ? (
           todayCompletionButton(entry.id, entry.label, completed)
         ) : (
           <span
@@ -437,7 +450,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             className="flex h-5 w-5 shrink-0 items-center justify-center text-[var(--text-soft)]"
           >
             <AppIcon
-              name={entry.kind === 'event' ? 'calendarDays' : entry.kind === 'routine' && !entry.time ? 'list' : 'clock'}
+              name={entry.kind === 'task' ? (completed ? 'checkCircle' : 'task') : entry.kind === 'event' ? 'calendarDays' : entry.kind === 'routine' && !entry.time ? 'list' : 'clock'}
               className="h-3.5 w-3.5"
             />
           </span>
@@ -461,6 +474,8 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               ? 'Actividad semanal'
               : entry.kind === 'routine'
               ? 'Rutina'
+              : entry.kind === 'task'
+              ? `${entry.task.source === 'project_task' ? 'Tarea de proyecto' : 'Tarea'}${entry.task.isDeadline ? ' · vencimiento' : ''}`
               : entry.event.type === 'examen'
               ? 'Examen · informativo'
               : state.calendarEvents.some((event) => event.id === entry.id && event.recurring)
@@ -468,6 +483,11 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               : 'Evento puntual · informativo'}
           </span>
         </div>
+        {entry.kind === 'task' && onNavigateToRecord && <button type="button" aria-label={`Abrir tarea: ${entry.label}`} onClick={() => {
+          const target = datedTaskDestination(entry.task); onNavigateToRecord(target.view, target.options);
+        }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--blue)] hover:bg-[var(--surface-muted)] focus-visible:outline-2 focus-visible:outline-[#4F46E5]">
+          <AppIcon name="arrowRight" className="h-4 w-4" />
+        </button>}
         {entry.kind === 'block' && entry.block.linkedTaskId && (
           <span
             title={
@@ -734,7 +754,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                     <div className="flex items-center gap-2">
                       <AppIcon name="calendar" className="h-4 w-4 text-indigo-500" />
                       <h4 className="text-xs font-bold text-[var(--text)]">
-                        Compromisos del Día ({untimedScheduled.length})
+                        Sin horario ({untimedScheduled.length})
                       </h4>
                     </div>
                   </div>
@@ -790,7 +810,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   <div className="flex items-center gap-2">
                     <AppIcon name="calendar" className="h-4 w-4 text-indigo-500" />
                     <h4 className="text-xs font-bold text-[var(--text)]">
-                      Compromisos del Día ({untimedScheduled.length})
+                      Sin horario ({untimedScheduled.length})
                     </h4>
                   </div>
                 </div>
@@ -867,7 +887,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   Semana del {new Date(`${dates[0]}T12:00:00`).toLocaleDateString('es-UY', { day: 'numeric', month: 'long' })} al {new Date(`${dates[6]}T12:00:00`).toLocaleDateString('es-UY', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </h2>
                 <p className="text-xs text-[var(--text-soft)]">
-                  {days.reduce((total, d) => total + d.blocks.length + d.routines.length + d.events.length, 0)} actividades en la semana
+                  {days.reduce((total, d) => total + d.blocks.length + d.routines.length + d.events.length + d.tasks.length, 0)} actividades en la semana
                 </p>
               </div>
             </div>
@@ -955,7 +975,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
           {/* Quick 7-Day Navigation Strip */}
           <nav aria-label="Días de la semana" className="flex sm:grid sm:grid-cols-7 gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
             {days.map((item, index) => {
-              const count = item.blocks.length + item.routines.length + item.events.length;
+              const count = item.blocks.length + item.routines.length + item.events.length + item.tasks.length;
               const isSelected = mobileDay === index;
               const isToday = item.date === todayIso;
               return (
@@ -996,19 +1016,12 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
           </nav>
 
           {/* Day Display: Focused Day (Default & Mobile) vs 7-Day Grid (Desktop Alternative) */}
-          {weekViewMode === 'grid' ? (
-            <div className="hidden sm:grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-3.5 items-start">
+          {weekViewMode === 'grid' && wideWeekView ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-3.5 items-start">
               {days.map((item) => renderDayCard(item, true))}
             </div>
-          ) : null}
-
-          {/* On mobile or when in focused mode: show focused day view */}
-          {weekViewMode === 'focused' ? (
-            <div className="min-w-0">
-              {renderFocusedDayView(days[mobileDay])}
-            </div>
           ) : (
-            <div className="sm:hidden min-w-0">
+            <div className="min-w-0">
               {renderFocusedDayView(days[mobileDay])}
             </div>
           )}

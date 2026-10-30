@@ -3,6 +3,8 @@
 @source "../index.html";
 @import "./assets/fonts/fonts.css";
 @import "./styles/gymCockpit.css";
+@import "./styles/gymActivityCalendar.css";
+@import "./styles/gymLauncher.css";
 @import "./styles/product-refinement.css";
 @import "./styles/refinement-tanda-2.css";
 @import "./styles/refinement-tanda-3.css";

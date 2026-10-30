@@ -10,6 +10,7 @@ interface TodayAgendaSectionProps {
   entries: TodayAgendaEntry[];
   pastPendingTasks?: TodayExtra[];
   futureScheduledTasks?: TodayExtra[];
+  selectedExtra?: TodayExtra;
   onToggle: (entry: TodayAgendaEntry) => void;
   onToggleFocus: (entry: TodayAgendaEntry) => void;
   onOpenAgenda: () => void;
@@ -113,6 +114,7 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
   entries,
   pastPendingTasks = [],
   futureScheduledTasks = [],
+  selectedExtra,
   onToggle,
   onToggleFocus,
   onOpenAgenda,
@@ -152,7 +154,7 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
       }
     }
     return focusTargetElement(initialFocusId);
-  }, [initialFocusId, focusNonce, pastPendingTasks, futureScheduledTasks]);
+  }, [initialFocusId, focusNonce, pastPendingTasks, futureScheduledTasks, selectedExtra]);
 
   const timed = entries.filter((entry) => Boolean(entry.time));
   const untimed = entries.filter((entry) => !entry.time);
@@ -172,6 +174,11 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
       </div>
 
       <div className="min-h-0 border-t border-[var(--border)] xl:overflow-y-auto overscroll-contain today-agenda-scroller">
+        {selectedExtra && <div id={`today-extra-${selectedExtra.id}`} className="border-b border-[var(--border)] px-4 py-3" aria-label="Tarea original seleccionada">
+          <p className="text-xs text-[var(--text-soft)]">{selectedExtra.date ? `Tarea del ${fmtDate(selectedExtra.date)}` : 'Tarea sin fecha programada'} · {selectedExtra.done ? 'Completada' : 'Pendiente'}</p>
+          <p className="mt-1 text-sm font-semibold text-[var(--text)]">{selectedExtra.text}</p>
+          {selectedExtra.dueDate && <p className="mt-1 text-xs text-[var(--text-soft)]">Vencimiento: {fmtDate(selectedExtra.dueDate)}</p>}
+        </div>}
         {/* Franja compacta y colapsable de pendientes anteriores */}
         {pastPendingTasks.length > 0 && (
           <div className="border-b border-[var(--border)] bg-amber-500/[0.04]">

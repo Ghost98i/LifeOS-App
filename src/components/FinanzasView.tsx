@@ -57,9 +57,9 @@ import {
   markMultipleTransactionsReviewed,
   markTransactionReviewed,
   rejectTransactionMatch,
-  resolveTransactionDuplicate,
   updateTransaction,
 } from '../lib/financeFlows';
+import { deleteFinanceDuplicate, keepFinanceDuplicateGroup } from '../lib/financeDuplicateReview';
 import { areMerchantsCompatible, daysDiff, deriveCycleIdentity } from '../lib/financeMatching';
 import { loadFinanceCustomization, saveFinanceCustomization, FinanceViewCustomization } from '../lib/viewCustomization';
 import { CustomizeFinanceModal } from './CustomizeFinanceModal';
@@ -249,6 +249,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   };
 
   const handleSubmitTx = (data: {
+    id: string;
     type: 'gasto' | 'ingreso';
     amount: number;
     category: string;
@@ -261,6 +262,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
     try {
       if (onUpdateState((draft) => {
         const input = {
+          id: data.id,
           type: data.type,
           amount: data.amount,
           category: data.category,
@@ -300,7 +302,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       if (onUpdateState((draft) => {
         markTransactionReviewed(draft, txId);
       }) === false) return;
-      showToast('Movimiento marcado como revisado.');
+      showToast('Revisión cerrada. El movimiento ya estaba contabilizado.');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'No se pudo actualizar el movimiento.', 'error');
     }
@@ -328,14 +330,25 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
     }
   };
 
-  const handleResolveDuplicate = (duplicateTxId: string, keepTxId?: string) => {
+  const handleKeepDuplicates = (transactions: Transaction[]): boolean => {
     try {
-      if (onUpdateState((draft) => {
-        resolveTransactionDuplicate(draft, duplicateTxId, keepTxId);
-      }) === false) return;
-      showToast('Duplicado resuelto.');
+      if (onUpdateState(draft => keepFinanceDuplicateGroup(draft, transactions)) === false) return false;
+      showToast('Movimientos conservados. El saldo no cambia.');
+      return true;
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'No se pudo resolver el duplicado.', 'error');
+      showToast(error instanceof Error ? error.message : 'No se pudo guardar la revisión.', 'error');
+      return false;
+    }
+  };
+
+  const handleDeleteDuplicate = (transaction: Transaction): boolean => {
+    try {
+      if (onUpdateState(draft => deleteFinanceDuplicate(draft, transaction)) === false) return false;
+      showToast('Movimiento eliminado. Su efecto contable fue revertido.', 'info');
+      return true;
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'No se pudo eliminar el movimiento.', 'error');
+      return false;
     }
   };
 
@@ -1034,7 +1047,8 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
             onMarkReviewed={handleMarkReviewed}
             onBulkReview={handleBulkReview}
             onIgnore={handleIgnoreReview}
-            onResolveDuplicate={handleResolveDuplicate}
+            onKeepDuplicates={handleKeepDuplicates}
+            onDeleteDuplicate={handleDeleteDuplicate}
             onLinkCommitment={handleLinkCommitment}
             onRejectMatch={handleRejectMatch}
             onUpdateTx={handleQuickUpdateTx}

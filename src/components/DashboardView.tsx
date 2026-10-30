@@ -146,6 +146,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     () => getFutureScheduledExtras(state, todayIso),
     [state, todayIso]
   );
+  // A deep link may target a completed historical task, outside today's lists.
+  const selectedExtra = useMemo(() => {
+    if (!initialFocusId?.startsWith('today-extra-')) return undefined;
+    const id = initialFocusId.slice('today-extra-'.length);
+    if (agendaEntries.some(entry => entry.source === 'extra' && entry.id === id) || pastPendingExtras.some(task => task.id === id) || futureScheduledExtras.some(task => task.id === id)) return undefined;
+    return state.todayExtras.find(task => task.id === id);
+  }, [initialFocusId, state.todayExtras, agendaEntries, pastPendingExtras, futureScheduledExtras]);
   const recentActivity = useMemo(
     () => getActivityTimeline(state, Number.MAX_SAFE_INTEGER, { hideAmounts: true, privacyMode: state.settings.privacyMode })
         .filter((activity) => {
@@ -649,10 +656,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           entries={agendaEntries}
           pastPendingTasks={pastPendingExtras}
           futureScheduledTasks={futureScheduledExtras}
+          selectedExtra={selectedExtra}
           onToggle={handleToggleAgendaEntry}
           onToggleFocus={handleToggleFocus}
           onOpenAgenda={openAgendaDestination}
-          onOpenEntry={(entry) => onNavigate(entry.navigationTarget || 'agenda')}
+          onOpenEntry={(entry) => {
+            if (entry.source === 'extra' && onNavigateToRecord) {
+              onNavigateToRecord('agenda', { date: todayIso, focusId: `agenda-task-extra-${entry.id}-${todayIso}` });
+            } else onNavigate(entry.navigationTarget || 'agenda');
+          }}
           onToggleExtra={handleToggleExtraDirect}
           onRescheduleExtra={handleRescheduleExtra}
           onMoveAllPastToToday={handleMoveAllPastToToday}

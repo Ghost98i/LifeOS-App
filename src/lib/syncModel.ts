@@ -181,7 +181,7 @@ export function mergeSyncModuleWithConflicts(
   const pureBaseline = extractPureModuleData(baselineData);
   const localData = syncModuleData(state, module);
   const { data: mergedData, conflicts } = mergeModuleDataWithConflicts(module, localData, pureRemote, pureBaseline, tombstones);
-  if ((module === 'resale' || module === 'gym') && conflicts.length > 0) return { state, conflicts };
+  if ((module === 'resale' || module === 'gym' || module === 'finance') && conflicts.length > 0) return { state, conflicts };
   const candidate = { ...state, ...(mergedData as Partial<LifeOSState>) };
   if (module === 'gym' && candidate.gym) {
     candidate.gym = { ...candidate.gym, activeTimer: state.gym.activeTimer ?? null };

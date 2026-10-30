@@ -110,7 +110,7 @@ export function getTodayAgendaCalendarItems(
   const calendarEnabled = isModuleEnabled(state, 'calendario');
   const studyEnabled = isModuleEnabled(state, 'estudios');
   return calendarItemsOnDate(state, dateIso).filter((item) => {
-    if (item.id.startsWith('scheduled-extra-') || item.id.startsWith('deadline-extra-') || item.id.startsWith('deadline-task-')) return false;
+    if (item.taskRef || item.id.startsWith('scheduled-extra-') || item.id.startsWith('deadline-extra-') || item.id.startsWith('deadline-task-')) return false;
     if (item.type === 'finanza_compromiso' || item.type === 'finanza_ingreso' || item.type === 'entrega') return false;
     if (item.type === 'examen') return studyEnabled;
     return calendarEnabled;

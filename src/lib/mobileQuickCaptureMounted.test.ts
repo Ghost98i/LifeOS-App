@@ -504,6 +504,47 @@ test('QC 2.1: MobileQuickCapture Gasto tab saves standard expense directly witho
   assert.equal(targetAcc?.balance, -800);
 });
 
+test('Gasto rápido conserva contenido y saldo ante fallo local y reintenta una sola vez', async () => {
+  const mockDoc = setupMockDom();
+  const container = mockDoc.createElement('div');
+  mockDoc.body.appendChild(container);
+  const root = createRoot(container);
+  let state = defaultState();
+  state.finance.accounts = [state.finance.accounts[0]];
+  state.finance.accounts[0].initialBalance = 10000;
+  state.finance.accounts[0].balance = 10000;
+  let fail = true;
+  let closed = false;
+  await act(async () => {
+    root.render(React.createElement(MobileQuickCapture, {
+      open: true, state, initialKind: 'gasto', onClose: () => { closed = true; },
+      onUpdateState: updater => {
+        const next = structuredClone(state);
+        updater(next);
+        if (fail) return false;
+        state = next;
+        return true;
+      },
+    }));
+  });
+  const input = findElements(container, el => el.tagName === 'INPUT')
+    .find(el => (el.attributes?.placeholder || '').includes('500'));
+  await act(async () => { triggerChange(input, '500 almuerzo'); });
+  const form = findElements(container, el => el.tagName === 'FORM')[0];
+  await act(async () => { triggerSubmit(form); });
+  assert.equal(state.finance.transactions.length, 0);
+  assert.equal(state.finance.accounts[0].balance, 10000);
+  assert.equal(closed, false);
+  assert.equal(input.value, '500 almuerzo');
+  assert.ok(getNodeText(container).includes('No se pudo guardar'));
+  fail = false;
+  await act(async () => { triggerSubmit(form); });
+  assert.equal(state.finance.transactions.length, 1);
+  assert.equal(state.finance.accounts[0].balance, 9500);
+  await act(async () => { await new Promise(resolve => setTimeout(resolve, 450)); });
+  await act(async () => { root.unmount(); });
+});
+
 test('QC 2.1: Stream Guard protects parsed finance preview and manual amount input', async () => {
   const mockDoc = setupMockDom();
   const container = mockDoc.createElement('div');

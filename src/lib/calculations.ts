@@ -1098,6 +1098,8 @@ export interface CalendarDisplayItem {
   frequency?: string;
   remainingOccurrences?: number | null;
   category?: string | null;
+  /** Read-only source reference, never a second persisted task. */
+  taskRef?: import('./datedAgendaTasks').AgendaTaskReference;
 }
 
 export function calendarItemsOnDate(state: LifeOSState, iso: string): CalendarDisplayItem[] {
@@ -1145,8 +1147,10 @@ export function calendarItemsOnDate(state: LifeOSState, iso: string): CalendarDi
     if (extra.dueDate === iso) {
       items.push({
         id: `deadline-extra-${extra.id}`,
+        taskRef: { source: 'extra', id: extra.id },
         name: extra.text,
         date: iso,
+        time: extra.date === iso ? extra.time : undefined,
         type: 'entrega',
         icon: '⏱️',
         pill: extra.done
@@ -1158,8 +1162,10 @@ export function calendarItemsOnDate(state: LifeOSState, iso: string): CalendarDi
     } else if (extra.date === iso) {
       items.push({
         id: `scheduled-extra-${extra.id}`,
+        taskRef: { source: 'extra', id: extra.id },
         name: extra.text,
         date: iso,
+        time: extra.time,
         type: 'otro',
         icon: '📌',
         pill: extra.done
@@ -1176,6 +1182,7 @@ export function calendarItemsOnDate(state: LifeOSState, iso: string): CalendarDi
       if (t.dueDate === iso) {
         items.push({
           id: `deadline-task-${t.id}`,
+          taskRef: { source: 'project_task', id: t.id, projectId: p.id },
           name: `[${p.name}] ${t.text}`,
           date: iso,
           type: 'entrega',

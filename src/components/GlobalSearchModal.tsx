@@ -85,6 +85,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   const [expenseAccount, setExpenseAccount] = useState(state.finance.accounts[0]?.id || '');
   const [expenseNote, setExpenseNote] = useState('');
   const [expenseSaving, setExpenseSaving] = useState(false);
+  const expenseOperationId = useRef<string | null>(null);
+  useEffect(() => { if (!open || mode !== 'new-expense') expenseOperationId.current = null; }, [open, mode]);
 
   // Micro-form state: Job
   const [jobEmpresa, setJobEmpresa] = useState('');
@@ -505,6 +507,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       {
         const saved = onUpdateState((draft) => {
           addTransaction(draft, {
+            id: expenseOperationId.current ??= globalThis.crypto?.randomUUID?.() || uid(),
             type: 'gasto',
             amount: amountNum,
             category: expenseCategory || 'Varios',

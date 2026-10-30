@@ -1,0 +1,30 @@
+.gym-launcher { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); align-items: center; gap: 32px; padding: 24px; border: 1px solid var(--border); border-radius: 20px; background: var(--card); color: var(--text); }
+.gym-launcher-summary, .gym-launcher-choice, .gym-launcher-actions { min-width: 0; }
+.gym-launcher h2 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.gym-launcher-context { margin-top: 8px; font-size: 14px; line-height: 1.5; color: var(--text-soft); max-width: 65ch; }
+.gym-launcher-alternative { display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; }
+.gym-launcher-use { min-width: 44px; color: var(--blue); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.dark .gym-launcher-use { color: #a5b4fc; }
+.gym-launcher-rest { color: #92400e; }
+.dark .gym-launcher-rest { color: #fcd34d; }
+.gym-launcher-eyebrow { margin-bottom: 4px; font-size: 14px; color: var(--text-soft); }
+.gym-launcher-controls { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 16px; }
+.gym-launcher-choice label { display: block; margin-bottom: 6px; font-size: 14px; font-weight: 600; }
+.gym-launcher-choice select { display: block; width: 100%; min-width: 0; min-height: 44px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text); font-size: 16px; }
+.gym-launcher-choice p { margin-top: 6px; font-size: 13px; line-height: 1.5; color: var(--text-soft); }
+.gym-launcher-actions { padding-top: 27px; display: flex; flex-direction: column; gap: 4px; }
+.gym-launcher button { min-height: 44px; cursor: pointer; font-size: 14px; line-height: 1.4; }
+.gym-launcher-start { display: inline-flex; justify-content: center; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 10px; background: var(--blue); color: white; font-weight: 650; overflow-wrap: anywhere; }
+.gym-launcher-start svg { flex-shrink: 0; }
+.gym-launcher-start:hover { background: var(--blue-hover); }
+.gym-launcher-start:disabled { opacity: .55; cursor: not-allowed; }
+.gym-launcher-rest-button { color: var(--text-soft); border-radius: 10px; }
+.gym-launcher-rest-button:hover { color: var(--text); background: var(--surface-muted); }
+.gym-launcher-text-button { margin-top: 4px; color: var(--blue); font-weight: 600; text-align: left; }
+.gym-launcher button:focus-visible, .gym-launcher select:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.gym-launcher-metrics { display: flex; flex-wrap: wrap; gap: 12px 24px; margin-top: 16px; }
+.gym-launcher-metrics dt { font-size: 12px; color: var(--text-soft); }
+.gym-launcher-metrics dd { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.gym-launcher-metrics dd span { font-size: 14px; font-weight: 500; }
+@media (max-width: 1100px) { .gym-launcher { grid-template-columns: 1fr; gap: 20px; } }
+@media (max-width: 639px) { .gym-launcher { padding: 18px; gap: 16px; } .gym-launcher h2 { font-size: 20px; } .gym-launcher-controls { grid-template-columns: 1fr; gap: 12px; } .gym-launcher-actions { padding-top: 0; } }

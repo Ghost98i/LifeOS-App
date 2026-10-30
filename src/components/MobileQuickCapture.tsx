@@ -83,6 +83,8 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
   const [manualAmount, setManualAmount] = useState('');
   const [manualAccountId, setManualAccountId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const financeOperationId = useRef<string | null>(null);
+  useEffect(() => { if (!open) financeOperationId.current = null; }, [open]);
 
   const activeCategories = useMemo(
     () => getActiveCategories(state.finance?.categories),
@@ -286,8 +288,9 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
         if (manualFinanceMode) {
           const amt = Number(manualAmount.replace(',', '.'));
           if (!Number.isFinite(amt) || amt <= 0) throw new Error('Ingresá un monto válido.');
-          onUpdateState((draft) => {
+          const saved = onUpdateState((draft) => {
             addQuickTransaction(draft, {
+              id: financeOperationId.current ??= globalThis.crypto?.randomUUID?.() || uid(),
               type: 'gasto',
               amount: amt,
               accountId: manualAccountId || fallbackAccountId,
@@ -296,6 +299,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
               date,
             });
           });
+          if (saved === false) throw new Error('No se pudo guardar. Conservamos el gasto para que puedas reintentar.');
           playSound('coins');
           setMessage('✓ Gasto registrado');
         } else {
@@ -318,8 +322,9 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
             setMessage('✓ Obligación registrada como tarea');
           } else {
             const chosenAccountId = parsedFinance.accountId || manualAccountId || fallbackAccountId;
-            onUpdateState((draft) => {
+            const saved = onUpdateState((draft) => {
               addQuickTransaction(draft, {
+                id: financeOperationId.current ??= globalThis.crypto?.randomUUID?.() || uid(),
                 type: parsedFinance.type,
                 amount: parsedFinance.amount!,
                 accountId: chosenAccountId,
@@ -328,6 +333,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                 date: parsedFinance.date,
               });
             });
+            if (saved === false) throw new Error('No se pudo guardar. Conservamos el gasto para que puedas reintentar.');
             playSound('coins');
             setMessage('✓ Gasto registrado');
           }

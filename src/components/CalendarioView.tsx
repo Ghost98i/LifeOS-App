@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { LifeOSState, CalendarEvent } from '../types';
+import { LifeOSState, CalendarEvent, ViewType } from '../types';
 import {
   todayISO,
   fmtDate,
@@ -19,11 +19,13 @@ import { isModuleEnabled } from '../lib/moduleVisibility';
 import { showToast } from '../lib/toast';
 import { playSound } from '../lib/audio';
 import { getCategoryName } from '../lib/financeCategories';
+import { datedTaskDestination } from '../lib/datedAgendaTasks';
 
 interface CalendarioViewProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => boolean;
   onNavigate?: (view: any) => void;
+  onNavigateToRecord?: (view: ViewType, options?: { tab?: string; focusId?: string; date?: string }) => void;
 }
 
 function formatNaturalDate(iso: string, isToday = false): string {
@@ -42,7 +44,7 @@ function chronologicalItems(state: LifeOSState, iso: string): CalendarDisplayIte
     (a.time || '99:99').localeCompare(b.time || '99:99') || a.name.localeCompare(b.name, 'es'));
 }
 
-export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateState, onNavigate }) => {
+export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateState, onNavigate, onNavigateToRecord }) => {
   const todayIso = todayISO();
   const [viewDate, setViewDate] = useState<Date>(() => new Date());
   const [selectedDate, setSelectedDate] = useState<string>(todayIso);
@@ -247,7 +249,8 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
   };
 
   const itemOrigin = (item: CalendarDisplayItem) =>
-    item.financialType === 'commitment' ? 'Compromiso financiero'
+    item.taskRef ? (item.isDeadline ? 'Tarea · vencimiento' : 'Tarea programada')
+      : item.financialType === 'commitment' ? 'Compromiso financiero'
       : item.financialType === 'income' ? 'Ingreso previsto'
       : item.type === 'examen' ? 'Estudios · examen'
       : item.type === 'entrega' ? 'Tarea · vencimiento'
@@ -349,7 +352,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                   type="button"
                   key={iso}
                   onClick={() => selectDate(iso)}
-                  aria-label={`${formatNaturalDate(iso, isToday)}, ${items.length} acontecimiento${items.length === 1 ? '' : 's'}`}
+                  aria-label={`${formatNaturalDate(iso, isToday)}, ${items.length} elemento${items.length === 1 ? '' : 's'}`}
                   aria-pressed={isSelected}
                   className={`group relative flex flex-col justify-start rounded-xl md:rounded-2xl p-1.5 sm:p-2 xl:p-2.5 min-h-[72px] sm:min-h-[88px] xl:min-h-[118px] min-w-0 text-left transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] ${
                     isSelected
@@ -420,7 +423,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                   {selectedDate ? formatNaturalDate(selectedDate, selectedDate === todayIso) : 'Elegí un día'}
                 </h2>
                 <p className="text-xs text-[var(--text-soft)] tabular-nums mt-0.5">
-                  {selectedItems.length} {selectedItems.length === 1 ? 'acontecimiento' : 'acontecimientos'}
+                  {selectedItems.length} {selectedItems.length === 1 ? 'elemento' : 'elementos'}
                 </p>
               </div>
 
@@ -510,7 +513,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
             ) : (
               <div className="rounded-xl border border-dashed border-[var(--border)] p-4 sm:p-5 text-center space-y-2 bg-[var(--card-subtle)]/30">
                 <p className="text-xs text-[var(--text-soft)]">
-                  No hay acontecimientos para esta fecha.
+                  No hay elementos para esta fecha.
                 </p>
                 <button
                   type="button"
@@ -728,7 +731,8 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
               <div className="flex items-center gap-2">
                 <span className="text-xl">{selectedItem.icon}</span>
                 <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-faint)]">
-                  {selectedItem.financialType === 'commitment'
+                  {selectedItem.taskRef ? 'Tarea'
+                    : selectedItem.financialType === 'commitment'
                     ? 'Compromiso Financiero'
                     : selectedItem.financialType === 'income'
                     ? 'Ingreso Previsto'
@@ -759,6 +763,10 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
               </p>
             </div>
 
+            {selectedItem.taskRef && <p className="text-sm text-[var(--text-soft)]">{selectedItem.isDone ? 'Completada' : 'Pendiente'}{selectedItem.isDeadline ? ' · fecha de vencimiento' : ''}</p>}
+            {selectedItem.taskRef && onNavigateToRecord && <button type="button" className="min-h-11 rounded-xl bg-[var(--blue)] px-4 text-sm font-semibold text-white" onClick={() => {
+              const target = datedTaskDestination(selectedItem.taskRef!); setSelectedItem(null); onNavigateToRecord(target.view, target.options);
+            }}>Abrir tarea original</button>}
             {selectedItem.financialAmount !== undefined && (
               <div className="p-3.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)] space-y-2">
                 <div className="flex items-center justify-between">

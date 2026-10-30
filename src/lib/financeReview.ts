@@ -1,5 +1,5 @@
 import type { FinancialCommitment, LifeOSState, Transaction } from '../types';
-import { isCommercialFinanceTransaction } from './financeFlows';
+import { getTransactionLockReason, isCommercialFinanceTransaction } from './financeFlows';
 import { identifyMerchant } from './merchantIdentity';
 import { findMatchCandidates, type MatchCandidate, type TransactionMatchResult } from './financeMatching';
 import { localISODate, todayISO } from './storage';
@@ -46,9 +46,67 @@ export interface AttentionCommitment {
 
 export interface FinanceReviewInboxResult {
   items: FinanceReviewInboxItem[];
+  duplicateGroups: FinanceDuplicateGroup[];
   totalPending: number;
   attentionCommitments: AttentionCommitment[];
   canBulkReviewAll: boolean;
+}
+
+export interface FinanceDuplicateGroup {
+  id: string;
+  transactions: Transaction[];
+  /** Actual heuristic edges, rather than an assertion that every pair is identical. */
+  pairs: [string, string][];
+}
+
+function isReviewable(state: LifeOSState, tx: Transaction): boolean {
+  return !getTransactionLockReason(state, tx);
+}
+
+/** Connected components of real identities. Similarity is only a review signal. */
+export function deriveFinanceDuplicateGroups(state: LifeOSState): FinanceDuplicateGroup[] {
+  const all = state.finance.transactions;
+  const counts = new Map<string, number>();
+  for (const tx of all) counts.set(tx.id, (counts.get(tx.id) || 0) + 1);
+  // Corrupt repeated IDs are never collapsed into a single apparent operation.
+  const candidates = all.filter(tx => tx.id && counts.get(tx.id) === 1 && isReviewable(state, tx));
+  const neighbors = new Map<string, Set<string>>();
+  const pairs: [string, string][] = [];
+  const accountIds = new Set(state.finance.accounts.map(account => account.id));
+  const currency = (tx: Transaction) => (tx.currency || state.finance.accounts.find(a => a.id === tx.accountId)?.currency || 'UYU').toUpperCase();
+  for (let i = 0; i < candidates.length; i++) {
+    const tx = candidates[i];
+    for (const other of candidates.slice(i + 1)) {
+      if (!tx.accountId || !accountIds.has(tx.accountId) || tx.type !== other.type || !Number.isFinite(tx.amount) || tx.amount <= 0 ||
+        Math.abs(tx.amount - other.amount) >= 0.001 || !Number.isFinite(other.amount) || other.amount <= 0 ||
+        tx.accountId !== other.accountId || currency(tx) !== currency(other) ||
+        !(Math.abs(daysDiff(tx.date, other.date)) <= 1)) continue;
+      pairs.push([tx.id, other.id]);
+      if (!neighbors.has(tx.id)) neighbors.set(tx.id, new Set());
+      if (!neighbors.has(other.id)) neighbors.set(other.id, new Set());
+      neighbors.get(tx.id)!.add(other.id);
+      neighbors.get(other.id)!.add(tx.id);
+    }
+  }
+  const visited = new Set<string>();
+  const groups: FinanceDuplicateGroup[] = [];
+  for (const tx of candidates) {
+    if (visited.has(tx.id) || !neighbors.has(tx.id)) continue;
+    const ids = new Set<string>();
+    const pending = [tx.id];
+    while (pending.length) {
+      const id = pending.pop()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
+      ids.add(id);
+      pending.push(...neighbors.get(id)!);
+    }
+    const transactions = candidates.filter(item => ids.has(item.id)).sort((a, b) => a.id.localeCompare(b.id));
+    // Historical reviewed/ignored entries remain context for a newly added operation.
+    if (transactions.every(item => isTransactionReviewed(item) || isTransactionIgnored(item))) continue;
+    groups.push({ id: `duplicates:${[...ids].sort().map(encodeURIComponent).join('|')}`, transactions, pairs: pairs.filter(([a, b]) => ids.has(a) && ids.has(b)) });
+  }
+  return groups;
 }
 
 function daysDiff(isoA: string, isoB: string): number {
@@ -101,6 +159,12 @@ export function deriveFinanceReviewInbox(
   const commitments = (state.finance?.commitments || []).filter((c) => c.active && c.status !== 'paid');
 
   const items: FinanceReviewInboxItem[] = [];
+  const duplicateGroups = deriveFinanceDuplicateGroups(state);
+  const duplicatePartner = new Map<string, string>();
+  for (const group of duplicateGroups) for (const [a, b] of group.pairs) {
+    if (!duplicatePartner.has(a)) duplicatePartner.set(a, b);
+    if (!duplicatePartner.has(b)) duplicatePartner.set(b, a);
+  }
 
   for (let i = 0; i < transactions.length; i++) {
     const tx = transactions[i];
@@ -178,25 +242,15 @@ export function deriveFinanceReviewInbox(
 
     // 3. Duplicate Detection
     // Matches another transaction with same type, amount, account, on same date or +/- 1 day
-    for (let j = 0; j < transactions.length; j++) {
-      if (i === j) continue;
-      const other = transactions[j];
-      if (other.origin === 'adjustment') continue;
-
-      const sameType = other.type === tx.type;
-      const sameAmount = Math.abs(other.amount - tx.amount) < 0.001;
-      const sameAccount = other.accountId === tx.accountId;
-      const dateProximity = Math.abs(daysDiff(tx.date, other.date)) <= 1;
-
-      if (sameType && sameAmount && sameAccount && dateProximity) {
-        reasons.push({
-          code: 'possible_duplicate',
-          label: 'Posible duplicado',
-          description: `Coincide en monto, cuenta y fecha con otro movimiento (${other.date}, $${other.amount}).`,
-          duplicateTransactionId: other.id,
-        });
-        break; // Only flag once per transaction
-      }
+    const partnerId = duplicatePartner.get(tx.id);
+    if (partnerId) {
+      const other = transactions.find(item => item.id === partnerId)!;
+      reasons.push({
+        code: 'possible_duplicate',
+        label: 'Posible duplicado',
+        description: `Coincide en monto y cuenta, con una fecha cercana a otro movimiento (${other.date}, $${other.amount}).`,
+        duplicateTransactionId: other.id,
+      });
     }
 
     // 4. Suspicious Date (future movements)
@@ -237,8 +291,8 @@ export function deriveFinanceReviewInbox(
     if (tx.origin === 'import') {
       reasons.push({
         code: 'pending_confirmation',
-        label: 'Confirmación pendiente',
-        description: 'Movimiento importado que requiere confirmación inicial.',
+        label: 'Revisión de importación',
+        description: 'Movimiento importado ya contabilizado que requiere revisión de sus datos.',
       });
     }
 
@@ -360,6 +414,7 @@ export function deriveFinanceReviewInbox(
 
   return {
     items,
+    duplicateGroups,
     totalPending: items.length,
     attentionCommitments,
     canBulkReviewAll,

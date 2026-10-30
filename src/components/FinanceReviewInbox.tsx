@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { FinancialCommitment, LifeOSState } from '../types';
+import type { FinancialCommitment, LifeOSState, Transaction } from '../types';
 import {
   deriveFinanceReviewInbox,
   ReviewReason,
@@ -8,13 +8,15 @@ import { fmtDate, formatMoney, todayISO } from '../lib/storage';
 import { getActiveCategories } from '../lib/financeCategories';
 import { AppIcon } from './AppIcon';
 import { PrivacyAmount } from './PrivacyAmount';
+import { FinanceDuplicateGroups } from './FinanceDuplicateGroups';
 
 interface FinanceReviewInboxProps {
   state: LifeOSState;
   onMarkReviewed: (txId: string) => void;
   onBulkReview: (txIds: string[]) => void;
   onIgnore: (txId: string) => void;
-  onResolveDuplicate: (duplicateTxId: string, keepTxId?: string) => void;
+  onKeepDuplicates: (transactions: Transaction[]) => boolean;
+  onDeleteDuplicate: (transaction: Transaction) => boolean;
   onLinkCommitment: (txId: string, commitmentId: string, targetType?: 'commitment' | 'expected_income') => void;
   onRejectMatch?: (txId: string, candidateId: string, cycleKey?: string) => void;
   onUpdateTx: (txId: string, updates: { category?: string; note?: string; date?: string }) => void;
@@ -26,7 +28,8 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
   onMarkReviewed,
   onBulkReview,
   onIgnore,
-  onResolveDuplicate,
+  onKeepDuplicates,
+  onDeleteDuplicate,
   onLinkCommitment,
   onRejectMatch,
   onUpdateTx,
@@ -38,7 +41,9 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
   const reviewInbox = deriveFinanceReviewInbox(state);
   const activeCategories = getActiveCategories(state.finance?.categories);
 
-  const totalItems = reviewInbox.items.length;
+  const otherItems = reviewInbox.items.map(item => ({ ...item, reasons: item.reasons.filter(reason => reason.code !== 'possible_duplicate') })).filter(item => item.reasons.length > 0);
+  const groupedIds = new Set(reviewInbox.duplicateGroups.flatMap(group => group.transactions.map(tx => tx.id)));
+  const totalItems = otherItems.length + reviewInbox.duplicateGroups.length;
   const attentionCount = totalItems + reviewInbox.attentionCommitments.length;
 
   if (attentionCount === 0) {
@@ -63,7 +68,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
               </span>
             </div>
             <p className="text-xs text-[var(--finance-text-muted)]">
-              Movimientos o compromisos que requieren confirmación manual
+              Revisá advertencias de movimientos y compromisos pendientes de pago
             </p>
           </div>
         </div>
@@ -74,7 +79,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
               type="button"
               onClick={() => onBulkReview(reviewInbox.items.map((it) => it.transaction.id))}
               className="secondary-button py-1 px-2.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer"
-              title="Aprobar todos los movimientos seguros"
+              title="Cerrar las advertencias; los movimientos ya están contabilizados"
             >
               ✓ Marcar todos revisados ({totalItems})
             </button>
@@ -139,7 +144,8 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
           ))}
 
           {/* Pending Movements Items */}
-          {reviewInbox.items.map((item) => {
+          <FinanceDuplicateGroups state={state} groups={reviewInbox.duplicateGroups} onKeep={onKeepDuplicates} onDelete={onDeleteDuplicate} />
+          {otherItems.map((item) => {
             const tx = item.transaction;
             const account = state.finance.accounts.find((a) => a.id === tx.accountId);
 
@@ -182,12 +188,12 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                   </div>
 
                   {/* Actions for this item */}
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  {!groupedIds.has(tx.id) && <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"
                       onClick={() => onMarkReviewed(tx.id)}
                       className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer transition-colors shadow-2xs"
-                      title="Marcar como revisado"
+                      title="Cerrar la advertencia. Este movimiento ya está contabilizado y conservarlo no vuelve a cobrar ni pagar."
                     >
                       ✓ Revisado
                     </button>
@@ -196,15 +202,16 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                       type="button"
                       onClick={() => onIgnore(tx.id)}
                       className="px-2 py-1 rounded-lg text-xs font-medium text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer"
-                      title="Excluir o ignorar de la bandeja"
+                      title="Ocultar la advertencia; conserva el movimiento y su efecto contable"
                     >
-                      Ignorar
+                      Ocultar aviso
                     </button>
-                  </div>
+                  </div>}
                 </div>
 
                 {/* Reasons Badges and Descriptions */}
                 <div className="space-y-1.5 pt-1 border-t border-[var(--border)]/50">
+                  <p className="text-[11px] text-[var(--text-soft)]">Este movimiento ya está contabilizado. Revisarlo u ocultar el aviso conserva su efecto en el saldo.</p>
                   {item.reasons.map((r: ReviewReason, idx: number) => (
                     <div key={idx} className="flex flex-wrap items-center justify-between gap-2 text-xs">
                       <div className="flex items-center gap-1.5 flex-wrap">
@@ -251,17 +258,6 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                             className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 cursor-pointer"
                           >
                             Ajustar a Hoy
-                          </button>
-                        )}
-
-                        {r.duplicateTransactionId && (
-                          <button
-                            type="button"
-                            onClick={() => onResolveDuplicate(tx.id, r.duplicateTransactionId)}
-                            className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-500/15 text-rose-600 dark:text-rose-400 hover:bg-rose-500/25 cursor-pointer"
-                            title="Elimina este movimiento y conserva el otro"
-                          >
-                            Eliminar este duplicado
                           </button>
                         )}
 

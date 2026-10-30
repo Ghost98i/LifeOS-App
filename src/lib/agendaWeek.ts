@@ -4,6 +4,7 @@ import { routineScheduledFor } from './calculations';
 import { DAYS, dayKeyFromDate, isoWeekMonday, todayISO } from './storage';
 import { getTodayAgendaCalendarItems } from './todayOverview';
 import { isModuleEnabled } from './moduleVisibility';
+import { getDatedAgendaTasks, type DatedAgendaTask } from './datedAgendaTasks';
 
 export interface AgendaDay {
   date: string;
@@ -11,10 +12,11 @@ export interface AgendaDay {
   blocks: LifeOSState['agenda'][DayKey];
   routines: LifeOSState['tasksRecurring'];
   events: CalendarDisplayItem[];
+  tasks: DatedAgendaTask[];
 }
 
 export interface AgendaDaySummary {
-  kind: 'event' | 'block' | 'routine' | 'empty';
+  kind: 'event' | 'block' | 'routine' | 'task' | 'empty';
   headline: string;
   counts: string;
 }
@@ -25,6 +27,7 @@ export function agendaDaySummary(day: AgendaDay): AgendaDaySummary {
     day.events.length && `${day.events.length} ${day.events.length === 1 ? 'evento' : 'eventos'}`,
     day.blocks.length && `${day.blocks.length} ${day.blocks.length === 1 ? 'actividad' : 'actividades'}`,
     day.routines.length && `${day.routines.length} ${day.routines.length === 1 ? 'rutina' : 'rutinas'}`,
+    day.tasks.length && `${day.tasks.length} ${day.tasks.length === 1 ? 'tarea' : 'tareas'}`,
   ].filter(Boolean).join(' · ');
 
   if (day.events.length > 0) {
@@ -38,6 +41,7 @@ export function agendaDaySummary(day: AgendaDay): AgendaDaySummary {
       : `${first[0].activity} · ${first[1].activity}`;
     return { kind: 'block', headline, counts };
   }
+  if (day.tasks.length > 0) return { kind: 'task', headline: day.tasks[0].name, counts };
   if (day.routines.length > 0) {
     return { kind: 'routine', headline: 'Sin compromisos programados', counts };
   }
@@ -106,6 +110,7 @@ export function agendaWeek(state: LifeOSState, reference: Date): AgendaDay[] {
           })
         : [],
       events: getTodayAgendaCalendarItems(state, date),
+      tasks: getDatedAgendaTasks(state, date),
     };
   });
 }
