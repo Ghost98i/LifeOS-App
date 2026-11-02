@@ -89,7 +89,9 @@ test('reconfirmar un borrador es idempotente; otra captura idéntica es independ
   check(state, 2, 9000, 1000);
 });
 
-test('sucesivos, retroactivo, edición y eliminación solo cambian el movimiento elegido', () => {
+test('sucesivos, retroactivo, edición y eliminación solo cambian el movimiento elegido', context => {
+  context.mock.timers.enable({ apis: ['Date'], now: new Date(2026, 9, 31, 12).getTime() });
+  context.after(() => context.mock.timers.reset());
   const state = fixture();
   const a = addTransaction(state, expense());
   check(state, 1, 9500, 500);
@@ -241,8 +243,8 @@ test('saldo real, disponible, proyección y patrimonio tienen contratos diferent
   const state = fixture();
   addTransaction(state, expense());
   addTransaction(state, expense());
-  state.finance.commitments.push({ id: 'future-expense', name: 'Pendiente', amount: 2000, category: 'Otros', frequency: 'once', nextDueDate: todayISO(), active: true });
-  state.finance.expectedIncomes.push({ id: 'future-income', name: 'Por cobrar', amount: 3000, frequency: 'once', startDate: todayISO(), active: true });
+  state.finance.commitments.push({ id: 'future-expense', name: 'Pendiente', amount: 2000, currency: 'UYU', category: 'Otros', frequency: 'once', nextDueDate: todayISO(), active: true });
+  state.finance.expectedIncomes.push({ id: 'future-income', name: 'Por cobrar', amount: 3000, currency: 'UYU', frequency: 'once', startDate: todayISO(), active: true });
   state.finance.investments.push({ id: 'investment', name: 'Inversión', amount: 4000 });
   const summary = deriveCashflowProjection(state).summariesByCurrency.UYU;
   assert.equal(summary.realBalance, 9000);

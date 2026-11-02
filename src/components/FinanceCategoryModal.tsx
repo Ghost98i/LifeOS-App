@@ -1,3 +1,4 @@
+import { PrivacyInput, PrivateFinancialText } from './PrivacyAmount';
 import React, { useState, useEffect, useRef } from 'react';
 import { FinanceCategory, LifeOSState } from '../types';
 import { AppIcon } from './AppIcon';
@@ -244,7 +245,7 @@ export const FinanceCategoryModal: React.FC<FinanceCategoryModalProps> = ({
         {isAdding && (
           <form onSubmit={handleCreate} className="px-5 py-3.5 border-b border-[var(--border)] bg-[var(--surface-muted)]/70 space-y-2 shrink-0">
             <div className="flex items-center gap-2">
-              <input
+              <PrivacyInput maskText
                 ref={newNameInputRef}
                 type="text"
                 value={newName}
@@ -299,7 +300,7 @@ export const FinanceCategoryModal: React.FC<FinanceCategoryModalProps> = ({
                   {isEditing ? (
                     <div className="space-y-1.5">
                       <div className="flex items-center gap-2">
-                        <input
+                        <PrivacyInput maskText
                           autoFocus
                           type="text"
                           value={editName}
@@ -338,7 +339,7 @@ export const FinanceCategoryModal: React.FC<FinanceCategoryModalProps> = ({
                   ) : (
                     <div className="flex items-center gap-2.5 flex-wrap">
                       <span className={`text-xs sm:text-sm font-semibold ${cat.active ? 'text-[var(--text)]' : 'text-[var(--text-faint)] line-through'}`}>
-                        {cat.name}
+                        <PrivateFinancialText>{cat.name}</PrivateFinancialText>
                       </span>
                       {cat.active ? (
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
@@ -428,7 +429,7 @@ export const FinanceCategoryModal: React.FC<FinanceCategoryModalProps> = ({
           <div className="w-full max-w-md bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-2xl space-y-4 animate-in zoom-in-95">
             <div className="space-y-1.5">
               <h3 className="text-sm font-bold text-[var(--text)]">
-                ¿Archivar categoría "{archiveTarget.name}"?
+                ¿Archivar categoría "<PrivateFinancialText>{archiveTarget.name}</PrivateFinancialText>"?
               </h3>
               <p className="text-xs text-[var(--text-soft)] leading-relaxed">
                 Esta categoría tiene{' '}
@@ -470,7 +471,7 @@ export const FinanceCategoryModal: React.FC<FinanceCategoryModalProps> = ({
           <div className="w-full max-w-md bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 shadow-2xl space-y-4 animate-in zoom-in-95">
             <div className="space-y-1.5">
               <h3 className="text-sm font-bold text-[var(--text)]">
-                ¿Eliminar categoría "{deleteTarget.name}"?
+                ¿Eliminar categoría "<PrivateFinancialText>{deleteTarget.name}</PrivateFinancialText>"?
               </h3>
               <p className="text-xs text-[var(--text-soft)] leading-relaxed">
                 Como esta categoría no tiene movimientos históricos registrados, se borrará definitivamente de tus categorías de Finanzas.

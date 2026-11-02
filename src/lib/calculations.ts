@@ -1,3 +1,4 @@
+import { confirmedFinancialCurrency } from './financeCurrencyPolicy';
 import {
   LifeOSState,
   Transaction,
@@ -152,6 +153,8 @@ export function calcSubscriptionsTotal(state: LifeOSState): number {
 export type { CashFlowCommitment, CashFlowDayPoint, CashFlowForecastItem };
 
 export interface CashFlowProjectionResult {
+  /** Relevant occurrences excluded from known-currency subtotals; amounts are not zeroed. */
+  unconfirmedCurrencyItems: CashFlowForecastItem[];
   currentBalance: number;
   totalExpectedIncome: number;
   committed: number;
@@ -299,10 +302,12 @@ export function cashFlowProjection(
   const horizonIso = `${horizon.getFullYear()}-${String(horizon.getMonth() + 1).padStart(2, '0')}-${String(horizon.getDate()).padStart(2, '0')}`;
 
   const forecastItems: CashFlowForecastItem[] = [];
+  const unconfirmedCurrencyItems: CashFlowForecastItem[] = [];
 
   // 1. Expected Incomes
   for (const inc of state.finance?.expectedIncomes || []) {
-    const incCur = (inc.currency || 'UYU').toUpperCase();
+    const incCur = confirmedFinancialCurrency(inc.currency);
+    if (!incCur) unconfirmedCurrencyItems.push(...getExpectedIncomeOccurrences(inc, fromIso, horizonIso));
     if (incCur === normCur) {
       forecastItems.push(...getExpectedIncomeOccurrences(inc, fromIso, horizonIso));
     }
@@ -379,7 +384,8 @@ export function cashFlowProjection(
 
   // 4. Financial Commitments
   for (const com of state.finance?.commitments || []) {
-    const comCur = (com.currency || 'UYU').toUpperCase();
+    const comCur = confirmedFinancialCurrency(com.currency);
+    if (!comCur) unconfirmedCurrencyItems.push(...getCommitmentOccurrences(com, fromIso, horizonIso));
     if (comCur === normCur) {
       forecastItems.push(...getCommitmentOccurrences(com, fromIso, horizonIso));
     }
@@ -505,6 +511,7 @@ export function cashFlowProjection(
   const nextExpense = upcomingExpenses.length > 0 ? { label: upcomingExpenses[0].label, amount: upcomingExpenses[0].amount, date: upcomingExpenses[0].date } : null;
 
   return {
+    unconfirmedCurrencyItems,
     currentBalance,
     totalExpectedIncome,
     committed,

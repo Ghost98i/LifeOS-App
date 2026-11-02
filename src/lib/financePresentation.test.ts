@@ -53,6 +53,7 @@ test('Finanzas 2.0A.1 - Trayectoria con señal: balance > 0 sin eventos no activ
   state.finance.commitments = [
     {
       id: 'com-1',
+      currency: 'UYU',
       name: 'Alquiler',
       amount: 15000,
       nextDueDate: '2026-10-15',

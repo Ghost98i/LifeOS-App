@@ -5,9 +5,10 @@ import {
   ReviewReason,
 } from '../lib/financeReview';
 import { fmtDate, formatMoney, todayISO } from '../lib/storage';
+import { confirmedFinancialCurrency, formatPlannedAmount } from '../lib/financeCurrencyPolicy';
 import { getActiveCategories } from '../lib/financeCategories';
 import { AppIcon } from './AppIcon';
-import { PrivacyAmount } from './PrivacyAmount';
+import { PrivacyAmount, PrivateFinancialText } from './PrivacyAmount';
 import { FinanceDuplicateGroups } from './FinanceDuplicateGroups';
 
 interface FinanceReviewInboxProps {
@@ -51,7 +52,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
   }
 
   return (
-    <div className="finance-surface border border-[var(--finance-border)] rounded-2xl p-4 sm:p-5 space-y-4 animate-in fade-in">
+    <div className="finance-surface border border-[var(--finance-border)] rounded-2xl p-3 sm:p-4 space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
@@ -68,7 +69,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
               </span>
             </div>
             <p className="text-xs text-[var(--finance-text-muted)]">
-              Revisá advertencias de movimientos y compromisos pendientes de pago
+              Movimientos y pagos pendientes para revisar
             </p>
           </div>
         </div>
@@ -102,7 +103,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
           {reviewInbox.attentionCommitments.map((att) => (
             <div
               key={att.commitment.id}
-              className={`p-3 rounded-xl border flex flex-wrap items-center justify-between gap-3 text-xs ${
+              className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${
                 att.kind === 'overdue'
                   ? 'bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-200'
                   : att.kind === 'compatible_movement'
@@ -110,23 +111,21 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                   : 'bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-200'
               }`}
             >
-              <div className="flex items-center gap-2">
-                <span className="font-bold">
-                  {att.kind === 'overdue' ? '⚠️ Vencido:' : att.kind === 'compatible_movement' ? '🔗 Compatible:' : '⏰ Próximo:'}
-                </span>
-                <span className="font-semibold">{att.commitment.name}</span>
+              <div className="min-w-0 space-y-1">
+                <span className="block font-semibold text-sm break-words"><PrivateFinancialText>{att.commitment.name}</PrivateFinancialText></span>
+                <span className="block">{att.label}</span>
                 <PrivacyAmount as="span" className="tabular-nums font-bold">
-                  ({formatMoney(att.commitment.amount, att.commitment.currency || 'UYU')})
+                  ({formatPlannedAmount(att.commitment.amount, att.commitment.currency)})
                 </PrivacyAmount>
-                <span className="text-[11px] opacity-80">· {att.label}</span>
+                {state.settings.privacyMode && !confirmedFinancialCurrency(att.commitment.currency) && <span>Moneda sin confirmar</span>}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 {att.compatibleTxId ? (
                   <button
                     type="button"
                     onClick={() => onLinkCommitment(att.compatibleTxId!, att.commitment.id)}
-                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shadow-2xs"
+                    className="min-h-11 px-3 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
                   >
                     Vincular a movimiento
                   </button>
@@ -134,9 +133,9 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                   <button
                     type="button"
                     onClick={() => onPayCommitment(att.commitment)}
-                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-[var(--card)] hover:bg-[var(--surface-muted)] text-[var(--text)] border border-[var(--border)] cursor-pointer"
+                    className="min-h-11 px-3 rounded-lg text-xs font-semibold bg-[var(--card)] hover:bg-[var(--surface-muted)] text-[var(--text)] border border-[var(--border)] cursor-pointer"
                   >
-                    Pagar ahora
+                    Registrar pago
                   </button>
                 )}
               </div>
@@ -173,7 +172,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
 
                     <span className="text-[var(--text-faint)]">·</span>
                     <span className="font-semibold text-[var(--text)]">
-                      {tx.note || tx.category}
+                      <PrivateFinancialText>{tx.note || tx.category}</PrivateFinancialText>
                     </span>
 
                     <span className="text-[var(--text-faint)]">·</span>
@@ -182,7 +181,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                     {account && (
                       <>
                         <span className="text-[var(--text-faint)]">·</span>
-                        <span className="text-[var(--text-soft)]">{account.name}</span>
+                        <span className="text-[var(--text-soft)]"><PrivateFinancialText>{account.name}</PrivateFinancialText></span>
                       </>
                     )}
                   </div>
@@ -226,7 +225,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                         >
                           {r.label}
                         </span>
-                        <span className="text-[var(--text-soft)] text-[11px]">{r.description}</span>
+                        <span className="text-[var(--text-soft)] text-[11px]"><PrivateFinancialText>{r.description}</PrivateFinancialText></span>
                       </div>
 
                       {/* Targeted One-Click Quick Fixes */}
@@ -312,7 +311,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                         >
                           <div className="space-y-0.5">
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-[var(--text)]">{cand.name}</span>
+                              <span className="font-bold text-[var(--text)]"><PrivateFinancialText>{cand.name}</PrivateFinancialText></span>
                               <span className="text-[var(--text-faint)]">·</span>
                               <PrivacyAmount as="span" className="font-bold tabular-nums text-[var(--text)]">
                                 {formatMoney(cand.amount, cand.currency || 'UYU')}
@@ -324,7 +323,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                               <div className="flex items-center gap-1 flex-wrap text-[10px] text-[var(--text-soft)]">
                                 {cand.reasons.map((r, i) => (
                                   <span key={i} className="px-1.5 py-0.5 rounded bg-[var(--surface-muted)] text-[var(--text-soft)]">
-                                    {r}
+                                    <PrivateFinancialText>{r}</PrivateFinancialText>
                                   </span>
                                 ))}
                               </div>

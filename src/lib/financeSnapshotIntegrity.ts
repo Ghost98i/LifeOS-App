@@ -1,6 +1,7 @@
 import type { Finance, Transaction, FinanceTransfer, AccountReconciliation } from '../types';
 import { financeRevisionMillis, parseFinanceRevisionOrder } from './financeRevision';
 import { reconstructAccountBalance } from './financeLedger';
+import { detectFinanceCurrencyLoss } from './financeCurrencyIntegrity';
 import { syncDataFingerprint, type SyncConflictItem } from './syncModel';
 
 type Event = Transaction | FinanceTransfer | AccountReconciliation;
@@ -11,7 +12,7 @@ export function detectFinanceSnapshotRegression(
   incoming: Finance,
   tombstones: Record<string, number> = {},
 ): SyncConflictItem[] {
-  const conflicts: SyncConflictItem[] = [];
+  const conflicts: SyncConflictItem[] = detectFinanceCurrencyLoss(local, incoming);
   const report = (id: string, reason: string, localValue: unknown, remoteValue: unknown) => {
     conflicts.push({
       id: `conflict-finance-snapshot-${id}`, module: 'finance', entityType: 'entity', entityId: id,

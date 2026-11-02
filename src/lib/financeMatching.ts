@@ -1,6 +1,7 @@
 import type { ExpectedIncome, FinancialCommitment, LifeOSState, Transaction } from '../types';
 import { isCommercialFinanceTransaction } from './financeFlows';
 import { identifyMerchant } from './merchantIdentity';
+import { confirmedFinancialCurrency } from './financeCurrencyPolicy';
 
 export type MatchConfidence = 'strong' | 'possible' | 'ambiguous' | 'none';
 export type MatchTargetType = 'commitment' | 'expected_income';
@@ -187,7 +188,8 @@ export function scoreCandidate(
 
   // 2. Currency Compatibility
   const txCur = (tx.currency || 'UYU').toUpperCase();
-  const targetCur = ((target as any).currency || 'UYU').toUpperCase();
+  const targetCur = confirmedFinancialCurrency(target.currency);
+  if (!targetCur) return null;
   if (txCur !== targetCur) return null;
 
   // 3. Amount Compatibility
@@ -323,7 +325,7 @@ export function findMatchCandidates(
           targetType: 'commitment',
           name: com.name,
           amount: com.amount,
-          currency: com.currency || 'UYU',
+          currency: com.currency!,
           dueDate: com.nextDueDate,
           cycleKey: evaluation.cycleKey,
           cycleLabel: evaluation.cycleLabel,
@@ -347,7 +349,7 @@ export function findMatchCandidates(
           targetType: 'expected_income',
           name: inc.name,
           amount: inc.amount,
-          currency: inc.currency || 'UYU',
+          currency: inc.currency!,
           dueDate: inc.startDate,
           cycleKey: evaluation.cycleKey,
           cycleLabel: evaluation.cycleLabel,

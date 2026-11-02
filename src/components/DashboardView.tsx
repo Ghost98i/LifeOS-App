@@ -42,7 +42,7 @@ const activityModuleToView: Record<string, ViewType> = {
 
 const activityModuleLabel: Record<ActivityTimelineItem['module'], string> = {
   finance: 'Finanzas',
-  gym: 'Gym',
+  gym: 'Gimnasio',
   study: 'Estudios',
   task: 'Tarea',
   resale: 'Reventa',
@@ -56,7 +56,7 @@ const formatActivityWhen = (timestamp: string): string => {
   const relative = formatRelativeTime(timestamp);
   if (timestamp.length <= 10 || Number.isNaN(Date.parse(timestamp))) return relative;
   const time = new Date(timestamp).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' });
-  return `${relative} · ${time}`;
+  return relative.includes(time) ? relative : `${relative} · ${time}`;
 };
 
 interface DashboardViewProps {
@@ -443,16 +443,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     <div className="today-shell relative mx-auto flex w-full flex-col gap-3 sm:gap-4">
       <header
         data-hero-period={dayPeriod}
-        className="today-hero order-1 relative isolate flex min-h-[310px] overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--hero-bg)] px-3 py-3 sm:min-h-[360px] sm:rounded-[26px] sm:px-8 sm:py-6 lg:min-h-[410px] xl:min-h-[430px] 2xl:min-h-[450px]"
+        className="today-hero today-hero-size relative isolate flex overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--hero-bg)] p-3 sm:rounded-[26px] sm:px-6 sm:py-4"
       >
         <AlpineDayCycleBackdrop forcePeriod={dayPeriod} compact />
         <div className="relative z-10 flex w-full flex-col items-start justify-between gap-2.5 sm:gap-3">
           {!dayClosed ? (
-            <button type="button" onClick={() => onNavigate('checkout')} aria-label="Cerrar el día" className="today-hero-action inline-flex shrink-0 self-end items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[12px] font-medium tracking-[-0.01em] transition sm:px-3 sm:py-1.5"><AppIcon name="moon" className="h-3.5 w-3.5 opacity-85" /><span className="hidden sm:inline">Cerrar el día</span></button>
+            <button type="button" onClick={() => onNavigate('checkout')} aria-label="Cerrar el día" className="today-hero-action inline-flex min-h-11 min-w-11 shrink-0 self-end items-center justify-center gap-1.5 rounded-[10px] px-2.5 text-[12px] font-medium tracking-[-0.01em] transition sm:px-3"><AppIcon name="moon" className="h-3.5 w-3.5 opacity-85" /><span className="hidden sm:inline">Cerrar el día</span></button>
           ) : (
             <span className="today-hero-closed inline-flex shrink-0 self-end items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[12px] font-medium tracking-[-0.01em] sm:px-3 sm:py-1.5"><AppIcon name="check" className="h-3.5 w-3.5" />Día cerrado</span>
           )}
-          <section className="today-observatory-panel" aria-label="Observatorio Celestiva, momento actual">
+          <section className="today-observatory-panel" aria-label="Momento actual en Celestian">
             <svg className="today-observatory-shape" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true" focusable="false">
               <defs>
                 <linearGradient id={`${observatoryId}-material`} x1="0" y1="0" x2="1" y2="0.6" gradientUnits="objectBoundingBox">
@@ -492,9 +492,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </header>
 
+      <div className="hidden sm:block">
+        <BentoCommandBar
+          state={state}
+          onUpdateState={onUpdateState}
+          onNavigate={onNavigate}
+          onOpenSearch={onOpenSearch}
+          onOpenCapture={onOpenCapture}
+          onQuickAction={onQuickAction}
+          compactBar
+        />
+      </div>
+
       {attentionItems.length > 0 && (
         <section
-          className="today-attention order-3 rounded-2xl border border-amber-500/20 bg-amber-500/[0.03] px-3.5 py-2.5 space-y-2.5"
+          className="today-attention rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3.5 py-2.5 space-y-2.5"
           aria-labelledby="today-attention-title"
         >
           <h2 id="today-attention-title" className="sr-only">
@@ -505,31 +517,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               return (
                 <div
                   key={item.id}
-                  className={`flex items-center gap-3 ${idx > 0 ? 'pt-2.5 border-t border-[var(--border)]/70' : ''}`}
+                  className={`today-attention-row ${idx > 0 ? 'pt-2.5 border-t border-[var(--border)]/70' : ''}`}
                 >
-                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <span className={`today-attention-icon flex h-7 w-7 items-center justify-center rounded-lg ${item.urgency === 'info' ? 'bg-[var(--surface-muted)] text-[var(--text-soft)]' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
                     <AppIcon name="shield" className="h-3.5 w-3.5" />
                   </span>
-                  <div className="min-w-0 flex-1">
+                  <div className="today-attention-copy min-w-0">
                     <strong className="block text-[13px] font-semibold text-[var(--text)]">
                       {item.title}
                     </strong>
-                    <span className="block truncate text-[12px] sm:text-[13px] text-[var(--text-faint)]">
+                    <span className="block break-words text-xs leading-relaxed text-[var(--text-soft)] sm:text-[13px]">
                       {item.detail}
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={onExportJSON}
-                    className="rounded-lg px-2 py-1 text-[13px] font-bold text-[var(--blue)] hover:underline cursor-pointer"
+                    className="today-attention-action min-h-11 rounded-lg px-2.5 text-[13px] font-semibold text-[var(--blue)] hover:underline cursor-pointer"
                   >
-                    Exportar
+                    Descargar copia
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDismissAttention(item)}
-                    className="p-1 text-[var(--text-faint)] hover:text-rose-500 rounded-lg hover:bg-rose-500/10 transition cursor-pointer"
-                    aria-label="Descartar aviso de backup"
+                    className="today-attention-dismiss flex h-11 w-11 items-center justify-center text-[var(--text-soft)] hover:text-rose-500 rounded-lg hover:bg-rose-500/10 transition cursor-pointer"
+                    aria-label="Descartar aviso de copia de seguridad"
                     title="Descartar aviso"
                   >
                     <AppIcon name="x" className="h-3.5 w-3.5" />
@@ -587,25 +599,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             return (
               <div
                 key={item.id}
-                className={`flex items-center gap-3 ${idx > 0 ? 'pt-2.5 border-t border-[var(--border)]/70' : ''}`}
+                className={`today-attention-row ${idx > 0 ? 'pt-2.5 border-t border-[var(--border)]/70' : ''}`}
               >
                 <span
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${badgeStyle}`}
+                  className={`today-attention-icon flex h-7 w-7 items-center justify-center rounded-lg ${badgeStyle}`}
                 >
                   <AppIcon name={iconName} className="h-3.5 w-3.5" />
                 </span>
-                <div className="min-w-0 flex-1">
+                <div className="today-attention-copy min-w-0">
                   <strong className="block text-[13px] font-semibold text-[var(--text)]">
                     {item.title}
                   </strong>
-                  <span className="block truncate text-[12px] sm:text-[13px] text-[var(--text-faint)]">
+                  <span className="block break-words text-xs leading-relaxed text-[var(--text-soft)] sm:text-[13px]">
                     {item.detail}
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={() => handleAttentionAction(item)}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 text-[12px] sm:text-[13px] font-bold text-[var(--blue)] hover:underline cursor-pointer"
+                  className="today-attention-action inline-flex min-h-11 items-center gap-1 rounded-lg px-2.5 text-xs sm:text-[13px] font-semibold text-[var(--blue)] hover:underline cursor-pointer"
                 >
                   <span>{item.actionLabel}</span>
                   <AppIcon name="arrowRight" className="h-3 w-3" />
@@ -613,7 +625,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <button
                   type="button"
                   onClick={() => handleDismissAttention(item)}
-                  className="p-1 text-[var(--text-faint)] hover:text-rose-500 rounded-lg hover:bg-rose-500/10 transition cursor-pointer"
+                  className="today-attention-dismiss flex h-11 w-11 items-center justify-center text-[var(--text-soft)] hover:text-rose-500 rounded-lg hover:bg-rose-500/10 transition cursor-pointer"
                   aria-label={`Descartar aviso: ${item.title}`}
                   title="Descartar aviso"
                 >
@@ -627,7 +639,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <button
                 type="button"
                 onClick={() => setShowDismissedModal(true)}
-                className="inline-flex items-center gap-1 text-[var(--text-faint)] hover:text-[var(--text)] transition underline cursor-pointer"
+                className="inline-flex min-h-11 items-center gap-1 text-[var(--text-soft)] hover:text-[var(--text)] transition underline cursor-pointer"
                 aria-label={`Ver ${dismissedAttentionItems.length} aviso(s) descartado(s)`}
               >
                 <span>{dismissedAttentionItems.length === 1 ? '1 aviso descartado' : `${dismissedAttentionItems.length} avisos descartados`}</span>
@@ -637,21 +649,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </section>
       )}
 
-      {/* 2. Quick Capture: Barra horizontal MUY compacta (100% ancho en escritorio, oculta en móvil) */}
-      <div className="order-2 hidden sm:block">
-        <BentoCommandBar
-          state={state}
-          onUpdateState={onUpdateState}
-          onNavigate={onNavigate}
-          onOpenSearch={onOpenSearch}
-          onOpenCapture={onOpenCapture}
-          onQuickAction={onQuickAction}
-          compactBar
-        />
-      </div>
-
       {/* 3. Fila Principal: Agenda de hoy (izquierda) + Estado (derecha) */}
-      <div className="order-4 grid grid-cols-1 items-start gap-3 sm:gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 items-start gap-3 sm:gap-4 xl:grid-cols-2">
         <TodayAgendaSection
           entries={agendaEntries}
           pastPendingTasks={pastPendingExtras}
@@ -683,7 +682,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {/* 4. Actividad reciente */}
       {recentActivity.length > 0 && (
-        <section className="today-activity-surface order-5 rounded-2xl border border-[var(--border)] p-3.5 sm:px-5 sm:py-3 shadow-[var(--card-shadow)]" aria-labelledby="recent-activity-title">
+        <section className="today-activity-surface rounded-2xl border border-[var(--border)] p-3.5 sm:px-5 sm:py-3 shadow-[var(--card-shadow)]" aria-labelledby="recent-activity-title">
           <div className="space-y-2.5">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -724,7 +723,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-baseline justify-between gap-x-2">
-                      <span className="text-[11px] font-semibold text-[var(--text-soft)]">{activity.badgeText || activityModuleLabel[activity.module]}</span>
+                      <span className="text-[11px] font-semibold text-[var(--text-soft)]">{activity.badgeText === 'Gym' ? 'Gimnasio' : activity.badgeText || activityModuleLabel[activity.module]}</span>
                       <time dateTime={activity.timestamp} className="text-[11px] text-[var(--text-soft)]">{formatActivityWhen(activity.timestamp)}</time>
                     </span>
                     <span className="block text-sm font-medium leading-snug text-[var(--text)] break-words group-hover:text-[var(--blue)]">{activity.title}</span>
@@ -749,7 +748,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
 export const DashboardSkeleton: React.FC = () => (
   <div className="mx-auto w-full space-y-4 sm:space-y-5 animate-pulse">
-    <div className="h-[142px] rounded-3xl border border-[var(--border)] bg-[var(--hero-bg)]" />
+    <div className="today-hero-size rounded-[22px] sm:rounded-[26px] border border-[var(--border)] bg-[var(--hero-bg)]" />
     <div className="h-12 rounded-2xl border border-[var(--border)] bg-[var(--card)] hidden sm:block" />
     <div className="grid gap-3 sm:gap-4 xl:grid-cols-2">
       <div className="h-[480px] rounded-2xl border border-[var(--border)] bg-[var(--card)]" />

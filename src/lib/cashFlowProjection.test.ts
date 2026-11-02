@@ -11,6 +11,7 @@ test('cashFlowProjection projects across 30, 60, and 90 days combining income, s
   state.finance.expectedIncomes = [
     {
       id: 'inc-1',
+      currency: 'UYU', // This scenario explicitly models UYU, not an ambiguous historical record.
       name: 'Salario',
       amount: 40000,
       startDate: '2026-09-05',
@@ -75,6 +76,7 @@ test('cashFlowProjection preserves source identity and only resolves persisted f
   state.finance.debts = [{ id: 'debt-1', name: 'Préstamo', amount: 10000, monthlyPayment: 1000, dueDate: '2026-10-12' }];
   state.finance.commitments = [{
     id: 'commitment-1',
+    currency: 'UYU',
     name: 'Alquiler',
     amount: 15000,
     category: 'Admin/Hogar',

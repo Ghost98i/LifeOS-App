@@ -765,7 +765,7 @@ test('Identidad Visual 1C-B1 — Estructura patrimonial en 3 bloques, separació
   assert.ok(html.includes('Patrimonio por moneda'));
   assert.ok(html.includes('Acuerdos y financiaciones'));
   assert.ok(html.includes('Inversiones y activos'));
-  assert.ok(html.includes('Otros pasivos registrados'));
+  assert.ok(html.includes('Otras deudas registradas'));
 
   // 2. Separación explícita UYU y USD incluso con liquidez USD = 0 y patrimonio neto USD negativo (-600)
   assert.ok(html.includes('Patrimonio neto UYU'));

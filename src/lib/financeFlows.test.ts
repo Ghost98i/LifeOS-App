@@ -37,7 +37,7 @@ test('confirmar un compromiso registra un gasto, afecta saldo y avanza la obliga
   account.balance = 1000;
   account.initialBalance = 1000;
   state.finance.commitments = [{
-    id: 'commitment-1', name: 'Cuota', amount: 200, category: 'Hogar',
+    id: 'commitment-1', name: 'Cuota', amount: 200, currency: 'UYU', category: 'Hogar',
     frequency: 'monthly', nextDueDate: '2026-10-20', active: true,
     accountId: account.id, remainingOccurrences: 2, dueDay: 20,
   }];
@@ -59,7 +59,7 @@ test('confirmar un ingreso esperado registra un ingreso, afecta saldo y actualiz
   account.balance = 1000;
   account.initialBalance = 1000;
   state.finance.expectedIncomes = [{
-    id: 'income-1', name: 'Cobro', amount: 400, startDate: '2026-10-25',
+    id: 'income-1', name: 'Cobro', amount: 400, currency: 'UYU', startDate: '2026-10-25',
     frequency: 'once', active: true, category: 'Ingresos', accountId: account.id,
   }];
 
@@ -80,7 +80,7 @@ test('confirmaciones compuestas preservan la no retroactividad de addTransaction
   account.initialBalance = 1000;
   reconcileAccount(state, { accountId: account.id, actualBalance: 1000, date: '2026-10-10' });
   state.finance.commitments = [{
-    id: 'commitment-old', name: 'Cuota anterior', amount: 100, category: 'Hogar',
+    id: 'commitment-old', name: 'Cuota anterior', amount: 100, currency: 'UYU', category: 'Hogar',
     frequency: 'once', nextDueDate: '2026-10-09', active: true, accountId: account.id,
   }];
 
@@ -93,12 +93,12 @@ test('confirmaciones compuestas preservan la no retroactividad de addTransaction
 test('una confirmación inválida no deja estado parcialmente aplicado', () => {
   const state = defaultState();
   state.finance.commitments = [{
-    id: 'commitment-invalid', name: 'Cuota', amount: 100, category: 'Hogar',
+    id: 'commitment-invalid', name: 'Cuota', amount: 100, currency: 'UYU', category: 'Hogar',
     frequency: 'monthly', nextDueDate: '2026-10-20', active: true,
     accountId: 'missing-account', remainingOccurrences: 2, dueDay: 20,
   }];
   state.finance.expectedIncomes = [{
-    id: 'income-invalid', name: 'Cobro', amount: 300, startDate: '2026-10-20',
+    id: 'income-invalid', name: 'Cobro', amount: 300, currency: 'UYU', startDate: '2026-10-20',
     frequency: 'once', active: true, accountId: 'missing-account',
   }];
 

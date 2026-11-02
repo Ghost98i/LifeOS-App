@@ -451,7 +451,9 @@ test('Finanzas 1.3C — Deduplicación estricta de deudas legacy vinculadas a un
   assert.equal(totalDebts, 10000, 'El pasivo total no debe sumar la deuda legacy vinculada (10.000, no 20.000)');
 });
 
-test('Finanzas 1.3C-D1 — Semántica dual: compra financiada de $U 12.000 (Hogar) y pago posterior de cuota sin duplicación', () => {
+test('Finanzas 1.3C-D1 — Semántica dual: compra financiada de $U 12.000 (Hogar) y pago posterior de cuota sin duplicación', (context) => {
+  context.mock.timers.enable({ apis: ['Date'], now: new Date(2026, 9, 31, 12).getTime() });
+  context.after(() => context.mock.timers.reset());
   const state = createTestState();
   const now = new Date();
   const purchaseDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-05`;
@@ -623,7 +625,9 @@ test('Finanzas 1.3C-D1 — Segregación multimoneda y acuerdos personales sin ac
   assert.equal(usdCats['Hogar'] || 0, 0);
 });
 
-test('Finanzas 1.3C microfix — Edición segura de categoría y fecha de adquisición sin alterar importes ni cronogramas', () => {
+test('Finanzas 1.3C microfix — Edición segura de categoría y fecha de adquisición sin alterar importes ni cronogramas', (context) => {
+  context.mock.timers.enable({ apis: ['Date'], now: new Date(2026, 9, 31, 12).getTime() });
+  context.after(() => context.mock.timers.reset());
   const state = createTestState();
   const now = new Date();
   const currentMonthIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-05`;

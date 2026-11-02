@@ -57,7 +57,7 @@ export const DraftConfirmationTray: React.FC<DraftConfirmationTrayProps> = ({
             <AppIcon name="sparkles" className="h-3.5 w-3.5" />
           </div>
           <span className="text-xs sm:text-sm font-bold text-[var(--text)]">
-            Borradores detectados
+            Borradores para revisar
           </span>
           <span className="px-1.5 py-0.5 text-[11px] tabular-nums font-bold rounded-full bg-[var(--surface-muted)] text-[var(--text-soft)] border border-[var(--border)]">
             {drafts.length}
@@ -78,10 +78,10 @@ export const DraftConfirmationTray: React.FC<DraftConfirmationTrayProps> = ({
                 onClick={onConfirmAll}
                 disabled={!allValid || isConfirmingAll}
                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer"
-                title={allValid ? 'Confirmar todos los borradores' : 'Hay borradores incompletos que requieren revisión antes de confirmar'}
+                title={allValid ? 'Guardar todos los borradores' : 'Hay borradores incompletos que requieren revisión antes de guardar'}
               >
                 <AppIcon name="check" className="h-3 w-3" />
-                <span>{isConfirmingAll ? 'Registrando...' : 'Confirmar todos'}</span>
+                <span>{isConfirmingAll ? 'Guardando…' : 'Guardar todos'}</span>
               </button>
             )}
             {onDiscardAll && (
@@ -397,10 +397,10 @@ const DraftCard: React.FC<DraftCardProps> = ({
               onClick={onConfirm}
               disabled={!canConfirm || isConfirming}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
-              title={canConfirm ? 'Confirmar este borrador' : validation.reason || 'Completá los campos requeridos'}
+              title={canConfirm ? 'Guardar este borrador' : validation.reason || 'Completá los campos requeridos'}
             >
               <AppIcon name="check" className="h-3.5 w-3.5" />
-              <span>{isConfirming ? 'Registrando...' : 'Confirmar'}</span>
+              <span>{isConfirming ? 'Guardando…' : 'Guardar'}</span>
             </button>
           )}
         </div>

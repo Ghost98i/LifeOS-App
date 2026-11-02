@@ -1,7 +1,8 @@
+import { PrivacyInput, PrivateFinancialText } from './PrivacyAmount';
 import React, { useEffect, useRef, useState } from 'react';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import { Transaction, Account } from '../types';
-import { todayISO, parseDecimalInput, uid } from '../lib/storage';
+import { todayISO, fmtDate, parseDecimalInput, uid } from '../lib/storage';
 import { AppIcon } from './AppIcon';
 
 export interface FinanceTransactionModalProps {
@@ -129,7 +130,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
                 {editingTransaction ? 'Editar Movimiento' : type === 'gasto' ? 'Registrar Gasto' : 'Registrar Ingreso'}
               </h2>
               <p className="text-xs text-[var(--text-soft)]">
-                {editingTransaction ? 'Modificá los datos del movimiento existente' : 'Impacta directamente tu saldo real'}
+                {editingTransaction ? 'Al guardar, se actualiza este movimiento y su efecto en el saldo.' : 'Se registra en la cuenta que elijas y actualiza su saldo.'}
               </p>
             </div>
           </div>
@@ -179,7 +180,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-sm sm:text-base text-[var(--text-faint)] select-none">
                 {accountCurrency === 'USD' ? 'US$' : '$U'}
               </span>
-              <input
+              <PrivacyInput
                 id="finance-tx-amount"
                 type="text"
                 inputMode="decimal"
@@ -208,7 +209,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
               >
                 {accounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    {a.name} ({(a.currency || 'UYU').toUpperCase()})
+                    <PrivateFinancialText>{a.name}</PrivateFinancialText> ({(a.currency || 'UYU').toUpperCase()})
                   </option>
                 ))}
               </select>
@@ -238,7 +239,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
               >
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.name}{c.active === false ? ' (Archivada)' : ''}
+                    <PrivateFinancialText>{c.name}</PrivateFinancialText>{c.active === false ? ' (Archivada)' : ''}
                   </option>
                 ))}
               </select>
@@ -249,7 +250,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
             <label htmlFor="finance-tx-note" className="text-xs font-semibold text-[var(--text-soft)] block mb-1">
               {type === 'gasto' ? '¿En qué gastaste? (opcional)' : '¿De dónde proviene? (opcional)'}
             </label>
-            <input id="finance-tx-note" type="text" value={note} onChange={(e) => setNote(e.target.value)}
+            <PrivacyInput maskText id="finance-tx-note" type="text" value={note} onChange={(e) => setNote(e.target.value)}
               placeholder={type === 'gasto' ? 'Ej: Jamón, queso, almuerzo…' : 'Ej: Sueldo, venta, devolución…'}
               className="w-full px-3 py-2.5 text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]" />
           </div>
@@ -261,11 +262,12 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
               onClick={() => setShowAdvanced(!showAdvanced)}
               className="text-xs font-semibold text-[var(--blue)] hover:underline flex items-center gap-1 cursor-pointer"
             >
-              <span>{showAdvanced ? 'Ocultar detalles adicionales ▴' : 'Más detalles (fecha, hora, fijos) ▾'}</span>
+              <span>{showAdvanced ? 'Ocultar detalles adicionales ▴' : 'Más detalles (fecha, hora, fijo o variable) ▾'}</span>
             </button>
           </div>
 
           {/* Advanced Fields */}
+          {!showAdvanced && <p className="text-xs text-[var(--text-soft)]">Fecha: {date === todayISO() ? 'hoy' : fmtDate(date)}{!editingTransaction && date === todayISO() ? ' (por defecto)' : ''}. Podés cambiarla en «Más detalles».</p>}
           {showAdvanced && (
             <div className="space-y-3 pt-2 border-t border-[var(--border)] animate-in fade-in duration-150">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -284,7 +286,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
 
                 <div>
                   <label htmlFor="finance-tx-fixed" className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
-                    Naturaleza del Gasto
+                    {type === 'gasto' ? 'Tipo de gasto' : 'Tipo de ingreso'}
                   </label>
                   <select
                     id="finance-tx-fixed"
@@ -292,8 +294,8 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
                     onChange={(e) => setFixed(e.target.value as any)}
                     className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] font-medium focus:outline-hidden focus:border-[var(--blue)] cursor-pointer"
                   >
-                    <option value="variable">Gasto Variable (cotidiano / discrecional)</option>
-                    <option value="fijo">Gasto Fijo (estructura / recurrente)</option>
+                    <option value="variable">{type === 'gasto' ? 'Variable (cotidiano / discrecional)' : 'Variable'}</option>
+                    <option value="fijo">{type === 'gasto' ? 'Fijo (estructura / recurrente)' : 'Fijo'}</option>
                   </select>
                 </div>
               </div>

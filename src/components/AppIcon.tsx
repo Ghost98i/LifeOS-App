@@ -28,6 +28,7 @@ import settingsSvg from '../assets/icons/icons8/icons8-settings-50.svg?raw';
 import searchSvg from '../assets/icons/icons8/icons8-search-50.svg?raw';
 import cloudSvg from '../assets/icons/icons8/icons8-cloud-sync-50.svg?raw';
 import plusSvg from '../assets/icons/icons8/icons8-plus-50.svg?raw';
+import squarePlusSvg from '../assets/icons/icons8/icons8-square-plus-50.svg?raw';
 import touchpadSvg from '../assets/icons/icons8/icons8-touchpad-50.svg?raw';
 import graduationSvg from '../assets/icons/icons8/icons8-graduation-cap-50.svg?raw';
 import aiSvg from '../assets/icons/icons8/icons8-artificial-intelligence-50.svg?raw';
@@ -38,7 +39,7 @@ import bellSvg from '../assets/icons/icons8/icons8-bell-50.svg?raw';
 
 export type AppIconName =
   | 'home' | 'calendar' | 'calendarDays' | 'briefcase' | 'repeat' | 'wallet'
-  | 'dumbbell' | 'book' | 'note' | 'sparkles' | 'settings' | 'plus' | 'more'
+  | 'dumbbell' | 'book' | 'note' | 'sparkles' | 'settings' | 'plus' | 'squarePlus' | 'more'
   | 'sun' | 'moon' | 'menu' | 'search' | 'shield' | 'volume' | 'volumeOff'
   | 'cloud' | 'check' | 'clock' | 'chart' | 'scale' | 'chevronLeft' | 'chevronRight'
   | 'trophy' | 'play' | 'pause' | 'rotateCcw' | 'filter' | 'kanban' | 'list' | 'arrowRight' | 'arrowUp' | 'trash' | 'edit' | 'flame' | 'trendingUp'
@@ -124,6 +125,7 @@ const icons8Sources: Partial<Record<AppIconName, string>> = {
   search: searchSvg,
   cloud: cloudSvg,
   plus: plusSvg,
+  squarePlus: squarePlusSvg,
   touchpad: touchpadSvg,
   graduation: graduationSvg,
   ai: aiSvg,

@@ -167,7 +167,7 @@ test('diálogo obsoleto rechaza revisión y eliminación sin cambios parciales; 
 
 test('eliminación de obligación usa el circuito contable; comerciales y conciliaciones permanecen protegidos', () => {
   const state = fixture();
-  state.finance.commitments = [{ id: 'commitment', name: 'Pago sintético', amount: 200, category: 'food', accountId: 'cash', active: true, status: 'pending', frequency: 'once', nextDueDate: todayISO() }];
+  state.finance.commitments = [{ id: 'commitment', name: 'Pago sintético', amount: 200, currency: 'UYU', category: 'food', accountId: 'cash', active: true, status: 'pending', frequency: 'once', nextDueDate: todayISO() }];
   const linked = confirmFinancialCommitment(state, { commitmentId: 'commitment', date: todayISO() });
   addTransaction(state, input('ordinary'));
   assertLedger(state, 600, 400);

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { LIFEOS_TOAST_EVENT, type LifeOSToast } from '../lib/toast';
+import { PrivateFinancialText } from './PrivacyAmount';
 
 export const ToastViewport: React.FC = () => {
   const [toasts, setToasts] = useState<LifeOSToast[]>([]);
@@ -45,7 +46,7 @@ export const ToastViewport: React.FC = () => {
             <span className="mt-0.5 shrink-0" aria-hidden="true">
               {toast.tone === 'error' ? '!' : toast.tone === 'info' ? 'i' : '✓'}
             </span>
-            <span className="leading-snug break-words">{toast.message}</span>
+            <span className="leading-snug break-words"><PrivateFinancialText>{toast.message}</PrivateFinancialText></span>
           </div>
           <button
             type="button"

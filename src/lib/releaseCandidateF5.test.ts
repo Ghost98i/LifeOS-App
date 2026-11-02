@@ -183,6 +183,7 @@ test('F5 — Fase 6: Finanzas — 10 Invariantes Matemáticas Estrictas', () => 
   state.finance.commitments = [
     {
       id: 'c1',
+      currency: 'UYU',
       name: 'Alquiler',
       amount: 5000,
       frequency: 'once',

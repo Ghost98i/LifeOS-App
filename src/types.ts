@@ -376,6 +376,8 @@ export interface CashflowWindowProjection {
   horizonIso: string;
   summariesByCurrency: Record<string, CashflowCurrencySummary>;
   events: CashflowEventItem[];
+  /** Kept visible, excluded from currency-specific sums; never persisted. */
+  unconfirmedCurrencyEvents: CashflowEventItem[];
 }
 
 export interface BudgetCategoryStatus {

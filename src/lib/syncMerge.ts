@@ -1,3 +1,4 @@
+import { detectFinanceCurrencyLoss } from './financeCurrencyIntegrity';
 import type {
   Account,
   AccountReconciliation,
@@ -1259,7 +1260,7 @@ export function mergeFinanceModule(
     };
   });
 
-  return {
+  const merged: Finance = {
     accounts: mergedAccounts,
     transactions,
     transfers,
@@ -1277,6 +1278,18 @@ export function mergeFinanceModule(
     cushionEnabled,
     heroDisplayMode,
   };
+  // A legacy client can publish a newer row with a formerly explicit currency stripped.
+  // Keep the existing conflict path instead of silently accepting that regression.
+  const currencyConflicts = new Map<string, SyncConflictItem>();
+  for (const reference of [local, remote, ...(baseline ? [baseline] : [])]) {
+    for (const conflict of detectFinanceCurrencyLoss(reference, merged, local, remote, baseline)) currencyConflicts.set(conflict.id, conflict);
+  }
+  if (currencyConflicts.size) {
+    if (!onConflict) throw new Error('La unión de Finanzas perdería una moneda conocida. Revisá el conflicto.');
+    currencyConflicts.forEach(onConflict);
+    return local;
+  }
+  return merged;
 }
 
 export function mergeGymModule(
@@ -2349,6 +2362,9 @@ export function mergeModuleData(
   const result = mergeModuleDataWithConflicts(module, localData, remoteData, baselineData, tombstones);
   if (module === 'resale' && result.conflicts.length > 0) {
     throw new Error('La mezcla comercial de Mi negocio está bloqueada y requiere conservar ambas versiones.');
+  }
+  if (module === 'finance' && result.conflicts.some(item => item.id.startsWith('conflict-finance-currency-'))) {
+    throw new Error('La mezcla financiera perdería una moneda conocida y requiere conservar ambas versiones.');
   }
   if (module === 'finance' && result.conflicts.some(item => item.id.startsWith('conflict-finance-identity-') || item.id.startsWith('conflict-finance-missing-'))) {
     throw new Error('La mezcla financiera contiene un ID repetido o una ausencia sin evidencia de eliminación y requiere conservar ambas versiones.');

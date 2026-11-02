@@ -222,7 +222,9 @@ test('Finanzas 1.2B — Aritmética y ciclo contable en el Ledger', async (t) =>
 });
 
 test('Finanzas 1.2B — Segregación estricta de monedas en cálculos', async (t) => {
-  await t.test('no suma UYU y USD 1:1 en métricas mensuales', () => {
+  await t.test('no suma UYU y USD 1:1 en métricas mensuales', context => {
+    context.mock.timers.enable({ apis: ['Date'], now: new Date(2026, 9, 17, 12).getTime() });
+    context.after(() => context.mock.timers.reset());
     const state = createBaseState();
     // Agregar gasto de 1000 UYU en acc-uyu
     addTransaction(state, {

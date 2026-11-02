@@ -1,3 +1,4 @@
+import { PrivacyInput, PrivateFinancialText, PrivacyAmount } from './PrivacyAmount';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   LifeOSState,
@@ -8,9 +9,9 @@ import {
   FinancialCommitmentFrequency,
 } from '../types';
 import { playSound } from '../lib/audio';
+import { confirmedFinancialCurrency, formatPlannedAmount, requireFinancialCurrency } from '../lib/financeCurrencyPolicy';
 import {
   todayISO,
-  fmtMoney,
   formatMoney,
   sameYear,
   uid,
@@ -590,6 +591,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         }
       } else {
         draft.finance.commitments.push({
+          currency: 'UYU', // This existing creation form explicitly labels its amount in UYU.
           id: uid(),
           name: comName.trim(),
           amount: amt,
@@ -673,15 +675,17 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         targetCycle: cycle,
         allowAdvance,
       });
-    }) === false) return;
+    }) === false) return false;
     playSound('coins');
     const toastMsg = state.settings?.privacyMode
-      ? 'Pago registrado y compromiso actualizado: -$U ••••'
-      : `Pago registrado y compromiso actualizado: -$${Number(actualAmount).toLocaleString('es-UY')}`;
+      ? 'Pago registrado y compromiso actualizado.'
+      : `Pago registrado y compromiso actualizado: −${formatPlannedAmount(actualAmount, com.currency)}`;
     showToast(toastMsg);
+    return true;
   };
 
   const openPayCommitment = (com: FinancialCommitment) => {
+    try { requireFinancialCurrency(com.currency, 'compromiso'); } catch (error) { showToast((error as Error).message, 'error'); return; }
     setPayingCommitment(com);
     setPayAmount(String(com.amount));
     setPayAccount(com.accountId || defaultAccountId(state) || '');
@@ -711,7 +715,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
     }
     const targetCycle = deriveCycleIdentity(payingCommitment, 'commitment').cycleKey;
     try {
-      handleConfirmCommitmentPayment(
+      const saved = handleConfirmCommitmentPayment(
         payingCommitment,
         numAmount,
         payAccount || undefined,
@@ -720,7 +724,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         targetCycle,
         isCommitmentFutureCycle ? payIsAdvance : undefined
       );
-      setPayingCommitment(null);
+      if (saved !== false) setPayingCommitment(null);
     } catch (err: any) {
       showToast(err.message || 'Error al registrar el pago', 'error');
     }
@@ -768,6 +772,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         }
       } else {
         draft.finance.expectedIncomes.push({
+          currency: 'UYU', // Capture the denomination explicitly offered by this form, only for new rows.
           id: uid(),
           name: incName.trim(),
           amount: amt,
@@ -818,7 +823,8 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   };
 
   const handleConfirmIncomeReal = (inc: ExpectedIncome) => {
-    const incCur = (inc.currency || 'UYU').trim().toUpperCase();
+    const incCur = confirmedFinancialCurrency(inc.currency);
+    if (!incCur) { showToast('La moneda de este cobro previsto no está confirmada. La operación no se realizó.', 'error'); return; }
     const incDate = inc.startDate || todayISO();
 
     // Buscar candidatos compatibles con invariantes contables
@@ -900,8 +906,8 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
           showToast('El período actual ya estaba liquidado. Saldo protegido sin duplicados.', 'info');
         } else {
           const toastMsg = state.settings?.privacyMode
-            ? 'Ingreso real registrado: +$U ••••'
-            : `Ingreso real registrado: +$${Number(confirmingIncome.amount).toLocaleString('es-UY')}`;
+            ? 'Ingreso real registrado.'
+            : `Ingreso real registrado: +${formatPlannedAmount(confirmingIncome.amount, confirmingIncome.currency)}`;
           showToast(toastMsg);
         }
       } catch (err: any) {
@@ -943,7 +949,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   }, [isCommitmentModalOpen, isIncomeModalOpen, isCushionModalOpen, payingCommitment, confirmingIncome, isAddAccountModalOpen]);
 
   return (
-    <div className="finance-refinement finance-workspace space-y-6">
+    <div className="finance-refinement finance-workspace space-y-4">
       {/* 1. Page Header (Privacidad gobernada por Stream Guard en Topbar) */}
       <PageHeader
         title="Finanzas"
@@ -1220,7 +1226,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                 <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
                   Nombre / Obligación
                 </label>
-                <input
+                <PrivacyInput maskText
                   type="text"
                   required
                   placeholder="Ej. Antel, Tarjeta, Cuota TV"
@@ -1233,9 +1239,9 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
-                    Monto (UYU)
+                    Monto ({editingComId ? confirmedFinancialCurrency(state.finance.commitments?.find(c => c.id === editingComId)?.currency) ?? 'moneda sin confirmar' : 'UYU'})
                   </label>
-                  <input
+                  <PrivacyInput
                     type="number"
                     required
                     min="1"
@@ -1398,7 +1404,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   <option value="">Sin asignar</option>
                   {(state.finance.accounts || []).map((acc) => (
                     <option key={acc.id} value={acc.id}>
-                      {acc.name}
+                      <PrivateFinancialText>{acc.name}</PrivateFinancialText>
                     </option>
                   ))}
                 </select>
@@ -1408,7 +1414,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                 <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
                   Notas (Opcional)
                 </label>
-                <input
+                <PrivacyInput maskText
                   type="text"
                   placeholder="Detalles adicionales"
                   value={comNotes}
@@ -1475,7 +1481,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                 <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
                   Concepto / Fuente
                 </label>
-                <input
+                <PrivacyInput maskText
                   type="text"
                   required
                   placeholder="Ej. Sueldo, Cobro freelance, Alquiler"
@@ -1488,9 +1494,9 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
-                    Monto (UYU)
+                    Monto ({editingIncId ? confirmedFinancialCurrency(state.finance.expectedIncomes?.find(i => i.id === editingIncId)?.currency) ?? 'moneda sin confirmar' : 'UYU'})
                   </label>
-                  <input
+                  <PrivacyInput
                     type="number"
                     required
                     min="1"
@@ -1572,7 +1578,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                     <option value="">Sin asignar</option>
                     {(state.finance.accounts || []).map((acc) => (
                       <option key={acc.id} value={acc.id}>
-                        {acc.name}
+                        <PrivateFinancialText>{acc.name}</PrivateFinancialText>
                       </option>
                     ))}
                   </select>
@@ -1642,15 +1648,15 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
 
             <p className="text-xs text-[var(--text-soft)]">
               Se registrará un gasto real y se avanzará el vencimiento de{' '}
-              <strong className="text-[var(--text)]">{payingCommitment.name}</strong>.
+              <strong className="text-[var(--text)]"><PrivateFinancialText>{payingCommitment.name}</PrivateFinancialText></strong>.
             </p>
 
             <form onSubmit={handleExecutePayment} className="space-y-3">
               <div>
                 <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
-                  Monto a Pagar (UYU)
+                  Monto a pagar ({confirmedFinancialCurrency(payingCommitment.currency) ?? 'moneda sin confirmar'})
                 </label>
-                <input
+                <PrivacyInput
                   type="number"
                   required
                   min="0.01"
@@ -1675,7 +1681,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                 >
                   {(state.finance.accounts || []).map((acc) => (
                     <option key={acc.id} value={acc.id}>
-                      {acc.name} (Saldo: {state.settings?.privacyMode ? '••••' : fmtMoney(acc.balance)})
+                      <PrivateFinancialText>{acc.name}</PrivateFinancialText> (Saldo: {state.settings?.privacyMode ? '••••' : formatMoney(acc.balance, acc.currency)})
                     </option>
                   ))}
                 </select>
@@ -1724,7 +1730,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                     className="rounded cursor-pointer mt-0.5"
                   />
                   <span className="text-xs text-[var(--text-soft)] leading-snug">
-                    Actualizar también el monto de cuotas o vencimientos futuros con este nuevo valor ({payAmount ? (state.settings?.privacyMode ? '••••' : fmtMoney(Number(payAmount) || 0)) : '$0'})
+                    Actualizar también el monto de cuotas o vencimientos futuros con este nuevo valor ({payAmount ? (state.settings?.privacyMode ? '••••' : formatPlannedAmount(Number(payAmount) || 0, payingCommitment.currency)) : '0'})
                   </span>
                 </label>
               </div>
@@ -1768,7 +1774,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
 
       {/* MODAL 4B: Income Confirmation & Matching Modal */}
       {confirmingIncome && (() => {
-        const incCur = (confirmingIncome.currency || 'UYU').trim().toUpperCase();
+        const incCur = confirmedFinancialCurrency(confirmingIncome.currency);
         const incDate = confirmingIncome.startDate || todayISO();
         const matchingCandidates = (state.finance?.transactions || [])
           .filter((tx) => {
@@ -1808,7 +1814,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   <div>
                     <h3 className="text-sm font-bold text-[var(--text)]">Confirmar cobro previsto</h3>
                     <p className="text-xs text-[var(--text-soft)]">
-                      {confirmingIncome.name} · {state.settings?.privacyMode ? '••••' : fmtMoney(confirmingIncome.amount)}
+                      <PrivateFinancialText>{confirmingIncome.name}</PrivateFinancialText> · {state.settings?.privacyMode ? '••••' : formatPlannedAmount(confirmingIncome.amount, confirmingIncome.currency)}
                     </p>
                   </div>
                 </div>
@@ -1870,10 +1876,10 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                                       onChange={() => setSelectedMatchingTxId(cTx.id)}
                                       className="cursor-pointer"
                                     />
-                                    <span className="truncate">{cTx.note || cTx.category}</span>
+                                    <span className="truncate"><PrivateFinancialText>{cTx.note || cTx.category}</PrivateFinancialText></span>
                                   </div>
                                   <span className="tabular-nums font-semibold shrink-0">
-                                    {cTx.date} · {fmtMoney(cTx.amount)}
+                                    {cTx.date} · {state.settings.privacyMode ? '••••' : formatMoney(cTx.amount, cTx.currency)}
                                   </span>
                                 </label>
                               ))}
@@ -1910,7 +1916,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                 ) : (
                   <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15 text-xs text-emerald-700 dark:text-emerald-300 space-y-1">
                     <p className="font-semibold">
-                      Se registrará un nuevo movimiento contable por {state.settings?.privacyMode ? '••••' : fmtMoney(confirmingIncome.amount)} y se incrementará el saldo real en la cuenta seleccionada.
+                      Se registrará un nuevo movimiento contable por {state.settings?.privacyMode ? '••••' : formatPlannedAmount(confirmingIncome.amount, confirmingIncome.currency)} y se incrementará el saldo real en la cuenta seleccionada.
                     </p>
                   </div>
                 )}
@@ -1928,7 +1934,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                       >
                         {(state.finance.accounts || []).map((acc) => (
                           <option key={acc.id} value={acc.id}>
-                            {acc.name} (Saldo: {state.settings?.privacyMode ? '••••' : fmtMoney(acc.balance)})
+                            <PrivateFinancialText>{acc.name}</PrivateFinancialText> (Saldo: {state.settings?.privacyMode ? '••••' : formatMoney(acc.balance, acc.currency)})
                           </option>
                         ))}
                       </select>
@@ -2041,6 +2047,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
             </div>
 
             <form onSubmit={handleSaveCushion} className="space-y-4">
+              <p className="text-xs text-[var(--text-soft)]">Es una referencia para los avisos; no modifica tu saldo.</p>
               <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)]">
                 <div>
                   <span className="text-xs font-bold text-[var(--text)] block">Activar avisos por saldo bajo</span>
@@ -2058,7 +2065,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
                     Monto mínimo (UYU)
                   </label>
-                  <input
+                  <PrivacyInput
                     type="number"
                     required
                     min="0"
@@ -2069,7 +2076,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                     className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-sm tabular-nums font-bold text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
                   />
                   <p className="text-[11px] text-[var(--text-soft)] mt-1">
-                    Saldo actual en cuentas: <strong>{cushionBalanceLabel}</strong>
+                    Saldo actual en cuentas: <PrivacyAmount as="strong">{cushionBalanceLabel}</PrivacyAmount>
                   </p>
                   {balanceEntries.length > 1 && (
                     <p className="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">
@@ -2164,7 +2171,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Nombre de la cuenta
                 </label>
-                <input
+                <PrivacyInput maskText
                   required
                   autoFocus
                   type="text"
@@ -2178,7 +2185,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Saldo inicial
                 </label>
-                <input
+                <PrivacyInput
                   type="text"
                   inputMode="decimal"
                   value={newAccBalance}

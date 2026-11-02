@@ -7,6 +7,7 @@ import { calcIncomeMonth, calcSpentMonth } from '../lib/calculations';
 import { AppIcon } from './AppIcon';
 import { PrivacyAmount } from './PrivacyAmount';
 import { FinanceBalanceAtmosphere } from './visual/FinanceBalanceAtmosphere';
+import { PARTIAL_FINANCE_SUMMARY } from '../lib/financeCurrencyPolicy';
 
 export interface FinanceHeroProps {
   state: LifeOSState;
@@ -68,6 +69,7 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
   };
 
   const realBalance = summary.realBalance;
+  const isPartial = windowProj.unconfirmedCurrencyEvents.length > 0;
   const committedAmount = summary.committedExpenses;
   const availableAfterCommitments = summary.availableAfterCommitments;
   const primaryIsAvailable = variant === 'full' && displayMode === 'real_available';
@@ -78,6 +80,9 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
 
   const allAccounts = state.finance?.accounts || [];
   const isEmptyState = allAccounts.length === 0;
+  const hasFinancialActivity = (state.finance.transactions?.length || 0) > 0
+    || allAccounts.some(account => Number(account.balance) !== 0 || Number(account.initialBalance || 0) !== 0)
+    || windowProj.events.length > 0;
 
   // 4. Cushion & Liquidity Assessment (Rigorous, disjunct, no fake thresholds)
   const isUSD = activeCurrency === 'USD';
@@ -85,11 +90,14 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
   const minCushionUYU = state.finance?.minCushion ?? 5000;
 
   let statusTone: 'healthy' | 'warning' | 'danger' | 'neutral' = 'healthy';
-  let statusText = 'Pagos del mes cubiertos';
+  let statusText = 'Saldo cubre los pagos pendientes';
 
   if (isEmptyState) {
     statusTone = 'neutral';
     statusText = 'Sin cuentas registradas';
+  } else if (!hasFinancialActivity) {
+    statusTone = 'neutral';
+    statusText = 'Sin movimientos registrados';
   } else if (isUSD) {
     if (realBalance < 0) {
       statusTone = 'danger';
@@ -123,11 +131,16 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
       statusText = 'Bajo el colchón de seguridad';
     } else if (!cushionEnabled) {
       statusTone = 'healthy';
-      statusText = 'Pagos del mes cubiertos';
+      statusText = 'Saldo cubre los pagos pendientes';
     } else {
       statusTone = 'healthy';
-      statusText = 'Pagos del mes cubiertos';
+      statusText = 'Saldo cubre los pagos pendientes';
     }
+  }
+
+  if (isPartial && statusTone !== 'danger') {
+    statusTone = 'warning';
+    statusText = 'Cálculo parcial: moneda sin confirmar';
   }
 
   const formatCurr = (val: number) => {
@@ -277,6 +290,7 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
     if (!onOpenCushionModal) return null;
     const isWarning =
       statusTone === 'warning' &&
+      hasFinancialActivity &&
       cushionEnabled &&
       !isUSD &&
       (realBalance < minCushionUYU || availableAfterCommitments < minCushionUYU);
@@ -285,7 +299,7 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
       <button
         type="button"
         onClick={onOpenCushionModal}
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
+        className={`inline-flex min-h-11 items-center gap-1.5 px-2 py-1 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
           isWarning
             ? 'border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300'
             : 'border-[var(--finance-border)] bg-[var(--finance-surface-subtle)] text-[var(--finance-text-secondary)] hover:text-[var(--finance-text-primary)] hover:border-indigo-500/40'
@@ -293,7 +307,7 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
         title={
           isUSD
             ? 'Colchón configurado en moneda base UYU (no aplica a USD)'
-            : 'Configurar colchón financiero mínimo de seguridad'
+            : 'Colchón mínimo: es una referencia para los avisos; no modifica tu saldo'
         }
       >
         <AppIcon name="shield" className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
@@ -301,15 +315,15 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
           {isUSD ? (
             <span>
               Colchón UYU:{' '}
-              <strong className="text-[var(--finance-text-primary)] font-bold">
-                $U {minCushionUYU.toLocaleString('es-UY')}
+              <strong className="block text-[var(--finance-text-primary)] font-bold">
+                $U {state.settings.privacyMode ? '••••' : minCushionUYU.toLocaleString('es-UY')}
               </strong>
             </span>
           ) : (
             <span>
-              Colchón:{' '}
-              <strong className="text-[var(--finance-text-primary)] font-bold">
-                {cushionEnabled ? formatMoney(minCushionUYU, 'UYU') : 'Desactivado'}
+              Colchón mínimo:{' '}
+              <strong className="block text-[var(--finance-text-primary)] font-bold">
+                {cushionEnabled ? state.settings.privacyMode ? '••••' : formatMoney(minCushionUYU, 'UYU') : 'Desactivado'}
               </strong>
             </span>
           )}
@@ -329,6 +343,7 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
 
     return (
       <section className="finance-surface relative rounded-2xl p-4 sm:p-5 border border-[var(--finance-border)]">
+        {isPartial && <p role="status" className="relative z-10 mb-3 text-sm text-amber-800 dark:text-amber-200">{PARTIAL_FINANCE_SUMMARY}</p>}
         <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
           <FinanceBalanceAtmosphere status={atmosphereStatus} />
         </div>
@@ -411,212 +426,50 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
   const isOverdraft = availableAfterCommitments < 0;
   const isBelowCushion =
     !isEmptyState &&
+    hasFinancialActivity &&
     cushionEnabled &&
     !isUSD &&
     !isOverdraft &&
     availableAfterCommitments < minCushionUYU;
 
   return (
-    <section className="finance-surface relative rounded-3xl p-4 sm:p-6 border border-[var(--finance-border)]">
-      <div className="absolute inset-0 overflow-hidden rounded-3xl pointer-events-none">
+    <section className="finance-surface finance-hero relative rounded-2xl p-4 border border-[var(--finance-border)]">
+      <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
         <FinanceBalanceAtmosphere status={atmosphereStatus} />
       </div>
-
-      <div className="relative z-10 space-y-4">
-        {/* =========================================================================
-            1. TOP ROW: Status signal + Currency pills (Left) + Cushion & Customize (Right)
-           ========================================================================= */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
-          {/* Status & Currency Pills */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={statusDotClasses} />
-            <span className="text-xs font-bold text-[var(--finance-text-primary)]">
-              {statusText}
-            </span>
-
-            {/* Currency Pill Selector */}
-            {currencies.length > 1 && (
-              <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] text-xs font-bold ml-1">
-                {currencies.map((c) => {
-                  const cBal = windowProj.summariesByCurrency[c]?.realBalance ?? 0;
-                  return (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setSelectedCurrency(c)}
-                      className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${
-                        activeCurrency === c
-                          ? 'bg-indigo-600 text-white shadow-2xs'
-                          : 'text-[var(--finance-text-secondary)] hover:text-[var(--finance-text-primary)]'
-                      }`}
-                    >
-                      {c} ({formatMoney(cBal, c, { noSymbol: true })})
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+      <div className="relative z-10 space-y-3">
+        {isPartial && <p role="status" className="text-sm text-amber-800 dark:text-amber-200">{PARTIAL_FINANCE_SUMMARY}</p>}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-[var(--finance-text-secondary)]">{primaryIsAvailable ? (isPartial ? 'Saldo parcial tras pagos pendientes' : 'Saldo tras pagos pendientes') : 'Saldo real'} ({activeCurrency})</span>
+              {currencies.length > 1 && <div className="flex gap-1" aria-label="Moneda del saldo">
+                {currencies.map(currency => <button key={currency} type="button" aria-pressed={currency === activeCurrency} onClick={() => setSelectedCurrency(currency)} className={`min-h-8 px-2 rounded-lg text-xs font-semibold cursor-pointer ${currency === activeCurrency ? 'bg-indigo-600 text-white' : 'text-[var(--finance-text-secondary)] hover:bg-[var(--finance-surface-subtle)]'}`}>{currency}</button>)}
+              </div>}
+            </div>
+            <PrivacyAmount as="div" className={`text-[clamp(1.375rem,7vw,2rem)] leading-tight font-extrabold tracking-tight tabular-nums break-words ${primaryBalance < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-[var(--finance-text-primary)]'}`}>{formatCurr(primaryBalance)}</PrivacyAmount>
+            {!isPartial && !isOverdraft && !isBelowCushion && <p className="flex items-center gap-2 text-xs text-[var(--finance-text-secondary)]"><span className={statusDotClasses} />{!hasCommitments && hasFinancialActivity ? 'Sin pagos pendientes este mes' : statusText}</p>}
           </div>
-
-          {/* Right: Discrete Cushion Chip + Settings */}
-          <div className="flex items-center gap-2">
-            {renderCushionChip()}
-
-            {onOpenCustomize && (
-              <button
-                type="button"
-                onClick={onOpenCustomize}
-                className="finance-control p-1.5 rounded-xl border text-[var(--finance-text-secondary)] hover:text-[var(--finance-text-primary)] cursor-pointer transition-colors"
-                title="Personalizar vista de Finanzas"
-              >
-                <AppIcon name="settings" className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
+          {onOpenCustomize && <button type="button" onClick={onOpenCustomize} className="finance-control min-h-11 min-w-11 inline-flex items-center justify-center rounded-xl cursor-pointer text-[var(--finance-text-secondary)]" title="Personalizar vista de Finanzas"><AppIcon name="settings" className="h-4 w-4" /></button>}
         </div>
-
-        {/* =========================================================================
-            2. CORE POSITION & ACTION BAR
-           ========================================================================= */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          {/* Left: Protagonist Balance */}
-          <div className="space-y-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--finance-text-muted)] block">
-              {primaryIsAvailable ? 'Disponible tras pagos' : 'Saldo real'} ({activeCurrency})
-            </span>
-
-            <PrivacyAmount
-              as="div"
-              className={`text-[clamp(1.25rem,7vw,2.25rem)] leading-tight font-black tracking-tight tabular-nums break-words max-w-full ${
-                primaryBalance < 0
-                  ? 'text-rose-600 dark:text-rose-400'
-                  : 'text-[var(--finance-text-primary)]'
-              }`}
-            >
-              {formatCurr(primaryBalance)}
-            </PrivacyAmount>
-
-            {/* When NO commitments: quiet, serene indicator (No duplicate numbers!) */}
-            {!hasCommitments && !isEmptyState && (
-              <div className="flex items-center gap-1.5 text-xs text-[var(--finance-text-muted)] pt-0.5 font-medium">
-                <AppIcon name="checkCircle" className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                <span>Sin compromisos este mes</span>
-              </div>
-            )}
-          </div>
-
-          {/* Right: Single Action Button (+ Movimiento) */}
-          <div className="shrink-0">
-            {renderActionButton()}
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {hasCommitments && <div className="grid grid-cols-2 gap-x-5 gap-y-2 flex-1 min-w-[240px]">
+            <div className="min-w-0"><span className="block text-xs text-[var(--finance-text-secondary)]">{primaryIsAvailable ? 'Saldo real' : isPartial ? 'Saldo parcial tras pagos' : 'Saldo tras pagos pendientes'}</span><PrivacyAmount as="strong" className="block text-base tabular-nums break-words text-[var(--finance-text-primary)]">{formatCurr(primaryIsAvailable ? realBalance : availableAfterCommitments)}</PrivacyAmount></div>
+            <div className="min-w-0"><span className="block text-xs text-[var(--finance-text-secondary)]">{isPartial ? 'Pagos pendientes conocidos' : 'Pagos pendientes del mes'}</span><PrivacyAmount as="strong" className="block text-base tabular-nums break-words text-[var(--finance-text-primary)]">−{formatCurr(committedAmount)}</PrivacyAmount><span className="text-xs text-[var(--finance-text-muted)]">{committedCount} {committedCount === 1 ? 'pago' : 'pagos'}</span></div>
+          </div>}
+          <div className="w-full sm:w-auto">{renderActionButton()}</div>
         </div>
-
-        {/* =========================================================================
-            3. ADAPTABLE SECONDARY METRICS: ONLY when commitments exist
-           ========================================================================= */}
-        {hasCommitments && (
-          <div className="grid grid-cols-2 gap-3 p-3 rounded-2xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] animate-in fade-in duration-200">
-            {/* Metric 1: Disponible tras compromisos */}
-            <div className="space-y-0.5 min-w-0">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--finance-text-muted)] block">
-                {primaryIsAvailable ? 'Saldo real' : 'Disponible tras pagos'}
-              </span>
-              <PrivacyAmount
-                as="div"
-                className={`text-[clamp(0.8125rem,4.2vw,1.125rem)] break-words font-black tabular-nums ${
-                  availableAfterCommitments < 0
-                    ? 'text-rose-600 dark:text-rose-400'
-                    : 'text-emerald-600 dark:text-emerald-400'
-                }`}
-              >
-                {formatCurr(primaryIsAvailable ? realBalance : availableAfterCommitments)}
-              </PrivacyAmount>
-            </div>
-
-            {/* Metric 2: Compromisos del mes */}
-            <div className="space-y-0.5 border-l border-[var(--finance-border)] pl-3 min-w-0">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--finance-text-muted)] block">
-                Compromisos del mes
-              </span>
-              <PrivacyAmount
-                as="div"
-                className="text-[clamp(0.8125rem,4.2vw,1.125rem)] break-words font-black tabular-nums text-[var(--finance-text-secondary)]"
-              >
-                −{formatCurr(committedAmount)}
-              </PrivacyAmount>
-              <span className="text-[10px] text-[var(--finance-text-muted)] block truncate">
-                {committedCount === 1 ? '1 pago' : `${committedCount} pagos`}
-              </span>
-            </div>
-          </div>
-        )}
-
-        <details open className="finance-surface-subtle rounded-xl border border-[var(--finance-border)]">
-          <summary className="flex min-h-10 cursor-pointer items-center justify-between gap-3 px-3 text-xs font-semibold text-[var(--finance-text-secondary)]">
-            Ingresos y gastos del mes
-          </summary>
-          <div className="grid grid-cols-2 gap-3 border-t border-[var(--finance-border)] p-3">
-            <div className="min-w-0 space-y-0.5">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--finance-text-muted)]">Ingresos</span>
-              <PrivacyAmount
-                as="div"
-                className="whitespace-nowrap text-[clamp(0.75rem,4vw,1rem)] font-bold tabular-nums text-emerald-600 dark:text-emerald-400"
-              >
-                +{formatCurr(monthIncome)}
-              </PrivacyAmount>
-            </div>
-            <div className="min-w-0 space-y-0.5 border-l border-[var(--finance-border)] pl-3">
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--finance-text-muted)]">Gastos</span>
-              <PrivacyAmount
-                as="div"
-                className="whitespace-nowrap text-[clamp(0.75rem,4vw,1rem)] font-bold tabular-nums text-[var(--finance-text-primary)]"
-              >
-                −{formatCurr(monthExpenses)}
-              </PrivacyAmount>
-            </div>
-          </div>
-        </details>
-
-        {/* =========================================================================
-            4. CONTEXTUAL RISK ALERTS (ONLY when relevant risks exist, linking to Futuro)
-           ========================================================================= */}
-        {isOverdraft ? (
-          <div className="p-3 rounded-2xl border border-rose-500/25 bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
-            <div className="flex items-start gap-2 min-w-0">
-              <AppIcon name="alertTriangle" className="h-4 w-4 shrink-0" />
-              <span className="min-w-0 break-words leading-5">
-                Faltan <strong>{formatCurr(Math.abs(availableAfterCommitments))}</strong> para cubrir los compromisos del mes.
-              </span>
-            </div>
-            {onNavigateTab && (
-              <button
-                type="button"
-                onClick={() => onNavigateTab('proyeccion')}
-                className="self-start underline font-bold text-xs shrink-0 cursor-pointer hover:opacity-80 sm:self-auto"
-              >
-                Ver en Futuro →
-              </button>
-            )}
-          </div>
-        ) : isBelowCushion ? (
-          <div className="p-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in">
-            <div className="flex items-start gap-2 min-w-0">
-              <AppIcon name="shield" className="h-4 w-4 shrink-0 text-amber-500" />
-              <span className="min-w-0 break-words leading-5">
-                Disponible bajo reserva de {formatMoney(minCushionUYU, 'UYU')}.
-              </span>
-            </div>
-            {onNavigateTab && (
-              <button
-                type="button"
-                onClick={() => onNavigateTab('proyeccion')}
-                className="self-start underline font-bold text-xs shrink-0 cursor-pointer hover:opacity-80 sm:self-auto"
-              >
-                Ver en Futuro →
-              </button>
-            )}
-          </div>
-        ) : null}
+        {(isOverdraft || isBelowCushion) && <div className={`flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 text-xs leading-5 ${isOverdraft ? 'bg-rose-500/10 text-rose-800 dark:text-rose-200' : 'bg-amber-500/10 text-amber-800 dark:text-amber-200'}`}>
+          <span>{isOverdraft ? <>Faltan <PrivacyAmount as="strong">{formatCurr(Math.abs(availableAfterCommitments))}</PrivacyAmount> para los pagos pendientes del mes.</> : <>El saldo tras pagos pendientes está por debajo del colchón de <PrivacyAmount as="strong">{formatMoney(minCushionUYU, 'UYU')}</PrivacyAmount>.</>}</span>
+          {onNavigateTab && <button type="button" onClick={() => onNavigateTab('proyeccion')} className="min-h-8 underline font-semibold cursor-pointer shrink-0">Ver en Futuro →</button>}
+        </div>}
+        <div className="flex flex-wrap items-start justify-between gap-x-1 gap-y-2 border-t border-[var(--finance-border)] pt-2">
+          {renderCushionChip()}
+          {(monthIncome !== 0 || monthExpenses !== 0) && <details className="min-w-0 text-xs">
+            <summary className="min-h-8 flex items-center cursor-pointer font-semibold text-[var(--finance-text-secondary)]">Movimientos del mes ▾</summary>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 py-1 text-[var(--finance-text-secondary)]"><span>Ingresos: <PrivacyAmount as="strong" className="tabular-nums">+{formatCurr(monthIncome)}</PrivacyAmount></span><span>Gastos: <PrivacyAmount as="strong" className="tabular-nums">−{formatCurr(monthExpenses)}</PrivacyAmount></span></div>
+          </details>}
+        </div>
       </div>
     </section>
   );

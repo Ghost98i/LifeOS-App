@@ -60,7 +60,7 @@ const AgendaEntryRow: React.FC<{
           onClick={() => onToggle(entry)}
           aria-label={entry.done ? `Marcar como pendiente: ${entry.label}` : `Completar: ${entry.label}`}
           aria-pressed={entry.done}
-          className={`lifeos-task-check relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] ${entry.done ? 'is-completed' : 'is-pending'}`}
+          className={`lifeos-task-check relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] ${entry.done ? 'is-completed' : 'is-pending'}`}
         >
           <CompletionCheckMark
             completed={entry.done}
@@ -85,7 +85,7 @@ const AgendaEntryRow: React.FC<{
         <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[12px] text-[var(--text-soft)]">
           {entry.time && <span className="font-semibold tabular-nums text-[var(--blue)] sm:hidden">{entry.time}</span>}
           <span>{entry.sourceLabel}</span>
-          {entry.isFocus && <span className={entry.done ? 'text-[var(--text-faint)]' : 'font-semibold text-amber-700 dark:text-amber-300'}>Prioridad</span>}
+          {entry.isFocus && entry.sourceLabel !== 'Prioridad' && <span className={entry.done ? 'text-[var(--text-faint)]' : 'font-semibold text-amber-700 dark:text-amber-300'}>Prioridad</span>}
         </span>
       </button>
 
@@ -94,7 +94,7 @@ const AgendaEntryRow: React.FC<{
           <button
             type="button"
             onClick={() => onToggleFocus(entry)}
-            className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${entry.isFocus ? 'bg-amber-500/12 text-amber-600 dark:text-amber-300' : 'text-[var(--text-faint)] hover:bg-[var(--surface-muted)] hover:text-amber-600'}`}
+            className={`flex h-11 w-11 items-center justify-center rounded-lg transition-colors ${entry.isFocus ? 'bg-amber-500/12 text-amber-600 dark:text-amber-300' : 'text-[var(--text-faint)] hover:bg-[var(--surface-muted)] hover:text-amber-600'}`}
             aria-label={entry.isFocus ? `Quitar prioridad: ${entry.label}` : `Marcar como prioridad: ${entry.label}`}
             title={entry.isFocus ? 'Quitar prioridad' : 'Marcar como prioridad'}
           >
@@ -164,11 +164,11 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
       className={`today-agenda-surface flex flex-col overflow-hidden rounded-2xl border border-[var(--border)] shadow-[var(--card-shadow)] ${className || ''}`}
       aria-labelledby="today-agenda-title"
     >
-      <div className="flex shrink-0 items-center justify-between gap-3 px-3.5 py-3 sm:px-4">
+      <div className="flex min-h-14 shrink-0 items-center justify-between gap-3 px-3.5 py-1.5 sm:px-4">
         <div className="flex min-w-0 items-center gap-2">
           <span className="today-section-icon today-section-icon-agenda"><AppIcon name="calendarDays" className="h-4 w-4" /></span>
           <h2 id="today-agenda-title" className="text-base font-bold tracking-[-0.025em] text-[var(--text)]">Agenda de hoy</h2>
-          <span className="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[13px] font-medium text-[var(--text-soft)]">{entries.length}</span>
+          {entries.length > 0 && <span className="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[13px] font-medium text-[var(--text-soft)]">{entries.length}</span>}
         </div>
         {openLabel && <button type="button" onClick={onOpenAgenda} className="rounded-lg px-2 py-1.5 text-[13px] font-bold text-[var(--blue)] hover:bg-[var(--blue-soft)]">{openLabel}</button>}
       </div>
@@ -182,7 +182,7 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
         {/* Franja compacta y colapsable de pendientes anteriores */}
         {pastPendingTasks.length > 0 && (
           <div className="border-b border-[var(--border)] bg-amber-500/[0.04]">
-            <div className="flex items-center justify-between px-3.5 py-2">
+            <div className="flex items-center justify-between px-3.5">
               <button
                 type="button"
                 onClick={() => setIsPastExpanded(!isPastExpanded)}
@@ -224,11 +224,11 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
                         <CompletionCheckMark completed={false} size={20} />
                       </button>
                       <div className="min-w-0">
-                        <p className="text-xs font-medium text-[var(--text)] truncate">
+                        <p className="text-xs font-medium text-[var(--text)] break-words">
                           {task.text}
                         </p>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--text-faint)]">
-                          <span>Prog: {fmtDate(task.date)}</span>
+                          <span>Programada el {fmtDate(task.date)}</span>
                           {isOverdue && (
                             <span className="rounded bg-rose-500/10 px-1 py-0.2 font-semibold text-rose-600 dark:text-rose-400">
                               Venció {fmtDate(task.dueDate!)}
@@ -258,98 +258,7 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
                         >
                           Hoy
                         </button>
-                        <label className="relative flex items-center justify-center rounded-md border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-muted)] cursor-pointer">
-                          <AppIcon name="calendarDays" className="h-3 w-3 mr-1" />
-                          <span>Fecha</span>
-                          <input
-                            type="date"
-                            aria-label={`Reprogramar ${task.text}`}
-                            defaultValue={task.date}
-                            onChange={(e) => {
-                              if (e.target.value) {
-                                onRescheduleExtra?.(task.id, e.target.value);
-                              }
-                            }}
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                          />
-                        </label>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Franja compacta y colapsable de próximas tareas programadas */}
-        {futureScheduledTasks.length > 0 && (
-          <div className="border-b border-[var(--border)] bg-blue-500/[0.02]">
-            <div className="flex items-center justify-between px-3.5 py-2">
-              <button
-                type="button"
-                onClick={() => setIsFutureExpanded(!isFutureExpanded)}
-                className="flex items-center gap-1.5 text-xs font-semibold text-[var(--blue)] hover:opacity-80 transition cursor-pointer"
-                aria-expanded={isFutureExpanded}
-              >
-                <AppIcon name="calendarDays" className="h-3.5 w-3.5" />
-                <span>Próximas programadas ({futureScheduledTasks.length})</span>
-                <AppIcon name={isFutureExpanded ? 'chevronUp' : 'chevronDown'} className="h-3.5 w-3.5 ml-0.5" />
-              </button>
-            </div>
-
-            {isFutureExpanded && (
-              <div className="border-t border-blue-500/10 divide-y divide-[var(--border)]/70">
-                {futureScheduledTasks.map((task) => {
-                  const isOverdue = Boolean(task.dueDate && task.dueDate < currentToday);
-                  const isDueToday = Boolean(task.dueDate && task.dueDate === currentToday);
-                  return (
-                    <div
-                      key={task.id}
-                      id={`today-extra-${task.id}`}
-                      className="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 px-3.5 py-2 hover:bg-[var(--card-subtle)] transition"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => onToggleExtra?.(task.id)}
-                        className="lifeos-task-check relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-all is-pending"
-                        aria-label={`Completar: ${task.text}`}
-                      >
-                        <CompletionCheckMark completed={false} size={20} />
-                      </button>
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-[var(--text)] truncate">
-                          {task.text}
-                        </p>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--text-faint)]">
-                          <span>Prog: {fmtDate(task.date)}</span>
-                          {isOverdue && (
-                            <span className="rounded bg-rose-500/10 px-1 py-0.2 font-semibold text-rose-600 dark:text-rose-400">
-                              Venció {fmtDate(task.dueDate!)}
-                            </span>
-                          )}
-                          {isDueToday && (
-                            <span className="rounded bg-amber-500/10 px-1 py-0.2 font-semibold text-amber-600 dark:text-amber-400">
-                              Vence hoy
-                            </span>
-                          )}
-                          {task.dueDate && !isOverdue && !isDueToday && (
-                            <span className="rounded bg-blue-500/10 px-1 py-0.2 font-semibold text-blue-600 dark:text-blue-400">
-                              Vence {fmtDate(task.dueDate)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => onRescheduleExtra?.(task.id, currentToday)}
-                          className="rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-[11px] font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)] transition cursor-pointer"
-                          title="Mover a hoy"
-                        >
-                          Hoy
-                        </button>
-                        <label className="relative flex items-center justify-center rounded-md border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-muted)] cursor-pointer">
+                        <label className="relative flex min-h-11 min-w-11 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-muted)] cursor-pointer">
                           <AppIcon name="calendarDays" className="h-3 w-3 mr-1" />
                           <span>Fecha</span>
                           <input
@@ -381,8 +290,8 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
               disabled={!openLabel}
               className="flex w-full items-center justify-between rounded-xl border border-dashed border-[var(--border)] bg-[var(--card-subtle)] px-3.5 py-3 text-left enabled:hover:border-[var(--blue)] disabled:cursor-default"
             >
-              <span className="text-sm font-medium text-[var(--text-soft)]">Tu día está libre.</span>
-              <AppIcon name="plus" className="h-4 w-4 text-[var(--blue)]" />
+              <span className="text-sm font-medium text-[var(--text-soft)]">No hay actividades para hoy.</span>
+              {openLabel && <AppIcon name="plus" className="h-4 w-4 text-[var(--blue)]" />}
             </button>
           </div>
         ) : (
@@ -422,6 +331,98 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
             )}
           </div>
         )}
+
+        {/* Franja compacta y colapsable de próximas tareas programadas */}
+        {futureScheduledTasks.length > 0 && (
+          <div className="border-t border-[var(--border)] bg-blue-500/[0.02]">
+            <div className="flex items-center justify-between px-3.5">
+              <button
+                type="button"
+                onClick={() => setIsFutureExpanded(!isFutureExpanded)}
+                className="flex items-center gap-1.5 text-xs font-semibold text-[var(--blue)] hover:opacity-80 transition cursor-pointer"
+                aria-expanded={isFutureExpanded}
+              >
+                <AppIcon name="calendarDays" className="h-3.5 w-3.5" />
+                <span>Próximas programadas ({futureScheduledTasks.length})</span>
+                <AppIcon name={isFutureExpanded ? 'chevronUp' : 'chevronDown'} className="h-3.5 w-3.5 ml-0.5" />
+              </button>
+            </div>
+
+            {isFutureExpanded && (
+              <div className="border-t border-blue-500/10 divide-y divide-[var(--border)]/70">
+                {futureScheduledTasks.map((task) => {
+                  const isOverdue = Boolean(task.dueDate && task.dueDate < currentToday);
+                  const isDueToday = Boolean(task.dueDate && task.dueDate === currentToday);
+                  return (
+                    <div
+                      key={task.id}
+                      id={`today-extra-${task.id}`}
+                      className="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 px-3.5 py-2 hover:bg-[var(--card-subtle)] transition"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => onToggleExtra?.(task.id)}
+                        className="lifeos-task-check relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-all is-pending"
+                        aria-label={`Completar: ${task.text}`}
+                      >
+                        <CompletionCheckMark completed={false} size={20} />
+                      </button>
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-[var(--text)] break-words">
+                          {task.text}
+                        </p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--text-faint)]">
+                          <span>Programada el {fmtDate(task.date)}</span>
+                          {isOverdue && (
+                            <span className="rounded bg-rose-500/10 px-1 py-0.2 font-semibold text-rose-600 dark:text-rose-400">
+                              Venció {fmtDate(task.dueDate!)}
+                            </span>
+                          )}
+                          {isDueToday && (
+                            <span className="rounded bg-amber-500/10 px-1 py-0.2 font-semibold text-amber-600 dark:text-amber-400">
+                              Vence hoy
+                            </span>
+                          )}
+                          {task.dueDate && !isOverdue && !isDueToday && (
+                            <span className="rounded bg-blue-500/10 px-1 py-0.2 font-semibold text-blue-600 dark:text-blue-400">
+                              Vence {fmtDate(task.dueDate)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onRescheduleExtra?.(task.id, currentToday)}
+                          className="rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 text-[11px] font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)] transition cursor-pointer"
+                          title="Mover a hoy"
+                        >
+                          Hoy
+                        </button>
+                        <label className="relative flex min-h-11 min-w-11 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 text-[11px] font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-muted)] cursor-pointer">
+                          <AppIcon name="calendarDays" className="h-3 w-3 mr-1" />
+                          <span>Fecha</span>
+                          <input
+                            type="date"
+                            aria-label={`Reprogramar ${task.text}`}
+                            defaultValue={task.date}
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                onRescheduleExtra?.(task.id, e.target.value);
+                              }
+                            }}
+                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
     </section>
   );

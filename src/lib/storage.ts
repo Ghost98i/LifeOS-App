@@ -353,9 +353,10 @@ export function sameYear(iso: string, ref: Date): boolean {
 }
 
 export function monthLabel(offset: number): Date {
-  const d = new Date();
-  d.setMonth(d.getMonth() + offset);
-  return d;
+  const now = new Date();
+  // Calendar-month identity only: retaining today's day can skip a short month.
+  // Local noon avoids midnight DST transitions; due-date anchors are handled separately.
+  return new Date(now.getFullYear(), now.getMonth() + offset, 1, 12);
 }
 
 export function stars(n?: number): string {
@@ -854,6 +855,8 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
             id: typeof inc.id === 'string' ? inc.id : uid(),
             name: String(inc.name).trim(),
             amount: Number(inc.amount || 0),
+            // Preserve the supplied code, including unknown strings for review; never infer a missing currency.
+            ...(typeof inc.currency === 'string' ? { currency: inc.currency } : {}),
             startDate: typeof inc.startDate === 'string' ? inc.startDate : todayISO(),
             frequency: ['once', 'weekly', 'biweekly', 'monthly', 'yearly'].includes(inc.frequency)
               ? inc.frequency
@@ -872,6 +875,7 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
             id: typeof c.id === 'string' ? c.id : uid(),
             name: String(c.name).trim(),
             amount: Number(c.amount || 0),
+            ...(typeof c.currency === 'string' ? { currency: c.currency } : {}),
             category: typeof c.category === 'string' ? c.category : 'Varios',
             frequency: ['once', 'weekly', 'biweekly', 'monthly', 'yearly'].includes(c.frequency) ? c.frequency : 'monthly',
             nextDueDate: typeof c.nextDueDate === 'string' ? c.nextDueDate : todayISO(),

@@ -6,7 +6,8 @@ import { fmtDate, formatMoney as canonicalFormatMoney, parseDecimalInput, todayI
 import { identifyMerchant } from '../lib/merchantIdentity';
 import { AppIcon } from './AppIcon';
 import { ContextualHelp } from './ContextualHelp';
-import { PrivacyAmount } from './PrivacyAmount';
+import { PrivateFinancialText, PrivacyInput, PrivacyAmount } from './PrivacyAmount';
+import { confirmedFinancialCurrency, formatPlannedAmount, PARTIAL_FINANCE_PROJECTION } from '../lib/financeCurrencyPolicy';
 
 interface FinanceFutureViewProps {
   state: LifeOSState;
@@ -80,11 +81,14 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
   const currencies = useMemo(() => {
     const set = new Set<string>();
     (state.finance?.accounts || []).forEach((a) => set.add((a.currency || 'UYU').toUpperCase()));
-    (state.finance?.commitments || []).forEach((c) => set.add((c.currency || 'UYU').toUpperCase()));
-    (state.finance?.expectedIncomes || []).forEach((e) => set.add((e.currency || 'UYU').toUpperCase()));
+    [...(state.finance?.commitments || []), ...(state.finance?.expectedIncomes || [])].forEach(record => {
+      const currency = confirmedFinancialCurrency(record.currency);
+      if (currency) set.add(currency);
+    });
+    (state.finance?.agreements || []).filter((a) => a.status !== 'cancelled').forEach((a) => set.add(a.currency));
     const arr = Array.from(set);
     return arr.length > 0 ? arr : ['UYU'];
-  }, [state.finance?.accounts, state.finance?.commitments, state.finance?.expectedIncomes]);
+  }, [state.finance?.accounts, state.finance?.commitments, state.finance?.expectedIncomes, state.finance?.agreements]);
 
   const [selectedCurrency, setSelectedCurrency] = useState<string>('UYU');
   const activeCurrency = currencies.includes(selectedCurrency) ? selectedCurrency : (currencies[0] || 'UYU');
@@ -119,9 +123,11 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
   const hasExplicitCushion = state.finance?.minCushion != null && state.finance?.cushionEnabled !== false;
 
   const showDeficitAlert = hasRealData && activeProj.isDeficit;
-  const showCushionAlert = hasRealData && hasExplicitCushion && activeProj.thresholdWarning && !activeProj.isDeficit;
+  const showCushionAlert = activeCurrency === 'UYU' && hasRealData && hasExplicitCushion && activeProj.thresholdWarning && !activeProj.isDeficit;
 
-  const statusBadge = !hasFutureSignal
+  const statusBadge = activeProj.unconfirmedCurrencyItems.length > 0
+    ? { label: 'Proyección parcial', cls: 'bg-amber-500/15 text-amber-700 dark:text-amber-300' }
+    : !hasFutureSignal
     ? { label: 'Sin proyección', cls: 'bg-zinc-500/10 text-[var(--finance-text-muted)]' }
     : showDeficitAlert
     ? { label: 'Faltan fondos', cls: 'bg-rose-500/15 text-rose-600 dark:text-rose-400' }
@@ -210,6 +216,9 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
           </div>
         </div>
 
+        {activeProj.unconfirmedCurrencyItems.length > 0 && (
+          <p role="status" className="text-sm text-amber-800 dark:text-amber-200">{PARTIAL_FINANCE_PROJECTION}</p>
+        )}
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span className="text-sm text-[var(--finance-text-secondary)]">Saldo estimado al {fmtDate(horizonEndDate)}</span>
           <PrivacyAmount as="strong" className="text-2xl font-bold tabular-nums text-[var(--finance-text-primary)]">{formatMoney(activeProj.dailyTrajectory.at(-1)?.endingBalance ?? 0)}</PrivacyAmount>
@@ -345,7 +354,8 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
 
           return (
             <div className="h-52 sm:h-60 w-full pt-2">
-              <ResponsiveContainer width="100%" height="100%">
+              {state.settings.privacyMode && <p className="text-xs text-[var(--finance-text-muted)]">Gráfico oculto por Stream Guard</p>}
+              {!state.settings.privacyMode && <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={activeProj.dailyTrajectory} margin={{ top: 10, right: 10, left: 5, bottom: 0 }}>
                   <defs>
                     <linearGradient id="futureTrajGradient" x1="0" y1="0" x2="0" y2="1">
@@ -441,24 +451,24 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                     fill="url(#futureTrajGradient)"
                   />
                 </AreaChart>
-              </ResponsiveContainer>
+              </ResponsiveContainer>}
             </div>
           );
         })()}
 
         {/* Milestones Strip: Top Upcoming Events along Trajectory */}
-        {projection.forecastItems.length > 0 && (
+        {activeProj.forecastItems.length > 0 && (
           <div className="pt-3 border-t border-[var(--finance-border)] space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--finance-text-muted)] flex items-center gap-1.5">
                 <span>▲ Hitos del horizonte ({projHorizon}d)</span>
               </span>
               <span className="text-[10px] text-[var(--finance-text-muted)]">
-                {projection.forecastItems.length} eventos previstos
+                {activeProj.forecastItems.length} eventos previstos
               </span>
             </div>
             <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-              {projection.forecastItems.slice(0, 8).map((item) => {
+              {activeProj.forecastItems.slice(0, 8).map((item) => {
                 const merchant = identifyMerchant(item.label);
                 const isIncome = item.type === 'income';
                 return (
@@ -483,7 +493,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                       </span>
                     ) : (
                       <span className="truncate max-w-[80px] font-medium text-[var(--finance-text-primary)]">
-                        {item.label}
+                        <PrivateFinancialText>{item.label}</PrivateFinancialText>
                       </span>
                     )}
                     {item.isFinancing && item.installmentNumber && (
@@ -536,31 +546,22 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
             </div>
 
             {sortedCommitments.length === 0 ? (
-              <div className="p-3 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] text-xs text-[var(--finance-text-muted)] flex items-center justify-between">
-                <span>Sin compromisos registrados</span>
-                <button
-                  type="button"
-                  onClick={onOpenCommitmentModal}
-                  className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                >
-                  + Agregar
-                </button>
-              </div>
+              <p className="text-xs text-[var(--finance-text-muted)]">Sin compromisos registrados.</p>
             ) : (
-              <div className="divide-y divide-[var(--finance-border)] max-h-[360px] overflow-y-auto pr-1">
+              <div className="finance-future-list divide-y divide-[var(--finance-border)] max-h-[360px] overflow-y-auto pr-1">
                 {sortedCommitments.map((com) => {
                   const isOverdue = com.nextDueDate < todayISO();
                   return (
                     <div
                       key={com.id}
                       id={`commitment-${com.id}`}
-                      className={`py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-2 text-xs transition-all rounded-xl px-1.5 ${
+                      className={`finance-future-row py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-2 text-xs transition-all rounded-xl px-1.5 ${
                         com.active ? 'opacity-100' : 'opacity-50'
                       }`}
                     >
                       <div className="min-w-0 space-y-0.5">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-bold text-[var(--finance-text-primary)] truncate">{com.name}</span>
+                          <span className="font-semibold text-sm text-[var(--finance-text-primary)] break-words [overflow-wrap:anywhere]"><PrivateFinancialText>{com.name}</PrivateFinancialText></span>
                           <span className="text-[10px] tabular-nums px-1.5 py-0.2 rounded bg-[var(--finance-surface-subtle)] text-[var(--finance-text-secondary)] border border-[var(--finance-border)]">
                             {freqLabels[com.frequency] || com.frequency}
                           </span>
@@ -585,24 +586,25 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                             </span>
                           )}
                         </div>
-                        <div className="text-[10px] text-[var(--finance-text-muted)]">
+                        <div className="text-xs text-[var(--finance-text-muted)]">
                           Vence: <strong className={isOverdue && com.active ? 'text-rose-500 tabular-nums' : 'text-[var(--finance-text-secondary)] tabular-nums'}>{fmtDate(com.nextDueDate)}</strong>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
-                        <PrivacyAmount as="span" className={`tabular-nums font-bold text-xs ${isOverdue && com.active ? 'text-rose-500' : 'text-[var(--finance-text-primary)]'}`}>
-                          −{formatMoney(com.amount, com.currency)}
+                      <div className={`finance-future-actions flex items-center gap-2 ${confirmedFinancialCurrency(com.currency) ? 'shrink-0' : 'flex-wrap justify-end max-w-[65%] min-w-0'}`}>
+                        <PrivacyAmount as="span" className={`finance-future-amount tabular-nums font-bold text-sm ${isOverdue && com.active ? 'text-rose-500' : 'text-[var(--finance-text-primary)]'}`}>
+                          −{formatPlannedAmount(com.amount, com.currency)}
                         </PrivacyAmount>
+                        {state.settings.privacyMode && !confirmedFinancialCurrency(com.currency) && <span className="text-xs text-[var(--finance-text-secondary)]">Moneda sin confirmar</span>}
 
                         {com.active && (
                           <button
                             type="button"
                             onClick={() => onPayCommitment(com)}
                             className="px-2 py-0.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer transition-colors shadow-2xs"
-                            title="Confirmar pago real hoy"
+                            title="Registrar un pago ya realizado"
                           >
-                            Pagar
+                            Registrar pago
                           </button>
                         )}
 
@@ -612,7 +614,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                           className="p-1 rounded text-[var(--finance-text-muted)] hover:text-[var(--finance-text-primary)] cursor-pointer"
                           title={com.active ? 'Pausar' : 'Reanudar'}
                         >
-                          <AppIcon name={com.active ? 'pause' : 'play'} className="h-3 w-3" />
+                          <AppIcon name={com.active ? 'pause' : 'play'} className="h-3.5 w-3.5" />
                         </button>
 
                         <button
@@ -621,7 +623,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                           className="p-1 rounded text-[var(--finance-text-muted)] hover:text-[var(--finance-text-primary)] cursor-pointer"
                           title="Editar"
                         >
-                          <AppIcon name="edit" className="h-3 w-3" />
+                          <AppIcon name="edit" className="h-3.5 w-3.5" />
                         </button>
 
                         <button
@@ -630,7 +632,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                           className="p-1 rounded text-[var(--finance-text-muted)] hover:text-rose-500 cursor-pointer"
                           title="Eliminar"
                         >
-                          <AppIcon name="trash" className="h-3 w-3" />
+                          <AppIcon name="trash" className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </div>
@@ -659,34 +661,25 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                 onClick={onOpenIncomeModal}
                 className="finance-control px-2.5 py-1 text-xs font-bold rounded-xl border flex items-center gap-1 cursor-pointer transition-all hover:border-[var(--finance-border-strong)] min-h-[34px]"
               >
-                <AppIcon name="plus" className="h-3 w-3" />
+                <AppIcon name="plus" className="h-3.5 w-3.5" />
                 <span>+ Ingreso</span>
               </button>
             </div>
 
             {sortedIncomes.length === 0 ? (
-              <div className="p-3 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] text-xs text-[var(--finance-text-muted)] flex items-center justify-between">
-                <span>Sin cobros previstos</span>
-                <button
-                  type="button"
-                  onClick={onOpenIncomeModal}
-                  className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                >
-                  + Agregar
-                </button>
-              </div>
+              <p className="text-xs text-[var(--finance-text-muted)]">Sin cobros previstos.</p>
             ) : (
-              <div className="divide-y divide-[var(--finance-border)] max-h-[360px] overflow-y-auto pr-1">
+              <div className="finance-future-list divide-y divide-[var(--finance-border)] max-h-[360px] overflow-y-auto pr-1">
                 {sortedIncomes.map((inc) => (
                   <div
                     key={inc.id}
-                    className={`py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-2 text-xs transition-opacity ${
+                    className={`finance-future-row py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-2 text-xs transition-opacity ${
                       inc.active ? 'opacity-100' : 'opacity-50'
                     }`}
                   >
                     <div className="min-w-0 space-y-0.5">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-bold text-[var(--finance-text-primary)] truncate">{inc.name}</span>
+                        <span className="font-semibold text-sm text-[var(--finance-text-primary)] break-words [overflow-wrap:anywhere]"><PrivateFinancialText>{inc.name}</PrivateFinancialText></span>
                         <span className="text-[10px] tabular-nums px-1.5 py-0.2 rounded bg-[var(--finance-surface-subtle)] text-[var(--finance-text-secondary)] border border-[var(--finance-border)]">
                           {freqLabels[inc.frequency] || inc.frequency}
                         </span>
@@ -701,15 +694,16 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                           </span>
                         )}
                       </div>
-                      <div className="text-[10px] text-[var(--finance-text-muted)]">
+                      <div className="text-xs text-[var(--finance-text-muted)]">
                         Desde: <strong className="tabular-nums text-[var(--finance-text-secondary)]">{fmtDate(inc.startDate)}</strong>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <PrivacyAmount as="span" className="tabular-nums font-bold text-xs text-emerald-600 dark:text-emerald-400">
-                        +{formatMoney(inc.amount, inc.currency)}
+                    <div className={`finance-future-actions flex items-center gap-2 ${confirmedFinancialCurrency(inc.currency) ? 'shrink-0' : 'flex-wrap justify-end max-w-[65%] min-w-0'}`}>
+                      <PrivacyAmount as="span" className="finance-future-amount tabular-nums font-bold text-sm text-emerald-600 dark:text-emerald-400">
+                        +{formatPlannedAmount(inc.amount, inc.currency)}
                       </PrivacyAmount>
+                      {state.settings.privacyMode && !confirmedFinancialCurrency(inc.currency) && <span className="text-xs text-[var(--finance-text-secondary)]">Moneda sin confirmar</span>}
 
                       {inc.active && (
                         <button
@@ -728,7 +722,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                         className="p-1 rounded text-[var(--finance-text-muted)] hover:text-[var(--finance-text-primary)] cursor-pointer"
                         title={inc.active ? 'Pausar' : 'Reanudar'}
                       >
-                        <AppIcon name={inc.active ? 'pause' : 'play'} className="h-3 w-3" />
+                        <AppIcon name={inc.active ? 'pause' : 'play'} className="h-3.5 w-3.5" />
                       </button>
 
                       <button
@@ -737,7 +731,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                         className="p-1 rounded text-[var(--finance-text-muted)] hover:text-[var(--finance-text-primary)] cursor-pointer"
                         title="Editar"
                       >
-                        <AppIcon name="edit" className="h-3 w-3" />
+                        <AppIcon name="edit" className="h-3.5 w-3.5" />
                       </button>
 
                       <button
@@ -746,7 +740,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                         className="p-1 rounded text-[var(--finance-text-muted)] hover:text-rose-500 cursor-pointer"
                         title="Eliminar"
                       >
-                        <AppIcon name="trash" className="h-3 w-3" />
+                        <AppIcon name="trash" className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   </div>
@@ -808,7 +802,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                       {sub.name.charAt(0).toUpperCase()}
                     </div>
                     <div className="min-w-0">
-                      <span className="font-semibold text-[var(--finance-text-primary)] block truncate">{sub.name}</span>
+                      <span className="font-semibold text-[var(--finance-text-primary)] block truncate"><PrivateFinancialText>{sub.name}</PrivateFinancialText></span>
                       <span className="text-[10px] text-[var(--finance-text-muted)] tabular-nums">
                         {sub.dueDay ? `Día ${sub.dueDay} de cada mes` : 'Cobro mensual'}
                       </span>
@@ -837,7 +831,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
         </div>
 
         {/* Sub-block: Cronograma Detallado de Flujos (Expandible / Progressive Disclosure) */}
-        {projection.forecastItems.length > 0 && (
+        {activeProj.forecastItems.length > 0 && (
           <div className="border-t border-[var(--finance-border)] pt-4">
             <button
               type="button"
@@ -849,7 +843,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                   Pagos y cobros por fecha ({projHorizon} días)
                 </h3>
                 <p className="text-[11px] text-[var(--finance-text-muted)]">
-                  {projection.forecastItems.length} eventos de cobro y pago proyectados día por día
+                  {activeProj.forecastItems.length} eventos de cobro y pago proyectados día por día
                 </p>
               </div>
               <span className="text-xs tabular-nums font-bold text-[var(--finance-text-muted)]">
@@ -869,7 +863,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--finance-border)]">
-                    {projection.forecastItems.map((item, idx) => (
+                    {activeProj.forecastItems.map((item, idx) => (
                       <tr key={`${item.id}-${idx}`} className="hover:bg-[var(--finance-surface-hover)] transition-colors">
                         <td className="py-2 px-3 tabular-nums text-[var(--finance-text-primary)] whitespace-nowrap">{fmtDate(item.date)}</td>
                         <td className="py-2 px-3 whitespace-nowrap">
@@ -884,7 +878,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                           </span>
                         </td>
                         <td className="py-2 px-3 font-medium text-[var(--finance-text-primary)]">
-                          <span>{item.label}</span>
+                          <span><PrivateFinancialText>{item.label}</PrivateFinancialText></span>
                           {item.isFinancing && item.installmentNumber && (
                             <span className="ml-2 text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
                               Cuota {item.installmentNumber}/{item.totalInstallments}
@@ -951,7 +945,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--finance-text-muted)] block mb-1">
                   Costo mensual
                 </label>
-                <input
+                <PrivacyInput
                   required
                   type="text"
                   inputMode="decimal"

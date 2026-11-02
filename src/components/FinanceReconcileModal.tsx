@@ -1,17 +1,18 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 import type { LifeOSState } from '../types';
 import { reconcileAccount, updateReconciliation, deleteReconciliation } from '../lib/financeFlows';
 import { fmtDate, formatMoney, diffMoney, parseDecimalInput, todayISO } from '../lib/storage';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
 import { AppIcon } from './AppIcon';
-import { PrivacyAmount } from './PrivacyAmount';
+import { PrivateFinancialText, PrivacyInput, PrivacyAmount } from './PrivacyAmount';
 
 interface FinanceReconcileModalProps {
   open: boolean;
   onClose: () => void;
   state: LifeOSState;
-  onUpdateState: (updater: (draft: LifeOSState) => void) => void;
+  onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
   accountId: string;
 }
 
@@ -29,6 +30,9 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
   const [note, setNote] = useState('');
   const [editingReconId, setEditingReconId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [saveError, setSaveError] = useState('');
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(open, dialogRef, onClose);
 
   useEffect(() => {
     if (open) {
@@ -40,17 +44,9 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
       setDate(todayISO());
       setNote('');
       setEditingReconId(null);
+      setSaveError('');
     }
   }, [open, initialAccountId, accounts]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [open, onClose]);
 
   if (!open) return null;
 
@@ -64,6 +60,7 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setSaveError('');
     if (!selectedAccountId) {
       showToast('Seleccioná una cuenta.', 'error');
       return;
@@ -74,7 +71,7 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
     }
 
     try {
-      onUpdateState((draft) => {
+      const saved = onUpdateState((draft) => {
         const input = {
           accountId: selectedAccountId,
           actualBalance: numActual,
@@ -87,23 +84,31 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
           reconcileAccount(draft, input);
         }
       });
+      if (saved === false) {
+        setSaveError('No se confirmó la conciliación: no se pudo guardar en este dispositivo. Revisá los datos y reintentá.');
+        return;
+      }
       playSound('success');
       showToast(
         difference === 0
-          ? 'Cuenta conciliada sin diferencias.'
-          : `Cuenta conciliada. Ajuste registrado: ${difference > 0 ? '+' : ''}${formatMoney(difference, targetCurrency)}`
+          ? 'Conciliación guardada en este dispositivo, sin diferencias.'
+          : `Conciliación guardada en este dispositivo. Ajuste registrado: ${difference > 0 ? '+' : ''}${state.settings.privacyMode ? '••••' : formatMoney(difference, targetCurrency)}`
       );
       onClose();
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'Error al conciliar.', 'error');
+      setSaveError(error instanceof Error ? error.message : 'No se confirmó la conciliación. Reintentá.');
     }
   };
 
   const handleDeleteRecon = (id: string) => {
     try {
-      onUpdateState((draft) => {
+      const saved = onUpdateState((draft) => {
         deleteReconciliation(draft, id);
       });
+      if (saved === false) {
+        showToast('No se confirmó la eliminación de la conciliación. Reintentá.', 'error');
+        return;
+      }
       showToast('Conciliación eliminada. El saldo actual se conserva.');
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Error al eliminar.', 'error');
@@ -116,11 +121,17 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
       onClick={onClose}
     >
       <div
-        className="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl overflow-hidden"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="finance-reconcile-title"
+        aria-describedby="finance-reconcile-description"
+        tabIndex={-1}
+        className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-6 max-w-md w-full space-y-4 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -130,10 +141,10 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
               <AppIcon name="check" className="h-4 w-4" />
             </div>
             <div>
-              <h3 className="font-extrabold text-sm text-[var(--text)]">
+              <h3 id="finance-reconcile-title" className="font-extrabold text-sm text-[var(--text)]">
                 {editingReconId ? 'Editar conciliación' : 'Conciliar saldo de cuenta'}
               </h3>
-              <p className="text-xs text-[var(--text-soft)]">
+              <p id="finance-reconcile-description" className="text-xs text-[var(--text-soft)]">
                 Compará con tu banco o efectivo. La diferencia se registra como un ajuste de saldo.
               </p>
             </div>
@@ -141,8 +152,9 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-xl text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer transition-colors"
+            className="min-h-11 min-w-11 rounded-xl text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer transition-colors"
             title="Cerrar"
+            aria-label="Cerrar conciliación"
           >
             ✕
           </button>
@@ -151,10 +163,11 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Account selector if multiple accounts exist */}
           <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
+            <label htmlFor="finance-reconcile-account" className="text-xs font-semibold text-[var(--text-soft)] block mb-1">
               Cuenta a conciliar
             </label>
             <select
+              id="finance-reconcile-account"
               value={selectedAccountId}
               onChange={(e) => {
                 setSelectedAccountId(e.target.value);
@@ -166,7 +179,7 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
             >
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.name}
+                  <PrivateFinancialText>{a.name}</PrivateFinancialText>
                 </option>
               ))}
             </select>
@@ -195,12 +208,12 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
 
           {/* Real bank balance input */}
           <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
+            <label htmlFor="finance-reconcile-balance" className="text-xs font-semibold text-[var(--text-soft)] block mb-1">
               Saldo real en banco / extracto
             </label>
-            <input
+            <PrivacyInput
+              id="finance-reconcile-balance"
               required
-              autoFocus
               type="text"
               inputMode="decimal"
               value={actualBalance}
@@ -224,19 +237,20 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
                   ? 'Coincidencia exacta (sin ajuste)'
                   : 'Ajuste contable necesario:'}
               </span>
-              <span className="tabular-nums font-bold">
+              <PrivacyAmount as="span" className="tabular-nums font-bold">
                 {difference === 0 ? '✓ Al día' : `${difference > 0 ? '+' : ''}${formatMoney(difference, targetCurrency)}`}
-              </span>
+              </PrivacyAmount>
             </div>
           )}
 
           {/* Date & Note */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
+              <label htmlFor="finance-reconcile-date" className="text-xs font-semibold text-[var(--text-soft)] block mb-1">
                 Fecha del extracto
               </label>
               <input
+                id="finance-reconcile-date"
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
@@ -245,10 +259,11 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
             </div>
 
             <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
+              <label htmlFor="finance-reconcile-note" className="text-xs font-semibold text-[var(--text-soft)] block mb-1">
                 Motivo del ajuste (opcional)
               </label>
-              <input
+              <PrivacyInput maskText
+                id="finance-reconcile-note"
                 type="text"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
@@ -259,6 +274,7 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
           </div>
 
           {/* CTA */}
+          {saveError && <p role="alert" className="rounded-xl bg-rose-500/10 p-3 text-sm text-rose-800 dark:text-rose-200">{saveError}</p>}
           <div className="flex items-center gap-2 pt-1">
             {editingReconId && (
               <button
@@ -299,11 +315,11 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
                 {accountReconciliations.map((r) => (
                   <div key={r.id} className="flex items-center justify-between py-2 text-xs">
                     <div>
-                      <span className="tabular-nums font-bold text-[var(--text)]">
+                      <PrivacyAmount as="span" className="tabular-nums font-bold text-[var(--text)]">
                         {formatMoney(r.actualBalance, targetCurrency)}
-                      </span>
+                      </PrivacyAmount>
                       <span className="text-[10px] text-[var(--text-faint)] block">
-                        {fmtDate(r.date)} {r.note ? `· ${r.note}` : ''}
+                        {fmtDate(r.date)} <PrivateFinancialText>{r.note ? `· ${r.note}` : ''}</PrivateFinancialText>
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">

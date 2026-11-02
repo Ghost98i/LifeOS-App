@@ -3,6 +3,8 @@ import { daysBetween, fmtDate, formatMoney, todayISO } from './storage';
 import { isModuleEnabled } from './moduleVisibility';
 import { deriveAgreementSchedule } from './financeAgreements';
 import { isWeeklyReviewDue } from './review';
+import { hasBackupContent } from './todayMaintenance';
+import { confirmedFinancialCurrency, formatPlannedAmount } from './financeCurrencyPolicy';
 
 export type AttentionSignalKind =
   | 'financial_commitment_due'
@@ -74,6 +76,11 @@ export function getAllAttentionCandidates(
   const tomorrow = getTomorrowDateString(today);
   const backupDismissed = Boolean(options?.backupDismissed);
   const candidates: AttentionItem[] = [];
+  // Match the textual masking used by financial controls. Mask before building
+  // notices so visible text, accessible names and dismissed notices all agree.
+  const privateMode = Boolean(state.settings?.privacyMode);
+  const financeLabel = (label: string) => privateMode ? label.replace(/\d[\d.,]*/g, '••••') : label;
+  const attentionMoney = (amount: number, currency: string) => privateMode ? '••••' : formatMoney(amount, currency);
 
   // =========================================================================
   // Señal B1: Compromisos financieros (FinancialCommitment)
@@ -92,13 +99,13 @@ export function getAllAttentionCandidates(
       if (com.nextDueDate <= today) {
         const diff = daysBetween(com.nextDueDate, today);
         const isOverdue = com.nextDueDate < today;
-        const cur = (com.currency || 'UYU').toUpperCase();
-        const formattedAmount = formatMoney(com.amount, cur);
+        const cur = confirmedFinancialCurrency(com.currency);
+        const formattedAmount = cur ? attentionMoney(com.amount, cur) : privateMode ? '•••• · moneda sin confirmar' : formatPlannedAmount(com.amount, com.currency);
 
         const title = isOverdue ? 'Vencimiento pendiente' : 'Vence hoy';
         const detail = isOverdue
-          ? `${com.name} (${formattedAmount}) venció ${formatDaysOverdue(diff)}.`
-          : `${com.name} (${formattedAmount}) tiene vencimiento hoy.`;
+          ? `${financeLabel(com.name)} (${formattedAmount}) venció ${formatDaysOverdue(diff)}.`
+          : `${financeLabel(com.name)} (${formattedAmount}) tiene vencimiento hoy.`;
 
         const score = isOverdue ? Math.min(120, 100 + Math.min(diff, 20)) : 95;
 
@@ -120,7 +127,7 @@ export function getAllAttentionCandidates(
         });
       } else if (com.nextDueDate === tomorrow) {
         const cur = (com.currency || 'UYU').toUpperCase();
-        const formattedAmount = formatMoney(com.amount, cur);
+        const formattedAmount = attentionMoney(com.amount, cur);
 
         candidates.push({
           id: `attention-com-${com.id}`,
@@ -128,7 +135,7 @@ export function getAllAttentionCandidates(
           signalKind: 'financial_commitment_due',
           module: 'finanzas',
           title: 'Vence mañana',
-          detail: `${com.name} (${formattedAmount}) vence mañana.`,
+          detail: `${financeLabel(com.name)} (${formattedAmount}) vence mañana.`,
           actionLabel: 'Ver cuota',
           urgency: 'warning',
           score: 82,
@@ -160,13 +167,13 @@ export function getAllAttentionCandidates(
         const isOverdue = nextDue.dueDate < today;
         const cur = (agreement.currency || 'UYU').toUpperCase();
         const pendingAmount = nextDue.remainingDue > 0.005 ? nextDue.remainingDue : nextDue.requiredAmount;
-        const formattedAmount = formatMoney(pendingAmount, cur);
+        const formattedAmount = attentionMoney(pendingAmount, cur);
 
         const title = isOverdue ? 'Cuota vencida' : 'Cuota vence hoy';
         const partialLabel = nextDue.status === 'partial' ? ' (saldo pendiente)' : '';
         const detail = isOverdue
-          ? `${agreement.title} · Cuota ${nextDue.installmentNumber}/${nextDue.totalInstallments} (${formattedAmount}${partialLabel}) venció ${formatDaysOverdue(diff)}.`
-          : `${agreement.title} · Cuota ${nextDue.installmentNumber}/${nextDue.totalInstallments} (${formattedAmount}${partialLabel}) vence hoy.`;
+          ? `${financeLabel(agreement.title)} · Cuota ${nextDue.installmentNumber}/${nextDue.totalInstallments} (${formattedAmount}${partialLabel}) venció ${formatDaysOverdue(diff)}.`
+          : `${financeLabel(agreement.title)} · Cuota ${nextDue.installmentNumber}/${nextDue.totalInstallments} (${formattedAmount}${partialLabel}) vence hoy.`;
 
         const score = isOverdue ? Math.min(120, 100 + Math.min(diff, 20)) : 95;
 
@@ -189,7 +196,7 @@ export function getAllAttentionCandidates(
       } else if (nextDue.dueDate === tomorrow) {
         const cur = (agreement.currency || 'UYU').toUpperCase();
         const pendingAmount = nextDue.remainingDue > 0.005 ? nextDue.remainingDue : nextDue.requiredAmount;
-        const formattedAmount = formatMoney(pendingAmount, cur);
+        const formattedAmount = attentionMoney(pendingAmount, cur);
         const partialLabel = nextDue.status === 'partial' ? ' (saldo pendiente)' : '';
 
         candidates.push({
@@ -198,7 +205,7 @@ export function getAllAttentionCandidates(
           signalKind: 'financial_agreement_due',
           module: 'finanzas',
           title: 'Cuota vence mañana',
-          detail: `${agreement.title} · Cuota ${nextDue.installmentNumber}/${nextDue.totalInstallments} (${formattedAmount}${partialLabel}) vence mañana.`,
+          detail: `${financeLabel(agreement.title)} · Cuota ${nextDue.installmentNumber}/${nextDue.totalInstallments} (${formattedAmount}${partialLabel}) vence mañana.`,
           actionLabel: 'Ver cuota',
           urgency: 'warning',
           score: 82,
@@ -434,21 +441,21 @@ export function getAllAttentionCandidates(
   const daysSinceBackup = state.settings?.lastBackupAt
     ? daysBetween(state.settings.lastBackupAt, today)
     : null;
-  const backupUrgent = daysSinceBackup === null || daysSinceBackup >= 3;
+  const backupUrgent = hasBackupContent(state) && (daysSinceBackup === null || daysSinceBackup >= 3);
   if (backupUrgent && !backupDismissed) {
-    const isSevere = daysSinceBackup === null || daysSinceBackup >= 7;
+    const isSevere = daysSinceBackup !== null && daysSinceBackup >= 7;
     candidates.push({
       id: 'attention-backup',
       dismissKey: `backup_urgent:${today}`,
       signalKind: 'backup_urgent',
       module: 'config',
-      title: 'Backup pendiente',
+      title: daysSinceBackup === null ? 'Copia de seguridad' : 'Copia de seguridad pendiente',
       detail:
         daysSinceBackup === null
-          ? 'Todavía no exportaste una copia local'
-          : `La última copia fue hace ${daysSinceBackup} días`,
-      actionLabel: 'Exportar',
-      urgency: isSevere ? 'urgent' : 'info',
+          ? 'No hay una copia de seguridad registrada.'
+          : `La última copia registrada fue hace ${daysSinceBackup} días.`,
+      actionLabel: 'Descargar copia',
+      urgency: isSevere ? 'urgent' : daysSinceBackup === null ? 'warning' : 'info',
       score: isSevere ? 80 : 65,
       targetView: 'config',
       sourceRecordId: 'backup',
@@ -461,11 +468,11 @@ export function getAllAttentionCandidates(
       dismissKey: `weekly_review_due:${today}`,
       signalKind: 'weekly_review_due',
       module: 'dashboard',
-      title: 'Revisión semanal pendiente',
-      detail: 'Completá la revisión guiada para sincronizar prioridades y hábitos.',
+      title: state.settings.lastWeeklyReviewAt ? 'Revisión semanal pendiente' : 'Revisá tu semana',
+      detail: 'Repasá tus actividades y elegí tus próximas prioridades.',
       actionLabel: 'Revisar',
-      urgency: 'warning',
-      score: 75,
+      urgency: state.settings.lastWeeklyReviewAt ? 'warning' : 'info',
+      score: state.settings.lastWeeklyReviewAt ? 75 : 60,
       targetView: 'dashboard',
       sourceRecordId: 'weekly-review',
     });

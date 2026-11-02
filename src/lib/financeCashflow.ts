@@ -9,6 +9,7 @@ import { getCommitmentOccurrences } from './financialCommitments';
 import { getExpectedIncomeOccurrences } from './calculations';
 import { deriveAgreementSchedule } from './financeAgreements';
 import { todayISO, roundMoney } from './storage';
+import { confirmedFinancialCurrency } from './financeCurrencyPolicy';
 
 export function parseCivilDate(iso: string): { year: number; month: number; day: number } {
   const parts = iso.split('-');
@@ -95,7 +96,7 @@ export function getCommittedEventsForWindow(
       continue;
     }
     const occurrences = getCommitmentOccurrences(com, fromIso, horizonIso, true);
-    const cur = (com.currency || 'UYU').toUpperCase();
+    const cur = typeof com.currency === 'string' ? com.currency : '';
     for (const occ of occurrences) {
       events.push({
         id: occ.id,
@@ -237,7 +238,7 @@ export function getExpectedIncomeEventsForWindow(
   for (const inc of expectedIncomes) {
     if (!inc.active || Number(inc.amount || 0) <= 0) continue;
     const occurrences = getExpectedIncomeOccurrences(inc, fromIso, horizonIso);
-    const cur = (inc.currency || 'UYU').toUpperCase();
+    const cur = typeof inc.currency === 'string' ? inc.currency : '';
     for (const occ of occurrences) {
       events.push({
         id: occ.id,
@@ -287,11 +288,13 @@ export function deriveCashflowProjection(
 
   const committedTotals: Record<string, number> = {};
   for (const event of committedEvents) {
+    if (event.kind === 'commitment' && !confirmedFinancialCurrency(event.currency)) continue;
     committedTotals[event.currency] = roundMoney((committedTotals[event.currency] || 0) + event.amount);
   }
 
   const incomeTotals: Record<string, number> = {};
   for (const event of incomeEvents) {
+    if (!confirmedFinancialCurrency(event.currency)) continue;
     incomeTotals[event.currency] = roundMoney((incomeTotals[event.currency] || 0) + event.amount);
   }
 
@@ -328,5 +331,6 @@ export function deriveCashflowProjection(
     horizonIso,
     summariesByCurrency,
     events: allEvents,
+    unconfirmedCurrencyEvents: allEvents.filter(event => (event.kind === 'commitment' || event.kind === 'expected_income') && !confirmedFinancialCurrency(event.currency)),
   };
 }

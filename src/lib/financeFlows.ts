@@ -10,6 +10,7 @@ import type {
 import { advanceCommitmentDueDate, advanceExpectedIncomeDate } from './financialCommitments';
 import { syncAgreementStatusOnLedgerChange } from './financeAgreements';
 import { deriveCycleIdentity } from './financeMatching';
+import { confirmedFinancialCurrency, requireFinancialCurrency } from './financeCurrencyPolicy';
 import {
   compareLedgerEvents,
   compareMaterializedBalanceShadow,
@@ -194,6 +195,7 @@ export function confirmFinancialCommitment(
 ): Transaction {
   const commitment = (state.finance.commitments || []).find((item) => item.id === input.commitmentId);
   if (!commitment) throw new Error('El compromiso ya no existe.');
+  const comCurrency = requireFinancialCurrency(commitment.currency, 'compromiso');
 
   const total = commitment.totalInstallments || commitment.totalOccurrences || null;
   const curInst = commitment.currentInstallment || 1;
@@ -248,7 +250,6 @@ export function confirmFinancialCommitment(
   if (!targetAccount) throw new Error('Elegí una cuenta válida.');
 
   const accountCurrency = (targetAccount.currency || 'UYU').trim().toUpperCase();
-  const comCurrency = (commitment.currency || 'UYU').trim().toUpperCase();
   if (accountCurrency !== comCurrency) {
     throw new Error(`Moneda incompatible: el compromiso (${comCurrency}) no coincide con la moneda de la cuenta de débito (${accountCurrency}).`);
   }
@@ -317,7 +318,7 @@ export function confirmExpectedIncome(
   if (!targetAccount) throw new Error('Elegí una cuenta válida.');
 
   const accountCurrency = (targetAccount.currency || 'UYU').trim().toUpperCase();
-  const incomeCurrency = (income.currency || 'UYU').trim().toUpperCase();
+  const incomeCurrency = requireFinancialCurrency(income.currency, 'cobro previsto');
   if (accountCurrency !== incomeCurrency) {
     throw new Error(`Moneda incompatible: la previsión (${incomeCurrency}) no coincide con la moneda de la cuenta de destino (${accountCurrency}).`);
   }
@@ -503,6 +504,10 @@ export function updateTransaction(state: LifeOSState, transactionId: string, inp
   const targetAccount = state.finance.accounts.find((account) => account.id === input.accountId)!;
   const targetAccCurrency = (targetAccount.currency || 'UYU').trim().toUpperCase();
   const txCurrency = (input.currency || transaction.currency || targetAccCurrency).trim().toUpperCase();
+  const originalAccount = state.finance.accounts.find(account => account.id === transaction.accountId);
+  const originalCurrency = (transaction.currency || originalAccount?.currency || 'UYU').trim().toUpperCase();
+  const changesFinancialFacts = amount !== transaction.amount || input.accountId !== transaction.accountId
+    || txCurrency !== originalCurrency || input.type !== transaction.type || (input.date || todayISO()) !== transaction.date;
   if (txCurrency !== targetAccCurrency) {
     throw new Error(`Moneda incompatible: el movimiento (${txCurrency}) no coincide con la moneda de la cuenta (${targetAccCurrency}).`);
   }
@@ -514,8 +519,9 @@ export function updateTransaction(state: LifeOSState, transactionId: string, inp
     }
     const income = (state.finance.expectedIncomes || []).find((i) => i.id === transaction.expectedIncomeId);
     if (income) {
-      const incCurrency = (income.currency || 'UYU').trim().toUpperCase();
-      if (txCurrency !== incCurrency) {
+      const incCurrency = confirmedFinancialCurrency(income.currency);
+      if (!incCurrency && changesFinancialFacts) requireFinancialCurrency(income.currency, 'cobro previsto');
+      if (incCurrency && txCurrency !== incCurrency) {
         throw new Error(`Moneda incompatible: no podés cambiar la moneda a ${txCurrency} porque este movimiento está vinculado a una previsión en ${incCurrency}. Desvinculá el cobro primero.`);
       }
     }
@@ -528,8 +534,9 @@ export function updateTransaction(state: LifeOSState, transactionId: string, inp
     }
     const commitment = (state.finance.commitments || []).find((c) => c.id === transaction.commitmentId);
     if (commitment) {
-      const comCurrency = (commitment.currency || 'UYU').trim().toUpperCase();
-      if (txCurrency !== comCurrency) {
+      const comCurrency = confirmedFinancialCurrency(commitment.currency);
+      if (!comCurrency && changesFinancialFacts) requireFinancialCurrency(commitment.currency, 'compromiso');
+      if (comCurrency && txCurrency !== comCurrency) {
         throw new Error(`Moneda incompatible: no podés cambiar la moneda a ${txCurrency} porque este movimiento está vinculado a un compromiso en ${comCurrency}. Desvinculá el pago primero.`);
       }
     }
@@ -944,7 +951,7 @@ export function linkTransactionToCommitment(
 
   // Invariante de Dominio: Moneda compatible
   const txCurrency = (transaction.currency || 'UYU').trim().toUpperCase();
-  const comCurrency = (commitment.currency || 'UYU').trim().toUpperCase();
+  const comCurrency = requireFinancialCurrency(commitment.currency, 'compromiso');
   if (txCurrency !== comCurrency) {
     throw new Error(`Moneda incompatible: el movimiento (${txCurrency}) no coincide con el compromiso (${comCurrency}).`);
   }
@@ -1022,7 +1029,7 @@ export function linkTransactionToExpectedIncome(
 
   // Invariante de Dominio 2: Moneda de la transacción vs previsión
   const txCurrency = (transaction.currency || 'UYU').trim().toUpperCase();
-  const incCurrency = (income.currency || 'UYU').trim().toUpperCase();
+  const incCurrency = requireFinancialCurrency(income.currency, 'cobro previsto');
   if (txCurrency !== incCurrency) {
     throw new Error(`Moneda incompatible: el movimiento (${txCurrency}) no coincide con la previsión (${incCurrency}).`);
   }
@@ -1167,6 +1174,8 @@ export function addFinancialCommitment(
   const amount = Number(input.amount);
   if (!Number.isFinite(amount) || amount <= 0) throw new Error('Ingresá un monto mayor a cero.');
 
+  const currency = input.currency === undefined ? 'UYU' : requireFinancialCurrency(input.currency, 'compromiso');
+
   if (!state.finance.commitments) state.finance.commitments = [];
 
   const total = input.totalInstallments ?? input.totalOccurrences ?? null;
@@ -1180,7 +1189,7 @@ export function addFinancialCommitment(
     id: input.id || uid(),
     name,
     amount,
-    currency: input.currency || 'UYU',
+    currency,
     category: input.category?.trim() || 'Varios',
     frequency: input.frequency || (total && total > 1 ? 'monthly' : 'once'),
     nextDueDate,

@@ -1,3 +1,4 @@
+import { maskFinancialText } from '../lib/financialPrivacy';
 import React, { useState, useMemo } from 'react';
 import { Transaction, Account, FinanceCategoryInput } from '../types';
 import type { CommercialSet } from '../lib/commercialContract';
@@ -7,7 +8,7 @@ import { resolveTransactionCurrency } from '../lib/calculations';
 import { getCategoryName, getAllCategories } from '../lib/financeCategories';
 import { identifyMerchant } from '../lib/merchantIdentity';
 import { AppIcon } from './AppIcon';
-import { PrivacyAmount } from './PrivacyAmount';
+import { PrivateFinancialText, PrivacyAmount, usePrivacyMode } from './PrivacyAmount';
 import { compareTransactionsChronologically, transactionTimeLabel } from '../lib/financeTransactionChronology';
 
 interface FinanceTransactionTableProps {
@@ -34,6 +35,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
   onDelete,
   totalGastadoAnio: _totalGastadoAnio,
 }) => {
+  const privateMode = usePrivacyMode();
   const [selectedAccount, setSelectedAccount] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedType, setSelectedType] = useState<TypeFilter>('all');
@@ -243,7 +245,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                   <option value="all">Todas las cuentas ({transactions.length})</option>
                   {accounts.map((acc) => (
                     <option key={acc.id} value={acc.id}>
-                      {acc.name}
+                      <PrivateFinancialText>{acc.name}</PrivateFinancialText>
                     </option>
                   ))}
                 </select>
@@ -265,7 +267,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                   <option value="all">Todas las categorías</option>
                   {allCats.map((cat) => (
                     <option key={cat.id} value={cat.id}>
-                      {cat.name} {!cat.active ? '(archivada)' : ''}
+                      <PrivateFinancialText>{cat.name}</PrivateFinancialText> {!cat.active ? '(archivada)' : ''}
                     </option>
                   ))}
                 </select>
@@ -361,7 +363,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
 
           {selectedCategory !== 'all' && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50 text-[11px] font-medium">
-              <span>Categoría: {selectedCategoryName}</span>
+              <span>Categoría: <PrivateFinancialText>{selectedCategoryName}</PrivateFinancialText></span>
               <button
                 type="button"
                 onClick={() => {
@@ -416,8 +418,8 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
 
       {/* Main Transactions Surface: Open, Clean Monarch-Inspired Table */}
       {sortedTransactions.length === 0 ? (
-        <div className="finance-surface rounded-2xl p-8 text-center">
-          <p className="finance-text-primary text-sm font-semibold">No se encontraron movimientos</p>
+        <div className="finance-surface rounded-2xl p-4 text-center">
+          <p className="finance-text-primary text-sm font-semibold">{hasActiveFilters ? 'Sin resultados para estos filtros' : 'Sin movimientos registrados'}</p>
           <p className="finance-text-secondary mt-1 text-xs">
             {hasActiveFilters
               ? 'Probá ajustando o limpiando los filtros seleccionados.'
@@ -481,16 +483,16 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                           </span>
                         )}
                         <span className="finance-text-secondary text-[11px] font-medium">
-                          {getCategoryName(categories, t.category)}
+                          <PrivateFinancialText>{getCategoryName(categories, t.category)}</PrivateFinancialText>
                         </span>
                         {account && (
                           <span className="finance-text-muted text-[10px]">
-                            · {account.name}
+                            · <PrivateFinancialText>{account.name}</PrivateFinancialText>
                           </span>
                         )}
                       </div>
                       <p className="finance-text-primary mt-1 text-sm font-semibold leading-snug break-words [overflow-wrap:anywhere]">
-                        {displayLabel}
+                        <PrivateFinancialText>{displayLabel}</PrivateFinancialText>
                       </p>
                       <p className="finance-text-muted text-[11px] tabular-nums">
                         {fmtDate(t.date)}
@@ -539,7 +541,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                             <button
                               type="button"
                               onClick={() => {
-                                if (confirm(`¿Eliminar movimiento "${displayLabel}"?`)) {
+                                if (confirm(maskFinancialText(`¿Eliminar movimiento "${displayLabel}"? El saldo se actualizará según los movimientos y conciliaciones existentes. No se puede deshacer.`, privateMode))) {
                                   onDelete(t.id);
                                 }
                               }}
@@ -611,7 +613,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                             )
                           )}
                           <span className="finance-text-primary min-w-0 font-semibold leading-snug break-words [overflow-wrap:anywhere]">
-                            {displayLabel}
+                            <PrivateFinancialText>{displayLabel}</PrivateFinancialText>
                           </span>
                         </div>
                       </td>
@@ -619,7 +621,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                       {/* Column 2: Categoría */}
                       <td className="finance-text-secondary py-3 px-3.5 whitespace-nowrap">
                         <span className="finance-surface-subtle finance-text-secondary inline-block px-2 py-0.5 rounded-md text-[11px] font-medium">
-                          {getCategoryName(categories, t.category)}
+                          <PrivateFinancialText>{getCategoryName(categories, t.category)}</PrivateFinancialText>
                         </span>
                       </td>
 
@@ -628,7 +630,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                         {account?.name ? (
                           <span className="inline-flex items-center gap-1.5">
                             <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
-                            <span>{account.name}</span>
+                            <span><PrivateFinancialText>{account.name}</PrivateFinancialText></span>
                           </span>
                         ) : (
                           <span>—</span>
@@ -701,7 +703,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                               <button
                                 type="button"
                                 onClick={() => {
-                                  if (confirm(`¿Eliminar movimiento "${displayLabel}"?`)) {
+                                  if (confirm(maskFinancialText(`¿Eliminar movimiento "${displayLabel}"? El saldo se actualizará según los movimientos y conciliaciones existentes. No se puede deshacer.`, privateMode))) {
                                     onDelete(t.id);
                                   }
                                 }}
@@ -728,21 +730,22 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                 {filteredTransactions.length} {filteredTransactions.length === 1 ? 'movimiento' : 'movimientos'}
               </span>
               <span>·</span>
-              <span>Neto:</span>
+              <span>Neto de la lista (ingresos − gastos):</span>
               {Object.keys(totalsByCurrency).length === 0 ? (
-                <strong className="text-emerald-600 dark:text-emerald-400 tabular-nums">
+                <PrivacyAmount as="strong" className="text-emerald-600 dark:text-emerald-400 tabular-nums">
                   {formatMoney(0, 'UYU')}
-                </strong>
+                </PrivacyAmount>
               ) : (
                 (Object.entries(totalsByCurrency) as [string, { gastos: number; ingresos: number; balance: number }][]).map(([cur, data], idx) => (
                   <span key={cur} className="inline-flex items-center gap-1">
                     {idx > 0 && <span>|</span>}
-                    <strong className={data.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400 tabular-nums' : 'text-rose-500 tabular-nums'}>
+                    <PrivacyAmount as="strong" className={data.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400 tabular-nums' : 'text-rose-500 tabular-nums'}>
                       {data.balance >= 0 ? '+' : ''}{formatMoney(data.balance, cur)}
-                    </strong>
+                    </PrivacyAmount>
                   </span>
                 ))
               )}
+              <span className="text-[var(--finance-text-muted)]">No es el saldo de las cuentas.</span>
             </div>
 
             {totalPages > 1 && (

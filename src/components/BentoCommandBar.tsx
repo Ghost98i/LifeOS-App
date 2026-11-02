@@ -85,7 +85,7 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
         feedback = confirmCaptureDraft(s, draft);
       });
       if (saved === false) {
-        showToast('Error al persistir localmente.', 'error');
+        showToast('No se pudo guardar en este dispositivo. El borrador sigue disponible.', 'error');
         return;
       }
       playSound(feedback.sound);
@@ -122,7 +122,7 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
         }
       });
       if (saved === false) {
-        showToast('Error al persistir localmente.', 'error');
+        showToast('No se pudo guardar en este dispositivo. Los borradores siguen disponibles.', 'error');
         return;
       }
       if (registeredCount > 0) {
@@ -193,16 +193,15 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
       }`}>
         <form onSubmit={handleSubmit} className="flex flex-col gap-2">
           <div className="flex items-center gap-2.5">
-            {/* Quick Capture / Icons8 Touchpad */}
-            <div className={`relative flex items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 shrink-0 h-8 w-8 transition-all ${
-              isFocused || input.trim() ? 'ring-2 ring-blue-500/30 shadow-2xs' : ''
-            }`}>
-              <AppIcon name="touchpad" className="h-[15px] w-[15px] text-[#4F46E5] dark:text-indigo-400 transition-transform duration-200" />
+            {/* Quick Capture / Icons8 Square Plus */}
+            <div className="relative flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 h-8 w-8">
+              <AppIcon name="squarePlus" className="h-6 w-6 text-[#4F46E5] dark:text-indigo-400 transition-transform duration-200" />
             </div>
 
             {/* Central Input */}
             <input
               type="text"
+              aria-label="Captura rápida"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onFocus={() => setIsFocused(true)}
@@ -231,7 +230,7 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
                   className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-blue-500/25 bg-blue-500/10 text-[12px] font-bold text-blue-700 dark:text-blue-300 hover:bg-blue-500/15 transition cursor-pointer"
                   title="Abrir ventana de captura universal (C)"
                 >
-                  <AppIcon name="touchpad" className="h-3 w-3 text-[var(--blue)]" />
+                  <AppIcon name="squarePlus" className="h-4 w-4 text-[var(--blue)]" />
                   <kbd className="font-mono text-[11px] text-blue-600 dark:text-blue-400">C</kbd>
                 </button>
               )}
@@ -242,8 +241,8 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
               type="submit"
               disabled={!input.trim()}
               className="flex items-center justify-center rounded-full bg-[var(--blue)] hover:bg-[var(--blue-hover)] active:scale-95 disabled:opacity-25 disabled:pointer-events-none text-white transition-all cursor-pointer shrink-0 shadow-2xs border border-white/10 h-8 w-8"
-              aria-label="Capturar"
-              title="Capturar y revisar borrador (Enter)"
+              aria-label="Revisar captura"
+              title="Revisar el borrador antes de guardar (Enter)"
             >
               <AppIcon name="arrowUp" className="h-4 w-4 text-white" />
             </button>
@@ -258,7 +257,7 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
                 <div className="flex items-center gap-1.5">
                   <AppIcon name="sparkles" className="h-3.5 w-3.5 text-blue-500" />
                   <span>
-                    Se detectaron <strong className="text-[var(--text)]">{liveDrafts.length} intenciones</strong> independientes. Presioná <strong className="text-[var(--text)]">Enter</strong> para generar borradores.
+                    Hay <strong className="text-[var(--text)]">{liveDrafts.length} borradores</strong> para revisar. Presioná <strong className="text-[var(--text)]">Enter</strong>.
                   </span>
                 </div>
               )}

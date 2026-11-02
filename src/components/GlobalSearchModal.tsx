@@ -246,7 +246,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       categoryOrder: 1,
       title: 'Captura Rápida Universal',
       subtitle: 'Crear tarea, gasto, nota, idea o recordatorio',
-      iconName: 'plus',
+      iconName: 'squarePlus',
       shortcutHint: 'N',
       onSelect: () => {
         onClose();

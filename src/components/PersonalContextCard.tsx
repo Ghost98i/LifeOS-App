@@ -146,7 +146,7 @@ export interface DailyContextDeltas {
 
 export function formatNaturalDelta(delta: ContextDayDelta, unit = ''): string {
   if (!delta.hasData) return 'Sin registro';
-  if (!delta.hasPrev || delta.diff == null) return 'Sin dato previo';
+  if (!delta.hasPrev || delta.diff == null) return 'Sin registro ayer';
   if (delta.diff === 0) return 'Sin cambios respecto a ayer';
   const sign = delta.diff > 0 ? '+' : '';
   const formattedVal = delta.diff.toLocaleString('es-UY', {
@@ -369,6 +369,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
     () => weekRecords.filter((item) => item.hasAny).length,
     [weekRecords],
   );
+  const hasMetricHistory = weekRecords.some((record) => record.sleepHours != null || record.energy != null || record.mood != null);
 
   useEffect(() => {
     if (!isEditing) {
@@ -862,7 +863,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
                       onClick={() => setIsInviteSkipped(true)}
                       className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-[var(--text-soft)] transition-colors hover:text-[var(--text)]"
                     >
-                      Omitir por hoy
+                      Ahora no
                     </button>
                     <button
                       type="button"
@@ -876,8 +877,11 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
               </div>
             )}
 
-
-            {/* Zona Superior: Indicadores Principales (Sueño, Energía, Ánimo) Alta Fidelidad */}
+            {!hasContext(current) && !showCheckinInvite && (
+              <p className="py-2 text-sm text-[var(--text-soft)]">Sin registros para este día.</p>
+            )}
+            {hasContext(current) && <>
+            {/* Valores del día seleccionado: los ceros son registros, no ausencias. */}
             <div
               className="today-state-kpi-strip grid grid-cols-3 divide-x divide-[var(--border)]/75 rounded-xl border border-[var(--border)]/80 bg-[var(--card-subtle)]/75 px-1 py-2 sm:py-2.5 shadow-2xs"
               aria-label={`Valores registrados para ${selectedDate === today ? 'hoy' : dayLabel(selectedDate, true)}`}
@@ -1011,7 +1015,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
                           title={`Registro matutino: ${current.morningSnapshot.sleepHours ?? '—'} h sueño, energía ${current.morningSnapshot.energy ?? '—'}/5`}
                           className="rounded bg-[var(--state-sleep-soft)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--state-sleep)]"
                         >
-                          Matutino preservado
+                          Registro de la mañana
                         </span>
                       </>
                     )}
@@ -1060,6 +1064,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
               </div>
             )}
 
+            </>}
             {/* Sugerencia contextual explicable: SOLO para hoy si existe recomendación */}
             {selectedDate === today && evaluation.recommendation && (
               <div
@@ -1081,7 +1086,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
                   </button>
                 </div>
                 <p className="mt-1 text-[13px] leading-relaxed text-[var(--text)]">
-                  {evaluation.recommendation.observed} {evaluation.recommendation.whyRelevant}
+                  {evaluation.recommendation.whyRelevant}
                 </p>
                 <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-amber-500/20 pt-2 text-[12px]">
                   <span className="font-medium text-amber-950 dark:text-amber-100">
@@ -1102,6 +1107,8 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowExplainDetails(!showExplainDetails)}
+                      aria-expanded={showExplainDetails}
+                      aria-controls="today-state-context-explanation"
                       className="text-[11px] font-semibold text-[var(--blue)] hover:underline"
                     >
                       {showExplainDetails ? 'Menos detalles' : 'Por qué veo esto'}
@@ -1109,17 +1116,11 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
                   </div>
                 </div>
                 {showExplainDetails && (
-                  <div className="mt-2 space-y-1 rounded-lg bg-[var(--card)]/80 p-2.5 text-[11px] text-[var(--text-soft)]">
+                  <div id="today-state-context-explanation" className="mt-2 space-y-1 rounded-lg bg-[var(--card)]/80 p-2.5 text-xs text-[var(--text-soft)]">
                     <p>
                       <strong>Observado:</strong> {evaluation.recommendation.observed}
                     </p>
-                    <p>
-                      <strong>Contexto de hoy:</strong> {evaluation.recommendation.whyRelevant}
-                    </p>
-                    <p>
-                      <strong>Opción a considerar:</strong> {evaluation.recommendation.optionToConsider}
-                    </p>
-                    <p className="pt-1 text-[10px] text-[var(--text-faint)]">
+                    <p className="pt-1 text-xs text-[var(--text-soft)]">
                       Esta sugerencia es orientativa. Celestian nunca cancela tareas ni impone descanso automáticamente.
                     </p>
                   </div>
@@ -1135,10 +1136,10 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
                     Tu evolución
                   </h3>
                   <p className="text-[12px] text-[var(--text-soft)]">
-                    Últimos 7 días · {registeredDaysCount}/7 con registro
+                    Últimos 7 días{registeredDaysCount > 0 ? ` · ${registeredDaysCount}/7 con registro` : ' · Sin registros todavía'}
                   </p>
                 </div>
-                <div
+                {hasMetricHistory && <div
                   className="inline-flex rounded-lg border border-[var(--border)] bg-[var(--card-subtle)] p-0.5"
                   role="group"
                   aria-label="Vista del gráfico semanal de estado"
@@ -1165,11 +1166,27 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
                       {tab.label}
                     </button>
                   ))}
-                </div>
+                </div>}
               </div>
 
               {/* Bottom Section: 7-Day Visualization */}
-              {viewMode === 'general' ? (
+              {!hasMetricHistory ? (
+                <div data-testid="today-state-empty-history" className="grid grid-cols-7 gap-1" role="group" aria-label="Seleccionar día de la semana">
+                  {weekRecords.map((record) => (
+                    <button
+                      key={record.date}
+                      type="button"
+                      aria-pressed={record.date === selectedDate}
+                      aria-label={`${formatLongDate(record.date, record.date === today)}: ${record.hasAny ? 'Con registro' : 'Sin registros'}. Seleccionar día.`}
+                      onClick={() => handleSelectDate(record.date)}
+                      className={`flex min-h-11 min-w-0 flex-col items-center justify-center rounded-lg text-xs ${record.date === selectedDate ? 'bg-[var(--blue-soft)] font-semibold text-[var(--blue)]' : 'text-[var(--text-soft)] hover:bg-[var(--surface-muted)]'}`}
+                    >
+                      <span>{record.date === today ? 'Hoy' : dayLabel(record.date)}</span>
+                      <span>{dayNumber(record.date)}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : viewMode === 'general' ? (
                 <WeeklyGeneralMatrixChart
                   records={weekRecords}
                   sleepScaleMax={sleepScaleMax}

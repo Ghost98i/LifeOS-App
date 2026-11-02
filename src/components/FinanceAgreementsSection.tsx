@@ -12,7 +12,8 @@ import {
 } from '../lib/financeAgreements';
 import { fmtDate, formatMoney, parseDecimalInput, roundMoney, todayISO } from '../lib/storage';
 import { AppIcon } from './AppIcon';
-import { PrivacyAmount } from './PrivacyAmount';
+import { PrivateFinancialText, PrivacyInput, PrivacyAmount } from './PrivacyAmount';
+import { maskFinancialText } from '../lib/financialPrivacy';
 
 interface FinanceAgreementsSectionProps {
   state: LifeOSState;
@@ -410,16 +411,7 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
 
       {/* List of Agreements */}
       {agreements.length === 0 ? (
-        <div className="p-3.5 rounded-2xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] flex items-center justify-between text-xs text-[var(--finance-text-muted)]">
-          <span>No hay acuerdos activos. Agregá préstamos o compras en cuotas.</span>
-          <button
-            type="button"
-            onClick={handleOpenCreate}
-            className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer shrink-0 ml-2"
-          >
-            + Registrar
-          </button>
-        </div>
+        <p className="text-xs text-[var(--finance-text-muted)]">Sin acuerdos registrados. Podés registrar préstamos o compras en cuotas.</p>
       ) : (
         <div className="space-y-3">
           {agreements.map((agreement) => {
@@ -449,10 +441,10 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-bold text-sm text-[var(--finance-text-primary)]">
-                        {agreement.title}
+                        <PrivateFinancialText>{agreement.title}</PrivateFinancialText>
                       </span>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-500/10 text-[var(--finance-text-secondary)]">
-                        {agreement.creditorName}
+                        <PrivateFinancialText>{agreement.creditorName}</PrivateFinancialText>
                       </span>
                       <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
                         {agreement.currency}
@@ -474,9 +466,9 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                       {agreement.acquisition && (
                         <span
                           className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-700 dark:text-violet-300"
-                          title={`Consumo adquirido: ${agreement.acquisition.category} (${fmtDate(agreement.acquisition.acquisitionDate)})`}
+                          title={maskFinancialText(`Consumo adquirido: ${agreement.acquisition.category} (${fmtDate(agreement.acquisition.acquisitionDate)})`, Boolean(state.settings.privacyMode))}
                         >
-                          🛍️ {agreement.acquisition.category}
+                          🛍️ <PrivateFinancialText>{agreement.acquisition.category}</PrivateFinancialText>
                         </span>
                       )}
                       {agreement.linkedLegacyDebtId && (
@@ -618,7 +610,7 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                         <div className="text-xs text-violet-700 dark:text-violet-300 flex items-center gap-1.5 pt-0.5 flex-wrap">
                           <span className="font-semibold">Consumo adquirido:</span>
                           <span>
-                            {agreement.acquisition.category} por{' '}
+                            <PrivateFinancialText>{agreement.acquisition.category}</PrivateFinancialText> por{' '}
                             <PrivacyAmount as="strong">
                               {formatMoney(agreement.acquisition.totalPurchaseAmount, agreement.currency)}
                             </PrivacyAmount>{' '}
@@ -640,7 +632,7 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                     {/* Optional Notes */}
                     {agreement.notes && (
                       <p className="text-[11px] text-[var(--finance-text-muted)] italic">
-                        "{agreement.notes}"
+                        "<PrivateFinancialText>{agreement.notes}</PrivateFinancialText>"
                       </p>
                     )}
                   </div>
@@ -785,9 +777,9 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                                   type="button"
                                   onClick={() => handleOpenPay(agreement, inst.remainingDue, inst.dueDate)}
                                   className="py-0.5 px-2 rounded-md text-[10px] font-bold bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer shadow-2xs transition-all"
-                                  title="Pagar esta cuota ahora"
+                                  title="Registrar un pago de esta cuota"
                                 >
-                                  Pagar
+                                  Registrar pago
                                 </button>
                               )}
                             </div>
@@ -816,10 +808,10 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                             <div key={p.id} className="p-2.5 flex items-center justify-between gap-2 text-xs">
                               <div>
                                 <div className="font-semibold text-[var(--finance-text-primary)]">
-                                  {p.note || 'Abono a deuda'}
+                                  <PrivateFinancialText>{p.note || 'Abono a deuda'}</PrivateFinancialText>
                                 </div>
                                 <div className="text-[10px] text-[var(--finance-text-muted)]">
-                                  {fmtDate(p.date)} · Cuenta: {acc?.name || 'Desconocida'}
+                                  {fmtDate(p.date)} · Cuenta: <PrivateFinancialText>{acc?.name || 'Desconocida'}</PrivateFinancialText>
                                 </div>
                               </div>
                               <PrivacyAmount as="span" className="font-bold tabular-nums text-rose-500">
@@ -905,7 +897,7 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Concepto / Título *
                 </label>
-                <input
+                <PrivacyInput maskText
                   required
                   autoFocus
                   type="text"
@@ -921,7 +913,7 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                   <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                     Acreedor / Comercio *
                   </label>
-                  <input
+                  <PrivacyInput maskText
                     required
                     type="text"
                     value={newCreditor}
@@ -960,7 +952,7 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                     <option value="">No, es una deuda o acuerdo nuevo</option>
                     {availableLegacyDebts.map((d) => (
                       <option key={d.id} value={d.id}>
-                        {d.name} ({state.settings?.privacyMode ? '••••' : formatMoney(d.amount, 'UYU')})
+                        <PrivateFinancialText>{d.name}</PrivateFinancialText> ({state.settings?.privacyMode ? '••••' : formatMoney(d.amount, 'UYU')})
                       </option>
                     ))}
                   </select>
@@ -1001,7 +993,7 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                       <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                         Importe por cuota *
                       </label>
-                      <input
+                      <PrivacyInput
                         required
                         type="text"
                         value={newInstallmentAmount}
@@ -1104,7 +1096,7 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                       <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                         Saldo pendiente actual *
                       </label>
-                      <input
+                      <PrivacyInput
                         required
                         type="text"
                         value={newInitialBal}
@@ -1156,7 +1148,7 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                           <label className="text-[9px] font-bold uppercase text-[var(--text-faint)] block mb-1">
                             Monto original pactado
                           </label>
-                          <input
+                          <PrivacyInput
                             type="text"
                             value={newOriginalPrincipal}
                             onChange={(e) => setNewOriginalPrincipal(e.target.value)}
@@ -1168,7 +1160,7 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                           <label className="text-[9px] font-bold uppercase text-[var(--text-faint)] block mb-1">
                             Pagos previos externos
                           </label>
-                          <input
+                          <PrivacyInput
                             type="text"
                             value={newPriorPaid}
                             onChange={(e) => setNewPriorPaid(e.target.value)}
@@ -1189,7 +1181,7 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Notas u observaciones (Opcional)
                 </label>
-                <input
+                <PrivacyInput maskText
                   type="text"
                   value={newNotes}
                   onChange={(e) => setNewNotes(e.target.value)}
@@ -1234,7 +1226,7 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                   Registrar abono a deuda
                 </h3>
                 <p className="text-xs text-[var(--text-faint)]">
-                  {payingAgreement.title} ({payingAgreement.creditorName})
+                  <PrivateFinancialText>{payingAgreement.title}</PrivateFinancialText> (<PrivateFinancialText>{payingAgreement.creditorName}</PrivateFinancialText>)
                 </p>
               </div>
               <button
@@ -1264,7 +1256,7 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Importe efectivamente pagado ({payingAgreement.currency}) *
                 </label>
-                <input
+                <PrivacyInput
                   required
                   autoFocus
                   type="text"
@@ -1290,7 +1282,7 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                     .filter((a) => (a.currency || 'UYU').toUpperCase() === payingAgreement.currency.toUpperCase())
                     .map((a) => (
                       <option key={a.id} value={a.id}>
-                        {a.name} ({state.settings?.privacyMode ? '••••' : formatMoney(a.balance, a.currency || 'UYU')})
+                        <PrivateFinancialText>{a.name}</PrivateFinancialText> ({state.settings?.privacyMode ? '••••' : formatMoney(a.balance, a.currency || 'UYU')})
                       </option>
                     ))}
                 </select>
@@ -1324,7 +1316,7 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Nota / Detalle en el libro mayor
                 </label>
-                <input
+                <PrivacyInput maskText
                   type="text"
                   value={payNote}
                   onChange={(e) => setPayNote(e.target.value)}

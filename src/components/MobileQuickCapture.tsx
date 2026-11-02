@@ -43,7 +43,7 @@ interface MobileQuickCaptureProps {
 export type CaptureKind = 'universal' | 'tarea' | 'gasto' | 'nota' | 'entrenamiento' | 'inbox' | 'idea' | 'recordatorio';
 
 const captureOptions: { kind: CaptureKind; label: string; icon: AppIconName; desc: string; primary?: boolean }[] = [
-  { kind: 'universal', label: 'Universal', icon: 'touchpad', desc: 'Auto-detectar', primary: true },
+  { kind: 'universal', label: 'Automática', icon: 'squarePlus', desc: 'Detectar el tipo de registro', primary: true },
   { kind: 'tarea', label: 'Tarea', icon: 'task', desc: 'Acción para hoy', primary: true },
   { kind: 'gasto', label: 'Gasto', icon: 'expense', desc: 'Parser rápido', primary: true },
   { kind: 'nota', label: 'Nota', icon: 'note', desc: 'Post-it o apunte', primary: true },
@@ -454,6 +454,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
     if (!trimmed) return;
     const drafts = parseCaptureDrafts(trimmed, state);
     if (drafts.length > 0) {
+      setMessage('');
       setMobileDrafts((prev) => [...prev, ...drafts]);
       setUniversalInput('');
       playSound('click');
@@ -468,7 +469,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
       <section
         role="dialog"
         aria-modal="true"
-        aria-label="Captura universal"
+        aria-label="Captura rápida"
         onKeyDown={handleDialogKeyDown}
         className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-[var(--card)] border border-[var(--border)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl transition-transform relative"
         onClick={(event) => event.stopPropagation()}
@@ -521,7 +522,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                   : 'text-[var(--text-soft)] hover:text-[var(--text)]'
               }`}
             >
-              <AppIcon name="touchpad" className="h-4 w-4" />
+              <AppIcon name="squarePlus" className="h-4 w-4" />
               <span>Captura</span>
             </button>
             <button
@@ -544,12 +545,18 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
           <button
             type="button"
             onClick={handleRequestClose}
-            className="w-8 h-8 rounded-full bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] font-bold flex items-center justify-center transition cursor-pointer"
+            className="w-11 h-11 shrink-0 rounded-full bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] font-bold flex items-center justify-center transition cursor-pointer"
             aria-label="Cerrar"
           >
             ✕
           </button>
         </div>
+
+        {message && (
+          <p role={message.startsWith('✓') ? 'status' : 'alert'} className={`mb-3 text-sm leading-relaxed ${message.startsWith('✓') ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>
+            {message}
+          </p>
+        )}
 
         {activeTab === 'inbox' ? (
           <div className="space-y-3 py-1">
@@ -687,7 +694,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
             <div className="space-y-3">
               <label className="block">
                 <span className="text-xs font-semibold text-[var(--text)] mb-1.5 block">
-                  Captura Universal (intérprete inteligente)
+                  ¿Qué querés registrar?
                 </span>
                 <div className="relative flex gap-2">
                   <input
@@ -720,7 +727,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
 
               <div className="flex items-center justify-between pt-1">
                 <span className="text-[11px] text-[var(--text-faint)]">
-                  Podés combinar varias intenciones con &quot;y&quot;.
+                  Podés combinar varios registros con &quot;y&quot;.
                 </span>
                 <button
                   type="button"
@@ -728,7 +735,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                   disabled={!universalInput.trim()}
                   className="px-4 py-2 rounded-xl bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold hover:opacity-90 active:scale-95 disabled:opacity-30 transition cursor-pointer shadow-xs"
                 >
-                  Interpretar
+                  Revisar captura
                 </button>
               </div>
             </div>
@@ -750,6 +757,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                     return;
                   }
                   setConfirmingDraftIds((prev) => new Set(prev).add(draft.id));
+                  setMessage('');
                   try {
                     let feedback: { message: string; sound: 'success' | 'coins' | 'click' } = {
                       message: 'Elemento registrado.',
@@ -759,7 +767,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                       feedback = confirmCaptureDraft(s, draft);
                     });
                     if (saved === false) {
-                      setMessage('Error al persistir localmente.');
+                      setMessage('No se pudo guardar en este dispositivo. El borrador sigue disponible.');
                       return;
                     }
                     playSound(feedback.sound);
@@ -782,6 +790,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                 onConfirmAll={() => {
                   if (isConfirmingAll) return;
                   setIsConfirmingAll(true);
+                  setMessage('');
                   try {
                     let count = 0;
                     const confirmedIds = new Set<string>();
@@ -799,7 +808,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                       }
                     });
                     if (saved === false) {
-                      setMessage('Error al persistir localmente.');
+                      setMessage('No se pudo guardar en este dispositivo. Los borradores siguen disponibles.');
                       return;
                     }
                     if (count > 0) {
@@ -1238,13 +1247,6 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                   />
                 </label>
               </div>
-            )}
-
-            {/* Status Message */}
-            {message && (
-              <p className="text-center text-xs font-bold text-emerald-500 animate-fade-in">
-                {message}
-              </p>
             )}
 
             {/* Save Button */}

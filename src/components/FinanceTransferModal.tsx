@@ -6,7 +6,7 @@ import { fmtDate, formatMoney, parseDecimalInput, todayISO } from '../lib/storag
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
 import { AppIcon } from './AppIcon';
-import { PrivacyAmount } from './PrivacyAmount';
+import { PrivateFinancialText, PrivacyInput, PrivacyAmount } from './PrivacyAmount';
 
 interface FinanceTransferModalProps {
   open: boolean;
@@ -184,7 +184,7 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
                 >
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.name} ({(a.currency || 'UYU').toUpperCase()})
+                      <PrivateFinancialText>{a.name}</PrivateFinancialText> ({(a.currency || 'UYU').toUpperCase()})
                     </option>
                   ))}
                 </select>
@@ -218,7 +218,7 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
                 >
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
-                      {a.name} ({(a.currency || 'UYU').toUpperCase()})
+                      <PrivateFinancialText>{a.name}</PrivateFinancialText> ({(a.currency || 'UYU').toUpperCase()})
                     </option>
                   ))}
                 </select>
@@ -249,7 +249,7 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
                 <label htmlFor="finance-transfer-amount" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Monto a transferir
                 </label>
-                <input
+                <PrivacyInput
                   id="finance-transfer-amount"
                   required
                   autoFocus
@@ -281,7 +281,7 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
               <label htmlFor="finance-transfer-note" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                 Nota opcional
               </label>
-              <input
+              <PrivacyInput maskText
                 id="finance-transfer-note"
                 type="text"
                 value={note}
@@ -326,7 +326,7 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
                           {fromAcc?.name || 'Cuenta'} → {toAcc?.name || 'Cuenta'}
                         </span>
                         <span className="text-[10px] text-[var(--text-faint)]">
-                          {fmtDate(t.date)} {t.note ? `· ${t.note}` : ''}
+                          {fmtDate(t.date)} <PrivateFinancialText>{t.note ? `· ${t.note}` : ''}</PrivateFinancialText>
                         </span>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">

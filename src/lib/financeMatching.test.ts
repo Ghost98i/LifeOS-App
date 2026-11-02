@@ -557,7 +557,7 @@ test('17. Compromiso pagado o cancelado no entra como candidato', () => {
   assert.equal(match.candidates.length, 0);
 });
 
-test('18. Compatibilidad legacy sin campos nuevos', () => {
+test('18. Un histórico sin moneda no se certifica como coincidencia; el registro se conserva', () => {
   const state = createBaseState();
 
   // Transacción antigua sin rejectedMatchIds ni currency ni matchedCycle
@@ -586,13 +586,13 @@ test('18. Compatibilidad legacy sin campos nuevos', () => {
 
   // Evaluamos match y Review Inbox
   const match = findMatchCandidates(legacyTx, state);
-  assert.equal(match.confidence, 'strong');
-  assert.equal(match.bestCandidate?.targetId, legacyCom.id);
+  assert.equal(match.confidence, 'none');
+  assert.equal(match.bestCandidate, undefined);
 
   const inbox = deriveFinanceReviewInbox(state);
-  assert.equal(inbox.items.length, 1);
-  assert.ok(inbox.items[0].matchResult);
-  assert.equal(inbox.items[0].matchResult.confidence, 'strong');
+  assert.equal(inbox.items.length, 0, 'No fabricar una revisión por una coincidencia sin moneda demostrada');
+  assert.equal(state.finance.commitments?.find(c => c.id === legacyCom.id), legacyCom);
+  assert.equal(legacyCom.currency, undefined);
 });
 
 test('19. Auditoría 1: Ambigüedad por cercanía (diferencia de 1-2 puntos deriva en ambiguous y no en strong)', () => {

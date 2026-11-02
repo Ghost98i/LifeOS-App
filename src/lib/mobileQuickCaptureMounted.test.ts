@@ -261,7 +261,7 @@ test('LifeOS — Fase 4: Real mounted MobileQuickCapture test (interpret 2 draft
 
   // Click "Interpretar" button
   const buttons = findElements(container, (el) => el.tagName === 'BUTTON');
-  const interpretBtn = buttons.find((b) => getNodeText(b).includes('Interpretar'));
+  const interpretBtn = buttons.find((b) => getNodeText(b).includes('Revisar captura'));
   assert.ok(interpretBtn, 'Interpret button must exist');
 
   await act(async () => {
@@ -273,7 +273,7 @@ test('LifeOS — Fase 4: Real mounted MobileQuickCapture test (interpret 2 draft
   assert.ok(draftCardsBefore.length >= 2, 'Both Gasto and Tarea drafts must be visible');
 
   const allButtonsAfterParse = findElements(container, (el) => el.tagName === 'BUTTON');
-  const confirmButtons = allButtonsAfterParse.filter((b) => getNodeText(b).includes('Confirmar') && !getNodeText(b).includes('todos'));
+  const confirmButtons = allButtonsAfterParse.filter((b) => getNodeText(b).includes('Guardar') && !getNodeText(b).includes('todos'));
   assert.equal(confirmButtons.length, 2, 'Must have 2 individual confirm buttons for the 2 drafts');
 
   // Initial state check
@@ -292,7 +292,7 @@ test('LifeOS — Fase 4: Real mounted MobileQuickCapture test (interpret 2 draft
 
   // Verify only 1 draft remains visible in the tray
   const remainingConfirmButtons = findElements(container, (el) => el.tagName === 'BUTTON').filter(
-    (b) => getNodeText(b).includes('Confirmar') && !getNodeText(b).includes('todos')
+    (b) => getNodeText(b).includes('Guardar') && !getNodeText(b).includes('todos')
   );
   const allCurrentButtons = findElements(container, (el) => el.tagName === 'BUTTON').map((b) => getNodeText(b));
   assert.equal(
@@ -318,7 +318,7 @@ test('LifeOS — Fase 4: Real mounted MobileQuickCapture test (interpret 2 draft
 
   // Verify: Draft 2 remains visible after external state change, NOT wiped!
   const buttonsAfterExternalChange = findElements(container, (el) => el.tagName === 'BUTTON').filter(
-    (b) => getNodeText(b).includes('Confirmar') && !getNodeText(b).includes('todos')
+    (b) => getNodeText(b).includes('Guardar') && !getNodeText(b).includes('todos')
   );
   assert.equal(buttonsAfterExternalChange.length, 1, 'Pending draft must NOT be wiped by external state change');
 
@@ -368,7 +368,7 @@ test('LifeOS — Fase 4: MobileQuickCapture mounted persistence failure: retains
   });
 
   const buttons = findElements(container, (el) => el.tagName === 'BUTTON');
-  const interpretBtn = buttons.find((b) => getNodeText(b).includes('Interpretar'));
+  const interpretBtn = buttons.find((b) => getNodeText(b).includes('Revisar captura'));
   await act(async () => {
     triggerClick(interpretBtn);
   });
@@ -378,7 +378,7 @@ test('LifeOS — Fase 4: MobileQuickCapture mounted persistence failure: retains
 
   // Confirm with persistence failure
   const confirmBtn = findElements(container, (el) => el.tagName === 'BUTTON').find(
-    (b) => getNodeText(b).includes('Confirmar') && !getNodeText(b).includes('todos')
+    (b) => getNodeText(b).includes('Guardar') && !getNodeText(b).includes('todos')
   );
   assert.ok(confirmBtn, 'Confirm button must exist');
 
@@ -392,9 +392,11 @@ test('LifeOS — Fase 4: MobileQuickCapture mounted persistence failure: retains
 
   // Verify: Draft was NOT removed from tray
   const draftsAfterFailure = findElements(container, (el) => el.tagName === 'BUTTON').filter(
-    (b) => getNodeText(b).includes('Confirmar') && !getNodeText(b).includes('todos')
+    (b) => getNodeText(b).includes('Guardar') && !getNodeText(b).includes('todos')
   );
   assert.equal(draftsAfterFailure.length, 1, 'Draft must be retained after persistence failure');
+  assert.ok(getNodeText(container).includes('No se pudo guardar en este dispositivo. El borrador sigue disponible.'),
+    'El error describe el fallo local y un borrador que efectivamente se conserva');
 
   // Now fix persistence and reattempt
   failPersistence = false;

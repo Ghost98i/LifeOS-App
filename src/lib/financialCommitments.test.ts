@@ -20,6 +20,7 @@ import type { FinancialCommitment, LifeOSState, Transaction, FinanceTransfer } f
 function makeCommitment(overrides: Partial<FinancialCommitment> = {}): FinancialCommitment {
   return {
     id: 'com-1',
+    currency: 'UYU', // Synthetic planning scenarios below intentionally use UYU.
     name: 'Alquiler',
     amount: 15000,
     category: 'Vivienda',
@@ -133,6 +134,7 @@ test('CRITICAL: Expected Income does NOT inflate Real Available & payment preven
   // Saldo Proyectado: $23.728
   const inc = {
     id: 'inc-freelance',
+    currency: 'UYU',
     name: 'Cobro Freelance',
     amount: 13728,
     category: 'Trabajo',
@@ -370,6 +372,7 @@ test('calendarItemsOnDate: renders financial commitments and expected incomes ac
         {
           id: 'inc-cal',
           name: 'Sueldo',
+          currency: 'UYU',
           amount: 60000,
           category: 'Trabajo',
           frequency: 'monthly',
@@ -887,6 +890,7 @@ test('Fase 6: Coexistencia armónica sin double counting entre suscripciones, de
 test('Fase 6: Expected Income nunca infla Disponible Real y se confirma atómicamente', () => {
   const inc = {
     id: 'inc-sueldo',
+    currency: 'UYU',
     name: 'Sueldo Octubre',
     amount: 35000,
     startDate: '2026-10-10',

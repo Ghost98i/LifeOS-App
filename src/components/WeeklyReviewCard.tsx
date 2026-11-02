@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { LifeOSState, ViewType } from '../types';
-import { reviewedThisWeek, weeklyReviewExceptions } from '../lib/review';
+import { isWeeklyReviewDue, weeklyReviewExceptions } from '../lib/review';
 import { todayISO } from '../lib/storage';
 import { AppIcon } from './AppIcon';
 import { playSound } from '../lib/audio';
@@ -15,8 +15,7 @@ interface WeeklyReviewCardProps {
 
 export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ state, onUpdateState, onNavigate, borderLess }) => {
   const exceptions = weeklyReviewExceptions(state);
-  const reviewed = reviewedThisWeek(state);
-  const needsReview = !reviewed;
+  const needsReview = isWeeklyReviewDue(state);
   const [isGuidedReviewOpen, setIsGuidedReviewOpen] = useState(false);
 
   const handleMarkReviewed = () => {
@@ -30,34 +29,34 @@ export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ state, onUpd
 
   return (
     <>
-      <section className={`flex items-center gap-3 px-1 py-1 ${borderLess ? '' : 'border-t border-[var(--border)]/70'}`}>
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">
+      <section className={`today-attention-row ${borderLess ? '' : 'border-t border-[var(--border)]/70'}`}>
+        <span className="today-attention-icon flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-[var(--surface-muted)] text-[var(--text-soft)]">
           <AppIcon name="rotateCcw" className="h-3.5 w-3.5" />
         </span>
 
-        <div className="min-w-0 flex-1">
-          <strong className="block text-xs font-semibold text-[var(--text)]">Revisión semanal pendiente</strong>
-          <span className="block truncate text-[10px] text-[var(--text-soft)] sm:text-[11px]">
+        <div className="today-attention-copy min-w-0">
+          <strong className="block text-[13px] font-semibold text-[var(--text)]">{state.settings.lastWeeklyReviewAt ? 'Revisión semanal pendiente' : 'Revisá tu semana'}</strong>
+          <span className="block text-xs leading-relaxed text-[var(--text-soft)]">
             {exceptions.length > 0
-              ? `${exceptions.length} ${exceptions.length === 1 ? 'señal requiere' : 'señales requieren'} tu revisión`
-              : 'Todavía no completaste la revisión de esta semana'}
+              ? `${exceptions.length} ${exceptions.length === 1 ? 'asunto' : 'asuntos'} para revisar`
+              : 'Repasá tus actividades y próximas prioridades.'}
           </span>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5">
-          {!reviewed && (
+        <div className="today-attention-actions flex flex-wrap items-center gap-1.5">
+          {needsReview && (
             <button
               type="button"
               onClick={handleMarkReviewed}
-              className="hidden rounded-lg px-2 py-1 text-[10px] font-semibold text-[var(--text-soft)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text)] sm:block"
+              className="hidden min-h-11 rounded-lg px-2 text-xs font-semibold text-[var(--text-soft)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text)] sm:block"
             >
-              Marcar hecha
+              Ya revisé la semana
             </button>
           )}
           <button
             type="button"
             onClick={() => setIsGuidedReviewOpen(true)}
-            className="rounded-lg px-2 py-1 text-[10px] font-bold text-indigo-600 transition-colors hover:bg-[var(--surface-muted)] dark:text-indigo-400"
+            className="min-h-11 rounded-lg px-2.5 text-xs font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--surface-muted)]"
           >
             Revisar
           </button>

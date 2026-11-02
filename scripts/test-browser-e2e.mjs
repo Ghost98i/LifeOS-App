@@ -156,7 +156,8 @@ async function main() {
   // FASE 0: COMPILACIÓN OBLIGATORIA Y SERVIDOR EXCLUSIVO EN PUERTO DEDICADO
   // =========================================================================
   console.log('📦 1. Compilación de producción obligatoria para garantizar código vigente...');
-  execSync('npm run build', { stdio: 'pipe' });
+  const buildOutput = execSync('npm run build', { stdio: 'pipe' });
+  fs.writeFileSync(path.join(EVIDENCE_DIR, 'build.log'), buildOutput);
   const localFingerprint = getLocalBuildFingerprint();
   assert.ok(localFingerprint, 'dist/index.html debe existir tras el build');
   console.log(`   Huella digital del build en disco: ${localFingerprint}`);
@@ -186,7 +187,7 @@ async function main() {
   const browser = await launchBrowser();
   const createContext = browser.newContext.bind(browser);
   browser.newContext = async (options = {}) => {
-    const context = await createContext({ timezoneId: 'America/Montevideo', locale: 'es-UY', ...options });
+    const context = await createContext({ timezoneId: 'America/Montevideo', locale: 'es-UY', serviceWorkers: 'block', ...options });
     await context.clock.setFixedTime(new Date(TEST_NOW));
     await context.route('**/*', route => ['localhost', '127.0.0.1'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
     return context;
@@ -1025,10 +1026,10 @@ async function main() {
 
       // 1. Ir a Agenda
       await page.click('aside nav button:has-text("Agenda")');
-      await page.waitForSelector('button:has-text("+ Puntual")', { timeout: 4000 });
+      await page.getByRole('button', { name: 'Compromiso puntual', exact: true }).waitFor({ timeout: 4000 });
 
       // 2. Abrir formulario real
-      await page.locator('button:has-text("+ Puntual")').first().click();
+      await page.getByRole('button', { name: 'Compromiso puntual', exact: true }).click();
       await page.waitForSelector('#agenda-event-title', { timeout: 4000 });
 
       // 3. Llenar formulario real para mañana a las 19:30
@@ -1103,8 +1104,8 @@ async function main() {
       await page.click('button:has-text("Cancelar")');
       await page.waitForSelector('button:has-text("Cancelar")', { state: 'detached', timeout: 3000 });
 
-      // 3. Clic real en "Omitir por hoy" en Estado
-      const skipBtn = page.locator('[data-testid="today-state-checkin-invite"] button:has-text("Omitir por hoy")');
+      // 3. Clic real en "Ahora no" en Estado
+      const skipBtn = page.locator('[data-testid="today-state-checkin-invite"] button:has-text("Ahora no")');
       await skipBtn.click();
       await page.waitForSelector('[data-testid="today-state-checkin-invite"]', { state: 'detached', timeout: 3000 });
 
@@ -1145,7 +1146,7 @@ async function main() {
       await page.goto(APP_URL);
 
       await page.waitForSelector('[data-testid="today-state-checkin-invite"]');
-      const skipBtn = page.locator('[data-testid="today-state-checkin-invite"] button:has-text("Omitir por hoy")');
+      const skipBtn = page.locator('[data-testid="today-state-checkin-invite"] button:has-text("Ahora no")');
       await skipBtn.click();
       await page.waitForSelector('[data-testid="today-state-checkin-invite"]', { state: 'detached' });
 

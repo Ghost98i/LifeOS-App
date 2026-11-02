@@ -4,7 +4,7 @@ import type { FinanceDuplicateGroup } from '../lib/financeReview';
 import { getTransactionLockReason } from '../lib/financeFlows';
 import { fmtDate, formatMoney } from '../lib/storage';
 import { useDialogFocus } from '../hooks/useDialogFocus';
-import { PrivacyAmount } from './PrivacyAmount';
+import { PrivateFinancialText, PrivacyAmount } from './PrivacyAmount';
 
 interface Props {
   state: LifeOSState;
@@ -27,10 +27,10 @@ export function FinanceDuplicateGroups({ state, groups, onKeep, onDelete }: Prop
     const created = tx.createdAt && Number.isFinite(Date.parse(tx.createdAt)) ? new Date(tx.createdAt).toLocaleString('es-UY', { dateStyle: 'short', timeStyle: 'medium' }) : null;
     return <div className="min-w-0 space-y-1 text-xs">
       <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 font-semibold text-[var(--text)]">
-        <span>{tx.note?.trim() || 'Sin descripción'}</span>
+        <span><PrivateFinancialText>{tx.note?.trim() || 'Sin descripción'}</PrivateFinancialText></span>
         <PrivacyAmount as="span" className="tabular-nums whitespace-nowrap">{tx.type === 'ingreso' ? '+' : '−'}{formatMoney(tx.amount, account?.currency || tx.currency || 'UYU')}</PrivacyAmount>
       </div>
-      <p className="text-[var(--text-soft)]">{category} · {fmtDate(tx.date)} · {account?.name || 'Sin cuenta'}</p>
+      <p className="text-[var(--text-soft)]"><PrivateFinancialText>{category}</PrivateFinancialText> · {fmtDate(tx.date)} · <PrivateFinancialText>{account?.name || 'Sin cuenta'}</PrivateFinancialText></p>
       <p className="text-[var(--text-soft)]">{created ? `Registrado: ${created}` : 'Hora de registro no disponible'}{tx.operationTime ? ` · Hora de operación: ${tx.operationTime}` : ''}</p>
       {identify && <p className="text-[var(--text-soft)] break-all">ID: <span className="font-mono">{tx.id}</span></p>}
       {(tx.commitmentId || tx.expectedIncomeId || tx.agreementId) && <p className="text-[var(--text-soft)]">Vinculado a una obligación o acuerdo. Su eliminación actualizará también esa vinculación.</p>}

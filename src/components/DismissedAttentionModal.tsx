@@ -83,14 +83,14 @@ export const DismissedAttentionModal: React.FC<DismissedAttentionModalProps> = (
               Avisos descartados
             </h3>
             <p className="text-xs text-[var(--text-faint)] mt-0.5">
-              Avisos silenciados para su ocurrencia actual. Podés restaurarlos para que vuelvan a evaluarse en Atención ahora.
+              Descartar un aviso no resuelve el pendiente. Podés restaurarlo para que vuelva a aparecer si todavía corresponde.
             </p>
           </div>
           <button
             ref={closeButtonRef}
             type="button"
             onClick={onClose}
-            className="p-1.5 text-[var(--text-faint)] hover:text-[var(--text)] rounded-lg hover:bg-[var(--surface-muted)] transition cursor-pointer"
+            className="flex h-11 w-11 shrink-0 items-center justify-center text-[var(--text-soft)] hover:text-[var(--text)] rounded-lg hover:bg-[var(--surface-muted)] transition cursor-pointer"
             aria-label="Cerrar ventana de avisos descartados"
           >
             <AppIcon name="x" className="h-4 w-4" />
@@ -122,7 +122,7 @@ export const DismissedAttentionModal: React.FC<DismissedAttentionModalProps> = (
                         {item.module}
                       </span>
                     </div>
-                    <span className="block truncate text-xs text-[var(--text-faint)] mt-0.5">
+                    <span className="block break-words text-xs text-[var(--text-soft)] mt-0.5">
                       {item.detail}
                     </span>
                   </div>
@@ -131,7 +131,7 @@ export const DismissedAttentionModal: React.FC<DismissedAttentionModalProps> = (
                 <button
                   type="button"
                   onClick={() => onRestoreItem(item)}
-                  className="shrink-0 px-2.5 py-1 text-xs font-semibold text-[var(--blue)] hover:bg-[var(--blue)]/10 rounded-lg transition cursor-pointer"
+                  className="min-h-11 shrink-0 px-2.5 text-xs font-semibold text-[var(--blue)] hover:bg-[var(--blue)]/10 rounded-lg transition cursor-pointer"
                   aria-label={`Restaurar aviso: ${item.title}`}
                 >
                   Restaurar

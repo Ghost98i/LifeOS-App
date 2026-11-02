@@ -35,7 +35,7 @@ test('Finanzas respeta la preferencia de mostrar disponible tras pagos como impo
   state.finance.commitments = [{ id: 'bill', name: 'Servicio', amount: 100, nextDueDate: todayISO(), frequency: 'once', active: true, category: 'Otros', accountId: 'account', currency: 'UYU' }];
   const html = renderToStaticMarkup(React.createElement(FinanceHero, { state, cashFlow: cashFlowProjection(state, 30), displayMode: 'real_available', onOpenNewTx: () => {}, onOpenTransfer: () => {} }));
   const text = html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ');
-  assert.match(text, /Disponible tras pagos \(UYU\).*?\$U 900/);
+  assert.match(text, /Saldo tras pagos pendientes \(UYU\).*?\$U 900/);
   assert.match(text, /Saldo real.*?\$U 1\.000/);
   assert.doesNotMatch(html, /<h1/);
 });

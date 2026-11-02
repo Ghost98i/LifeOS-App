@@ -11,7 +11,6 @@ import {
   calcNetWorth,
   calcIncomeMonth,
   calcFixedSpentMonth,
-  calcMonthComparison,
   calcSpentByCategory,
   calcSpentByCategoryAllTime,
   calcCashOutflowMonth,
@@ -22,7 +21,8 @@ import {
 } from '../lib/calculations';
 import { AppIcon } from './AppIcon';
 import { ContextualHelp } from './ContextualHelp';
-import { PrivacyAmount } from './PrivacyAmount';
+import { PrivacyInput, PrivacyAmount, PrivateFinancialText } from './PrivacyAmount';
+import { financeMonthComparison } from '../lib/financeMonthComparison';
 
 interface FinanceAnalyticsViewProps {
   state: LifeOSState;
@@ -82,7 +82,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
   onOpenCategoryManager,
 }) => {
   // Budget & Month Navigation State
-  const currentMonthIso = useMemo(() => todayISO().slice(0, 7), []);
+  const currentMonthIso = todayISO().slice(0, 7);
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthIso);
   const [selectedCurrency, setSelectedCurrency] = useState<string>('UYU');
 
@@ -116,24 +116,26 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
     return calcNetWorth(state, activeCurrency);
   }, [state, activeCurrency]);
 
-  const monthOffset = useMemo(() => {
+  // Keep the calendar base in the memo identity too: the same numeric offset
+  // can refer to a different month after midnight on the first day of a month.
+  const monthScope = useMemo(() => {
     const [sy, sm] = selectedMonth.split('-').map(Number);
     const [ty, tm] = currentMonthIso.split('-').map(Number);
-    return (sy - ty) * 12 + (sm - tm);
+    return { offset: (sy - ty) * 12 + (sm - tm) };
   }, [selectedMonth, currentMonthIso]);
 
   // Dual metrics: Cash Outflow vs Acquisitions
   const cashOutflow = useMemo(() => {
-    return calcCashOutflowMonth(state, monthOffset, activeCurrency);
-  }, [state, monthOffset, activeCurrency]);
+    return calcCashOutflowMonth(state, monthScope.offset, activeCurrency);
+  }, [state, monthScope, activeCurrency]);
 
   const acquisitions = useMemo(() => {
-    return calcTotalAcquisitionsMonth(state, monthOffset, activeCurrency);
-  }, [state, monthOffset, activeCurrency]);
+    return calcTotalAcquisitionsMonth(state, monthScope.offset, activeCurrency);
+  }, [state, monthScope, activeCurrency]);
 
   const scopedMonthCatAcquisitions = useMemo(() => {
-    return calcAcquisitionsByCategory(state, monthOffset, activeCurrency);
-  }, [state, monthOffset, activeCurrency]);
+    return calcAcquisitionsByCategory(state, monthScope.offset, activeCurrency);
+  }, [state, monthScope, activeCurrency]);
 
   // Monthly Budget Status Report
   const report = useMemo(() => {
@@ -149,11 +151,11 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
   const isGlobalOverrun = effectiveLimit !== null && effectiveSpent > effectiveLimit;
 
   // Currency-scoped metrics
-  const scopedIngreso = useMemo(() => calcIncomeMonth(state, monthOffset, activeCurrency), [state, monthOffset, activeCurrency]);
+  const scopedIngreso = useMemo(() => calcIncomeMonth(state, monthScope.offset, activeCurrency), [state, monthScope, activeCurrency]);
   const currentBalanceMes = diffMoney(scopedIngreso, effectiveSpent);
-  const scopedFijoMes = useMemo(() => calcFixedSpentMonth(state, monthOffset, activeCurrency), [state, monthOffset, activeCurrency]);
+  const scopedFijoMes = useMemo(() => calcFixedSpentMonth(state, monthScope.offset, activeCurrency), [state, monthScope, activeCurrency]);
   const currentGastoVariable = Math.max(0, diffMoney(effectiveSpent, scopedFijoMes));
-  const currentCmp = useMemo(() => calcMonthComparison(state, activeCurrency), [state, activeCurrency]);
+  const currentCmp = useMemo(() => financeMonthComparison(state, monthScope.offset, activeCurrency, analyticsMode), [state, monthScope, activeCurrency, analyticsMode]);
 
   const scopedTotalGastadoAnio = useMemo(() => {
     const today = new Date();
@@ -165,7 +167,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
       .reduce((s, t) => sumMoney(s, Number(t.amount || 0)), 0);
   }, [state, activeCurrency]);
 
-  const scopedMonthCatSpent = useMemo(() => calcSpentByCategory(state, monthOffset, activeCurrency), [state, monthOffset, activeCurrency]);
+  const scopedMonthCatSpent = useMemo(() => calcSpentByCategory(state, monthScope.offset, activeCurrency), [state, monthScope, activeCurrency]);
   const scopedAllTimeCatSpent = useMemo(() => calcSpentByCategoryAllTime(state, activeCurrency), [state, activeCurrency]);
 
   const scopedMonthlyEvolutionData = useMemo(() => {
@@ -209,13 +211,18 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
 
   // Historical data check
   const hasHistoricalData = scopedMonthlyEvolutionData.length >= 2;
-  const comparisonText = !hasHistoricalData
-    ? 'Primer mes registrado'
+  const hasFinancialDetails = state.finance.transactions.length > 0
+    || state.finance.accounts.some(account => Number(account.balance) !== 0)
+    || state.finance.investments.length > 0 || state.finance.debts.length > 0 || (state.finance.agreements?.length || 0) > 0;
+  const comparisonText = currentCmp.current === 0
+    ? analyticsMode === 'cash_flow' ? 'Sin pagos en el mes seleccionado' : 'Sin compras en el mes seleccionado'
+    : currentCmp.pct === null
+    ? analyticsMode === 'cash_flow' ? 'Sin pagos el mes anterior' : 'Sin compras el mes anterior'
     : currentCmp.dir === 'flat'
-    ? 'similar al mes pasado'
+    ? 'similar al mes anterior'
     : currentCmp.dir === 'up'
-    ? `▲ ${currentCmp.pct.toFixed(0)}% más que el mes pasado`
-    : `▼ ${currentCmp.pct.toFixed(0)}% menos que el mes pasado`;
+    ? `▲ ${currentCmp.pct.toFixed(0)}% más que el mes anterior`
+    : `▼ ${currentCmp.pct.toFixed(0)}% menos que el mes anterior`;
 
   // Inline editing handlers
   const startEditCategory = (categoryId: string, currentBudget: number | null) => {
@@ -363,15 +370,11 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                   : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
               }`}
             >
-              {isGlobalOverrun
+              <PrivateFinancialText>{isGlobalOverrun
                 ? `Excedido (+${formatCurr(Math.abs(effectiveRemaining!))})`
-                : `${effectivePct.toFixed(0)}% consumido`}
+                : `${effectivePct.toFixed(0)}% consumido`}</PrivateFinancialText>
             </span>
-          ) : (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-500/10 text-[var(--finance-text-muted)] self-start sm:self-auto">
-              Sin presupuesto fijado
-            </span>
-          )}
+          ) : null}
         </div>
 
         {/* Asymmetric Reading Layout: Primary Anchor (Gasto & Presupuesto) + Complementary Balance & Inflow */}
@@ -385,12 +388,12 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                 </span>
                 {analyticsMode === 'acquisitions' && acquisitions.financedAcquisitions > 0 && (
                   <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
-                    Incluye {formatCurr(acquisitions.financedAcquisitions)} financiado
+                    Incluye <PrivateFinancialText>{formatCurr(acquisitions.financedAcquisitions)}</PrivateFinancialText> financiado
                   </span>
                 )}
                 {analyticsMode === 'cash_flow' && cashOutflow.debtPayments > 0 && (
                   <span className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                    Incluye {formatCurr(cashOutflow.debtPayments)} en cuotas
+                    Incluye <PrivateFinancialText>{formatCurr(cashOutflow.debtPayments)}</PrivateFinancialText> en cuotas
                   </span>
                 )}
               </div>
@@ -399,7 +402,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                   −{formatCurr(analyticsMode === 'cash_flow' ? cashOutflow.totalOutflow : acquisitions.totalAcquired)}
                 </PrivacyAmount>
                 <span className={`text-xs font-bold ${
-                  !hasHistoricalData
+                  currentCmp.pct === null
                     ? 'text-[var(--finance-text-muted)]'
                     : currentCmp.dir === 'up'
                     ? 'text-rose-500'
@@ -415,18 +418,18 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
               <div className="text-[11px] text-[var(--finance-text-muted)] pt-1 flex items-center gap-2 flex-wrap">
                 {analyticsMode === 'cash_flow' ? (
                   <>
-                    <span>Gastos operativos: <strong className="text-[var(--finance-text-primary)] tabular-nums">{formatCurr(cashOutflow.operationalSpent)}</strong></span>
+                    <span>Gastos operativos: <PrivacyAmount as="strong" className="text-[var(--finance-text-primary)] tabular-nums">{formatCurr(cashOutflow.operationalSpent)}</PrivacyAmount></span>
                     <span>·</span>
-                    <span>Pago de cuotas: <strong className="text-[var(--finance-text-primary)] tabular-nums">{formatCurr(cashOutflow.debtPayments)}</strong></span>
+                    <span>Pago de cuotas: <PrivacyAmount as="strong" className="text-[var(--finance-text-primary)] tabular-nums">{formatCurr(cashOutflow.debtPayments)}</PrivacyAmount></span>
                   </>
                 ) : (
                   <>
-                    <span>Al contado: <strong className="text-[var(--finance-text-primary)] tabular-nums">{formatCurr(acquisitions.operationalSpent)}</strong></span>
+                    <span>Al contado: <PrivacyAmount as="strong" className="text-[var(--finance-text-primary)] tabular-nums">{formatCurr(acquisitions.operationalSpent)}</PrivacyAmount></span>
                     <span>·</span>
-                    <span>Financiado: <strong className="text-[var(--finance-text-primary)] tabular-nums">{formatCurr(acquisitions.financedAcquisitions)}</strong></span>
+                    <span>Financiado: <PrivacyAmount as="strong" className="text-[var(--finance-text-primary)] tabular-nums">{formatCurr(acquisitions.financedAcquisitions)}</PrivacyAmount></span>
                     {acquisitions.financedItems.length > 0 && (
                       <span className="text-[10px] opacity-75">
-                        ({acquisitions.financedItems.map((i) => `${i.title}: ${formatCurr(i.amount)}`).join(', ')})
+                        (<PrivateFinancialText>{acquisitions.financedItems.map((i) => `${i.title}: ${formatCurr(i.amount)}`).join(', ')}</PrivateFinancialText>)
                       </span>
                     )}
                   </>
@@ -473,21 +476,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                   <span>{effectiveRemaining !== null && effectiveRemaining >= 0 ? `${(100 - effectivePct).toFixed(0)}% margen restante` : 'Límite superado'}</span>
                 </div>
               </div>
-            ) : (
-              <div className="pt-1 flex items-center gap-2 text-xs text-[var(--finance-text-muted)]">
-                <span>Sin límite mensual asignado.</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTempGlobalBudget('');
-                    setEditingGlobal(true);
-                  }}
-                  className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-                >
-                  + Fijar presupuesto
-                </button>
-              </div>
-            )}
+            ) : null}
           </div>
 
           {/* Columna Secundaria (5 cols en lg): Balance Neto y Entradas en formato compacto */}
@@ -551,7 +540,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
           <div className="flex items-center gap-2 flex-wrap text-xs">
             {editingGlobal ? (
               <div className="flex items-center gap-1">
-                <input
+                <PrivacyInput
                   type="number"
                   autoFocus
                   value={tempGlobalBudget}
@@ -623,7 +612,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
 
         {/* Empty state if no budgets configured */}
         {!report.hasBudget && configuredCategories.length === 0 && !showAllCategories ? (
-          <div className="p-4 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
             <span className="text-[var(--finance-text-muted)]">
               Todavía no definiste límites de gasto para {formatMonthTitle(selectedMonth)}.
             </span>
@@ -657,14 +646,14 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                     >
                       {/* Categoría */}
                       <td className="py-2.5 px-3 font-semibold text-[var(--finance-text-primary)]">
-                        <span>{item.categoryName}</span>
+                        <span><PrivateFinancialText>{item.categoryName}</PrivateFinancialText></span>
                       </td>
 
                       {/* Límite Planificado (Editable in-place) */}
                       <td className="py-2.5 px-3 tabular-nums text-[var(--finance-text-secondary)]">
                         {isEditing ? (
                           <div className="flex items-center gap-1">
-                            <input
+                            <PrivacyInput
                               type="number"
                               autoFocus
                               value={tempBudget}
@@ -759,7 +748,8 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
         {showCategoryChart && distinctMonthCategoriesCount >= 3 && (
           <div className="mt-4 pt-4 border-t border-[var(--finance-border)] grid grid-cols-1 md:grid-cols-2 gap-4 items-center animate-in fade-in">
             <div className="h-56 w-full flex items-center justify-center">
-              <ResponsiveContainer width="100%" height="100%">
+              {state.settings.privacyMode && <p className="text-xs text-[var(--finance-text-muted)]">Gráfico oculto por Stream Guard</p>}
+              {!state.settings.privacyMode && <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={monthCategoriesForChart}
@@ -776,7 +766,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                   </Pie>
                   <Tooltip content={<CustomChartTooltip />} />
                 </PieChart>
-              </ResponsiveContainer>
+              </ResponsiveContainer>}
             </div>
 
             <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
@@ -786,7 +776,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                   <div key={cat.name} className="flex items-center justify-between text-xs py-1 border-b border-[var(--finance-border)]">
                     <div className="flex items-center gap-2">
                       <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: PALETTE[index % PALETTE.length] }} />
-                      <span className="font-semibold text-[var(--finance-text-primary)]">{cat.name}</span>
+                      <span className="font-semibold text-[var(--finance-text-primary)]"><PrivateFinancialText>{cat.name}</PrivateFinancialText></span>
                     </div>
                     <div className="flex items-center gap-2 tabular-nums">
                       <span className="text-[10px] text-[var(--finance-text-muted)]">{pct.toFixed(0)}%</span>
@@ -813,9 +803,10 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
           </h3>
         </div>
 
-        {hasHistoricalData ? (
+        {hasHistoricalData && state.finance.transactions.length > 0 ? (
           <div className="h-48 sm:h-52 w-full pt-2">
-            <ResponsiveContainer width="100%" height="100%">
+            {state.settings.privacyMode && <p className="text-xs text-[var(--finance-text-muted)]">Gráfico oculto por Stream Guard</p>}
+            {!state.settings.privacyMode && <ResponsiveContainer width="100%" height="100%">
               <BarChart data={scopedMonthlyEvolutionData} margin={{ top: 10, right: 10, left: 5, bottom: 0 }}>
                 <XAxis dataKey="name" tick={{ fill: 'var(--finance-text-muted)', fontSize: 13 }} axisLine={false} tickLine={false} />
                 <YAxis
@@ -834,27 +825,15 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                 <Bar dataKey="Ingresos" fill="#10B981" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="Gastos" fill="#EF4444" radius={[4, 4, 0, 0]} />
               </BarChart>
-            </ResponsiveContainer>
+            </ResponsiveContainer>}
           </div>
         ) : (
           /* Compact Empty State (No huge void eating screen) */
-          <div className="p-3.5 rounded-xl border border-[var(--finance-border)] bg-[var(--finance-surface-subtle)] flex items-center gap-3 text-xs">
-            <div className="h-7 w-7 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-              <AppIcon name="activity" className="h-4 w-4" />
-            </div>
-            <div>
-              <span className="font-bold text-[var(--finance-text-primary)]">
-                Todavía no hay meses para comparar
-              </span>
-              <p className="text-[11px] text-[var(--finance-text-muted)] mt-0.5">
-                Se activa al registrar movimientos en un segundo mes.
-              </p>
-            </div>
-          </div>
+          <p className="text-xs text-[var(--finance-text-muted)]">{state.finance.transactions.length === 0 ? 'Sin movimientos registrados para analizar.' : 'Registrá movimientos en otro mes para comparar su evolución.'}</p>
         )}
       </section>
 
-      <details className="finance-surface rounded-2xl p-4 sm:p-5 space-y-4">
+      {hasFinancialDetails && <details className="finance-surface rounded-2xl p-4 sm:p-5 space-y-4">
         <summary className="min-h-11 cursor-pointer text-base font-bold text-[var(--finance-text-primary)]">Más detalles del mes <span className="ml-2 text-sm font-normal text-[var(--finance-text-muted)]">Gastos fijos, patrimonio e histórico</span></summary>
         {/* Fila A: Estructura de Rigidez del Gasto (Fijo vs Variable) */}
         <div className="p-3.5 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] space-y-2 text-xs">
@@ -992,7 +971,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                       key={c.name}
                       className="py-1.5 px-2 rounded-lg flex items-center justify-between text-xs hover:bg-[var(--finance-surface-hover)] transition-colors"
                     >
-                      <span className="font-medium text-[var(--finance-text-primary)] truncate">{c.name}</span>
+                      <span className="font-medium text-[var(--finance-text-primary)] truncate"><PrivateFinancialText>{c.name}</PrivateFinancialText></span>
                       <PrivacyAmount as="span" className="font-bold tabular-nums text-[var(--finance-text-secondary)]">
                         {formatCurr(c.value)}
                       </PrivacyAmount>
@@ -1003,7 +982,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
             </div>
           )}
         </div>
-      </details>
+      </details>}
     </div>
   );
 };

@@ -2,6 +2,7 @@ import { validateDurableCommercial } from './lib/commercialDurable';
 import { reconcileFinancePublication } from './lib/financeSyncReconciliation';
 import { assertCommercialTransition } from './lib/commercialTransition';
 import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { PrivacyProvider } from './components/PrivacyAmount';
 import { ViewType, LifeOSState } from './types';
 import { commercialHydrationBlock, changesStoredCommercial, defaultState, hasPersistedCommercial, loadRecoveryState, loadStoredState, parseBackupJSON, readStoredCommercial, saveRecoveryState, saveStoredState, todayISO } from './lib/storage';
 import {
@@ -2316,6 +2317,7 @@ export default function App() {
     : 'pb-28 sm:pb-28';
 
   return (
+    <PrivacyProvider active={Boolean(state.settings.privacyMode)}>
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex flex-col lg:flex-row antialiased selection:bg-blue-500/20 selection:text-blue-500">
       {/* Sidebar */}
       <Sidebar
@@ -2786,5 +2788,6 @@ export default function App() {
       />
       {!__LIFEOS_PORTABLE__ && <PwaUpdatePrompt />}
     </div>
+    </PrivacyProvider>
   );
 }

@@ -188,7 +188,7 @@ export const Topbar: React.FC<TopbarProps> = ({
             title={(state.inbox || []).length > 0 ? `Capturar / Bandeja (${(state.inbox || []).length} pendientes)` : "Capturar (C)"}
             className="flex h-9 items-center gap-1.5 rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] px-3 text-xs font-bold text-white shadow-xs transition-all active:scale-[0.98] cursor-pointer"
           >
-            <AppIcon name="touchpad" className="h-3.5 w-3.5 text-white" />
+            <AppIcon name="squarePlus" className="h-4 w-4 text-white" />
             <span>Capturar</span>
             {(state.inbox || []).length > 0 ? (
               <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-black text-slate-900 animate-pulse">

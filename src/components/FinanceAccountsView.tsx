@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { LifeOSState } from '../types';
 import { fmtDate, fmtMoney, formatMoney, parseDecimalInput } from '../lib/storage';
 import { AppIcon } from './AppIcon';
-import { PrivacyAmount } from './PrivacyAmount';
+import { PrivateFinancialText, PrivacyInput, PrivacyAmount } from './PrivacyAmount';
 import {
   calcAccountsTotal,
   calcDebtsTotal,
@@ -10,6 +10,7 @@ import {
   calcNetWorth,
 } from '../lib/calculations';
 import { FinanceAgreementsSection } from './FinanceAgreementsSection';
+import { maskFinancialText } from '../lib/financialPrivacy';
 
 interface FinanceAccountsViewProps {
   state: LifeOSState;
@@ -219,7 +220,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="font-bold text-sm text-[var(--finance-text-primary)] break-words [overflow-wrap:anywhere]">
-                        {account.name}
+                        <PrivateFinancialText>{account.name}</PrivateFinancialText>
                       </span>
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--finance-surface-subtle)] text-[var(--finance-text-secondary)] shrink-0">
                         {(account.currency || 'UYU').toUpperCase()}
@@ -229,7 +230,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        if (confirm(`¿Eliminar la cuenta "${account.name}"? Solo se permite si no tiene movimientos registrados.`)) {
+                        if (confirm(maskFinancialText(`¿Eliminar la cuenta "${account.name}"? Solo se permite si no tiene movimientos registrados.`, Boolean(state.settings.privacyMode)))) {
                           onDeleteAccount(account.id);
                         }
                       }}
@@ -263,7 +264,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                         type="button"
                         onClick={() => onOpenReconcile(account.id)}
                         className="finance-control py-1 px-2.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors shrink-0"
-                        title={`Conciliar saldo real de ${account.name}`}
+                        title={maskFinancialText(`Conciliar saldo real de ${account.name}`, Boolean(state.settings.privacyMode))}
                       >
                         <AppIcon
                           name="check"
@@ -454,16 +455,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
           </div>
 
           {investments.length === 0 ? (
-            <div className="p-3.5 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] flex items-center justify-between text-xs text-[var(--finance-text-muted)]">
-              <span>Sin inversiones registradas</span>
-              <button
-                type="button"
-                onClick={() => setIsAddInvOpen(true)}
-                className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-              >
-                + Agregar
-              </button>
-            </div>
+            <p className="text-xs text-[var(--finance-text-muted)]">Sin inversiones registradas.</p>
           ) : (
             <div className="divide-y divide-[var(--finance-border)] border-t border-[var(--finance-border)]">
               {investments.map((inv) => (
@@ -472,7 +464,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                   className="py-3 first:pt-3 last:pb-0.5 flex items-center justify-between gap-3 text-xs"
                 >
                   <span className="font-semibold text-[var(--finance-text-primary)] min-w-0 break-words [overflow-wrap:anywhere]">
-                    {inv.name}
+                    <PrivateFinancialText>{inv.name}</PrivateFinancialText>
                   </span>
 
                   <div className="flex items-center gap-2.5 shrink-0">
@@ -499,11 +491,11 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
           <div className="flex items-start justify-between gap-2">
             <div>
               <h3 className="text-sm font-extrabold text-[var(--finance-text-primary)]">
-                Otros pasivos registrados
+                Otras deudas registradas
               </h3>
               {debts.length > 0 ? (
                 <span className="text-xs text-[var(--finance-text-muted)] block mt-0.5">
-                  Subtotal computado UYU:{' '}
+                  Deudas sin acuerdo vinculado (UYU):{' '}
                   <PrivacyAmount
                     as="strong"
                     className={`font-bold tabular-nums ${
@@ -529,16 +521,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
           </div>
 
           {debts.length === 0 ? (
-            <div className="p-3.5 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] flex items-center justify-between text-xs text-[var(--finance-text-muted)]">
-              <span>Sin deudas registradas</span>
-              <button
-                type="button"
-                onClick={() => setIsAddDebtOpen(true)}
-                className="font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-              >
-                + Agregar
-              </button>
-            </div>
+            <p className="text-xs text-[var(--finance-text-muted)]">Sin deudas registradas.</p>
           ) : (
             <div className="divide-y divide-[var(--finance-border)] border-t border-[var(--finance-border)]">
               {debts.map((d) => {
@@ -557,12 +540,12 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                             linkedAgreement ? 'text-[var(--finance-text-secondary)]' : 'text-[var(--finance-text-primary)]'
                           }`}
                         >
-                          {d.name}
+                          <PrivateFinancialText>{d.name}</PrivateFinancialText>
                         </span>
                         {linkedAgreement && (
                           <span
                             className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] text-[var(--finance-text-secondary)]"
-                            title={`Vinculada al acuerdo "${linkedAgreement.title}"`}
+                            title={maskFinancialText(`Vinculada al acuerdo "${linkedAgreement.title}"`, Boolean(state.settings.privacyMode))}
                           >
                             Contabilizada en Acuerdos · Excluida de este subtotal
                           </span>
@@ -640,7 +623,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Nombre de la cuenta
                 </label>
-                <input
+                <PrivacyInput maskText
                   required
                   autoFocus
                   type="text"
@@ -654,7 +637,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Saldo inicial
                 </label>
-                <input
+                <PrivacyInput
                   type="text"
                   inputMode="decimal"
                   value={accBalance}
@@ -714,7 +697,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Acreedor o concepto
                 </label>
-                <input
+                <PrivacyInput maskText
                   required
                   autoFocus
                   type="text"
@@ -728,7 +711,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Monto total
                 </label>
-                <input
+                <PrivacyInput
                   required
                   type="number"
                   step="any"
@@ -742,7 +725,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Cuota mensual (opcional)
                 </label>
-                <input
+                <PrivacyInput
                   type="number"
                   step="any"
                   value={debtMonthlyPayment}
@@ -798,7 +781,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Nombre del activo
                 </label>
-                <input
+                <PrivacyInput maskText
                   required
                   autoFocus
                   type="text"
@@ -812,7 +795,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Valor estimado
                 </label>
-                <input
+                <PrivacyInput
                   required
                   type="number"
                   step="any"

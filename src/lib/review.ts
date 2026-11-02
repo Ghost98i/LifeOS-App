@@ -4,6 +4,7 @@ import { sleepSummary } from './contextInsights';
 import { getCategoryName } from './financeCategories';
 import { isModuleEnabled } from './moduleVisibility';
 import { getCompletedGymSets, getPerformedGymVolume, isPerformedGymSession } from './gymMetrics';
+import { accountHasRecordedActivity, hasBackupContent, hasReviewableActivity } from './todayMaintenance';
 
 export interface ReviewException {
   id: string;
@@ -34,7 +35,8 @@ export function weeklyReviewExceptions(state: LifeOSState): ReviewException[] {
   const oldStock = state.resale.inventory.filter((item) => item.status === 'comprado' && daysBetween(item.buyDate, today) >= 30);
   if (oldStock.length) exceptions.push({ id: 'old-stock', title: `${oldStock.length} producto(s) llevan más de 30 días`, detail: 'Revisá precio, publicación o salida.', view: 'reventa', tone: 'attention' });
 
-  const staleAccounts = state.finance.accounts.filter((account) => !account.lastReconciledAt || daysBetween(account.lastReconciledAt, today) >= 14);
+  const staleAccounts = state.finance.accounts.filter((account) => accountHasRecordedActivity(state, account)
+    && (!account.lastReconciledAt || daysBetween(account.lastReconciledAt, today) >= 14));
   if (staleAccounts.length) exceptions.push({ id: 'stale-accounts', title: `${staleAccounts.length} cuenta(s) sin conciliar`, detail: staleAccounts.map((account) => account.name).join(' · '), view: 'finanzas', tone: 'attention' });
 
   const budgetOverruns = state.finance.categories.filter((category) => {
@@ -54,7 +56,11 @@ export function weeklyReviewExceptions(state: LifeOSState): ReviewException[] {
   const studiedRecently = state.study.studyLog.some((log) => daysBetween(log.date, today) <= 7);
   if (soonExams.length && !studiedRecently) exceptions.push({ id: 'exam-no-study', title: 'Examen cerca sin estudio reciente', detail: 'Hay un examen en los próximos 14 días y no registraste estudio esta semana.', view: 'estudios', tone: 'urgent' });
 
-  if (!state.settings.lastBackupAt || daysBetween(state.settings.lastBackupAt, today) >= 7) exceptions.push({ id: 'backup', title: 'Backup pendiente', detail: 'Tu última copia tiene una semana o más.', view: 'config', tone: 'info' });
+  if (hasBackupContent(state) && (!state.settings.lastBackupAt || daysBetween(state.settings.lastBackupAt, today) >= 7)) {
+    exceptions.push({ id: 'backup', title: state.settings.lastBackupAt ? 'Copia de seguridad pendiente' : 'Copia de seguridad',
+      detail: state.settings.lastBackupAt ? 'La última copia registrada tiene una semana o más.' : 'No hay una copia de seguridad registrada.',
+      view: 'config', tone: 'info' });
+  }
   return exceptions.filter((item) => isModuleEnabled(state, item.view));
 }
 
@@ -67,7 +73,8 @@ export function reviewedThisWeek(state: LifeOSState, today = todayISO()): boolea
 }
 
 export function isWeeklyReviewDue(state: LifeOSState, today = todayISO()): boolean {
-  return !reviewedThisWeek(state, today);
+  return !reviewedThisWeek(state, today)
+    && (Boolean(state.settings?.lastWeeklyReviewAt) || hasReviewableActivity(state));
 }
 
 export interface WeeklyReviewData {
