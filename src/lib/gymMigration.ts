@@ -391,6 +391,12 @@ export function migrateGym(value: unknown): Gym {
         exerciseIndex: typeof timer.exerciseIndex === 'number' ? timer.exerciseIndex : undefined,
         targetExerciseIndex: typeof timer.targetExerciseIndex === 'number' ? timer.targetExerciseIndex : undefined,
         minimized: timer.minimized === true,
+        ...(typeof timer.pausedAt === 'number' && Number.isFinite(timer.pausedAt) && timer.pausedAt > 0 ? {
+          pausedAt: timer.pausedAt,
+          ...(typeof timer.remainingSecondsWhenPaused === 'number'
+            && Number.isFinite(timer.remainingSecondsWhenPaused) && timer.remainingSecondsWhenPaused >= 0
+            ? { remainingSecondsWhenPaused: timer.remainingSecondsWhenPaused } : {}),
+        } : {}),
       }
       : null,
     settings,
