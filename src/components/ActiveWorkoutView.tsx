@@ -34,6 +34,7 @@ export interface ActiveWorkoutViewProps {
   completionMotion?: { setKey: string; nonce: number } | null;
   restTimer?: React.ReactNode;
   activeTimer?: GymActiveTimer | null;
+  showQuickRestAdjustments?: boolean;
   exerciseSuggestions: string[];
   onSelectExercise: (exerciseIndex: number) => void;
   onSelectSet: (setIndex: number) => void;
@@ -45,7 +46,7 @@ export interface ActiveWorkoutViewProps {
   onUpdateSetByIndex?: (setIndex: number, updates: Partial<GymSet>) => void;
   onAddSet: (exerciseIndex: number) => void;
   onDeleteSet: (exerciseIndex: number, setIndex: number) => void;
-  onAddExercise: (payload: AddExercisePayload) => void;
+  onAddExercise: (payload: AddExercisePayload) => boolean | void;
   onDeleteExercise: (exerciseIndex: number) => void;
   onUpdateEquipment: (exerciseIndex: number, equipment: ExerciseEquipment, barWeight?: number) => void;
   onUpdateBarWeight: (exerciseIndex: number, barWeight: number) => void;
@@ -66,8 +67,8 @@ export interface ActiveWorkoutViewProps {
   onEditSessionTimes?: (startedAt: string | null, finishedAt: string | null) => void;
   onAdjustRestTimer?: (deltaSeconds: number) => void;
   onTogglePauseRestTimer?: () => void;
-  onSkipRestTimer?: () => void;
-  onCompleteRestTimer?: () => void;
+  onSkipRestTimer?: () => boolean | void;
+  onCompleteRestTimer?: () => boolean | void;
   onToggleMinimizeRest?: () => void;
 }
 
@@ -109,6 +110,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
   completionMotion,
   restTimer,
   activeTimer,
+  showQuickRestAdjustments = true,
   exerciseSuggestions,
   onSelectExercise,
   onSelectSet,
@@ -199,10 +201,11 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
       if (!isPaused && remaining <= 0) {
         if (!hasFinishedRef.current) {
           hasFinishedRef.current = true;
-          playSound('success');
-          showToast('Descanso finalizado. ¡Siguiente serie lista!', 'info');
-          if (onCompleteRestTimer) onCompleteRestTimer();
-          else if (onSkipRestTimer) onSkipRestTimer();
+          const saved = onCompleteRestTimer ? onCompleteRestTimer() : onSkipRestTimer?.();
+          if (saved !== false) {
+            playSound('success');
+            showToast('Descanso finalizado. ¡Siguiente serie lista!', 'info');
+          }
         }
       }
     };
@@ -234,7 +237,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
     event.preventDefault();
     const name = newExerciseName.trim();
     if (!name) return;
-    onAddExercise({
+    const saved = onAddExercise({
       name,
       muscleGroup: newExerciseMuscle,
       equipment: newExerciseEquipment,
@@ -242,11 +245,14 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
       initialWeight: newExerciseWeight,
       initialReps: newExerciseReps,
     });
+    if (saved === false) return;
     setNewExerciseName('');
   };
 
   // Rest state determination
-  const isTimerRunning = Boolean(activeTimer && left > 0);
+  // An expired rest still needs a confirmed clear. Keep its existing retry action
+  // available if persistence rejected the automatic completion.
+  const isTimerRunning = Boolean(activeTimer);
   const restingExerciseIndex = activeTimer?.exerciseIndex ?? safeExerciseIndex;
   const isRestingThisExercise = isTimerRunning && restingExerciseIndex === safeExerciseIndex;
   const isRestPhaseActive = isRestingThisExercise && !activeTimer?.minimized && !isReviewingPreviousSet;
@@ -307,7 +313,6 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
   const handleSkipOrAdvance = () => {
     setIsReviewingPreviousSet(false);
     if (nextEffortButtonText.includes('Finalizar sesión')) {
-      if (onSkipRestTimer) onSkipRestTimer();
       onFinish();
     } else {
       if (onSkipRestTimer) onSkipRestTimer();
@@ -328,14 +333,14 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
       <header className="gym-workout-topbar flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="gym-live-label"><span aria-hidden="true" /> Sesión activa</p>
-          <div className="mt-0.5 flex min-w-0 items-baseline gap-2">
-            <h1 className="truncate text-lg font-bold tracking-tight text-[var(--text)] sm:text-xl">{sessionTitle}</h1>
+          <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+            <h1 className="break-words text-lg font-bold tracking-tight text-[var(--text)] sm:text-xl">{sessionTitle}</h1>
             <span className="shrink-0 text-xs tabular-nums text-[var(--text-soft)]">
-              {progress.completed}/{progress.total} series
+              {progress.completed}/{progress.total} series realizadas
             </span>
           </div>
           <p className="mt-1 text-xs text-[var(--text-faint)]">
-            Iniciado {session.startedAt || 'hoy'} · {getPerformedGymVolume(session).toLocaleString('es-UY')} kg realizados
+            Iniciado {session.startedAt || 'hoy'} · Volumen efectivo: {getPerformedGymVolume(session).toLocaleString('es-UY')} kg (sin aproximaciones)
           </p>
         </div>
 
@@ -379,7 +384,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
               onClick={onFinish}
               className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]"
             >
-              <AppIcon name="checkCircle" className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <AppIcon name="checkCircle" className="h-4 w-4 text-[var(--gym-visual-accent)]" />
               Finalizar sesión
             </button>
             <button
@@ -403,12 +408,12 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
       </header>
 
       {exercise ? (
-        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,780px)_minmax(320px,1fr)]">
+        <div className="gym-active-layout grid items-start gap-4 xl:grid-cols-[minmax(0,780px)_minmax(320px,1fr)]">
           {/* COCKPIT PRINCIPAL */}
-          <main data-active-set-editor className="gym-cockpit-wrap min-w-0 space-y-3">
+          <main data-active-set-editor className="gym-cockpit-wrap min-w-0">
             {/* Aviso Contextual si el usuario navega a otro ejercicio mientras corre un descanso */}
             {!isRestingThisExercise && isTimerRunning && (
-              <div className="flex items-center justify-between rounded-xl bg-[var(--blue-soft)] border border-[var(--blue)]/30 px-3.5 py-2.5 text-xs">
+              <div className="gym-rest-origin-note flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[var(--blue-soft)] border border-[var(--blue)]/30 px-3.5 py-2.5 text-xs">
                 <div className="flex items-center gap-2">
                   <AppIcon name="clock" className="h-4 w-4 text-[var(--blue)] shrink-0" />
                   <span className="font-semibold text-[var(--text)]">
@@ -436,8 +441,8 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
 
             {/* Aviso si está revisando una serie completada durante un descanso */}
             {isReviewingPreviousSet && isTimerRunning && (
-              <div className="flex items-center justify-between rounded-xl bg-amber-500/10 border border-amber-500/25 px-3.5 py-2.5 text-xs">
-                <span className="font-semibold text-amber-700 dark:text-amber-300">
+              <div className="gym-rest-origin-note flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)] px-3.5 py-2.5 text-xs">
+                <span className="font-semibold text-[var(--text-soft)]">
                   Revisando Serie {completedSetIndex + 1} ({completedSet.weight} kg × {completedSet.reps}) · Descanso: <strong className="tabular-nums">{formattedTimer}</strong>
                 </span>
                 <button
@@ -467,9 +472,9 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     aria-label="Ejercicio anterior"
                     title="Ejercicio anterior"
                   >
-                    ‹
+                    <AppIcon name="chevronLeft" className="h-4 w-4" />
                   </button>
-                  <span className="c-pager-label">Ejercicio {safeExerciseIndex + 1} de {session.exercises.length}</span>
+                  <span className="c-pager-label"><span className="hidden sm:inline">Ejercicio </span>{safeExerciseIndex + 1} de {session.exercises.length}</span>
                   <button
                     type="button"
                     className="c-pager-btn min-h-11"
@@ -478,7 +483,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     aria-label="Ejercicio siguiente"
                     title="Ejercicio siguiente"
                   >
-                    ›
+                    <AppIcon name="chevronRight" className="h-4 w-4" />
                   </button>
                 </div>
 
@@ -489,9 +494,10 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                       className="c-tool-btn min-h-11"
                       onClick={() => onOpenCalculator(safeExerciseIndex, safeSetIndex, Number(currentSet.weight) || 40, barWeight)}
                       title="Calculadora gráfica de discos de barra"
+                      aria-label="Calcular discos"
                     >
                       <AppIcon name="dumbbell" className="h-3.5 w-3.5" />
-                      <span>Discos</span>
+                      <span className="hidden sm:inline">Discos</span>
                     </button>
                   )}
                   <button
@@ -499,9 +505,10 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     className="c-tool-btn min-h-11"
                     onClick={() => onOpenHistory({ exerciseId: exercise.id, exerciseName: exercise.name })}
                     title="Historial de marcas y récords personales"
+                    aria-label="Historial del ejercicio"
                   >
-                    <AppIcon name="activity" className="h-3.5 w-3.5" />
-                    <span>PRs</span>
+                    <AppIcon name="history" className="h-4 w-4" />
+                    <span className="hidden sm:inline">Historial</span>
                   </button>
                 </div>
               </div>
@@ -515,13 +522,12 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                   <h2 className="c-exercise-title">{exercise.name}</h2>
                   <div className="c-meta-sub">
                     <span>{exercise.muscleGroup || 'General'}</span>
-                    <span>· {plateDescription(equipment, Number(currentSet?.weight) || 0, barWeight)}</span>
-                    {nextExercise && <span className="opacity-75">· Después: {nextExercise.name}</span>}
                     {currentSet && (
                       <button
                         type="button"
                         onClick={() => onUpdateCurrentSet({ type: currentSet.type === 'warmup' ? 'normal' : 'warmup' })}
                         className={`c-warmup-pill min-h-11 cursor-pointer ${currentSet.type === 'warmup' ? '' : 'opacity-60 bg-[var(--surface-muted)] text-[var(--text-soft)] border-[var(--border)]'}`}
+                        aria-label={`Tipo de serie: ${currentSet.type === 'warmup' ? 'aproximación; cambiar a efectiva' : 'efectiva; cambiar a aproximación'}`}
                         title={currentSet.type === 'warmup' ? 'Serie de aproximación · Clic para hacerla efectiva' : 'Serie efectiva · Clic para marcar como aproximación'}
                       >
                         {currentSet.type === 'warmup' ? 'Aproximación' : 'Efectiva'}
@@ -548,9 +554,10 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                       className={`c-set-pill min-h-11 ${isSelected ? 'is-active' : ''} ${isDone ? 'is-done' : ''}`}
                       title={`Serie ${idx + 1}: ${set.weight} kg × ${set.reps} repeticiones`}
                       aria-label={`Serie ${idx + 1}: ${set.weight} kilogramos, ${set.reps} repeticiones${isDone ? ', realizada' : ', pendiente'}`}
+                      aria-pressed={isSelected}
                     >
                       <div className="c-set-pill-top">
-                        <span>{isWarmup ? 'Apx' : `S${idx + 1}`}</span>
+                        <span>{isWarmup ? 'Aprox.' : `Serie ${idx + 1}`}</span>
                         {isDone && (
                           showCompletionMotion ? (
                             <LifeOSLottie
@@ -560,10 +567,10 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                               speed={1.35}
                               decorative
                               className="shrink-0"
-                              fallback={<span className="c-check">✓</span>}
+                              fallback={<AppIcon name="check" className="c-check h-3.5 w-3.5" />}
                             />
                           ) : (
-                            <span className="c-check">✓</span>
+                            <AppIcon name="check" className="c-check h-3.5 w-3.5" />
                           )
                         )}
                       </div>
@@ -590,6 +597,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
               <div className="c-stage-card c-logging-phase">
                 {currentSet ? (
                   <>
+                    <p className="c-set-position">Serie {safeSetIndex + 1} de {sets.length}<span>{currentSet.completed ? 'Registrada' : 'Por registrar'}</span></p>
                     <div className="c-load-grid">
                       {/* Columna de Peso */}
                       <div className="c-load-col">
@@ -667,13 +675,13 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     {/* Barra Contextual de Carga & Referencia Previa */}
                     <div className="c-load-context-row">
                       <span className="c-context-plate-desc" title={plateDescription(equipment, Number(currentSet.weight) || 0, barWeight)}>
-                        ⚙️ {plateDescription(equipment, Number(currentSet.weight) || 0, barWeight)}
+                        {plateDescription(equipment, Number(currentSet.weight) || 0, barWeight)}
                       </span>
                       {previousSet ? (
                         <div className="c-prev-best-pill">
                           <span>
                             Última vez · serie {safeSetIndex + 1}: <strong>{previousSet.weight} kg × {previousSet.reps}</strong>
-                            {previousSessionBest && <span className="opacity-80"> (Mejor serie efectiva de esa sesión: {previousSessionBest})</span>}
+                            {previousSessionBest && <span className="c-previous-best">Mejor serie efectiva de esa sesión: {previousSessionBest}</span>}
                           </span>
                           <button
                             type="button"
@@ -685,7 +693,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                           </button>
                         </div>
                       ) : (
-                        <span className="text-[11px] text-[var(--text-faint)]">Primera sesión</span>
+                        <span className="text-xs text-[var(--text-soft)]">Sin referencia para esta serie.{previousSessionBest && <span className="c-previous-best">Mejor serie efectiva de esa sesión: {previousSessionBest}</span>}</span>
                       )}
                     </div>
 
@@ -698,7 +706,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                       <AppIcon name={currentSet.completed ? 'checkCircle' : 'check'} className="h-5 w-5" />
                       <span>
                         {currentSet.completed
-                          ? `✓ Serie ${safeSetIndex + 1} completada · Tocar para desmarcar`
+                          ? `Serie ${safeSetIndex + 1} completada · Tocar para desmarcar`
                           : `Completar serie ${safeSetIndex + 1} · ${currentSet.weight} kg × ${currentSet.reps}`}
                       </span>
                     </button>
@@ -721,41 +729,41 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
               <div className="c-stage-card c-rest-phase">
                 {/* Centro Focal del Cronómetro de Recuperación */}
                 <div className="c-rest-focal-center">
-                  <span className="c-rest-label">
-                    {isPaused
-                      ? '⏸ Descanso en pausa'
-                      : (activeTimer?.kind === 'exercise' ? 'Cambio de ejercicio' : 'Descanso entre series')}
-                  </span>
-
                   <div className="c-rest-timer-wrap">
                     <div className="c-rest-ring">
                       <svg viewBox="0 0 100 100" className="c-timer-svg" aria-hidden="true">
-                        <circle cx="50" cy="50" r={RING_RADIUS} fill="none" stroke="currentColor" strokeWidth="5" className="text-[var(--border)] opacity-30" />
+                        <circle cx="50" cy="50" r={RING_RADIUS} fill="none" stroke="currentColor" strokeWidth="2.25" className="c-timer-track" />
                         <circle
                           cx="50"
                           cy="50"
                           r={RING_RADIUS}
                           fill="none"
                           stroke="currentColor"
-                          strokeWidth="5"
+                          strokeWidth="2.25"
                           strokeDasharray={RING_CIRCUMFERENCE}
                           strokeDashoffset={dashOffset}
                           strokeLinecap="round"
-                          className="text-[var(--blue)] transition-all duration-300"
+                          className="c-timer-progress"
                         />
                       </svg>
                     </div>
-                    <div className="c-rest-timer-text" aria-live="polite">
+                    <div className="c-rest-timer-text" role="timer" aria-label="Tiempo de descanso restante">
                       {formattedTimer}
                     </div>
                   </div>
 
+                  <div className="c-rest-details">
+                  <span className="c-rest-label">
+                    {isPaused
+                      ? 'Descanso en pausa'
+                      : (activeTimer?.kind === 'exercise' ? 'Cambio de ejercicio' : 'Descanso entre series')}
+                  </span>
                   {/* Ajustes Rápidos de Tiempo */}
                   <div className="c-rest-adjust-row">
                     {onTogglePauseRestTimer && (
                       <button
                         type="button"
-                        className={`c-rest-time-btn min-h-11 ${isPaused ? 'border-amber-500/50 bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold' : ''}`}
+                        className={`c-rest-time-btn min-h-11 ${isPaused ? 'is-paused' : ''}`}
                         onClick={onTogglePauseRestTimer}
                         aria-label={isPaused ? 'Reanudar descanso' : 'Pausar descanso'}
                       >
@@ -763,22 +771,22 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                         {isPaused ? 'Reanudar' : 'Pausar'}
                       </button>
                     )}
-                    <button
+                    {showQuickRestAdjustments && <button
                       type="button"
                       className="c-rest-time-btn min-h-11"
                       onClick={() => onAdjustRestTimer?.(-30)}
                       aria-label="Restar 30 segundos"
                     >
                       −30s
-                    </button>
-                    <button
+                    </button>}
+                    {showQuickRestAdjustments && <button
                       type="button"
                       className="c-rest-time-btn min-h-11"
                       onClick={() => onAdjustRestTimer?.(30)}
                       aria-label="Sumar 30 segundos"
                     >
                       +30s
-                    </button>
+                    </button>}
                     {onToggleMinimizeRest && (
                       <button
                         type="button"
@@ -788,6 +796,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                         Minimizar
                       </button>
                     )}
+                  </div>
                   </div>
                 </div>
 
@@ -807,7 +816,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                 {/* Acción Primaria de Descanso */}
                 <button
                   type="button"
-                  className="c-primary-cta min-h-14"
+                  className="c-primary-cta c-next-effort-cta min-h-14"
                   onClick={handleSkipOrAdvance}
                 >
                   <span>{nextEffortButtonText}</span>
@@ -820,7 +829,8 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     className="c-review-link min-h-11"
                     onClick={handleReviewCompletedSet}
                   >
-                    ✎ Revisar o corregir Serie {completedSetIndex + 1} ({completedSet.weight} kg × {completedSet.reps})
+                    <AppIcon name="edit" className="h-4 w-4 shrink-0" />
+                    Revisar o corregir Serie {completedSetIndex + 1} ({completedSet.weight} kg × {completedSet.reps})
                   </button>
                 </div>
               </div>
@@ -828,10 +838,10 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
 
             {/* Barra flotante/fija si el temporizador está minimizado o en otro ejercicio */}
             {isTimerRunning && (!isRestPhaseActive || activeTimer?.minimized) && (
-              <div className="gym-rest-sticky-bar sticky bottom-3 z-30 w-full pt-1">
-                <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--blue)]/40 bg-[var(--card)] p-3 shadow-xl backdrop-blur-md">
+              <div className="gym-rest-sticky-bar w-full pt-1">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--blue)]/40 bg-[var(--card)] p-3">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${isPaused ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400' : 'bg-[var(--blue-soft)] text-[var(--blue)]'} font-black text-xs`}>
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--blue-soft)] text-[var(--gym-visual-accent)] text-xs">
                       <AppIcon name={isPaused ? 'pause' : 'clock'} className="h-4 w-4" />
                     </span>
                     <div className="min-w-0">
@@ -855,7 +865,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                         {isPaused ? 'Seguir' : 'Pausa'}
                       </button>
                     )}
-                    {onAdjustRestTimer && (
+                    {onAdjustRestTimer && showQuickRestAdjustments && (
                       <button
                         type="button"
                         onClick={() => onAdjustRestTimer(30)}
@@ -892,8 +902,8 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
           </main>
 
           {/* PANEL LATERAL / ESCRITORIO: Resumen y Configuración */}
-          <aside className="min-w-0 space-y-3">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xs">
+          <aside className="gym-workout-aside min-w-0 space-y-3">
+            <div className="gym-session-summary rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xs">
               <div className="flex items-center justify-between gap-2">
                 <div>
                   <h3 className="text-sm font-bold text-[var(--text)]">Resumen de la sesión</h3>
@@ -910,6 +920,8 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                 )}
               </div>
 
+              {nextExercise && <p className="gym-session-next-exercise text-xs text-[var(--text-soft)]">Después: {nextExercise.name}</p>}
+
               <details className="group mt-3 border-t border-[var(--border)] pt-3">
                 <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-semibold text-[var(--text)]">
                   <span>Lista de ejercicios ({session.exercises.length})</span>
@@ -924,13 +936,14 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                         key={item.id || `${item.name}-outline-${index}`}
                         type="button"
                         onClick={() => selectExercise(index)}
+                        aria-current={index === safeExerciseIndex ? 'step' : undefined}
                         className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-xl px-3 text-left text-sm transition-colors ${
                           index === safeExerciseIndex
                             ? 'bg-[var(--blue-soft)] font-semibold text-[var(--blue)]'
                             : 'text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]'
                         }`}
                       >
-                        <span className="truncate">{index + 1}. {item.name}</span>
+                        <span className="min-w-0 break-words">{index + 1}. {item.name}</span>
                         <span className="shrink-0 tabular-nums">{done}/{total}</span>
                       </button>
                     );
@@ -982,6 +995,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                 <div className="space-y-2">
                   <p className="text-xs font-semibold text-[var(--text)]">{exercise.name}</p>
                   <select
+                    aria-label="Equipamiento del ejercicio"
                     value={equipment}
                     onChange={(event) => onUpdateEquipment(safeExerciseIndex, event.target.value as ExerciseEquipment)}
                     className={`${controlClass} w-full`}
@@ -989,7 +1003,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     {EXERCISE_EQUIPMENT_OPTIONS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
                   </select>
                   {equipment === 'barra' && (
-                    <select value={barWeight} onChange={(event) => onUpdateBarWeight(safeExerciseIndex, Number(event.target.value))} className={`${controlClass} w-full`}>
+                    <select aria-label="Peso de la barra" value={barWeight} onChange={(event) => onUpdateBarWeight(safeExerciseIndex, Number(event.target.value))} className={`${controlClass} w-full`}>
                       <option value={20}>Barra olímpica · 20 kg</option>
                       <option value={15}>Barra técnica · 15 kg</option>
                       <option value={10}>Barra W / EZ · 10 kg</option>
@@ -1038,16 +1052,17 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                       }
                     }}
                     placeholder="Nombre del ejercicio"
+                    aria-label="Nombre del ejercicio"
                     className={`${controlClass} w-full`}
                   />
                   <datalist id="active-gym-exercise-suggestions">
                     {exerciseSuggestions.map((item) => <option key={item} value={item} />)}
                   </datalist>
                   <div className="grid min-w-0 grid-cols-2 gap-2">
-                    <select value={newExerciseMuscle} onChange={(event) => setNewExerciseMuscle(event.target.value as MuscleGroup)} className={`${controlClass} w-full`}>
+                    <select aria-label="Grupo muscular del nuevo ejercicio" value={newExerciseMuscle} onChange={(event) => setNewExerciseMuscle(event.target.value as MuscleGroup)} className={`${controlClass} w-full`}>
                       {['Pecho', 'Espalda', 'Piernas', 'Hombros', 'Brazos', 'Core', 'Cardio', 'Otros'].map((item) => <option key={item}>{item}</option>)}
                     </select>
-                    <select value={newExerciseEquipment} onChange={(event) => setNewExerciseEquipment(event.target.value as ExerciseEquipment)} className={`${controlClass} w-full`}>
+                    <select aria-label="Equipamiento del nuevo ejercicio" value={newExerciseEquipment} onChange={(event) => setNewExerciseEquipment(event.target.value as ExerciseEquipment)} className={`${controlClass} w-full`}>
                       {EXERCISE_EQUIPMENT_OPTIONS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
                     </select>
                   </div>

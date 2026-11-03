@@ -12,3 +12,8 @@ Licensing is pending verification for every resource before public deployment.
 `adjustable-bench.svg` retains its embedded Noun Project attribution and is tracked as
 `pending-attribution`. `pull-ups.svg` (`DOMINADAS.svg` in the source package) also needs a
 specific rights review because it combines earlier resources.
+
+Verification performed on 2026-11-02 is documented in `docs/gym-icon-licenses.md`.
+The review identified the embedded bench creator and checked official licensing
+guidance, but did not establish asset-specific permission for this catalog.
+All pending statuses remain in force; embedded credit is not proof of a license.

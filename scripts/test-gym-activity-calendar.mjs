@@ -47,8 +47,8 @@ try {
     await day('2026-10-27').click(); await page.getByText('Descanso registrado. No suma un día entrenado.', { exact: true }).waitFor();
     assert.equal(await day('2026-10-27').getAttribute('data-trained'), null);
     if (width >= 1024) {
-      const compactWidth = await page.locator('.gym-activity-calendar').evaluate(el => el.getBoundingClientRect().width);
-      assert.ok(compactWidth <= 554 && compactWidth < calendarWidth);
+      const emptySelectionWidth = await page.locator('.gym-activity-calendar').evaluate(el => el.getBoundingClientRect().width);
+      assert.ok(Math.abs(emptySelectionWidth - calendarWidth) < 1, 'Selecting a rest day preserves the shared calendar canvas');
       assert.ok(Math.abs(await page.locator('.gym-activity-grid').evaluate(el => el.getBoundingClientRect().width) - gridWidth) < 1);
     }
     await page.getByLabel('Mes del calendario', { exact: true }).fill('2024-01'); await day('2024-01-31').click();

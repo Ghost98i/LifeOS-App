@@ -1,7 +1,7 @@
 .gym-activity-calendar {
   padding: 16px;
   border: 1px solid var(--border);
-  border-radius: 20px;
+  border-radius: 16px;
   background: var(--card);
   color: var(--text);
   font-size: 14px;
@@ -14,7 +14,7 @@
 .gym-activity-calendar input:focus-visible,
 .gym-activity-calendar summary:focus-visible { outline: 2px solid var(--gym-calendar-accent); outline-offset: 2px; }
 .gym-activity-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
-.gym-activity-heading h2 { font-size: 18px; font-weight: 650; }
+.gym-activity-heading h2 { font-size: 17px; font-weight: 600; letter-spacing: -.02em; }
 .gym-activity-week-row { display: flex; align-items: center; gap: 8px; position: relative; }
 .gym-activity-week { color: var(--text-soft); }
 .gym-activity-week strong { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -29,7 +29,7 @@
 .gym-activity-grid { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0 2px; font-variant-numeric: tabular-nums; }
 .gym-activity-grid th { height: 28px; text-align: center; font-size: 12px; font-weight: 500; color: var(--text-soft); }
 .gym-activity-grid td { padding: 0; vertical-align: top; }
-.gym-activity-grid button { display: flex; flex-direction: column; align-items: center; justify-content: start; gap: 2px; width: 100%; height: 54px; padding: 4px 0; border: 1px solid transparent; border-radius: 8px; }
+.gym-activity-grid button { display: flex; flex-direction: column; align-items: center; justify-content: start; gap: 2px; width: 100%; height: 48px; padding: 4px 0; border: 1px solid transparent; border-radius: 8px; }
 .gym-activity-grid button:hover { background: var(--surface-muted); }
 .gym-activity-grid [aria-selected="true"] button { background: var(--surface-muted); border-color: var(--gym-calendar-accent); }
 .gym-activity-grid [aria-current="date"] > span { color: var(--gym-calendar-accent); font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
@@ -54,12 +54,13 @@
 .gym-activity-help p { position: absolute; z-index: 20; top: 100%; left: 0; width: min(100%, 22rem); padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text); line-height: 1.5; }
 @media (min-width: 1024px) {
   .gym-activity-calendar { padding: 20px; }
-  .gym-activity-layout { grid-template-columns: minmax(0, 32rem) minmax(0, 1fr); gap: 28px; }
+  .gym-activity-layout { grid-template-columns: minmax(0, 1fr) minmax(0, .85fr); gap: 28px; }
   .gym-activity-selection { border-top: 0; border-left: 1px solid var(--border); padding-top: 8px; padding-left: 28px; }
-  .gym-activity-calendar[data-empty-selection] { max-width: calc(32rem + 42px); }
-  .gym-activity-calendar[data-empty-selection] .gym-activity-layout { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .gym-activity-calendar[data-empty-selection] .gym-activity-selection { border-left: 0; border-top: 1px solid var(--border); padding: 12px 0 0; }
-  .gym-activity-calendar[data-empty-selection] .gym-activity-empty { margin-top: 4px; }
+  .gym-activity-heading > div { display: flex; align-items: center; justify-content: space-between; gap: 20px; width: 100%; }
+  .gym-activity-heading { margin-bottom: 8px; }
+  .gym-activity-calendar[data-empty-selection] .gym-activity-selection { display: flex; flex-direction: column; justify-content: center; padding-block: 20px; }
+  .gym-activity-calendar[data-empty-selection] .gym-activity-empty { margin-top: 8px; max-width: 30ch; }
+  .gym-activity-calendar[data-empty-selection] .gym-activity-selection h3 { font-size: 19px; line-height: 1.5; letter-spacing: -.02em; }
 }
 @media (max-width: 400px) {
   .gym-activity-calendar { padding: 10px; }

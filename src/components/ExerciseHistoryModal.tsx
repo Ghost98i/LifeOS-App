@@ -12,6 +12,7 @@ import type { GymSession } from '../types';
 import { getExerciseHistory } from '../lib/gymMetrics';
 import { AppIcon } from './AppIcon';
 import { fmtDate } from '../lib/storage';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 
 interface ExerciseHistoryModalProps {
   exerciseId?: string;
@@ -26,26 +27,8 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = ({
   sessions,
   onClose,
 }) => {
-  const previousFocusedElementRef = React.useRef<HTMLElement | null>(null);
-
-  React.useEffect(() => {
-    if (document.activeElement instanceof HTMLElement) {
-      previousFocusedElementRef.current = document.activeElement;
-    }
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      if (previousFocusedElementRef.current && typeof previousFocusedElementRef.current.focus === 'function') {
-        previousFocusedElementRef.current.focus();
-      }
-    };
-  }, [onClose]);
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  useDialogFocus(true, dialogRef, onClose);
 
   const history = useMemo(
     () => getExerciseHistory(sessions, { exerciseId, exerciseName }),
@@ -56,10 +39,12 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="exercise-history-title"
@@ -70,7 +55,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = ({
         <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] pb-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h2 id="exercise-history-title" className="text-lg font-black text-[var(--text)] tracking-tight truncate">
+              <h2 id="exercise-history-title" className="min-w-0 break-words text-lg font-black text-[var(--text)] tracking-tight">
                 {history.exerciseName}
               </h2>
               {history.muscleGroup && (
@@ -85,7 +70,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = ({
               )}
             </div>
             <p className="text-xs text-[var(--text-faint)] mt-0.5">
-              {history.sessions.length} sesión(es) registrada(s) con este ejercicio
+              {history.sessions.length} {history.sessions.length === 1 ? 'sesión registrada' : 'sesiones registradas'} con este ejercicio
             </p>
           </div>
 
@@ -93,7 +78,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Cerrar modal"
-            className="p-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer"
             title="Cerrar"
           >
             <AppIcon name="x" className="h-4 w-4" />
@@ -127,7 +112,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = ({
             </strong>
             {history.prs.maxE1RM?.weight ? (
               <span className="text-[10px] text-[var(--text-faint)]">
-                ({history.prs.maxE1RM.weight}k × {history.prs.maxE1RM.reps})
+                ({history.prs.maxE1RM.weight} kg × {history.prs.maxE1RM.reps})
               </span>
             ) : null}
           </div>
@@ -153,7 +138,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = ({
               Volumen Máx.
             </span>
             <strong className="block text-sm font-black text-emerald-600 dark:text-emerald-400 tabular-nums mt-0.5">
-              {history.prs.maxVolume ? `${history.prs.maxVolume.value.toLocaleString('es-UY')}k` : '—'}
+              {history.prs.maxVolume ? `${history.prs.maxVolume.value.toLocaleString('es-UY')} kg` : '—'}
             </strong>
             <span className="text-[10px] text-[var(--text-faint)]">en 1 sesión</span>
           </div>
@@ -246,8 +231,8 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = ({
                     <span className="font-extrabold text-[var(--text)] tabular-nums block">
                       {fmtDate(sess.date)}
                     </span>
-                    <div className="text-[11px] text-[var(--text-soft)] tabular-nums truncate">
-                      {sess.sets.map((s) => `${s.weight}k × ${s.reps}`).join(' · ')}
+                    <div className="text-xs text-[var(--text-soft)] tabular-nums break-words">
+                      {sess.sets.map((s) => `${s.weight} kg × ${s.reps}`).join(' · ')}
                     </div>
                   </div>
 
@@ -272,7 +257,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="w-full py-2.5 px-4 rounded-xl bg-[var(--surface-muted)] hover:bg-[var(--border)] text-[var(--text)] border border-[var(--border)] text-xs font-bold transition cursor-pointer"
+            className="min-h-11 w-full py-2.5 px-4 rounded-xl bg-[var(--surface-muted)] hover:bg-[var(--border)] text-[var(--text)] border border-[var(--border)] text-xs font-bold transition cursor-pointer"
           >
             Cerrar Ficha
           </button>

@@ -241,23 +241,30 @@ export function configureGymTemplateExercise(
   gym: Gym,
   templateId: string,
   target: TemplateExerciseTarget,
-  input: { setsCount: number; reps: number; targetWeight: number; restSeconds?: number }
+  input: { setsCount?: number; reps?: number; targetWeight?: number; restSeconds?: number }
 ): boolean {
   const template = gym.routineTemplates.find((candidate) => candidate.id === templateId);
   const found = findTemplateExercise(template, target);
   if (!found) return false;
 
-  const setsCount = Math.min(20, Math.max(1, Math.round(input.setsCount) || 1));
-  const reps = Math.min(1000, Math.max(1, Math.round(input.reps) || 1));
-  const targetWeight = Math.max(0, Number(input.targetWeight) || 0);
-  found.exercise.sets = Array.from({ length: setsCount }, (_, index) => ({
-    id: found.exercise.sets[index]?.id || uid(),
-    weight: targetWeight,
-    reps,
-    completed: false,
-    completedAt: null,
-  }));
-  found.exercise.weight = targetWeight;
+  const previousSets = found.exercise.sets;
+  const setsCount = input.setsCount === undefined
+    ? Math.max(1, previousSets.length)
+    : Math.min(20, Math.max(1, Math.round(input.setsCount) || 1));
+  const reps = input.reps === undefined ? undefined : Math.min(1000, Math.max(1, Math.round(input.reps) || 1));
+  const targetWeight = input.targetWeight === undefined ? undefined : Math.max(0, Number(input.targetWeight) || 0);
+  found.exercise.sets = Array.from({ length: setsCount }, (_, index) => {
+    const previous = previousSets[index];
+    return {
+      id: previous?.id || uid(),
+      weight: targetWeight ?? previous?.weight ?? previousSets[0]?.weight ?? found.exercise.weight ?? 0,
+      reps: reps ?? previous?.reps ?? previousSets[0]?.reps ?? 10,
+      ...(previous?.type ? { type: previous.type } : {}),
+      completed: false,
+      completedAt: null,
+    };
+  });
+  if (targetWeight !== undefined) found.exercise.weight = targetWeight;
   if (input.restSeconds !== undefined) {
     found.exercise.restSeconds = Math.min(600, Math.max(15, Math.round(input.restSeconds) || 90));
     found.exercise.restSecondsMode = 'custom';
@@ -402,7 +409,7 @@ export function addSetToGymSession(
   const previous = exercise.sets[exercise.sets.length - 1];
   const set: GymSet = {
     id: uid(),
-    weight: previous?.weight ?? (Number(exercise.weight) || 20),
+    weight: previous?.weight ?? (Number.isFinite(Number(exercise.weight ?? NaN)) ? Number(exercise.weight) : 20),
     reps: previous?.reps ?? 10,
     completed: false,
   };

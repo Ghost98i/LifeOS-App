@@ -197,10 +197,12 @@ test('Cockpit 3: Llegada del temporizador a cero no auto-completa ni modifica se
     })
   );
 
-  // When timer has reached zero, transitions back to logging phase for Set 2
-  assert.match(html, /c-stage-card c-logging-phase/);
-  // Set 2 is pending, NOT completed
-  assert.match(html, /Completar serie 2 · 82\.5 kg × 8/);
+  // Time expiry is not proof that clearing the timer was persisted. Keep the
+  // existing start/retry control until the parent confirms the clear (Cockpit 4).
+  assert.match(html, /c-stage-card c-rest-phase/);
+  assert.match(html, /00:00/);
+  assert.match(html, /Comenzar Serie 2 Ahora →/);
+  assert.equal(session.exercises[0].sets[1].completed, false);
   assert.doesNotMatch(html, /Serie 2 completada · Tocar para desmarcar/);
 });
 
@@ -322,7 +324,7 @@ test('Cockpit 6: Última serie del último ejercicio y cierre real a través de 
   assert.equal(session.finishedAt, '19:00');
 });
 
-test('Cockpit 7: Ausencia de historial muestra Primera sesión de forma limpia', () => {
+test('Cockpit 7: Ausencia de referencia no atribuye una primera sesión', () => {
   const session = createMockSession();
 
   const html = renderToStaticMarkup(
@@ -360,7 +362,7 @@ test('Cockpit 7: Ausencia de historial muestra Primera sesión de forma limpia',
     })
   );
 
-  assert.match(html, /Primera sesión/);
+  assert.match(html, /Sin referencia para esta serie/);
   assert.doesNotMatch(html, /undefined/);
   assert.doesNotMatch(html, /NaN/);
 });
@@ -402,7 +404,7 @@ test('Cockpit 8: Aproximaciones frente a series efectivas reflejan distinción v
   );
 
   assert.match(html, /Aproximación/);
-  assert.match(html, /Apx/); // Ribbon tag for warmup
+  assert.match(html, /Aprox\./); // Readable label for warmup
 });
 
 test('Cockpit 9: Diferentes tipos de equipamiento presentan descripciones coherentes', () => {

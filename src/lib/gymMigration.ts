@@ -41,11 +41,11 @@ const MUSCLE_GROUPS: MuscleGroup[] = ['Pecho', 'Espalda', 'Piernas', 'Hombros', 
 const DAYS: DayKey[] = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
 export const EXERCISE_EQUIPMENT_LIST: ExerciseEquipment[] = ['barra', 'mancuerna', 'polea', 'maquina', 'corporal'];
 export const EXERCISE_EQUIPMENT_OPTIONS: { key: ExerciseEquipment; label: string; icon: string }[] = [
-  { key: 'barra', label: '🏋️ Barra', icon: '🏋️' },
-  { key: 'mancuerna', label: '💪 Mancuerna', icon: '💪' },
-  { key: 'polea', label: '🔗 Polea', icon: '🔗' },
-  { key: 'maquina', label: '⚙️ Máquina', icon: '⚙️' },
-  { key: 'corporal', label: '🤸 Corporal', icon: '🤸' },
+  { key: 'barra', label: 'Barra', icon: '🏋️' },
+  { key: 'mancuerna', label: 'Mancuerna', icon: '💪' },
+  { key: 'polea', label: 'Polea', icon: '🔗' },
+  { key: 'maquina', label: 'Máquina', icon: '⚙️' },
+  { key: 'corporal', label: 'Peso corporal', icon: '🤸' },
 ];
 
 function normalizedName(value: string): string {

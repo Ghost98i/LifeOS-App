@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import type { GymSettings } from '../types';
 import { AppIcon } from './AppIcon';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 
 interface GymRestSettingsModalProps {
   settings: Required<GymSettings>;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (nextSettings: GymSettings) => void;
+  onSave: (nextSettings: GymSettings) => boolean | void;
 }
 
 const SET_PRESETS = [60, 90, 120, 180];
@@ -23,9 +24,11 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
   const [exerciseRest, setExerciseRest] = useState(settings.restBetweenExercisesSeconds);
   const [showQuickAdjustments, setShowQuickAdjustments] = useState(settings.showQuickRestAdjustments);
   const [allowManualEditing, setAllowManualEditing] = useState(settings.allowManualRestEditing);
+  const [saveError, setSaveError] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
+      setSaveError(false);
       setAutoTimer(settings.autoTimerEnabled);
       setSetRest(settings.restBetweenSetsSeconds);
       setExerciseRest(settings.restBetweenExercisesSeconds);
@@ -34,37 +37,35 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
     }
   }, [isOpen, settings]);
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  useDialogFocus(isOpen, dialogRef, onClose);
 
   if (!isOpen) return null;
 
   const handleSave = () => {
-    onSave({
+    const saved = onSave({
       autoTimerEnabled: autoTimer,
       restBetweenSetsSeconds: Math.min(600, Math.max(15, setRest || 120)),
       restBetweenExercisesSeconds: Math.min(600, Math.max(15, exerciseRest || 180)),
       showQuickRestAdjustments: showQuickAdjustments,
       allowManualRestEditing: allowManualEditing,
     });
+    if (saved === false) { setSaveError(true); return; }
     onClose();
   };
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="gym-rest-settings-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in"
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="gym-rest-settings-title"
+        data-gym-rest-settings
         className="max-h-[calc(100dvh-2rem)] w-full max-w-md space-y-5 overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -86,9 +87,9 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Cerrar ajustes"
-            className="flex h-9 w-9 items-center justify-center rounded-xl text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
           >
-            ✕
+            <AppIcon name="x" className="h-4 w-4" />
           </button>
         </div>
 
@@ -108,12 +109,12 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
             aria-checked={autoTimer}
             aria-label="Descanso automático"
             onClick={() => setAutoTimer((prev) => !prev)}
-            className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none ${
+            className={`gym-rest-switch relative inline-flex h-11 w-12 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${
               autoTimer ? 'bg-[var(--blue)]' : 'bg-[var(--border-strong)]'
             }`}
           >
             <span
-              className={`pointer-events-none inline-block h-5 w-5 translate-y-1 transform rounded-full bg-white shadow-md transition duration-200 ${
+              className={`pointer-events-none absolute top-3 inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition duration-200 ${
                 autoTimer ? 'translate-x-6' : 'translate-x-1'
               }`}
             />
@@ -208,11 +209,11 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
               aria-checked={showQuickAdjustments}
               aria-label="Mostrar ajustes rápidos de descanso"
               onClick={() => setShowQuickAdjustments((current) => !current)}
-              className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none ${
+              className={`gym-rest-switch relative inline-flex h-11 w-12 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${
                 showQuickAdjustments ? 'bg-[var(--blue)]' : 'bg-[var(--border-strong)]'
               }`}
             >
-              <span className={`pointer-events-none inline-block h-5 w-5 translate-y-1 rounded-full bg-white shadow-md transition duration-200 ${
+              <span className={`pointer-events-none absolute top-3 inline-block h-5 w-5 rounded-full bg-white shadow-md transition duration-200 ${
                 showQuickAdjustments ? 'translate-x-6' : 'translate-x-1'
               }`} />
             </button>
@@ -229,17 +230,18 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
               aria-checked={allowManualEditing}
               aria-label="Permitir edición manual del descanso"
               onClick={() => setAllowManualEditing((current) => !current)}
-              className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer rounded-full transition-colors duration-200 focus:outline-none ${
+              className={`gym-rest-switch relative inline-flex h-11 w-12 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${
                 allowManualEditing ? 'bg-[var(--blue)]' : 'bg-[var(--border-strong)]'
               }`}
             >
-              <span className={`pointer-events-none inline-block h-5 w-5 translate-y-1 rounded-full bg-white shadow-md transition duration-200 ${
+              <span className={`pointer-events-none absolute top-3 inline-block h-5 w-5 rounded-full bg-white shadow-md transition duration-200 ${
                 allowManualEditing ? 'translate-x-6' : 'translate-x-1'
               }`} />
             </button>
           </div>
         </div>
 
+        {saveError && <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">No se guardaron los ajustes. Podés volver a intentarlo.</p>}
         <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-3">
           <button
             type="button"

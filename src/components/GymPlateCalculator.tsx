@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { AppIcon } from './AppIcon';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 
 export interface GymPlateCalculatorProps {
   initialWeight?: number;
@@ -59,27 +60,8 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
   onClose,
   onApplyWeight,
 }) => {
-  const previousFocusedElementRef = React.useRef<HTMLElement | null>(null);
-
-  React.useEffect(() => {
-    if (!isOpen) return;
-    if (document.activeElement instanceof HTMLElement) {
-      previousFocusedElementRef.current = document.activeElement;
-    }
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      if (previousFocusedElementRef.current && typeof previousFocusedElementRef.current.focus === 'function') {
-        previousFocusedElementRef.current.focus();
-      }
-    };
-  }, [isOpen, onClose]);
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  useDialogFocus(isOpen, dialogRef, onClose);
 
   const [barWeight, setBarWeight] = useState(initialBarWeight);
   const [totalWeight, setTotalWeight] = useState(initialWeight);
@@ -118,10 +100,12 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="plate-calculator-title"
@@ -143,9 +127,9 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Cerrar calculadora"
-            className="p-1 rounded-lg text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer"
           >
-            ✕
+            <AppIcon name="x" className="h-4 w-4" />
           </button>
         </div>
 

@@ -5,6 +5,7 @@ import { calculateSessionDuration, getCompletedGymSets, getPerformedGymVolume } 
 import { AppIcon } from './AppIcon';
 import { fmtDate } from '../lib/storage';
 import { LifeOSLottie } from './visual/LifeOSLottie';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 
 interface WorkoutSummaryModalProps {
   session: GymSession;
@@ -20,26 +21,8 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
   onClose,
 }) => {
   const [showAllPRs, setShowAllPRs] = useState(false);
-  const previousFocusedElementRef = React.useRef<HTMLElement | null>(null);
-
-  React.useEffect(() => {
-    if (document.activeElement instanceof HTMLElement) {
-      previousFocusedElementRef.current = document.activeElement;
-    }
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      if (previousFocusedElementRef.current && typeof previousFocusedElementRef.current.focus === 'function') {
-        previousFocusedElementRef.current.focus();
-      }
-    };
-  }, [onClose]);
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  useDialogFocus(true, dialogRef, onClose, '#gym-routine-choice');
 
   const completedSets = getCompletedGymSets(session).length;
   const duration = calculateSessionDuration(session.startedAt, session.finishedAt, session);
@@ -56,10 +39,12 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in"
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="workout-summary-title"
@@ -68,7 +53,7 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
       >
         {/* Header Compacto y Estable */}
         <div className="shrink-0 px-5 pt-4 pb-3 text-center border-b border-[var(--border)]/40 bg-[var(--surface-muted)]/30">
-          <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400 mb-1.5 shadow-xs">
+          <div className="gym-summary-confirmation mx-auto flex h-11 w-11 items-center justify-center rounded-xl mb-1.5">
             <AppIcon name="checkCircle" className="h-6 w-6" />
           </div>
           <h2 id="workout-summary-title" className="text-lg sm:text-xl font-black text-[var(--text)] tracking-tight">
@@ -94,9 +79,9 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
 
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-2.5 sm:p-3 text-center">
               <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-                Volumen
+                Volumen efectivo
               </span>
-              <strong className="block text-sm font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5 tabular-nums">
+              <strong className="gym-summary-volume block text-sm font-extrabold mt-0.5 tabular-nums">
                 {totalVolume.toLocaleString('es-UY')} <span className="text-[10px] font-normal">kg</span>
               </strong>
             </div>
@@ -181,7 +166,7 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
           ) : (
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-3.5 text-center">
               <p className="text-xs text-[var(--text-soft)]">
-                Entrenamiento consistente completado. ¡Gran trabajo acumulando volumen!
+                Sesión registrada. Tus series realizadas quedaron guardadas.
               </p>
             </div>
           )}

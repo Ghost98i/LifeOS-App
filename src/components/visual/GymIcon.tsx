@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { GYM_ICON_REGISTRY, type GymIconName } from '../../lib/gymIconRegistry';
 import { AppIcon } from '../AppIcon';
 
@@ -15,7 +15,8 @@ export const GymIcon: React.FC<GymIconProps> = ({
   className = '',
   decorative = false,
 }) => {
-  const definition = GYM_ICON_REGISTRY[icon] || GYM_ICON_REGISTRY['gym-fallback'];
+  const definition = Object.hasOwn(GYM_ICON_REGISTRY, icon) ? GYM_ICON_REGISTRY[icon] : GYM_ICON_REGISTRY['gym-fallback'];
+  const [failedSource, setFailedSource] = useState<string | null>(null);
   const accessibility = decorative
     ? { 'aria-hidden': true as const }
     : { role: 'img', 'aria-label': label || definition.label };
@@ -24,14 +25,17 @@ export const GymIcon: React.FC<GymIconProps> = ({
     <span
       {...accessibility}
       className={`gym-icon ${className}`}
-      data-gym-icon={definition.id}
+      data-gym-icon={definition.src && failedSource === definition.src ? 'gym-fallback' : definition.id}
       title={decorative ? undefined : label || definition.label}
     >
-      {definition.src ? (
-        <span
-          className="gym-icon-glyph"
-          style={{ '--gym-icon-url': `url("${definition.src}")` } as React.CSSProperties}
-        />
+      {definition.src && failedSource !== definition.src ? (
+        <>
+          <img src={definition.src} alt="" hidden onError={() => setFailedSource(definition.src)} />
+          <span
+            className="gym-icon-glyph"
+            style={{ '--gym-icon-url': `url("${definition.src}")` } as React.CSSProperties}
+          />
+        </>
       ) : (
         <AppIcon name="dumbbell" className="gym-icon-fallback" />
       )}

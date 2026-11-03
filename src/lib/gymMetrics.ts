@@ -436,6 +436,7 @@ export function applyHistoryToTemplateExercises(
   currentSessionId?: string
 ): Exercise[] {
   return templateExercises.map((templateEx) => {
+    const templateWeight = Number.isFinite(Number(templateEx.weight ?? NaN)) ? Number(templateEx.weight) : 20;
     const ghost = getExerciseGhostValues(sessions, {
       exerciseId: templateEx.id,
       exerciseName: templateEx.name,
@@ -443,9 +444,9 @@ export function applyHistoryToTemplateExercises(
     const templateSets = templateEx.sets && templateEx.sets.length > 0
       ? templateEx.sets
       : [
-          { id: 'def-1', weight: Number(templateEx.weight) || 20, reps: 10, completed: false },
-          { id: 'def-2', weight: Number(templateEx.weight) || 20, reps: 10, completed: false },
-          { id: 'def-3', weight: Number(templateEx.weight) || 20, reps: 10, completed: false },
+          { id: 'def-1', weight: templateWeight, reps: 10, completed: false },
+          { id: 'def-2', weight: templateWeight, reps: 10, completed: false },
+          { id: 'def-3', weight: templateWeight, reps: 10, completed: false },
         ];
 
     const ghostEffectiveSets = ghost ? ghost.sets.filter(isEffectiveSet) : [];
@@ -482,7 +483,7 @@ export function applyHistoryToTemplateExercises(
       // Si el template tiene más series que el historial, usar sugerencia inicial,
       // el último valor conocido del historial, o fallback del template
       const fallbackWeight = ghost?.initialSuggestion?.weight
-        ?? (ghost && ghost.sets.length > 0 ? ghost.sets[ghost.sets.length - 1].weight : (Number(tSet.weight) || Number(templateEx.weight) || 20));
+        ?? (ghost && ghost.sets.length > 0 ? ghost.sets[ghost.sets.length - 1].weight : (Number.isFinite(Number(tSet.weight ?? NaN)) ? Number(tSet.weight) : templateWeight));
       const fallbackReps = ghost?.initialSuggestion?.reps
         ?? (ghost && ghost.sets.length > 0 ? ghost.sets[ghost.sets.length - 1].reps : (Number(tSet.reps) || 10));
 
@@ -498,7 +499,7 @@ export function applyHistoryToTemplateExercises(
     const initialWeight = ghost?.initialSuggestion?.weight
       ?? mappedSets.find(isEffectiveSet)?.weight
       ?? mappedSets[0]?.weight
-      ?? (Number(templateEx.weight) || 20);
+      ?? templateWeight;
 
     return {
       ...templateEx,

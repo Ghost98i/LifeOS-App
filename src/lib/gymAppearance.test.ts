@@ -88,7 +88,7 @@ test('auto mantiene icono derivado según musculatura dominante y nombre', () =>
     [{ id: '5', name: 'Movilidad general', muscleGroup: 'Otros', sets: [] }],
     'General'
   );
-  assert.equal(defaultIdentity.icon, 'gym-dumbbell');
+  assert.equal(defaultIdentity.icon, 'gym-fallback');
 });
 
 test('override persiste: asignar icono personalizable actualiza el template y se duplica limpiamente', () => {

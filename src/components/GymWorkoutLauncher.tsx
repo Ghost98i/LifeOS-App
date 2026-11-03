@@ -3,7 +3,8 @@ import type { RoutineTemplate } from '../types';
 import type { getGymLauncherPlan } from '../lib/gymLauncher';
 import type { GymSessionPresentation } from '../lib/gymIdlePresentation';
 import { DAY_LABELS } from '../lib/storage';
-import { AppIcon } from './AppIcon';
+import { GymIcon } from './visual/GymIcon';
+import { resolveRoutineIcon } from '../lib/gymAppearance';
 
 interface Props {
   plan: ReturnType<typeof getGymLauncherPlan>;
@@ -61,7 +62,7 @@ export function GymWorkoutLauncher({ plan, routines, completed, onSelect, onStar
       </div>
       <div className="gym-launcher-actions">
         <button type="button" data-gym-start onClick={onStart} disabled={!plan.canStart} className="gym-launcher-start">
-          <AppIcon name="dumbbell" className="h-4 w-4" />
+          <GymIcon icon={plan.selected ? resolveRoutineIcon(plan.selected) : 'gym-fallback'} decorative className="h-5 w-5 shrink-0" />
           <span>{plan.templateId === null ? 'Iniciar entrenamiento' : plan.selected ? `Iniciar ${plan.selected.name}` : completed ? 'Iniciar otro entrenamiento' : 'Iniciar entrenamiento libre'}</span>
         </button>
         {(!completed || plan.explicitRest) && <button type="button" onClick={onToggleRest} className="gym-launcher-rest-button">{plan.explicitRest ? 'Cancelar descanso' : 'Marcar descanso para hoy'}</button>}

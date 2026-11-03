@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { GymActiveTimer, LifeOSState } from '../types';
 import { AppIcon } from './AppIcon';
 import { playTimerCountdownTone } from '../lib/audio';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 import {
   applyGymRestTimerAdjustment,
   getGymSettings,
@@ -11,9 +12,9 @@ import {
 
 interface GymRestTimerBarProps {
   state: LifeOSState;
-  onUpdateState: (updater: (draft: LifeOSState) => void) => void;
-  onComplete?: () => void;
-  onSkip?: () => void;
+  onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
+  onComplete?: () => boolean | void;
+  onSkip?: () => boolean | void;
   onOpenSettings?: () => void;
   nextExerciseName?: string | null;
 }
@@ -45,6 +46,8 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
   const [isMinimized, setIsMinimized] = useState(() => Boolean(timer?.minimized));
   const [isManualEditorOpen, setIsManualEditorOpen] = useState(false);
   const [manualSeconds, setManualSeconds] = useState(60);
+  const manualDialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(isManualEditorOpen, manualDialogRef, () => setIsManualEditorOpen(false));
   const lastChimeSecondRef = useRef<number | null>(null);
   const hasFinishedRef = useRef(false);
 
@@ -54,15 +57,14 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
     setIsMinimized(Boolean(timer?.minimized));
   }, [timerEndsAt, timer?.setId, timer?.exerciseId, timer?.minimized, isPaused]);
 
-  const triggerFinish = useCallback(() => {
-    if (hasFinishedRef.current) return;
+  const triggerFinish = useCallback((retry = false) => {
+    if (hasFinishedRef.current && !retry) return;
     hasFinishedRef.current = true;
-    if (onComplete) onComplete();
-    else onUpdateState((draft) => { draft.gym.activeTimer = null; });
+    if (onComplete) return onComplete();
+    return onUpdateState((draft) => { draft.gym.activeTimer = null; });
   }, [onComplete, onUpdateState]);
 
   const handleSkip = () => {
-    if (hasFinishedRef.current) return;
     hasFinishedRef.current = true;
     if (onSkip) onSkip();
     else if (onComplete) onComplete();
@@ -114,25 +116,23 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
   const adjustTimer = (deltaSeconds: number) => {
     if (!timer) return;
     lastChimeSecondRef.current = null;
+    if (applyGymRestTimerAdjustment(timer, deltaSeconds).completed) {
+      triggerFinish(true);
+      return;
+    }
     onUpdateState((draft) => {
       if (!draft.gym.activeTimer) return;
       const res = applyGymRestTimerAdjustment(draft.gym.activeTimer, deltaSeconds);
-      if (res.completed) {
-        triggerFinish();
-      } else if (res.timer) {
-        draft.gym.activeTimer = res.timer;
-      }
+      draft.gym.activeTimer = res.timer;
     });
   };
 
   const toggleMinimize = () => {
-    setIsMinimized((current) => {
-      const next = !current;
-      onUpdateState((draft) => {
-        if (draft.gym.activeTimer) draft.gym.activeTimer.minimized = next;
-      });
-      return next;
+    const next = !isMinimized;
+    const saved = onUpdateState((draft) => {
+      if (draft.gym.activeTimer) draft.gym.activeTimer.minimized = next;
     });
+    if (saved !== false) setIsMinimized(next);
   };
 
   const openManualEditor = () => {
@@ -142,14 +142,15 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
 
   const applyManualEdit = () => {
     const nextSeconds = Math.max(1, Math.round(manualSeconds) || 1);
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       if (!draft.gym.activeTimer) return;
       draft.gym.activeTimer = setGymRestTimerRemaining(draft.gym.activeTimer, nextSeconds, Date.now());
     });
+    if (saved === false) return;
     setIsManualEditorOpen(false);
   };
 
-  if (!timer || left <= 0) return null;
+  if (!timer) return null;
 
   const minutes = Math.floor(left / 60);
   const seconds = left % 60;
@@ -157,16 +158,15 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
   const dashOffset = RING_CIRCUMFERENCE * (1 - progress);
   const urgency = left <= 5 ? 'critical' : left <= 15 ? 'ending' : isExerciseRest ? 'long' : 'normal';
   const manualEditor = isManualEditorOpen ? (
-    <div role="dialog" aria-modal="true" aria-labelledby="gym-manual-rest-title" className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" onClick={() => setIsManualEditorOpen(false)}>
-      <div className="w-full max-w-xs space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+    <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 p-4" onClick={() => setIsManualEditorOpen(false)}>
+      <div ref={manualDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="gym-manual-rest-title" className="w-full max-w-xs space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
         <div>
           <h3 id="gym-manual-rest-title" className="text-base font-black text-[var(--text)]">Editar descanso en curso</h3>
-          <p className="mt-1 text-xs text-[var(--text-soft)]">Define el tiempo restante. El deadline se actualizará desde ahora.</p>
+          <p className="mt-1 text-xs text-[var(--text-soft)]">Elegí cuánto descanso queda. El tiempo se contará desde ahora.</p>
         </div>
         <label className="block text-xs font-bold text-[var(--text-soft)]">
           Segundos restantes
           <input
-            autoFocus
             type="number"
             min={1}
             step={1}
@@ -227,7 +227,7 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
         <p className="mt-1 max-w-sm text-sm leading-5 text-[var(--text-soft)]">
           {isExerciseRest && nextExerciseName
             ? <>Después sigue <strong className="text-[var(--text)]">{nextExerciseName}</strong>.</>
-            : 'El tiempo se mantiene sincronizado aunque salgas de Gimnasio.'}
+            : 'El descanso sigue en este dispositivo aunque salgas de Gimnasio.'}
         </p>
         {settings.showQuickRestAdjustments && <div className="mt-4 hidden items-center gap-2 sm:flex">
           <button type="button" onClick={() => adjustTimer(-30)} className="gym-rest-action">−30 s</button>

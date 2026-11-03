@@ -113,8 +113,8 @@ export const LEGACY_ROUTINE_ICON_MAP: Readonly<Record<string, GymIconName>> = {
 };
 
 export function resolveRoutineIconAsset(iconName: RoutineIconName): GymIconName {
-  if (iconName in GYM_ICON_REGISTRY) return iconName as GymIconName;
-  return LEGACY_ROUTINE_ICON_MAP[iconName] || 'gym-fallback';
+  if (Object.hasOwn(GYM_ICON_REGISTRY, iconName)) return iconName as GymIconName;
+  return Object.hasOwn(LEGACY_ROUTINE_ICON_MAP, iconName) ? LEGACY_ROUTINE_ICON_MAP[iconName] : 'gym-fallback';
 }
 
 function normalizedName(name: string): string {
@@ -122,7 +122,8 @@ function normalizedName(name: string): string {
     .trim()
     .toLocaleLowerCase('es-UY')
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
 }
 
 /**
@@ -137,40 +138,41 @@ export function resolveExerciseGymIcon(
 
   if (equipment === 'mancuerna') return 'gym-dumbbell';
 
-  if (/press.*banca.*inclinado|banca.*inclinad/.test(normalized) && (!equipment || equipment === 'barra')) {
+  if (/^(?:press (?:de |en )?banca inclinad[oa]|press inclinado(?: (?:de |en )?banca)?)(?: con barra)?$/.test(normalized) && (!equipment || equipment === 'barra')) {
     return 'gym-incline-bench-press';
   }
-  if (/press.*banca|banca.*plano/.test(normalized) && (!equipment || equipment === 'barra')) {
+  if (/^(?:press (?:de |en )?banca(?: plan[oa])?|banca plan[oa])(?: con barra)?$/.test(normalized) && (!equipment || equipment === 'barra')) {
     return 'gym-bench-press';
   }
-  if (/remo.*sentado|remo.*polea.*baja|polea.*baja.*remo/.test(normalized) && (!equipment || equipment === 'polea')) {
+  if (/^remo (?:sentado(?: en polea(?: baja)?)?|en polea baja)(?: con agarre (?:neutro|estrecho|ancho)(?: y pausa)?)?$/.test(normalized) && (!equipment || equipment === 'polea')) {
     return 'gym-seated-row';
   }
-  if (/jalon.*pecho|polea.*alta/.test(normalized) && (!equipment || equipment === 'polea')) {
+  if (/^jalon al pecho(?: en polea(?: alta)?)?(?: con agarre (?:neutro|estrecho|ancho))?$/.test(normalized) && (!equipment || equipment === 'polea')) {
     return 'gym-lat-pulldown';
   }
-  if (/pec.?deck|mariposa|contractor.*pecho/.test(normalized) && (!equipment || equipment === 'maquina')) {
+  if (/^(?:pec[ -]?deck|mariposa(?: en maquina)?|contractor de pecho)$/.test(normalized) && (!equipment || equipment === 'maquina')) {
     return 'gym-pec-deck';
   }
-  if (/prensa.*pierna|leg.?press/.test(normalized) && (!equipment || equipment === 'maquina')) {
+  if (/^(?:prensa de piernas|leg[ -]?press)(?: inclinada| horizontal)?$/.test(normalized) && (!equipment || equipment === 'maquina')) {
     return 'gym-leg-press';
   }
-  if (/press.*militar|press.*hombro/.test(normalized) && (!equipment || equipment === 'maquina' || equipment === 'barra')) {
-    return equipment === 'barra' ? 'gym-barbell' : 'gym-shoulder-press';
+  if (/^press (?:militar|de hombros)(?: sentado)?(?: en maquina| con barra)?$/.test(normalized)) {
+    if (equipment === 'barra' || (!equipment && /militar|con barra/.test(normalized))) return 'gym-barbell';
+    if (equipment === 'maquina' || (!equipment && /en maquina/.test(normalized))) return 'gym-shoulder-press';
   }
-  if (/dominada|pull.?up/.test(normalized) && (!equipment || equipment === 'corporal')) {
+  if (/^(?:dominadas?|pull[ -]?ups?)$/.test(normalized) && (!equipment || equipment === 'corporal')) {
     return 'gym-pull-ups';
   }
-  if (/fondos|paralela/.test(normalized) && (!equipment || equipment === 'corporal')) {
+  if (/^fondos(?: en paralelas)?$/.test(normalized) && (!equipment || equipment === 'corporal')) {
     return 'gym-power-tower';
   }
-  if (/bicicleta|ciclismo/.test(normalized) && (!equipment || equipment === 'maquina')) {
+  if (/^(?:bicicleta(?: estatica| fija| reclinada)?|ciclismo)$/.test(normalized) && (!equipment || equipment === 'maquina')) {
     return 'gym-bike';
   }
-  if (/caminadora|cinta|treadmill/.test(normalized) && (!equipment || equipment === 'maquina')) {
+  if (/^(?:caminadora|cinta de correr|treadmill)$/.test(normalized) && (!equipment || equipment === 'maquina')) {
     return 'gym-treadmill';
   }
-  if (/sentadilla/.test(normalized) && (!equipment || equipment === 'barra')) {
+  if (/^sentadilla(?: con barra| trasera| frontal)?$/.test(normalized) && equipment === 'barra') {
     return 'gym-squat-rack';
   }
 

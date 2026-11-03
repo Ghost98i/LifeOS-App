@@ -10,7 +10,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from 'recharts';
-import { DayKey, Exercise, ExerciseEquipment, GymSession, GymSet, LifeOSState, MuscleGroup, RoutineAppearance } from '../types';
+import { DayKey, Exercise, ExerciseEquipment, GymActiveTimer, GymSession, GymSet, LifeOSState, MuscleGroup, RoutineAppearance } from '../types';
 import { GymRestTimerBar } from './GymRestTimerBar';
 import { GymActivityCalendar } from './GymActivityCalendar';
 import { GymWorkoutLauncher } from './GymWorkoutLauncher';
@@ -27,6 +27,7 @@ import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 import { GymExerciseArtwork } from './visual/GymExerciseArtwork';
 import { GymIcon } from './visual/GymIcon';
+import { PrivacyAmount, PrivacyInput, usePrivacyMode } from './PrivacyAmount';
 import {
   todayISO,
   DAYS,
@@ -159,6 +160,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   initialTab = 'entrenar',
   initialEditingTemplateId = null,
 }) => {
+  const privacy = usePrivacyMode();
   const [activeTab, setActiveTab] = useState<'entrenar' | 'rutinas' | 'historial' | 'progresion'>(
     initialEditingTemplateId ? 'rutinas' : initialTab
   );
@@ -222,9 +224,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     });
   }, []);
 
-  const handleRestTimerFinish = useCallback(() => {
-    const timer = state.gym.activeTimer;
-    if (!timer) return;
+  const advanceAfterRest = useCallback((timer: GymActiveTimer) => {
     if (timer.kind === 'exercise') {
       const activeSession = getActiveGymSession(state.gym);
       if (activeSession) {
@@ -251,10 +251,30 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
         }
       }
     }
-    onUpdateState((draft) => {
+  }, [state.gym, liveExIdx]);
+
+  const handleRestTimerFinish = useCallback(() => {
+    let completedTimer: GymActiveTimer | null = null;
+    const saved = onUpdateState((draft) => {
+      completedTimer = draft.gym.activeTimer || null;
       draft.gym.activeTimer = null;
     });
-  }, [state.gym, liveExIdx, onUpdateState]);
+    if (!saved) return false;
+    if (completedTimer) advanceAfterRest(completedTimer);
+    return true;
+  }, [onUpdateState, advanceAfterRest]);
+
+  const handleAdjustRestTimer = (delta: number) => {
+    let completedTimer: GymActiveTimer | null = null;
+    const saved = onUpdateState((draft) => {
+      const timer = draft.gym.activeTimer;
+      if (!timer) return;
+      const result = applyGymRestTimerAdjustment(timer, delta);
+      draft.gym.activeTimer = result.timer;
+      if (result.completed) completedTimer = timer;
+    });
+    if (saved && completedTimer) advanceAfterRest(completedTimer);
+  };
 
   // Plate Calculator Modal state
   const [calculatorTarget, setCalculatorTarget] = useState<{
@@ -326,26 +346,29 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
   const handleCompleteStaleSession = (sessionId: string) => {
     let result: ReturnType<typeof finishGymSession> | null = null;
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       result = finishGymSession(draft.gym, sessionId, { finishedAt: 'Cerrada' });
     });
     if (result?.status === 'no_completed_sets') {
       showToast('Completá al menos una serie o descartá la sesión.', 'error');
       return;
     }
+    if (!saved || result?.status !== 'completed') return;
     showToast('Sesión anterior completada.', 'info');
   };
 
   const handleDiscardStaleSession = (sessionId: string) => {
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       discardGymSession(draft.gym, sessionId);
     });
+    if (!saved) return;
     showToast('Sesión descartada.', 'info');
   };
 
   const handleToggleRestDay = () => {
     const today = todayISO();
-    onUpdateState((draft) => {
+    let cancelled = false;
+    const saved = onUpdateState((draft) => {
       if (!draft.gym) draft.gym = { sessions: [], exercises: [], routineTemplates: [], weight: [] } as any;
       if (!draft.gym.restDays) draft.gym.restDays = [];
       const idx = draft.gym.restDays.indexOf(today);
@@ -354,15 +377,16 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
         if (draft.checkoutLog?.[today]) {
           draft.checkoutLog[today].trainedSkipped = false;
         }
-        showToast('Descanso cancelado.', 'info');
+        cancelled = true;
       } else {
         draft.gym.restDays.push(today);
         if (!draft.checkoutLog) draft.checkoutLog = {};
         if (!draft.checkoutLog[today]) draft.checkoutLog[today] = {};
         draft.checkoutLog[today].trainedSkipped = true;
-        showToast('Hoy marcado como descanso. No suma un entrenamiento.');
       }
     });
+    if (!saved) return;
+    showToast(cancelled ? 'Descanso cancelado.' : 'Hoy marcado como descanso. No suma un entrenamiento.', cancelled ? 'info' : 'success');
   };
 
   const weightPts = sortedWeight(state);
@@ -411,11 +435,12 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     e.preventDefault();
     const kg = Number(weightKg);
     if (!kg) return;
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       const date = weightDate || todayISO();
       draft.gym.weight = draft.gym.weight.filter((w) => w.date !== date);
       draft.gym.weight.push({ date, kg });
     });
+    if (!saved) return;
     setWeightKg('');
     showToast(`Peso registrado: ${kg} kg`);
   };
@@ -450,7 +475,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     setActiveTab('entrenar');
     playSound('click');
     showToast(result?.created
-      ? '🏋️ Entrenamiento iniciado con tu historial más reciente.'
+      ? 'Entrenamiento iniciado. Las cargas son sugeridas hasta que completes cada serie.'
       : 'Entrenamiento activo reanudado.');
   };
 
@@ -472,7 +497,6 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     let result: ReturnType<typeof finishGymSession> | null = null;
     const saved = onUpdateState((draft) => {
       result = finishGymSession(draft.gym, sessionId, { finishedAt: finishTime });
-      draft.gym.activeTimer = null;
       if (result?.status === 'completed') currentStreak = calcGymStreakDetails(draft).streakDays;
     });
     if (result?.status === 'no_completed_sets') {
@@ -539,9 +563,10 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   const handleDeleteSession = (id: string) => {
     const session = state.gym.sessions.find((candidate) => candidate.id === id);
     if (!session || !requestGymSessionDeletion(session, (message) => window.confirm(message))) return;
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       deleteGymSession(draft.gym, id);
     });
+    if (!saved) return;
     showToast('Sesión eliminada.', 'info');
   };
 
@@ -556,7 +581,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     initialReps = 10
   ) => {
     if (!exName.trim()) return;
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       addExerciseToGymSession(draft.gym, sessionId, {
         name: exName,
         muscleGroup,
@@ -566,7 +591,9 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
         initialReps,
       });
     });
+    if (!saved) return false;
     showToast(`Ejercicio agregado: ${exName.trim()}`);
+    return true;
   };
 
   const handleAddSet = (sessionId: string, exerciseIndex: number) => {
@@ -611,6 +638,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
         nonce: (current?.nonce || 0) + 1,
       }));
     }
+    return saved;
   };
 
   const handleDeleteSet = (sessionId: string, exerciseIndex: number, setIndex: number) => {
@@ -654,35 +682,38 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   const handleAddTemplate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!templateName.trim()) return;
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       draft.gym.routineTemplates.push({
         id: uid(),
         name: templateName.trim(),
         exercises: [],
       });
     });
+    if (!saved) return;
     setTemplateName('');
-    showToast('Plantilla creada.');
+    showToast('Rutina creada.');
   };
 
   const handleDeleteTemplate = (id: string) => {
     const template = state.gym.routineTemplates.find((candidate) => candidate.id === id);
     if (!template || !window.confirm(`¿Eliminar la plantilla "${template.name}"? El historial no se eliminará.`)) return;
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       deleteGymTemplate(draft.gym, id);
     });
+    if (!saved) return;
     if (editingTemplateId === id) setEditingTemplateId(null);
     showToast('Plantilla eliminada.', 'info');
   };
 
   const handleDuplicateTemplate = (id: string) => {
     let duplicateId: string | null = null;
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       duplicateId = duplicateGymTemplate(draft.gym, id)?.id || null;
     });
-    if (!duplicateId) return;
+    if (!saved || !duplicateId) return false;
     setEditingTemplateId(duplicateId);
-    showToast('Plantilla duplicada con identidad independiente.');
+    showToast('Rutina duplicada.');
+    return true;
   };
 
   const handleToggleTemplateDay = (templateId: string, day: DayKey) => {
@@ -703,31 +734,33 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     const name = window.prompt('Nombre para la nueva plantilla de rutina:', defaultName);
     if (!name || !name.trim()) return;
 
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       draft.gym.routineTemplates.push({
         id: uid(),
         name: name.trim(),
         exercises: session.exercises.map((ex) => {
           const eq = ex.equipment || inferExerciseEquipment(ex.name).equipment;
           return {
-            id: uid(),
+            id: ex.id || uid(),
             name: ex.name,
             equipment: eq,
             muscleGroup: ex.muscleGroup,
             barWeight: eq === 'barra' ? (ex.barWeight ?? 20) : 0,
             restSeconds: ex.restSeconds,
             restSecondsMode: ex.restSecondsMode || 'inherit',
-            timerEnabled: true,
+            timerEnabled: ex.timerEnabled ?? true,
             sets: ex.sets.map((s) => ({
               id: uid(),
               weight: s.weight,
               reps: s.reps,
               completed: false,
+              type: s.type,
             })),
           };
         }),
       });
     });
+    if (!saved) return;
     showToast('Plantilla guardada a partir de la sesión.');
   };
 
@@ -749,7 +782,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   const handleConfigureTemplateExercise = (
     templateId: string,
     exerciseIndex: number,
-    input: { setsCount: number; reps: number; targetWeight: number; restSeconds?: number }
+    input: { setsCount?: number; reps?: number; targetWeight?: number; restSeconds?: number }
   ) => {
     onUpdateState((draft) => {
       const template = draft.gym.routineTemplates.find((candidate) => candidate.id === templateId);
@@ -773,14 +806,16 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   };
 
   const handleDeleteExerciseFromTemplate = (templateId: string, exerciseIndex: number) => {
-    onUpdateState((draft) => {
+    let deleted = false;
+    const saved = onUpdateState((draft) => {
       const t = draft.gym.routineTemplates.find((x) => x.id === templateId);
       const exercise = t?.exercises[exerciseIndex];
-      deleteGymTemplateExercise(draft.gym, templateId, {
+      deleted = deleteGymTemplateExercise(draft.gym, templateId, {
         exerciseId: exercise?.id,
         exerciseIndex,
       });
     });
+    if (!saved || !deleted) return;
     showToast('Ejercicio eliminado de la plantilla.', 'info');
   };
 
@@ -806,7 +841,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
       completed: false,
     }));
 
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       const t = draft.gym.routineTemplates.find((x) => x.id === templateId);
       if (t) {
         t.exercises.push({
@@ -822,7 +857,9 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
         });
       }
     });
+    if (!saved) return false;
     showToast(`Ejercicio agregado a plantilla: ${name.trim()}`);
+    return true;
   };
 
   const handleNormalizeAllHistory = () => {
@@ -834,11 +871,12 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     if (!window.confirm(
       `Se corregirán ${preview.affectedExerciseCount} ejercicios en ${preview.affectedSessionIds.length} sesiones completadas. ¿Continuar?`
     )) return;
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       const current = previewNormalizeGymHistory(draft.gym);
       draft.gym.sessions = current.updatedSessions;
     });
-    showToast(`🪄 Historial normalizado: ${preview.affectedExerciseCount} ejercicios corregidos.`);
+    if (!saved) return;
+    showToast(`Historial normalizado: ${preview.affectedExerciseCount} ejercicios corregidos.`);
   };
 
   const handlePropagateExerciseToHistory = (
@@ -853,12 +891,13 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     if (!window.confirm(
       `Se actualizará "${exerciseName}" en ${preview.affectedSessionIds.length} sesiones completadas. ¿Continuar?`
     )) return;
-    onUpdateState((draft) => {
+    const saved = onUpdateState((draft) => {
       const current = previewExerciseHistoryPropagation(draft.gym, exerciseName, config);
       draft.gym.sessions = current.updatedSessions;
       draft.gym.routineTemplates = current.updatedTemplates;
     });
-    showToast(`⚡ "${exerciseName}" propagado a ${preview.affectedSessionIds.length} sesiones históricas.`);
+    if (!saved) return;
+    showToast(`"${exerciseName}" aplicado a ${preview.affectedSessionIds.length} sesiones históricas.`);
   };
 
   const gymHistory = useMemo(() => {
@@ -920,7 +959,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   const handleLiveCompleteCurrentSet = () => {
     if (!activeWorkoutSession || !liveCurrentSet) return;
     const nextCompleted = !liveCurrentSet.completed;
-    handleUpdateSet(activeWorkoutSession.id, liveSafeExIdx, liveSafeSetIdx, { completed: nextCompleted });
+    const saved = handleUpdateSet(activeWorkoutSession.id, liveSafeExIdx, liveSafeSetIdx, { completed: nextCompleted });
+    if (!saved) return;
 
     // If completing, auto-advance to next incomplete set in this exercise
     if (nextCompleted && liveSets.length > liveSafeSetIdx + 1) {
@@ -932,14 +972,14 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     <div className="gym-page space-y-6">
       {/* La sesión activa usa su propio encabezado operativo para priorizar el primer viewport móvil. */}
       {!(activeWorkoutSession && activeTab === 'entrenar') && (
-        <PageHeader
+        <div className="gym-page-heading"><PageHeader
           title="Gimnasio"
-        />
+        /></div>
       )}
 
       {/* Gym sections */}
       {!(activeWorkoutSession && activeTab === 'entrenar') && (
-      <nav aria-label="Secciones de Gimnasio" className="flex min-w-0 gap-1 overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1 sm:grid sm:grid-cols-4 sm:overflow-visible">
+      <nav aria-label="Secciones de Gimnasio" className="gym-section-nav flex min-w-0 gap-1 overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1 sm:grid sm:grid-cols-4 sm:overflow-visible">
         <button
           type="button"
           onClick={() => setActiveTab('entrenar')}
@@ -1027,17 +1067,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
               completionMotion={setCompletionMotion}
               exerciseSuggestions={COMMON_EXERCISE_SUGGESTIONS}
               activeTimer={state.gym.activeTimer}
-              onAdjustRestTimer={(delta) => {
-                onUpdateState((draft) => {
-                  if (!draft.gym.activeTimer) return;
-                  const res = applyGymRestTimerAdjustment(draft.gym.activeTimer, delta);
-                  if (res.completed) {
-                    handleRestTimerFinish();
-                  } else if (res.timer) {
-                    draft.gym.activeTimer = res.timer;
-                  }
-                });
-              }}
+              showQuickRestAdjustments={gymSettings.showQuickRestAdjustments}
+              onAdjustRestTimer={handleAdjustRestTimer}
               onTogglePauseRestTimer={() => {
                 onUpdateState((draft) => {
                   if (draft.gym.activeTimer) {
@@ -1243,18 +1274,18 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                     );
                     return (
                       <article key={t.id} className={`border-b border-[var(--border)] last:border-b-0 ${isSelected ? 'bg-[var(--blue-soft)]' : ''}`}>
-                        <div className="flex min-w-0 items-center gap-1.5 px-2 py-1.5 sm:gap-3 sm:px-4 sm:py-2">
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5 px-2 py-1.5 sm:flex-nowrap sm:gap-3 sm:px-4 sm:py-2">
                           <button
                             type="button"
                             aria-pressed={isSelected}
                             aria-label={`${isEmpty ? 'Rutina sin ejercicios' : 'Seleccionar rutina'}: ${t.name}`}
                             disabled={isEmpty}
                             onClick={() => handleSelectRoutine(t.id)}
-                            className={`flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] ${isEmpty ? 'cursor-not-allowed opacity-75' : 'hover:bg-[var(--surface-muted)]'} ${isSelected ? 'ring-1 ring-inset ring-[var(--blue)]' : ''}`}
+                            className={`flex min-h-14 min-w-0 flex-1 basis-full items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] sm:basis-auto ${isEmpty ? 'cursor-not-allowed opacity-75' : 'hover:bg-[var(--surface-muted)]'} ${isSelected ? 'ring-1 ring-inset ring-[var(--blue)]' : ''}`}
                           >
                             <RoutineIdentityMark exercises={t.exercises} name={t.name} appearance={t.appearance} compact />
                             <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-bold text-[var(--text)] sm:text-base">{t.name}</span>
+                              <span className="block break-words text-sm font-bold text-[var(--text)] sm:text-base">{t.name}</span>
                               <span className="mt-0.5 block text-xs leading-4 text-[var(--text-soft)]">
                                 {isEmpty ? 'Sin ejercicios · Editá para empezar' : `${t.exercises.length} ejercicio${t.exercises.length === 1 ? '' : 's'}`}
                                 {!isEmpty && (t.days?.length ? ` · ${t.days.map((day) => DAY_LABELS[day]).join(', ')}` : ' · Sin días asignados')}
@@ -1262,7 +1293,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                             </span>
                             {isSelected && <span className="shrink-0 text-[11px] font-bold text-[var(--blue)]">Elegida</span>}
                           </button>
-                          <div className="flex shrink-0 items-center gap-1">
+                          <div className="ml-auto flex shrink-0 items-center gap-1">
                             {!isEmpty && <button
                               type="button"
                               onClick={() => handleStartWorkout(t.id)}
@@ -1283,7 +1314,13 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                 <AppIcon name="more" className="h-5 w-5" />
                               </summary>
                               <div className="absolute right-0 top-12 z-30 w-48 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-xl">
-                                <button type="button" onClick={() => handleDuplicateTemplate(t.id)} className="flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]">
+                                <button type="button" onClick={(event) => {
+                                  const menu = event.currentTarget.closest('details');
+                                  if (handleDuplicateTemplate(t.id)) {
+                                    menu?.removeAttribute('open');
+                                    menu?.querySelector('summary')?.focus();
+                                  }
+                                }} className="flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)]">
                                   Duplicar rutina
                                 </button>
                                 <button type="button" onClick={() => handleDeleteTemplate(t.id)} className="flex min-h-11 w-full items-center rounded-lg px-3 text-left text-sm font-semibold text-rose-600 hover:bg-rose-500/10 dark:text-rose-400">
@@ -1382,7 +1419,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                     onClick={() => onUpdateState((draft) => {
                                       updateGymTemplate(draft.gym, t.id, { appearance: null });
                                     })}
-                                    className={`inline-flex min-h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold transition-colors ${
+                                    className={`inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold transition-colors ${
                                       !t.appearance?.icon
                                         ? 'bg-[var(--blue)] text-white shadow-xs'
                                         : 'bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)]'
@@ -1394,7 +1431,15 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
                                   <span className="hidden h-5 w-px bg-[var(--border)] sm:inline-block" aria-hidden="true" />
 
-                                  <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Icono de rutina">
+                                  <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Icono de rutina" onKeyDown={(event: React.KeyboardEvent<HTMLDivElement>) => {
+                                    if (event.altKey || event.ctrlKey || event.metaKey) return;
+                                    const radios = Array.from((event.currentTarget as HTMLDivElement).querySelectorAll<HTMLButtonElement>('[role="radio"]')) as HTMLButtonElement[];
+                                    const current = radios.indexOf(event.target as HTMLButtonElement);
+                                    if (current < 0 || !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+                                    event.preventDefault();
+                                    const index = event.key === 'Home' ? 0 : event.key === 'End' ? radios.length - 1 : (current + (['ArrowLeft', 'ArrowUp'].includes(event.key) ? -1 : 1) + radios.length) % radios.length;
+                                    radios[index]?.focus(); radios[index]?.click();
+                                  }}>
                                     {hasLegacyIcon && t.appearance?.icon && (
                                       <button
                                         type="button"
@@ -1405,7 +1450,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                         onClick={() => onUpdateState((draft) => {
                                           updateGymTemplate(draft.gym, t.id, { appearance: { icon: t.appearance?.icon } });
                                         })}
-                                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-600 ring-2 ring-indigo-500 dark:text-indigo-300"
+                                        className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-600 ring-2 ring-indigo-500 dark:text-indigo-300"
                                       >
                                         <GymIcon icon={identity.icon} decorative className="h-5 w-5" />
                                       </button>
@@ -1418,12 +1463,13 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                           type="button"
                                           role="radio"
                                           aria-checked={isSelected}
+                                          tabIndex={isSelected || (!t.appearance?.icon && opt === ROUTINE_ICON_OPTIONS[0]) ? 0 : -1}
                                           title={opt.label}
                                           aria-label={opt.label}
                                           onClick={() => onUpdateState((draft) => {
                                             updateGymTemplate(draft.gym, t.id, { appearance: { icon: opt.name } });
                                           })}
-                                          className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
+                                          className={`flex h-11 w-11 items-center justify-center rounded-xl transition-all ${
                                             isSelected
                                               ? 'bg-blue-500/15 text-blue-600 ring-2 ring-blue-500 dark:text-blue-400'
                                               : 'bg-[var(--surface-muted)] text-[var(--text-soft)] hover:bg-[var(--border)] hover:text-[var(--text)]'
@@ -1464,7 +1510,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                             </span>
                                           </span>
                                           <div className="min-w-0">
-                                            <h4 className="truncate text-sm font-bold text-[var(--text)]">{ex.name}</h4>
+                                            <h4 className="break-words text-sm font-bold text-[var(--text)]">{ex.name}</h4>
                                             <p className="mt-0.5 text-xs text-[var(--text-soft)]">{ex.muscleGroup || 'Sin grupo muscular'}</p>
                                           </div>
                                         </div>
@@ -1500,8 +1546,6 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                                 value={ex.sets.length || 1}
                                                 onChange={(event) => handleConfigureTemplateExercise(t.id, exIdx, {
                                                   setsCount: Number(event.target.value),
-                                                  reps: ex.sets[0]?.reps || 10,
-                                                  targetWeight: ex.sets[0]?.weight ?? ex.weight ?? 0,
                                                 })}
                                                 className="mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
                                               />
@@ -1514,9 +1558,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                                 max={1000}
                                                 value={ex.sets[0]?.reps || 10}
                                                 onChange={(event) => handleConfigureTemplateExercise(t.id, exIdx, {
-                                                  setsCount: ex.sets.length || 1,
                                                   reps: Number(event.target.value),
-                                                  targetWeight: ex.sets[0]?.weight ?? ex.weight ?? 0,
                                                 })}
                                                 className="mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
                                               />
@@ -1529,8 +1571,6 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                                 step="0.5"
                                                 value={ex.sets[0]?.weight ?? ex.weight ?? 0}
                                                 onChange={(event) => handleConfigureTemplateExercise(t.id, exIdx, {
-                                                  setsCount: ex.sets.length || 1,
-                                                  reps: ex.sets[0]?.reps || 10,
                                                   targetWeight: Number(event.target.value),
                                                 })}
                                                 className="mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
@@ -1656,7 +1696,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
             <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-extrabold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
-                  <span>⚠️</span>
+                  <AppIcon name="bell" className="h-4 w-4 shrink-0" />
                   <span>Tenés {staleActiveSessions.length} sesión(es) de fechas anteriores sin finalizar</span>
                 </span>
                 <span className="text-[11px] text-[var(--text-soft)]">No bloquean tu entrenamiento de hoy</span>
@@ -1671,14 +1711,14 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                       <button
                         type="button"
                         onClick={() => handleCompleteStaleSession(s.id)}
-                        className="px-2.5 py-1 text-[11px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg cursor-pointer"
+                        className="min-h-11 px-2.5 py-1 text-xs font-semibold bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white rounded-lg cursor-pointer"
                       >
-                        Finalizar sesión ✓
+                        Finalizar sesión
                       </button>
                       <button
                         type="button"
                         onClick={() => handleDiscardStaleSession(s.id)}
-                        className="px-2.5 py-1 text-[11px] font-semibold text-rose-500 hover:bg-rose-500/10 rounded-lg cursor-pointer"
+                        className="min-h-11 px-2.5 py-1 text-xs font-semibold text-rose-500 hover:bg-rose-500/10 rounded-lg cursor-pointer"
                       >
                         Descartar
                       </button>
@@ -1920,7 +1960,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
               <span className="mt-0.5 block text-xs leading-5 text-[var(--text-soft)]">Registrar medidas y revisar la evolución corporal.</span>
             </span>
             <span className="flex shrink-0 items-center gap-2 text-xs font-bold text-[var(--accent)]">
-              {peso != null && <span className="privacy-sensitive hidden tabular-nums sm:inline">{peso} kg</span>}
+              {peso != null && <span className="hidden tabular-nums sm:inline">{privacy ? '••••' : `${peso} kg`}</span>}
               <AppIcon name="chevronDown" className="h-4 w-4 -rotate-90 transition-transform group-hover:translate-x-0.5" />
             </span>
           </button>
@@ -2045,7 +2085,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
             <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-1 text-sm font-semibold text-[var(--text)]">
               <span>Salud corporal</span>
               <span className="flex items-center gap-3 text-xs font-medium text-[var(--text-soft)]">
-                {peso != null ? `${peso} kg` : 'Sin peso registrado'}
+                {peso != null ? privacy ? '••••' : `${peso} kg` : 'Sin peso registrado'}
                 <AppIcon name="chevronDown" className="h-4 w-4 transition-transform group-open:rotate-180" />
               </span>
             </summary>
@@ -2053,15 +2093,15 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <p className="text-xs text-[var(--text-faint)]">Peso actual</p>
-                  <p className="mt-1 text-2xl font-bold tabular-nums text-[var(--text)]">{peso != null ? `${peso} kg` : '—'}</p>
-                  <p className="mt-0.5 text-xs text-[var(--text-soft)]">
+                  <PrivacyAmount as="p" className="mt-1 text-2xl font-bold tabular-nums text-[var(--text)]">{peso != null ? `${peso} kg` : '—'}</PrivacyAmount>
+                  <PrivacyAmount as="p" className="mt-0.5 text-xs text-[var(--text-soft)]">
                     {variacion == null ? 'Sin variación calculable' : `${variacion > 0 ? '+' : ''}${variacion.toFixed(1)} kg desde el inicio`}
-                  </p>
+                  </PrivacyAmount>
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-[var(--text-faint)]">IMC</p>
-                  <p className="mt-1 text-lg font-bold tabular-nums text-[var(--text)]">{imc != null ? imc.toFixed(1) : '—'}</p>
-                  <p className="text-xs text-[var(--text-soft)]">{imcCat.label}</p>
+                  <PrivacyAmount as="p" className="mt-1 text-lg font-bold tabular-nums text-[var(--text)]">{imc != null ? imc.toFixed(1) : '—'}</PrivacyAmount>
+                  <PrivacyAmount as="p" className="text-xs text-[var(--text-soft)]">{imcCat.label}</PrivacyAmount>
                 </div>
               </div>
 
@@ -2073,7 +2113,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                   onChange={(e) => setWeightDate(e.target.value)}
                   className="min-h-11 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm text-[var(--text)]"
                 />
-                <input
+                <PrivacyInput
                   type="number"
                   aria-label="Peso en kilogramos"
                   step="0.1"
@@ -2087,7 +2127,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                 </button>
               </form>
 
-              {bodyWeightChartData.length >= 2 && (
+              {privacy && bodyWeightChartData.length >= 2 && <p className="text-xs text-[var(--text-soft)]">Stream Guard oculta la evolución del peso.</p>}
+              {!privacy && bodyWeightChartData.length >= 2 && (
                 <div>
                   <h3 className="text-sm font-bold text-[var(--text)]">¿Cómo cambió tu peso?</h3>
                   <div className="mt-3 h-48 w-full">
@@ -2172,7 +2213,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
         onSave={(nextSettings) => {
-          onUpdateState((draft) => {
+          return onUpdateState((draft) => {
             draft.gym.settings = nextSettings;
           });
         }}
@@ -2187,7 +2228,7 @@ interface TemplateAddExerciseFormProps {
     muscleGroup: MuscleGroup,
     equipment: ExerciseEquipment,
     barWeight: number
-  ) => void;
+  ) => boolean | void;
 }
 
 const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd }) => {
@@ -2199,7 +2240,8 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onAdd(name.trim(), muscleGroup, equipment, equipment === 'barra' ? barWeight : 0);
+    const saved = onAdd(name.trim(), muscleGroup, equipment, equipment === 'barra' ? barWeight : 0);
+    if (saved === false) return;
     setName('');
   };
 
@@ -2215,6 +2257,7 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
         <input
           type="text"
           list="template-gym-suggestions"
+          aria-label="Nombre del ejercicio de la rutina"
           value={name}
           onChange={(e) => {
             const val = e.target.value;
@@ -2241,6 +2284,7 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
           Músculo
         </label>
         <select
+          aria-label="Grupo muscular del ejercicio de la rutina"
           value={muscleGroup}
           onChange={(e) => setMuscleGroup(e.target.value as MuscleGroup)}
           className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold text-[var(--text)]"
@@ -2258,6 +2302,7 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
           Equipo
         </label>
         <select
+          aria-label="Equipamiento del ejercicio de la rutina"
           value={equipment}
           onChange={(e) => {
             const eq = e.target.value as ExerciseEquipment;
@@ -2320,7 +2365,7 @@ interface WorkoutSessionCardProps {
     barWeight: number,
     initialWeight: number,
     initialReps: number
-  ) => void;
+  ) => boolean | void;
   onDeleteExercise: (exerciseIndex: number) => void;
   onAddSet: (exerciseIndex: number) => void;
   onUpdateSet: (exerciseIndex: number, setIndex: number, updates: Partial<GymSet>) => void;
@@ -2387,7 +2432,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
   const handleCreateExercise = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newExName.trim()) return;
-    onAddExercise(
+    const saved = onAddExercise(
       newExName.trim(),
       newExMuscle,
       newExEquipment,
@@ -2395,6 +2440,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
       Number(newExWeight) || 20,
       Number(newExReps) || 10
     );
+    if (saved === false) return;
     setNewExName('');
   };
 
@@ -2463,7 +2509,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                 </span>
               )}
               {isActive ? (
-                <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase rounded-md bg-emerald-500/15 text-emerald-600 border border-emerald-500/30 animate-pulse">
+                <span className="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-[var(--blue-soft)] text-[var(--gym-visual-accent)] border border-[var(--border)]">
                   ● En curso
                 </span>
               ) : (
@@ -2474,10 +2520,11 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
               <button
                 type="button"
                 onClick={() => setIsEditingHeader(true)}
-                className="text-[var(--text-faint)] hover:text-[var(--blue)] text-xs p-1 cursor-pointer"
+                className="inline-flex min-h-11 min-w-11 items-center justify-center text-[var(--text-soft)] hover:text-[var(--blue)] text-xs p-1 cursor-pointer"
                 title="Editar fecha, semana u horarios"
+                aria-label="Editar fecha, semana u horarios"
               >
-                ✏️
+                <AppIcon name="edit" className="h-4 w-4" />
               </button>
             </div>
           )}
@@ -2496,7 +2543,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
             <button
               type="button"
               onClick={onFinishWorkout}
-              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-all shadow-xs"
+              className="min-h-11 px-3 py-1 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-semibold rounded-lg cursor-pointer"
             >
               Terminar ✓
             </button>
@@ -2510,7 +2557,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                 className="text-[11px] font-semibold text-[var(--text-soft)] hover:text-[var(--blue)] cursor-pointer p-1"
                 title="Guardar esta rutina como plantilla"
               >
-                📋 Plantilla
+                <AppIcon name="note" className="h-4 w-4" /> Plantilla
               </button>
 
               <button
@@ -2586,11 +2633,11 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                       }}
                       className="bg-[var(--card)] border border-[var(--border)] rounded-md px-1.5 py-0.5 text-xs font-semibold cursor-pointer text-[var(--text)]"
                     >
-                      <option value="barra">🏋️ Barra</option>
-                      <option value="mancuerna">💪 Mancuerna</option>
-                      <option value="polea">🔗 Polea</option>
-                      <option value="maquina">⚙️ Máquina</option>
-                      <option value="corporal">🤸 Corporal</option>
+                      <option value="barra">Barra</option>
+                      <option value="mancuerna">Mancuerna</option>
+                      <option value="polea">Polea</option>
+                      <option value="maquina">Máquina</option>
+                      <option value="corporal">Peso corporal</option>
                     </select>
 
                     {currentEquipment === 'barra' && (
@@ -2621,7 +2668,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                         className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 hover:bg-amber-500/20 font-bold text-[10px] cursor-pointer"
                         title={`Aplicar "${exercise.name}" como ${currentEquipment} en todo el historial`}
                       >
-                        ⚡ Al historial
+                        Al historial
                       </button>
                     )}
 
@@ -2639,7 +2686,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                         className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 font-bold text-[10px] cursor-pointer flex items-center gap-1"
                         title="Calculadora y desglose de discos por lado"
                       >
-                        <span>⚖️ Discos</span>
+                        <AppIcon name="dumbbell" className="h-4 w-4" /><span>Discos</span>
                       </button>
                     )}
 
@@ -2687,7 +2734,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                             onClick={() => onUpdateSet(exIdx, setIdx, { completed: !set.completed })}
                             className={`inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold ${
                               set.completed
-                                ? 'bg-emerald-500/12 text-emerald-700 dark:text-emerald-300'
+                                ? 'bg-[var(--blue-soft)] text-[var(--gym-visual-accent)]'
                                 : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'
                             }`}
                           >
@@ -2768,7 +2815,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                           <tr
                             key={set.id || setIdx}
                             className={`transition-colors ${
-                              set.completed ? 'bg-emerald-500/5' : 'hover:bg-[var(--card)]/50'
+                              set.completed ? 'bg-[var(--blue-soft)]' : 'hover:bg-[var(--card)]/50'
                             }`}
                           >
                             <td className="py-1.5 tabular-nums text-[var(--text-soft)]">
@@ -2864,21 +2911,21 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                     className="p-1 text-[10px] text-blue-600 hover:underline cursor-pointer"
                                     title="Calcular discos para esta serie"
                                   >
-                                    ⚖️
+                                    <AppIcon name="dumbbell" className="h-4 w-4" />
                                   </button>
                                 )}
                               </div>
                             </td>
                             <td className="py-1.5 tabular-nums text-[11px] text-[var(--text-soft)]">
                               {currentEquipment === 'barra' && (
-                                <span
+                                <button type="button"
                                   onClick={() =>
                                     onOpenCalculator(exIdx, setIdx, setWeight, currentBarWeight)
                                   }
-                                  className="cursor-pointer hover:underline text-[var(--blue)] font-bold"
+                                  className="min-h-11 cursor-pointer hover:underline text-[var(--blue)] font-bold"
                                 >
                                   {platePerSide > 0 ? `${platePerSide} kg/lado` : 'Solo barra'}
-                                </span>
+                                </button>
                               )}
                               {currentEquipment === 'mancuerna' && (
                                 <span className="font-semibold text-[var(--text-soft)]">
@@ -2949,7 +2996,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                 }
                                 className={`w-6 h-6 rounded-lg border-2 inline-flex items-center justify-center text-xs font-bold transition-all cursor-pointer ${
                                   set.completed
-                                    ? 'bg-emerald-500 border-emerald-500 text-white shadow-xs'
+                                    ? 'bg-[var(--blue)] border-[var(--blue)] text-white'
                                     : 'border-[var(--border)] bg-[var(--card)] text-transparent hover:border-[var(--blue)]'
                                 }`}
                               >
@@ -3212,7 +3259,7 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps & { initiallyExpand
                 <time className="text-xs font-semibold text-[var(--text-soft)]" dateTime={session.date}>
                   {formatGymSessionDateTime(session)}
                 </time>
-                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--gym-visual-accent)]">
                   <AppIcon name="check" className="h-3 w-3" />
                   Completada
                 </span>
@@ -3227,11 +3274,11 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps & { initiallyExpand
                   </span>
                 )}
               </div>
-              <h3 className="mt-0.5 truncate text-base font-black tracking-tight text-[var(--text)] sm:text-lg">
+              <h3 className="mt-0.5 break-words text-base font-black tracking-tight text-[var(--text)] sm:text-lg">
                 {presentation.name}
               </h3>
               {session.exercises.length > 0 && (
-                <p className="mt-0.5 truncate text-xs text-[var(--text-faint)]">
+                <p className="mt-0.5 break-words text-xs text-[var(--text-soft)]">
                   {session.exercises.map((e) => e.name).join(' · ')}
                 </p>
               )}
@@ -3350,7 +3397,7 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps & { initiallyExpand
                           {Number(set.weight) || 0} kg × {Number(set.reps) || 0}
                         </span>
                         {set.completed ? (
-                          <span className="h-2 w-2 rounded-full bg-emerald-500/80" aria-label="Serie realizada" />
+                          <span className="h-2 w-2 rounded-full bg-[var(--gym-visual-accent)]" aria-label="Serie realizada" />
                         ) : (
                           <span className="text-[10px] font-semibold text-[var(--text-faint)]">No realizada</span>
                         )}

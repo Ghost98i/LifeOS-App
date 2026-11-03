@@ -5,6 +5,7 @@ import {
   type GymIconName,
 } from './gymIconRegistry';
 import { inferMuscleGroup } from './gymMigration';
+import { resolveExerciseGymIcon } from './gymIconRegistry';
 
 export { isRoutineIconName };
 
@@ -54,7 +55,9 @@ export function inferAutomaticRoutineIdentity(
   routineName = ''
 ): Omit<RoutineIdentity, 'isCustomIcon'> {
   const groups = exercises.reduce<Record<string, number>>((result, exercise) => {
-    const group = exercise.muscleGroup || inferMuscleGroup(exercise.name);
+    // A title is not evidence of the equipment or work actually in the routine.
+    const group = exercise.muscleGroup || (resolveExerciseGymIcon(exercise.name) !== 'gym-fallback' ? inferMuscleGroup(exercise.name) : 'Otros');
+    if (group === 'Otros') return result;
     result[group] = (result[group] || 0) + 1;
     return result;
   }, {});
@@ -75,7 +78,10 @@ export function inferAutomaticRoutineIdentity(
                 : /core|abdomen/i.test(routineName)
                   ? 'Core'
                   : null;
-  const dominant = nameIdentity || Object.entries(groups).sort((a, b) => b[1] - a[1])[0]?.[0] || 'Entrenamiento';
+  const ranked = Object.entries(groups).sort((a, b) => b[1] - a[1]);
+  const dominant = ranked.length
+    ? (ranked[0][1] > (ranked[1]?.[1] || 0) ? ranked[0][0] : 'Entrenamiento')
+    : (exercises.length === 0 ? nameIdentity : null) || 'Entrenamiento';
   const normalized = dominant
     .toLocaleLowerCase('es-UY')
     .normalize('NFD')
@@ -83,13 +89,13 @@ export function inferAutomaticRoutineIdentity(
 
   if (/descanso|recuperacion/.test(normalized)) return identity('Descanso', 'gym-rest');
   if (/cardio/.test(normalized)) return identity('Cardio', 'gym-bike');
-  if (/pierna|cuádriceps|isquio|glúteo|pantorrilla/.test(normalized)) return identity(dominant, 'gym-leg-press');
+  if (/pierna|cuadriceps|isquio|gluteo|pantorrilla/.test(normalized)) return identity(dominant, 'gym-leg-press');
   if (/espalda|dorsal/.test(normalized)) return identity(dominant, 'gym-lat-pulldown');
   if (/pecho/.test(normalized)) return identity(dominant, 'gym-bench-press');
   if (/hombro|deltoide/.test(normalized)) return identity(dominant, 'gym-shoulder-press');
-  if (/brazo|bíceps|tríceps/.test(normalized)) return identity(dominant, 'gym-dumbbell');
+  if (/brazo|biceps|triceps/.test(normalized)) return identity(dominant, 'gym-dumbbell');
   if (/core|abdomen/.test(normalized)) return identity(dominant, 'gym-yoga-mat');
-  return identity(dominant, 'gym-dumbbell');
+  return identity(dominant, 'gym-fallback');
 }
 
 export function getRoutineIdentity(
