@@ -969,7 +969,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   };
 
   return (
-    <div className="gym-page space-y-6">
+    <div className="gym-page w-full min-w-0 space-y-6">
       {/* La sesión activa usa su propio encabezado operativo para priorizar el primer viewport móvil. */}
       {!(activeWorkoutSession && activeTab === 'entrenar') && (
         <div className="gym-page-heading"><PageHeader
@@ -1256,7 +1256,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                   </div>
                 )}
 
-                <div className="overflow-visible rounded-3xl bg-[var(--card)] shadow-sm ring-1 ring-inset ring-[var(--border)]">
+                <div className="gym-routine-list overflow-visible rounded-3xl bg-[var(--card)] shadow-sm ring-1 ring-inset ring-[var(--border)]">
                   {state.gym.routineTemplates.length === 0 && !showTemplates && (
                     <div className="px-5 py-6">
                       <p className="text-sm font-semibold text-[var(--text)]">Todavía no hay rutinas guardadas.</p>
@@ -1273,7 +1273,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                       && !ROUTINE_ICON_OPTIONS.some((option) => option.name === t.appearance?.icon)
                     );
                     return (
-                      <article key={t.id} className={`border-b border-[var(--border)] last:border-b-0 ${isSelected ? 'bg-[var(--blue-soft)]' : ''}`}>
+                      <article key={t.id} data-editing={isEditing || undefined} className={`border-b border-[var(--border)] last:border-b-0 ${isSelected ? 'bg-[var(--blue-soft)]' : ''}`}>
                         <div className="flex min-w-0 flex-wrap items-center gap-1.5 px-2 py-1.5 sm:flex-nowrap sm:gap-3 sm:px-4 sm:py-2">
                           <button
                             type="button"
@@ -1966,7 +1966,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
           </button>
 
           {activeExerciseMetric ? (
-            <section data-gym-exercise-progress className="space-y-4">
+            <section data-gym-exercise-progress className="gym-progress-exercise space-y-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <p className="text-xs font-semibold text-[var(--text-soft)]">Evolución por ejercicio</p>

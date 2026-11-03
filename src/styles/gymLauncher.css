@@ -1,5 +1,5 @@
 .gym-launcher {
-  display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.4fr); align-items: start;
+  display: grid; grid-template-columns: minmax(0,1fr); align-items: start;
   gap: 32px; padding: 24px; border: 1px solid var(--border); border-radius: 16px;
   background: var(--card); color: var(--text);
 }
@@ -30,7 +30,11 @@
 .gym-launcher-metrics dt { font-size: 12px; color: var(--text-soft); }
 .gym-launcher-metrics dd { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .gym-launcher-metrics dd span { font-size: 13px; font-weight: 400; }
-@media (max-width: 1100px) { .gym-launcher { grid-template-columns: 1fr; gap: 20px; } }
+@container gym-page (min-width: 960px) {
+ .gym-launcher { grid-template-columns: minmax(0,.9fr) minmax(0,1.4fr); }
+ .gym-launcher-controls { grid-template-columns: minmax(0,1fr) minmax(220px,320px); }
+}
+@container gym-page (max-width: 959px) { .gym-launcher { gap: 20px; } }
 @media (max-width: 639px) {
  .gym-launcher { padding: 18px; gap: 18px; }
  .gym-launcher-summary { padding: 0; }

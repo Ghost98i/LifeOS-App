@@ -328,7 +328,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
   };
 
   return (
-    <section data-active-workout-view className="gym-workout-shell mx-auto w-full min-w-0 max-w-[1240px] space-y-4 overflow-x-hidden">
+    <section data-active-workout-view className="gym-workout-shell w-full min-w-0 space-y-4 overflow-x-hidden">
       {/* 1. Barra Superior Operativa */}
       <header className="gym-workout-topbar flex items-center justify-between gap-3">
         <div className="min-w-0">
@@ -408,7 +408,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
       </header>
 
       {exercise ? (
-        <div className="gym-active-layout grid items-start gap-4 xl:grid-cols-[minmax(0,780px)_minmax(320px,1fr)]">
+        <div className="gym-active-layout grid items-start gap-4">
           {/* COCKPIT PRINCIPAL */}
           <main data-active-set-editor className="gym-cockpit-wrap min-w-0">
             {/* Aviso Contextual si el usuario navega a otro ejercicio mientras corre un descanso */}
