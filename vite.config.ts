@@ -13,6 +13,16 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tailwindcss(),
+      {
+        name: 'lifeos-build-identity',
+        transformIndexHtml() {
+          return [{
+            tag: 'meta',
+            attrs: { name: 'lifeos-build-id', content: process.env.LIFEOS_BUILD_ID || 'dev' },
+            injectTo: 'head' as const,
+          }];
+        },
+      },
       VitePWA({
             disable: portable,
             registerType: 'prompt',
