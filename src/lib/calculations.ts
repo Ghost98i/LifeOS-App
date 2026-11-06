@@ -189,7 +189,8 @@ export function resolveFinancialCommitment(
 export function getExpectedIncomeOccurrences(
   income: ExpectedIncome,
   fromIso: string,
-  horizonIso: string
+  horizonIso: string,
+  includeOverdue = false
 ): CashFlowForecastItem[] {
   if (!income.active || Number(income.amount || 0) <= 0) return [];
   const items: CashFlowForecastItem[] = [];
@@ -197,17 +198,26 @@ export function getExpectedIncomeOccurrences(
   const startIso = income.startDate || fromIso;
   const endIso = income.endDate || null;
 
-  const pushIfInRange = (dIso: string) => {
-    if (dIso >= fromIso && dIso <= horizonIso && (!endIso || dIso <= endIso)) {
+  const pushIfInRange = (dIso: string, isOverdue = false) => {
+    const effectiveDate = dIso < fromIso ? fromIso : dIso;
+    const isWithinEnd = !endIso || (
+      income.frequency === 'monthly'
+        ? dIso.slice(0, 7) <= endIso.slice(0, 7)
+        : income.frequency === 'yearly'
+          ? dIso.slice(0, 4) <= endIso.slice(0, 4)
+          : dIso <= endIso
+    );
+    if (effectiveDate <= horizonIso && isWithinEnd) {
       items.push({
         id: `inc-${income.id}-${dIso}`,
-        date: dIso,
+        date: effectiveDate,
         label: income.name,
         amount,
         type: 'income',
         category: income.category,
         accountId: income.accountId,
         sourceId: income.id,
+        isOverdue: dIso < fromIso || isOverdue,
       });
     }
   };
@@ -217,7 +227,11 @@ export function getExpectedIncomeOccurrences(
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
   if (income.frequency === 'once') {
-    pushIfInRange(startIso);
+    if (startIso >= fromIso && startIso <= horizonIso && (!endIso || startIso <= endIso)) {
+      pushIfInRange(startIso, false);
+    } else if (startIso < fromIso && includeOverdue && (!endIso || startIso <= endIso)) {
+      pushIfInRange(startIso, true);
+    }
     return items;
   }
 
@@ -229,6 +243,10 @@ export function getExpectedIncomeOccurrences(
 
     // If start is before fromDate, advance by step intervals
     if (curr.getTime() < fromDate.getTime()) {
+      const overdueIso = toIso(curr);
+      if (includeOverdue && (!endIso || overdueIso <= endIso)) {
+        pushIfInRange(overdueIso, true);
+      }
       const diffMs = fromDate.getTime() - curr.getTime();
       const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
       const jumps = Math.floor(diffDays / stepDays);
@@ -252,6 +270,10 @@ export function getExpectedIncomeOccurrences(
     const targetDay = startObj.getDate();
     const fromObj = toDate(fromIso);
 
+    if (startIso < fromIso && includeOverdue) {
+      pushIfInRange(startIso, true);
+    }
+
     const y = fromObj.getFullYear();
     const m = fromObj.getMonth();
 
@@ -261,7 +283,8 @@ export function getExpectedIncomeOccurrences(
       const d = new Date(y, m + i, actualDay, 12);
       const iso = toIso(d);
       if (iso > horizonIso) break;
-      if (iso >= startIso) {
+      if (endIso && iso.slice(0, 7) > endIso.slice(0, 7)) break;
+      if (iso >= fromIso && iso >= startIso) {
         pushIfInRange(iso);
       }
     }
@@ -274,12 +297,17 @@ export function getExpectedIncomeOccurrences(
     const targetDay = startObj.getDate();
     const fromObj = toDate(fromIso);
 
+    if (startIso < fromIso && includeOverdue) {
+      pushIfInRange(startIso, true);
+    }
+
     for (let yr = fromObj.getFullYear(); yr <= fromObj.getFullYear() + 1; yr++) {
       const lastDay = new Date(yr, targetMonth + 1, 0).getDate();
       const actualDay = Math.min(targetDay, lastDay);
       const d = new Date(yr, targetMonth, actualDay, 12);
       const iso = toIso(d);
-      if (iso >= startIso) {
+      if (endIso && iso.slice(0, 4) > endIso.slice(0, 4)) break;
+      if (iso >= fromIso && iso >= startIso) {
         pushIfInRange(iso);
       }
     }
@@ -307,9 +335,9 @@ export function cashFlowProjection(
   // 1. Expected Incomes
   for (const inc of state.finance?.expectedIncomes || []) {
     const incCur = confirmedFinancialCurrency(inc.currency);
-    if (!incCur) unconfirmedCurrencyItems.push(...getExpectedIncomeOccurrences(inc, fromIso, horizonIso));
+    if (!incCur) unconfirmedCurrencyItems.push(...getExpectedIncomeOccurrences(inc, fromIso, horizonIso, true));
     if (incCur === normCur) {
-      forecastItems.push(...getExpectedIncomeOccurrences(inc, fromIso, horizonIso));
+      forecastItems.push(...getExpectedIncomeOccurrences(inc, fromIso, horizonIso, true));
     }
   }
 

@@ -25,9 +25,10 @@ import { WorkoutSummaryModal } from './WorkoutSummaryModal';
 import { ExerciseHistoryModal } from './ExerciseHistoryModal';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
+import { ContextualHelp } from './ContextualHelp';
 import { GymExerciseArtwork } from './visual/GymExerciseArtwork';
 import { GymIcon } from './visual/GymIcon';
-import { PrivacyAmount, PrivacyInput, usePrivacyMode } from './PrivacyAmount';
+import { PrivacyAmount, usePrivacyMode } from './PrivacyAmount';
 import {
   todayISO,
   DAYS,
@@ -40,17 +41,14 @@ import {
   calcDetailedPRs,
   detectSessionPRs,
   getExerciseHistory,
-  getGymProgressMetrics,
+  getUnifiedGymProgressMetrics,
   calculateSessionDuration,
   NewPRRecord,
   nowTimeHHmm,
 } from '../lib/gymMetrics';
 import type { ExerciseMetricTarget } from '../lib/gymMetrics';
 import {
-  currentWeight,
   weightVariation,
-  calcIMC,
-  imcCategory,
   calcGymStreakDetails,
   sortedWeight,
 } from '../lib/calculations';
@@ -99,6 +97,10 @@ import {
   ROUTINE_ICON_OPTIONS,
   ROUTINE_ICON_LABELS,
 } from '../lib/gymAppearance';
+import {
+  GYM_EXERCISE_ICON_OPTIONS,
+  type GymIconName,
+} from '../lib/gymIconRegistry';
 import { motionItemKey, shouldPlayCompletionMotion } from '../lib/motion';
 
 interface GimnasioViewProps {
@@ -140,17 +142,17 @@ const RoutineIdentityMark: React.FC<{
   name?: string;
   appearance?: RoutineAppearance;
   compact?: boolean;
-}> = ({ exercises, name, appearance, compact = false }) => {
+}> = React.memo(({ exercises, name, appearance, compact = false }) => {
   const identity = getRoutineIdentity(exercises, name, appearance);
   return (
     <div
       aria-hidden="true"
-      className={`gym-routine-mark relative shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br ${identity.surface} ring-1 ring-inset ring-[var(--border)] ${compact ? 'h-11 w-11' : 'h-14 w-14 sm:h-16 sm:w-16'}`}
+      className={`gym-routine-mark relative shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br ${identity.surface} ring-1 ring-inset ring-[var(--border)] ${compact ? 'h-12 w-12' : 'h-14 w-14 sm:h-16 sm:w-16'}`}
     >
-      <GymIcon icon={identity.icon} decorative className="absolute inset-0 h-full w-full p-2.5" />
+      <GymIcon icon={identity.icon} decorative className="absolute inset-0 h-full w-full p-2" />
     </div>
   );
-};
+});
 
 export const GimnasioView: React.FC<GimnasioViewProps> = ({
   state,
@@ -164,8 +166,6 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   const [activeTab, setActiveTab] = useState<'entrenar' | 'rutinas' | 'historial' | 'progresion'>(
     initialEditingTemplateId ? 'rutinas' : initialTab
   );
-  const [weightDate, setWeightDate] = useState(todayISO());
-  const [weightKg, setWeightKg] = useState('');
 
   const [sessionDate, setSessionDate] = useState(todayISO());
   const [sessionWeekLabel, setSessionWeekLabel] = useState('');
@@ -173,14 +173,12 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   const sessionTemplate = launcherPlan.templateId;
 
   const [templateName, setTemplateName] = useState('');
-  const [showBodyComposition, setShowBodyComposition] = useState(false);
   const [calendarHistorySessionId, setCalendarHistorySessionId] = useState<string | null>(null);
   const historyRootRef = useRef<HTMLDivElement>(null);
   const launcherRef = useRef<HTMLElement>(null);
-  const bodyHealthDetailsRef = useRef<HTMLDetailsElement>(null);
-  const bodyHealthContentRef = useRef<HTMLDivElement>(null);
   const [showTemplates, setShowTemplates] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(initialEditingTemplateId);
+  const [openExerciseIconKey, setOpenExerciseIconKey] = useState<string | null>(null);
 
   // Live Workout Mobile Navigation State
   const [liveExIdx, setLiveExIdx] = useState<number>(() => {
@@ -213,16 +211,6 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     const timeout = window.setTimeout(() => setSetCompletionMotion(null), 1100);
     return () => window.clearTimeout(timeout);
   }, [setCompletionMotion]);
-
-  const openBodyComposition = useCallback(() => {
-    setActiveTab('progresion');
-    setShowBodyComposition(true);
-    if (bodyHealthDetailsRef.current) bodyHealthDetailsRef.current.open = true;
-    window.requestAnimationFrame(() => {
-      bodyHealthContentRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      bodyHealthContentRef.current?.focus({ preventScroll: true });
-    });
-  }, []);
 
   const advanceAfterRest = useCallback((timer: GymActiveTimer) => {
     if (timer.kind === 'exercise') {
@@ -297,18 +285,17 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
   const [selectedExercise, setSelectedExercise] = useState<string>('');
   const gymProgress = useMemo(
-    () => getGymProgressMetrics(state.gym.sessions, todayISO()),
-    [state.gym.sessions]
+    () => activeTab === 'progresion'
+      ? getUnifiedGymProgressMetrics(state.gym.sessions, todayISO())
+      : { exercises: [], frequency: { last7Days: { count: 0, volume: 0 }, last30Days: { count: 0, volume: 0 }, previous30Days: { count: 0, volume: 0 } } },
+    [activeTab, state.gym.sessions]
   );
   const activeExerciseMetric = gymProgress.exercises.find((exercise) => exercise.key === selectedExercise)
     || gymProgress.exercises[0]
     || null;
   const activeExercise = activeExerciseMetric?.exerciseName || '';
 
-  const peso = currentWeight(state);
-  const variacion = weightVariation(state);
-  const imc = calcIMC(state);
-  const imcCat = imcCategory(imc);
+  const variacion = useMemo(() => activeTab === 'progresion' ? weightVariation(state) : null, [activeTab, state]);
   const isRestDayToday = launcherPlan.explicitRest;
   const gymSessions = state.gym?.sessions;
   const sortedSessions = useMemo(() => {
@@ -319,11 +306,16 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   }, [gymSessions]);
 
   const calendarOverview = useMemo(
-    () => getGymCalendarOverview(state.gym.sessions, todayISO()),
-    [state.gym.sessions]
+    () => activeTab === 'progresion'
+      ? getGymCalendarOverview(state.gym.sessions, todayISO())
+      : { weekCount: 0, monthCount: 0, activeDays: new Set<string>(), restDays: new Set<string>() },
+    [activeTab, state.gym.sessions]
   );
 
-  const performedSessionCount = sortedSessions.filter(isPerformedGymSession).length;
+  const performedSessionCount = useMemo(
+    () => sortedSessions.filter(isPerformedGymSession).length,
+    [sortedSessions]
+  );
 
   const todayCompletedSession = useMemo(
     () => sortedSessions.find((session) => session.date === launcherToday && isPerformedGymSession(session)) || null,
@@ -389,28 +381,30 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     showToast(cancelled ? 'Descanso cancelado.' : 'Hoy marcado como descanso. No suma un entrenamiento.', cancelled ? 'info' : 'success');
   };
 
-  const weightPts = sortedWeight(state);
-
-  const bodyWeightChartData = weightPts.map((p) => ({
-    dateLabel: fmtDate(p.date),
-    rawDate: p.date,
-    kg: p.kg,
-  }));
+  const bodyWeightChartData = useMemo(() => {
+    if (activeTab !== 'progresion') return [];
+    return sortedWeight(state).map((p) => ({
+      dateLabel: fmtDate(p.date),
+      rawDate: p.date,
+      kg: p.kg,
+    }));
+  }, [activeTab, state]);
 
   const bwVals = bodyWeightChartData.map((d) => d.kg);
   const bwMin = bwVals.length > 0 ? Math.max(0, Math.floor(Math.min(...bwVals) - 2)) : 50;
   const bwMax = bwVals.length > 0 ? Math.ceil(Math.max(...bwVals) + 2) : 100;
 
-  const liftingChartData = activeExerciseMetric
-    ? getExerciseHistory(state.gym?.sessions || [], {
-        exerciseId: activeExerciseMetric.exerciseId,
-        exerciseName: activeExerciseMetric.exerciseName,
-      }).chartPoints.map((point) => ({
-        dateLabel: fmtDate(point.date),
-        rawDate: point.date,
-        kg: point.maxWeight,
-      }))
-    : [];
+  const liftingChartData = useMemo(() => {
+    if (activeTab !== 'progresion' || !activeExerciseMetric) return [];
+    return getExerciseHistory(gymSessions || [], {
+      exerciseId: activeExerciseMetric.exerciseId,
+      exerciseName: activeExerciseMetric.exerciseName,
+    }).chartPoints.map((point) => ({
+      dateLabel: fmtDate(point.date),
+      rawDate: point.date,
+      kg: point.maxWeight,
+    }));
+  }, [activeTab, activeExerciseMetric, gymSessions]);
 
   const liftVals = liftingChartData.map((d) => d.kg);
   const liftMin = liftVals.length > 0 ? Math.max(0, Math.floor(Math.min(...liftVals) - 5)) : 0;
@@ -429,20 +423,6 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
       );
     }
     return null;
-  };
-
-  const handleAddWeight = (e: React.FormEvent) => {
-    e.preventDefault();
-    const kg = Number(weightKg);
-    if (!kg) return;
-    const saved = onUpdateState((draft) => {
-      const date = weightDate || todayISO();
-      draft.gym.weight = draft.gym.weight.filter((w) => w.date !== date);
-      draft.gym.weight.push({ date, kg });
-    });
-    if (!saved) return;
-    setWeightKg('');
-    showToast(`Peso registrado: ${kg} kg`);
   };
 
   // Workout sessions
@@ -744,6 +724,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
             id: ex.id || uid(),
             name: ex.name,
             equipment: eq,
+            ...(ex.icon ? { icon: ex.icon } : {}),
             muscleGroup: ex.muscleGroup,
             barWeight: eq === 'barra' ? (ex.barWeight ?? 20) : 0,
             restSeconds: ex.restSeconds,
@@ -776,6 +757,20 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
         exerciseId: exercise?.id,
         exerciseIndex,
       }, updates);
+      if ('icon' in updates && exercise) {
+        const active = getActiveGymSession(draft.gym);
+        if (active) {
+          for (const sessEx of active.exercises) {
+            if ((exercise.id && sessEx.id === exercise.id) || sessEx.name.trim().toLowerCase() === exercise.name.trim().toLowerCase()) {
+              if (updates.icon) {
+                sessEx.icon = updates.icon;
+              } else {
+                delete sessEx.icon;
+              }
+            }
+          }
+        }
+      }
     });
   };
 
@@ -825,6 +820,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     muscleGroup?: MuscleGroup,
     equipment?: ExerciseEquipment,
     barWeight?: number,
+    icon?: GymIconName,
     setsCount = 3,
     reps = 10,
     weight = 20
@@ -848,6 +844,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
           id: uid(),
           name: name.trim(),
           equipment: eq,
+          ...(icon ? { icon } : {}),
           muscleGroup: group,
           barWeight: barW,
           restSecondsMode: 'inherit',
@@ -901,8 +898,9 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   };
 
   const gymHistory = useMemo(() => {
+    if (activeTab !== 'historial') return { recentWeeks: [], archivedMonths: [] };
     return buildGymHistory(state.gym.sessions);
-  }, [state.gym.sessions]);
+  }, [activeTab, state.gym.sessions]);
 
   const calendarRestDates = useMemo(() => [
     ...(state.gym.restDays || []),
@@ -931,16 +929,22 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   const liveSets = liveCurrentEx?.sets || [];
   const liveSafeSetIdx = Math.max(0, Math.min(liveSetIdx, Math.max(0, liveSets.length - 1)));
   const liveCurrentSet = liveSets[liveSafeSetIdx];
-  const liveGhost = liveCurrentEx
-    ? getExerciseGhostValues(state.gym.sessions, {
-        exerciseId: liveCurrentEx.id,
-        exerciseName: liveCurrentEx.name,
-      }, activeWorkoutSession?.id)
-    : null;
+  const liveGhost = useMemo(
+    () => liveCurrentEx
+      ? getExerciseGhostValues(state.gym.sessions, {
+          exerciseId: liveCurrentEx.id,
+          exerciseName: liveCurrentEx.name,
+        }, activeWorkoutSession?.id)
+      : null,
+    [activeWorkoutSession?.id, liveCurrentEx, state.gym.sessions]
+  );
   const livePreviousSet = liveGhost?.sets[liveSafeSetIdx] || null;
-  const livePreviousSessionBest = activeWorkoutSession && liveCurrentEx
-    ? getPreviousSessionBestLabel(state.gym.sessions, activeWorkoutSession.id, liveCurrentEx.name, liveCurrentEx.id)
-    : null;
+  const livePreviousSessionBest = useMemo(
+    () => activeWorkoutSession && liveCurrentEx
+      ? getPreviousSessionBestLabel(state.gym.sessions, activeWorkoutSession.id, liveCurrentEx.name, liveCurrentEx.id)
+      : null,
+    [activeWorkoutSession, liveCurrentEx, state.gym.sessions]
+  );
 
   const handleLiveAdjustWeight = (delta: number) => {
     if (!activeWorkoutSession || !liveCurrentSet) return;
@@ -1210,7 +1214,12 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                 <div className="flex flex-col gap-3 px-1 sm:flex-row sm:items-end sm:justify-between">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="min-w-0">
-                      <h2 className="text-lg font-black tracking-tight text-[var(--text)]">Rutinas</h2>
+                      <div className="flex items-center gap-1">
+                        <h2 className="text-lg font-black tracking-tight text-[var(--text)]">Rutinas</h2>
+                        <ContextualHelp label="Cómo funcionan las rutinas">
+                          Acá armás tus planes semanales con ejercicios, series y cargas objetivo. Los entrenamientos realizados se guardan aparte en Historial.
+                        </ContextualHelp>
+                      </div>
                       <p className="mt-0.5 text-xs text-[var(--text-soft)]">Planes guardados · las sesiones ejecutadas están en Historial.</p>
                     </div>
                   </div>
@@ -1452,7 +1461,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                         })}
                                         className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-600 ring-2 ring-indigo-500 dark:text-indigo-300"
                                       >
-                                        <GymIcon icon={identity.icon} decorative className="h-5 w-5" />
+                                        <GymIcon icon={identity.icon} decorative className="h-6 w-6" />
                                       </button>
                                     )}
                                     {ROUTINE_ICON_OPTIONS.map((opt) => {
@@ -1475,7 +1484,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                               : 'bg-[var(--surface-muted)] text-[var(--text-soft)] hover:bg-[var(--border)] hover:text-[var(--text)]'
                                           }`}
                                         >
-                                          <GymIcon icon={opt.icon} decorative className="h-5 w-5" />
+                                          <GymIcon icon={opt.icon} decorative className="h-6 w-6" />
                                         </button>
                                       );
                                     })}
@@ -1495,22 +1504,55 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                   const hasCustomRest = ex.restSecondsMode === 'custom'
                                     || (ex.restSecondsMode === undefined && typeof ex.restSeconds === 'number' && ex.restSeconds !== 90);
                                   const isRestDisabled = ex.restSecondsMode === 'disabled' || ex.timerEnabled === false;
+                                  const exerciseIconKey = `${t.id}-${ex.id || exIdx}`;
+                                  const isIconPickerOpen = openExerciseIconKey === exerciseIconKey;
+                                  const selectedIconOption = ex.icon
+                                    ? GYM_EXERCISE_ICON_OPTIONS.find((opt) => opt.id === ex.icon)
+                                    : null;
                                   return (
                                     <section key={ex.id || exIdx} className="rounded-2xl bg-[var(--card)] p-3 shadow-xs ring-1 ring-inset ring-[var(--border)] sm:p-4">
                                       <div className="flex items-center justify-between gap-3">
                                         <div className="flex min-w-0 items-center gap-3">
-                                          <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-[var(--indigo)]">
+                                          <button
+                                            type="button"
+                                            onClick={() => setOpenExerciseIconKey((prev) => (prev === exerciseIconKey ? null : exerciseIconKey))}
+                                            title="Elegir icono para este ejercicio"
+                                            aria-label={`Elegir icono de ${ex.name}`}
+                                            aria-expanded={isIconPickerOpen}
+                                            className={`relative flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl transition-all ${
+                                              isIconPickerOpen || ex.icon
+                                                ? 'bg-blue-500/15 text-[var(--blue)] ring-2 ring-[var(--blue)]'
+                                                : 'bg-indigo-500/10 text-[var(--indigo)] hover:ring-2 hover:ring-[var(--blue)]/50'
+                                            }`}
+                                          >
                                             <GymExerciseArtwork
                                               name={ex.name}
                                               equipment={ex.equipment || (ex.barWeight && ex.barWeight > 0 ? 'barra' : undefined)}
+                                              icon={ex.icon || undefined}
                                               compact
                                             />
                                             <span className="absolute -bottom-1 -right-1 rounded-md bg-[var(--card)] px-1 text-[9px] font-black tabular-nums text-[var(--text-faint)] ring-1 ring-[var(--border)]">
                                               {String(exIdx + 1).padStart(2, '0')}
                                             </span>
-                                          </span>
+                                          </button>
                                           <div className="min-w-0">
-                                            <h4 className="break-words text-sm font-bold text-[var(--text)]">{ex.name}</h4>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <h4 className="break-words text-sm font-bold text-[var(--text)]">{ex.name}</h4>
+                                              <button
+                                                type="button"
+                                                onClick={() => setOpenExerciseIconKey((prev) => (prev === exerciseIconKey ? null : exerciseIconKey))}
+                                                aria-pressed={isIconPickerOpen}
+                                                className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] font-semibold transition-colors ${
+                                                  isIconPickerOpen || ex.icon
+                                                    ? 'bg-blue-500/15 text-[var(--blue)] ring-1 ring-blue-500/30'
+                                                    : 'bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)]'
+                                                }`}
+                                                title="Cambiar icono del ejercicio"
+                                              >
+                                                <AppIcon name="sparkles" className="h-3 w-3" />
+                                                <span>{selectedIconOption ? selectedIconOption.label : 'Icono'}</span>
+                                              </button>
+                                            </div>
                                             <p className="mt-0.5 text-xs text-[var(--text-soft)]">{ex.muscleGroup || 'Sin grupo muscular'}</p>
                                           </div>
                                         </div>
@@ -1535,6 +1577,47 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                               </button>
                                         </div>
                                       </div>
+
+                                      {isIconPickerOpen && (
+                                        <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/60 p-3">
+                                          <div className="flex flex-wrap items-center gap-1.5">
+                                            <button
+                                              type="button"
+                                              aria-pressed={!ex.icon}
+                                              onClick={() => handleUpdateTemplateExercise(t.id, exIdx, { icon: undefined })}
+                                              className={`inline-flex h-10 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold transition-colors ${
+                                                !ex.icon
+                                                  ? 'bg-[var(--blue)] text-white shadow-xs'
+                                                  : 'bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)]'
+                                              }`}
+                                            >
+                                              <AppIcon name="sparkles" className="h-3.5 w-3.5" />
+                                              Automático
+                                            </button>
+                                            <span className="hidden h-5 w-px bg-[var(--border)] sm:inline-block" aria-hidden="true" />
+                                            {GYM_EXERCISE_ICON_OPTIONS.map((opt) => {
+                                              const isSelected = ex.icon === opt.id;
+                                              return (
+                                                <button
+                                                  key={opt.id}
+                                                  type="button"
+                                                  title={opt.label}
+                                                  aria-label={opt.label}
+                                                  aria-pressed={isSelected}
+                                                  onClick={() => handleUpdateTemplateExercise(t.id, exIdx, { icon: opt.id })}
+                                                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+                                                    isSelected
+                                                      ? 'bg-blue-500/15 text-blue-600 ring-2 ring-blue-500 dark:text-blue-400'
+                                                      : 'bg-[var(--card)] text-[var(--text-soft)] hover:bg-[var(--border)] hover:text-[var(--text)]'
+                                                  }`}
+                                                >
+                                                  <GymIcon icon={opt.id} decorative className="h-5 w-5" />
+                                                </button>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
 
                                       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                                             <label className="text-xs font-medium text-[var(--text-soft)]">
@@ -1674,8 +1757,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                             )}
 
                             <TemplateAddExerciseForm
-                              onAdd={(name, muscle, equipment, barWeight) =>
-                                handleAddExerciseToTemplate(t.id, name, muscle, equipment, barWeight)
+                              onAdd={(name, muscle, equipment, barWeight, icon) =>
+                                handleAddExerciseToTemplate(t.id, name, muscle, equipment, barWeight, icon)
                               }
                             />
                           </div>
@@ -1946,117 +2029,179 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
             </div>
           </section>
 
-          <button
-            type="button"
-            onClick={openBodyComposition}
-            aria-controls="gym-body-health"
-            className="gym-body-health-shortcut group flex min-h-20 w-full items-center gap-4 rounded-2xl border px-4 py-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent)] sm:px-5"
-          >
-            <span className="gym-body-health-shortcut-icon" aria-hidden="true">
-              <GymIcon icon="gym-scale" decorative className="h-8 w-8" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-black text-[var(--text)]">Peso y composición corporal</span>
-              <span className="mt-0.5 block text-xs leading-5 text-[var(--text-soft)]">Registrar medidas y revisar la evolución corporal.</span>
-            </span>
-            <span className="flex shrink-0 items-center gap-2 text-xs font-bold text-[var(--accent)]">
-              {peso != null && <span className="hidden tabular-nums sm:inline">{privacy ? '••••' : `${peso} kg`}</span>}
-              <AppIcon name="chevronDown" className="h-4 w-4 -rotate-90 transition-transform group-hover:translate-x-0.5" />
-            </span>
-          </button>
+          <div id="gym-body-health" className="scroll-mt-24">
+            <div id="qa-focus-peso" tabIndex={-1} className="outline-none">
+              <BodyCompositionCard state={state} onUpdateState={onUpdateState}>
+                {privacy && bodyWeightChartData.length >= 2 && (
+                  <p className="border-t border-[var(--border)]/60 pt-3 text-xs text-[var(--text-soft)]">
+                    Stream Guard oculta la evolución del peso.
+                  </p>
+                )}
+                {!privacy && bodyWeightChartData.length >= 2 && (
+                  <div className="border-t border-[var(--border)]/60 pt-3.5">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <h3 className="text-xs font-bold text-[var(--text-soft)]">Evolución de peso</h3>
+                      {variacion != null && (
+                        <PrivacyAmount as="span" className="text-[11px] font-semibold tabular-nums text-[var(--text-faint)]">
+                          {`${variacion > 0 ? '+' : ''}${variacion.toFixed(1)} kg desde el inicio`}
+                        </PrivacyAmount>
+                      )}
+                    </div>
+                    <div className="h-40 w-full sm:h-44">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={bodyWeightChartData} margin={{ top: 8, right: 10, left: -22, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="colorBw" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="var(--blue)" stopOpacity={0.24} />
+                              <stop offset="95%" stopColor="var(--blue)" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.45} vertical={false} />
+                          <XAxis dataKey="dateLabel" tick={{ fill: 'var(--text-faint)', fontSize: 10 }} axisLine={false} tickLine={false} />
+                          <YAxis domain={[bwMin, bwMax]} tick={{ fill: 'var(--text-faint)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v} kg`} />
+                          <Tooltip content={<CustomChartTooltip unit="kg" />} />
+                          <Area type="monotone" dataKey="kg" stroke="var(--blue)" strokeWidth={2.5} isAnimationActive={false} fillOpacity={1} fill="url(#colorBw)" dot={{ r: 3, fill: 'var(--blue)', stroke: 'var(--card)', strokeWidth: 2 }} />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+              </BodyCompositionCard>
+            </div>
+          </div>
 
           {activeExerciseMetric ? (
-            <section data-gym-exercise-progress className="gym-progress-exercise space-y-4">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="text-xs font-semibold text-[var(--text-soft)]">Evolución por ejercicio</p>
-                  <h2 className="mt-1 text-xl font-bold text-[var(--text)]">{activeExerciseMetric.exerciseName}</h2>
+            <section
+              data-gym-exercise-progress
+              className="gym-progress-exercise rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 shadow-xs space-y-3.5"
+            >
+              {/* Header — same clean structure as Composición corporal */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue)]/20">
+                    <AppIcon name="activity" className="h-4.5 w-4.5" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1">
+                      <h2 className="text-sm font-bold text-[var(--text)]">Evolución por ejercicio</h2>
+                      <ContextualHelp label="Cómo se evalúa la evolución por ejercicio">
+                        Compara tus sesiones recientes de este ejercicio frente a tus registros anteriores para indicar si la marca está mejorando o estable, e integra el historial completo de carga máxima por sesión.
+                      </ContextualHelp>
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--text-soft)]">
+                      <span className="font-semibold text-[var(--text)]">{activeExerciseMetric.exerciseName}</span>
+                      <span>·</span>
+                      <button
+                        type="button"
+                        onClick={() => setHistoryExercise({ exerciseId: activeExerciseMetric.exerciseId, exerciseName: activeExerciseMetric.exerciseName })}
+                        className="inline-flex items-center gap-0.5 font-bold text-[var(--blue)] hover:underline cursor-pointer"
+                      >
+                        <span>Ver ficha completa</span>
+                        <span aria-hidden="true">↗</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <label className="flex flex-col gap-1 text-xs font-medium text-[var(--text-soft)]">
-                  Elegir ejercicio
+
+                <div className="ml-auto flex items-center gap-2">
                   <select
+                    aria-label="Elegir ejercicio"
                     value={activeExerciseMetric.key}
                     onChange={(e) => setSelectedExercise(e.target.value)}
-                    className="min-h-11 min-w-56 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold text-[var(--text)] outline-none focus:border-[var(--blue)]"
+                    className="min-h-10 min-w-48 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-xs font-bold text-[var(--text)] outline-none focus:border-[var(--blue)]"
                   >
                     {gymProgress.exercises.map((exercise) => (
                       <option key={exercise.key} value={exercise.key}>{exercise.exerciseName}</option>
                     ))}
                   </select>
-                </label>
-              </div>
-
-              <div className="rounded-3xl bg-[var(--card)] p-5 shadow-sm ring-1 ring-inset ring-[var(--border)] sm:p-6">
-                <div className="grid gap-6 lg:grid-cols-[1.15fr_1fr] lg:items-end">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs font-semibold text-[var(--text-faint)]">Mejor serie</p>
-                      <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${
-                        activeExerciseMetric.state === 'improved'
-                          ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
-                          : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'
-                      }`}>
-                        {activeExerciseMetric.state === 'improved'
-                          ? 'Mejorando'
-                          : activeExerciseMetric.state === 'stable'
-                            ? 'Estable'
-                            : 'Aún sin tendencia'}
-                      </span>
-                    </div>
-                    <p className="mt-2 text-4xl font-black tracking-tight tabular-nums text-[var(--text)] sm:text-5xl">
-                      {activeExerciseMetric.bestSet
-                        ? <>{activeExerciseMetric.bestSet.weight}<span className="ml-1.5 text-base font-semibold text-[var(--text-soft)]">kg × {activeExerciseMetric.bestSet.reps}</span></>
-                        : '—'}
-                    </p>
-                  </div>
-                  <dl className="grid grid-cols-2 gap-5 border-t border-[var(--border)] pt-5 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-                    <div>
-                      <dt className="text-xs text-[var(--text-faint)]">Última ejecución</dt>
-                      <dd className="mt-1 text-base font-bold text-[var(--text)]">
-                        {activeExerciseMetric.lastExecution ? fmtDate(activeExerciseMetric.lastExecution.date) : '—'}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-[var(--text-faint)]">Sesiones en 30 días</dt>
-                      <dd className="mt-1 text-base font-bold tabular-nums text-[var(--text)]">
-                        {activeExerciseMetric.recentSessionCount}
-                      </dd>
-                    </div>
-                  </dl>
                 </div>
-                <p className="mt-5 border-t border-[var(--border)] pt-4 text-sm leading-6 text-[var(--text-soft)]">
-                  {activeExerciseMetric.state === 'improved'
-                    ? 'Tu mejor serie reciente superó el período anterior.'
-                    : activeExerciseMetric.state === 'stable'
-                      ? 'La mejor serie se mantuvo frente al período anterior.'
-                      : 'Necesitamos ejecuciones en dos períodos comparables para marcar una tendencia.'}
-                  {activeExerciseMetric.previousVolume > 0 && (
-                    <> Volumen reciente: <span className="font-semibold tabular-nums text-[var(--text)]">{activeExerciseMetric.recentVolume.toLocaleString('es-UY')} kg</span>.</>
-                  )}
-                </p>
               </div>
 
+              {/* 4 Metric Boxes — matching Composición corporal */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-0.5">
+                <div className="rounded-xl bg-[var(--surface-muted)] p-2.5 border border-[var(--border)]/60">
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
+                    Mejor serie
+                  </span>
+                  <strong className="mt-0.5 block text-lg tabular-nums font-extrabold text-[var(--text)]">
+                    {activeExerciseMetric.bestSet
+                      ? `${activeExerciseMetric.bestSet.weight} kg × ${activeExerciseMetric.bestSet.reps}`
+                      : '—'}
+                  </strong>
+                  <span className={`mt-0.5 block text-[10px] font-semibold ${
+                    activeExerciseMetric.state === 'improved'
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-[var(--text-faint)]'
+                  }`}>
+                    {activeExerciseMetric.state === 'improved'
+                      ? 'Mejorando'
+                      : activeExerciseMetric.state === 'stable'
+                        ? 'Estable'
+                        : 'Sin tendencia aún'}
+                  </span>
+                </div>
+
+                <div className="rounded-xl bg-[var(--surface-muted)] p-2.5 border border-[var(--border)]/60">
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
+                    Última ejecución
+                  </span>
+                  <strong className="mt-0.5 block text-lg tabular-nums font-extrabold text-[var(--text)]">
+                    {activeExerciseMetric.lastExecution ? fmtDate(activeExerciseMetric.lastExecution.date) : '—'}
+                  </strong>
+                  <span className="mt-0.5 block text-[10px] text-[var(--text-faint)]">
+                    Última sesión
+                  </span>
+                </div>
+
+                <div className="rounded-xl bg-[var(--surface-muted)] p-2.5 border border-[var(--border)]/60">
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
+                    Sesiones en 30 días
+                  </span>
+                  <strong className="mt-0.5 block text-lg tabular-nums font-extrabold text-[var(--text)]">
+                    {activeExerciseMetric.recentSessionCount}
+                  </strong>
+                  <span className="mt-0.5 block text-[10px] text-[var(--text-faint)]">
+                    Frecuencia reciente
+                  </span>
+                </div>
+
+                <div className="rounded-xl bg-[var(--surface-muted)] p-2.5 border border-[var(--border)]/60">
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
+                    Volumen reciente
+                  </span>
+                  <strong className="mt-0.5 block text-lg tabular-nums font-extrabold text-[var(--text)]">
+                    {`${activeExerciseMetric.recentVolume.toLocaleString('es-UY')} kg`}
+                  </strong>
+                  <span className="mt-0.5 block text-[10px] text-[var(--text-faint)]">
+                    Últimos 30 días
+                  </span>
+                </div>
+              </div>
+
+              {/* Full-width Evolution Chart inside the same card */}
               {liftingChartData.length >= 2 ? (
-                <div className="rounded-3xl bg-[var(--card-subtle)] p-4 sm:p-5">
-                  <div className="mb-3">
-                    <h3 className="text-sm font-bold text-[var(--text)]">¿Cómo cambió la carga máxima?</h3>
-                    <p className="mt-0.5 text-xs text-[var(--text-soft)]">Mayor peso realizado en cada sesión.</p>
+                <div className="border-t border-[var(--border)]/60 pt-3.5">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h3 className="text-xs font-bold text-[var(--text-soft)]">Carga máxima por sesión</h3>
+                    <span className="text-[11px] tabular-nums text-[var(--text-faint)]">
+                      {liftingChartData.length} sesiones
+                    </span>
                   </div>
-                  <div className="h-48 w-full sm:h-52">
+                  <div className="h-44 w-full sm:h-48">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={liftingChartData} margin={{ top: 10, right: 10, left: -22, bottom: 0 }}>
+                      <LineChart data={liftingChartData} margin={{ top: 8, right: 10, left: -22, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.45} vertical={false} />
                         <XAxis dataKey="dateLabel" tick={{ fill: 'var(--text-faint)', fontSize: 10 }} axisLine={false} tickLine={false} />
                         <YAxis domain={[liftMin, liftMax]} tick={{ fill: 'var(--text-faint)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v} kg`} />
                         <Tooltip content={<CustomChartTooltip unit="kg" />} />
-                        <Line type="monotone" dataKey="kg" stroke="var(--blue)" strokeWidth={2.5} dot={{ r: 3, fill: 'var(--blue)', stroke: 'var(--card)', strokeWidth: 2 }} />
+                        <Line type="monotone" dataKey="kg" stroke="var(--blue)" strokeWidth={2.5} isAnimationActive={false} dot={{ r: 3, fill: 'var(--blue)', stroke: 'var(--card)', strokeWidth: 2 }} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
               ) : (
-                <p data-gym-progress-low-data className="rounded-2xl bg-[var(--surface-muted)] px-4 py-5 text-sm text-[var(--text-soft)]">
-                  Registrá otra ejecución de {activeExercise} para ver su evolución de carga.
+                <p data-gym-progress-low-data className="rounded-xl bg-[var(--surface-muted)] px-3.5 py-2.5 text-xs text-[var(--text-soft)]">
+                  Registrá otra sesión de {activeExercise} para ver el gráfico de carga.
                 </p>
               )}
             </section>
@@ -2070,97 +2215,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
           )}
 
           {gymProgress.exercises.length > 0 && (
-            <details className="group border-y border-[var(--border)]">
-              <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-1 text-sm font-semibold text-[var(--text)]">
-                <span>Récords personales</span>
-                <AppIcon name="chevronDown" className="h-4 w-4 text-[var(--text-soft)] transition-transform group-open:rotate-180" />
-              </summary>
-              <div className="border-t border-[var(--border)] py-4">
-                <PersonalRecordsCard state={state} onSelectExercise={setHistoryExercise} />
-              </div>
-            </details>
+            <PersonalRecordsCard state={state} onSelectExercise={setHistoryExercise} />
           )}
-
-          <details ref={bodyHealthDetailsRef} id="gym-body-health" className="group border-y border-[var(--border)]">
-            <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-1 text-sm font-semibold text-[var(--text)]">
-              <span>Salud corporal</span>
-              <span className="flex items-center gap-3 text-xs font-medium text-[var(--text-soft)]">
-                {peso != null ? privacy ? '••••' : `${peso} kg` : 'Sin peso registrado'}
-                <AppIcon name="chevronDown" className="h-4 w-4 transition-transform group-open:rotate-180" />
-              </span>
-            </summary>
-            <div ref={bodyHealthContentRef} id="qa-focus-peso" tabIndex={-1} className="space-y-5 scroll-mt-24 border-t border-[var(--border)] py-5 outline-none">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs text-[var(--text-faint)]">Peso actual</p>
-                  <PrivacyAmount as="p" className="mt-1 text-2xl font-bold tabular-nums text-[var(--text)]">{peso != null ? `${peso} kg` : '—'}</PrivacyAmount>
-                  <PrivacyAmount as="p" className="mt-0.5 text-xs text-[var(--text-soft)]">
-                    {variacion == null ? 'Sin variación calculable' : `${variacion > 0 ? '+' : ''}${variacion.toFixed(1)} kg desde el inicio`}
-                  </PrivacyAmount>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-[var(--text-faint)]">IMC</p>
-                  <PrivacyAmount as="p" className="mt-1 text-lg font-bold tabular-nums text-[var(--text)]">{imc != null ? imc.toFixed(1) : '—'}</PrivacyAmount>
-                  <PrivacyAmount as="p" className="text-xs text-[var(--text-soft)]">{imcCat.label}</PrivacyAmount>
-                </div>
-              </div>
-
-              <form onSubmit={handleAddWeight} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_8rem_auto]">
-                <input
-                  type="date"
-                  aria-label="Fecha del peso"
-                  value={weightDate}
-                  onChange={(e) => setWeightDate(e.target.value)}
-                  className="min-h-11 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm text-[var(--text)]"
-                />
-                <PrivacyInput
-                  type="number"
-                  aria-label="Peso en kilogramos"
-                  step="0.1"
-                  value={weightKg}
-                  onChange={(e) => setWeightKg(e.target.value)}
-                  placeholder="70.5 kg"
-                  className="min-h-11 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm text-[var(--text)]"
-                />
-                <button type="submit" className="min-h-11 rounded-xl bg-[var(--text)] px-4 text-sm font-bold text-[var(--bg-elevated)] hover:opacity-90">
-                  Registrar peso
-                </button>
-              </form>
-
-              {privacy && bodyWeightChartData.length >= 2 && <p className="text-xs text-[var(--text-soft)]">Stream Guard oculta la evolución del peso.</p>}
-              {!privacy && bodyWeightChartData.length >= 2 && (
-                <div>
-                  <h3 className="text-sm font-bold text-[var(--text)]">¿Cómo cambió tu peso?</h3>
-                  <div className="mt-3 h-48 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={bodyWeightChartData} margin={{ top: 10, right: 10, left: -22, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="colorBw" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="var(--blue)" stopOpacity={0.24} />
-                            <stop offset="95%" stopColor="var(--blue)" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" opacity={0.45} vertical={false} />
-                        <XAxis dataKey="dateLabel" tick={{ fill: 'var(--text-faint)', fontSize: 10 }} axisLine={false} tickLine={false} />
-                        <YAxis domain={[bwMin, bwMax]} tick={{ fill: 'var(--text-faint)', fontSize: 10 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v} kg`} />
-                        <Tooltip content={<CustomChartTooltip unit="kg" />} />
-                        <Area type="monotone" dataKey="kg" stroke="var(--blue)" strokeWidth={2.5} fillOpacity={1} fill="url(#colorBw)" dot={{ r: 3, fill: 'var(--blue)', stroke: 'var(--card)', strokeWidth: 2 }} />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setShowBodyComposition((value) => !value)}
-                className="min-h-11 rounded-xl px-3 text-sm font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)]"
-              >
-                {showBodyComposition ? 'Ocultar composición corporal' : 'Ver composición corporal'}
-              </button>
-              {showBodyComposition && <BodyCompositionCard state={state} onUpdateState={onUpdateState} />}
-            </div>
-          </details>
         </div>
       )}
 
@@ -2227,7 +2283,8 @@ interface TemplateAddExerciseFormProps {
     name: string,
     muscleGroup: MuscleGroup,
     equipment: ExerciseEquipment,
-    barWeight: number
+    barWeight: number,
+    icon?: GymIconName
   ) => boolean | void;
 }
 
@@ -2236,13 +2293,17 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
   const [muscleGroup, setMuscleGroup] = useState<MuscleGroup>('Pecho');
   const [equipment, setEquipment] = useState<ExerciseEquipment>('barra');
   const [barWeight, setBarWeight] = useState(20);
+  const [customIcon, setCustomIcon] = useState<GymIconName | undefined>(undefined);
+  const [showIconPicker, setShowIconPicker] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    const saved = onAdd(name.trim(), muscleGroup, equipment, equipment === 'barra' ? barWeight : 0);
+    const saved = onAdd(name.trim(), muscleGroup, equipment, equipment === 'barra' ? barWeight : 0, customIcon);
     if (saved === false) return;
     setName('');
+    setCustomIcon(undefined);
+    setShowIconPicker(false);
   };
 
   return (
@@ -2251,33 +2312,109 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
       className="grid gap-3 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] p-3 sm:grid-cols-2 lg:grid-cols-[minmax(14rem,1fr)_auto_auto_auto_auto] lg:items-end"
     >
       <div className="sm:col-span-2 lg:col-span-1">
-        <label className="mb-1.5 block text-xs font-medium text-[var(--text-soft)]">
-          Ejercicio
-        </label>
-        <input
-          type="text"
-          list="template-gym-suggestions"
-          aria-label="Nombre del ejercicio de la rutina"
-          value={name}
-          onChange={(e) => {
-            const val = e.target.value;
-            setName(val);
-            if (val) {
-              setMuscleGroup(inferMuscleGroup(val));
-              const inferred = inferExerciseEquipment(val);
-              setEquipment(inferred.equipment);
-              setBarWeight(inferred.barWeight);
-            }
-          }}
-          placeholder="Ej: Curl con mancuernas"
-          className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm text-[var(--text)] outline-none focus:border-[var(--blue)]"
-        />
+        <div className="mb-1.5 flex items-center justify-between gap-2">
+          <label className="block text-xs font-medium text-[var(--text-soft)]">
+            Ejercicio
+          </label>
+          <button
+            type="button"
+            onClick={() => setShowIconPicker((v) => !v)}
+            aria-pressed={showIconPicker}
+            className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] font-semibold transition-colors ${
+              showIconPicker || customIcon
+                ? 'bg-blue-500/15 text-[var(--blue)] ring-1 ring-blue-500/30'
+                : 'bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)]'
+            }`}
+          >
+            <AppIcon name="sparkles" className="h-3 w-3" />
+            <span>{customIcon ? 'Icono elegido' : 'Elegir icono'}</span>
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowIconPicker((v) => !v)}
+            title="Elegir icono del ejercicio"
+            aria-label="Elegir icono del ejercicio"
+            className={`flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl transition-all ${
+              showIconPicker || customIcon
+                ? 'bg-blue-500/15 text-[var(--blue)] ring-2 ring-[var(--blue)]'
+                : 'bg-indigo-500/10 text-[var(--indigo)] ring-1 ring-inset ring-[var(--border)] hover:ring-2 hover:ring-[var(--blue)]/50'
+            }`}
+          >
+            <GymExerciseArtwork
+              name={name.trim() || muscleGroup}
+              equipment={name.trim() ? equipment : undefined}
+              icon={customIcon}
+              compact
+            />
+          </button>
+          <input
+            type="text"
+            list="template-gym-suggestions"
+            aria-label="Nombre del ejercicio de la rutina"
+            value={name}
+            onChange={(e) => {
+              const val = e.target.value;
+              setName(val);
+              if (val.trim()) {
+                setMuscleGroup(inferMuscleGroup(val));
+                const inferred = inferExerciseEquipment(val);
+                setEquipment(inferred.equipment);
+                setBarWeight(inferred.barWeight);
+              }
+            }}
+            placeholder="Ej: Curls, Martillo, Bench press, Pull..."
+            className="min-h-11 flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm text-[var(--text)] outline-none focus:border-[var(--blue)]"
+          />
+        </div>
         <datalist id="template-gym-suggestions">
           {COMMON_EXERCISE_SUGGESTIONS.map((s) => (
             <option key={s} value={s} />
           ))}
         </datalist>
       </div>
+
+      {showIconPicker && (
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/60 p-3 sm:col-span-2 lg:col-span-full">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              aria-pressed={!customIcon}
+              onClick={() => setCustomIcon(undefined)}
+              className={`inline-flex h-10 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold transition-colors ${
+                !customIcon
+                  ? 'bg-[var(--blue)] text-white shadow-xs'
+                  : 'bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)]'
+              }`}
+            >
+              <AppIcon name="sparkles" className="h-3.5 w-3.5" />
+              Automático
+            </button>
+            <span className="hidden h-5 w-px bg-[var(--border)] sm:inline-block" aria-hidden="true" />
+            {GYM_EXERCISE_ICON_OPTIONS.map((opt) => {
+              const isSelected = customIcon === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  title={opt.label}
+                  aria-label={opt.label}
+                  aria-pressed={isSelected}
+                  onClick={() => setCustomIcon(opt.id)}
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
+                    isSelected
+                      ? 'bg-blue-500/15 text-blue-600 ring-2 ring-blue-500 dark:text-blue-400'
+                      : 'bg-[var(--card)] text-[var(--text-soft)] hover:bg-[var(--border)] hover:text-[var(--text)]'
+                  }`}
+                >
+                  <GymIcon icon={opt.id} decorative className="h-5 w-5" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="min-w-0">
         <label className="mb-1.5 block text-xs font-medium text-[var(--text-soft)]">
@@ -3177,7 +3314,7 @@ const EQUIPMENT_LABELS: Record<ExerciseEquipment, string> = {
   corporal: 'Peso corporal',
 };
 
-const LatestWorkoutSession: React.FC<WorkoutSessionCardProps & { initiallyExpanded?: boolean }> = (props) => {
+const LatestWorkoutSession: React.FC<WorkoutSessionCardProps & { initiallyExpanded?: boolean }> = React.memo((props) => {
   const { session, allSessions, onDeleteSession, onSaveAsTemplate } = props;
   const [isExpanded, setIsExpanded] = useState(Boolean(props.initiallyExpanded));
   const [isEditing, setIsEditing] = useState(false);
@@ -3423,4 +3560,4 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps & { initiallyExpand
       )}
     </article>
   );
-};
+});

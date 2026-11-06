@@ -24,7 +24,17 @@ function useCalendarToday() {
   return today;
 }
 
-const fullDate = (date: string) => new Intl.DateTimeFormat('es-UY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(`${date}T12:00:00`));
+const FULL_DATE_FORMATTER = new Intl.DateTimeFormat('es-UY', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const MONTH_FORMATTER = new Intl.DateTimeFormat('es-UY', { month: 'long', year: 'numeric' });
+const fullDateCache = new Map<string, string>();
+const fullDate = (date: string) => {
+  let formatted = fullDateCache.get(date);
+  if (!formatted) {
+    formatted = FULL_DATE_FORMATTER.format(new Date(`${date}T12:00:00`));
+    fullDateCache.set(date, formatted);
+  }
+  return formatted;
+};
 const nameOf = (session: GymSession) => session.weekLabel?.trim() || session.exercises?.[0]?.name?.trim() || 'Entrenamiento';
 
 interface GymActivityCalendarProps {
@@ -33,7 +43,7 @@ interface GymActivityCalendarProps {
   onOpenSession: (sessionId: string) => void;
 }
 
-export const GymActivityCalendar: React.FC<GymActivityCalendarProps> = ({ sessions, restDates, onOpenSession }) => {
+export const GymActivityCalendar: React.FC<GymActivityCalendarProps> = React.memo(({ sessions, restDates, onOpenSession }) => {
   const today = useCalendarToday();
   const [month, setMonth] = useState(() => today.slice(0, 7));
   const [selected, setSelected] = useState(() => today);
@@ -43,7 +53,7 @@ export const GymActivityCalendar: React.FC<GymActivityCalendarProps> = ({ sessio
   const root = useRef<HTMLElement>(null);
   const headingId = useId();
   const selectedHeadingId = useId();
-  const monthLabel = new Intl.DateTimeFormat('es-UY', { month: 'long', year: 'numeric' }).format(new Date(`${month}-01T12:00:00`));
+  const monthLabel = useMemo(() => MONTH_FORMATTER.format(new Date(`${month}-01T12:00:00`)), [month]);
   const selectedSessions = index.byDate.get(selected) || [];
   const changeMonth = (next: string) => {
     const date = selectGymActivityMonth(next, selected);
@@ -115,4 +125,4 @@ export const GymActivityCalendar: React.FC<GymActivityCalendarProps> = ({ sessio
     {index.invalidDateCount > 0 && <p className="gym-activity-date-note">{index.invalidDateCount} {index.invalidDateCount === 1 ? 'registro con trabajo no tiene una fecha válida' : 'registros con trabajo no tienen una fecha válida'}. Se conservan sin asignarles un día.</p>}
     {index.futureDateCount > 0 && <p className="gym-activity-date-note">{index.futureDateCount} {index.futureDateCount === 1 ? 'registro finalizado tiene fecha futura y no cuenta' : 'registros finalizados tienen fecha futura y no cuentan'} como asistencia.</p>}
   </section>;
-};
+});

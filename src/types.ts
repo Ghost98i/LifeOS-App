@@ -456,6 +456,7 @@ export interface Exercise {
   id?: string;
   name: string;
   equipment?: ExerciseEquipment;
+  icon?: import('./lib/gymIconRegistry').GymIconName | null;
   weight?: number;
   barWeight?: number;
   reps?: string;
@@ -486,7 +487,19 @@ export type RoutineIconName =
   | 'gym-shoulder-press'
   | 'gym-yoga-mat'
   | 'gym-bike'
-  | 'gym-rest';
+  | 'gym-rest'
+  | 'gym-torso'
+  | 'gym-biceps'
+  | 'gym-abs'
+  | 'gym-weightlifting'
+  | 'gym-deadlift'
+  | 'gym-curls'
+  | 'gym-pushups'
+  | 'gym-plank'
+  | 'gym-stretching'
+  | 'gym-triceps'
+  | 'gym-hamstrings'
+  | 'gym-calves';
 
 export const ROUTINE_ICON_NAMES: readonly RoutineIconName[] = [
   'dumbbell',
@@ -507,6 +520,18 @@ export const ROUTINE_ICON_NAMES: readonly RoutineIconName[] = [
   'gym-yoga-mat',
   'gym-bike',
   'gym-rest',
+  'gym-torso',
+  'gym-biceps',
+  'gym-abs',
+  'gym-weightlifting',
+  'gym-deadlift',
+  'gym-curls',
+  'gym-pushups',
+  'gym-plank',
+  'gym-stretching',
+  'gym-triceps',
+  'gym-hamstrings',
+  'gym-calves',
 ] as const;
 
 export function isRoutineIconName(value: unknown): value is RoutineIconName {

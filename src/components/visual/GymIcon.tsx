@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { GYM_ICON_REGISTRY, type GymIconName } from '../../lib/gymIconRegistry';
 import { AppIcon } from '../AppIcon';
 
+const verifiedSources = new Set<string>();
+
 interface GymIconProps {
   icon: GymIconName;
   label?: string;
@@ -9,7 +11,7 @@ interface GymIconProps {
   decorative?: boolean;
 }
 
-export const GymIcon: React.FC<GymIconProps> = ({
+export const GymIcon: React.FC<GymIconProps> = React.memo(({
   icon,
   label,
   className = '',
@@ -30,7 +32,17 @@ export const GymIcon: React.FC<GymIconProps> = ({
     >
       {definition.src && failedSource !== definition.src ? (
         <>
-          <img src={definition.src} alt="" hidden onError={() => setFailedSource(definition.src)} />
+          {!verifiedSources.has(definition.src) && (
+            <img
+              src={definition.src}
+              alt=""
+              hidden
+              onLoad={() => {
+                if (definition.src) verifiedSources.add(definition.src);
+              }}
+              onError={() => setFailedSource(definition.src)}
+            />
+          )}
           <span
             className="gym-icon-glyph"
             style={{ '--gym-icon-url': `url("${definition.src}")` } as React.CSSProperties}
@@ -41,5 +53,5 @@ export const GymIcon: React.FC<GymIconProps> = ({
       )}
     </span>
   );
-};
+});
 

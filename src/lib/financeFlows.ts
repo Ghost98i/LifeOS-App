@@ -207,6 +207,7 @@ export function confirmFinancialCommitment(
       : `cycle-${commitment.nextDueDate}`;
   const settlementKey = input.targetCycle || currentCommitmentCycle;
   const deterministicTxId = `settle-${commitment.id}-${settlementKey}`;
+  const accountId = input.accountId || commitment.accountId || state.finance.accounts[0]?.id || null;
 
   // 1. Idempotency check: strictly scoped to this occurrence / cycle
   const existingTx = state.finance.transactions.find((tx) =>
@@ -214,6 +215,19 @@ export function confirmFinancialCommitment(
     (tx.commitmentId === commitment.id && tx.matchedCycle === settlementKey)
   );
   if (existingTx) {
+    const isCurrentOrPast = settlementKey === currentCommitmentCycle;
+    if (isCurrentOrPast) {
+      const advanced = advanceCommitmentDueDate(commitment);
+      const settledTxIds = commitment.settledTxIds
+        ? (commitment.settledTxIds.includes(existingTx.id) ? commitment.settledTxIds : [...commitment.settledTxIds, existingTx.id])
+        : [existingTx.id];
+      Object.assign(commitment, advanced, {
+        lastSettledTxId: existingTx.id,
+        settledTxIds,
+        updatedAt: new Date().toISOString(),
+      });
+      materializeAccounts(state, affectedAccountIds([existingTx.accountId, accountId]));
+    }
     return existingTx;
   }
   if (!commitment.active && commitment.status === 'paid') {
@@ -244,7 +258,6 @@ export function confirmFinancialCommitment(
   }
 
   const amount = input.amount ?? Number(commitment.amount);
-  const accountId = input.accountId || commitment.accountId || state.finance.accounts[0]?.id || null;
   if (!accountId) throw new Error('Elegí una cuenta válida.');
   const targetAccount = state.finance.accounts.find((a) => a.id === accountId);
   if (!targetAccount) throw new Error('Elegí una cuenta válida.');
@@ -323,13 +336,24 @@ export function confirmExpectedIncome(
     throw new Error(`Moneda incompatible: la previsión (${incomeCurrency}) no coincide con la moneda de la cuenta de destino (${accountCurrency}).`);
   }
 
-  const txDate = input.date || todayISO();
   const amount = input.amount !== undefined ? Number(input.amount) : Number(income.amount);
 
   // Clave determinista de ciclo vigente
   const currentIncomeCycle = income.frequency === 'once' ? 'once' : `cycle-${income.startDate}`;
   const targetCycle = input.targetCycle || currentIncomeCycle;
   const deterministicTxId = `settle-inc-${income.id}-${targetCycle}`;
+  const cycleDate = targetCycle.startsWith('cycle-') ? targetCycle.replace('cycle-', '') : null;
+
+  // Usar la fecha del targetCycle (ej. 2026-11-05) o la fecha de confirmación, NUNCA la fecha de inicio de la previsión si es anterior
+  const rawConfirmationDate = input.date;
+  const isPastStartDatePassed = Boolean(
+    rawConfirmationDate &&
+    rawConfirmationDate === income.startDate &&
+    income.startDate < (cycleDate || todayISO())
+  );
+  const confirmationDate = (rawConfirmationDate && !isPastStartDatePassed)
+    ? rawConfirmationDate
+    : (cycleDate || todayISO());
 
   // 1. Idempotency directa: si este ciclo exacto ya fue liquidado
   const existingTx = state.finance.transactions.find((tx) =>
@@ -337,6 +361,19 @@ export function confirmExpectedIncome(
     (tx.expectedIncomeId === income.id && tx.matchedCycle === targetCycle)
   );
   if (existingTx) {
+    const isCurrentOrPast = targetCycle === currentIncomeCycle || (cycleDate && income.startDate <= cycleDate);
+    if (isCurrentOrPast) {
+      const advanced = advanceExpectedIncomeDate(income, cycleDate || undefined);
+      const settledTxIds = income.settledTxIds
+        ? (income.settledTxIds.includes(existingTx.id) ? income.settledTxIds : [...income.settledTxIds, existingTx.id])
+        : [existingTx.id];
+      Object.assign(income, advanced, {
+        lastSettledTxId: existingTx.id,
+        settledTxIds,
+        updatedAt: new Date().toISOString(),
+      });
+      materializeAccounts(state, affectedAccountIds([existingTx.accountId, accountId]));
+    }
     return existingTx;
   }
 
@@ -352,15 +389,20 @@ export function confirmExpectedIncome(
 
   // 3. Control contable de cobro anticipado por fecha (sin depender de ventanas heurísticas fijas):
   // Para ingresos únicos ('once') no existe ciclo subsiguiente susceptible de adelantarse inadvertidamente.
-  const isRecurringCycle = income.frequency !== 'once' && targetCycle.startsWith('cycle-');
-  const cycleDate = isRecurringCycle ? targetCycle.replace('cycle-', '') : null;
-  const isAdvance = Boolean(isRecurringCycle && cycleDate && cycleDate > txDate);
+  const isRecurringCycle = income.frequency !== 'once' && Boolean(cycleDate);
+  const isAdvance = Boolean(isRecurringCycle && cycleDate && cycleDate > confirmationDate);
 
   if (isAdvance && !input.allowAdvance) {
-    throw new Error(`El cobro del ciclo ${targetCycle} vence el ${cycleDate}. Para cobrarlo por adelantado en ${txDate}, confirmá explícitamente la acción de cobro anticipado.`);
+    throw new Error(`El cobro del ciclo ${targetCycle} vence el ${cycleDate}. Para cobrarlo por adelantado en ${confirmationDate}, confirmá explícitamente la acción de cobro anticipado.`);
   }
 
-  const advanced = advanceExpectedIncomeDate(income);
+  const txDate = isAdvance
+    ? confirmationDate
+    : (rawConfirmationDate && rawConfirmationDate > (cycleDate || '') && !isPastStartDatePassed
+      ? rawConfirmationDate
+      : (cycleDate || confirmationDate));
+
+  const advanced = advanceExpectedIncomeDate(income, cycleDate || undefined);
   const transaction = addTransaction(state, {
     id: deterministicTxId,
     type: 'ingreso',
@@ -1080,7 +1122,8 @@ export function linkTransactionToExpectedIncome(
   transaction.reviewed = true;
   transaction.revisionOrder = createFinanceRevisionOrderAfter(transaction.revisionOrder);
 
-  const advanced = advanceExpectedIncomeDate(income);
+  const cycleDate = settlementKey.startsWith('cycle-') ? settlementKey.replace('cycle-', '') : null;
+  const advanced = advanceExpectedIncomeDate(income, cycleDate || undefined);
   const settledTxIds = income.settledTxIds ? [...income.settledTxIds, transaction.id] : [transaction.id];
   Object.assign(income, advanced, {
     lastSettledTxId: transaction.id,

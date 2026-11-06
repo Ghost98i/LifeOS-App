@@ -343,13 +343,28 @@ export function getExerciseExecutions(
  * - Identidad moderna por exerciseId; fallback legacy por nombre si falta ID.
  * - Si no hay sets efectivos completados en el historial, retorna null (para que el llamador use fallback).
  */
+function getLatestExecutionAcrossIdsAndName(
+  sessions: GymSession[],
+  targetValue: string | ExerciseMetricTarget,
+  options: { excludeSessionId?: string; upToDate?: string } = {}
+): ExerciseExecutionMetric | null {
+  const target = metricTarget(targetValue);
+  const byTarget = getExerciseExecutions(sessions, target, options)[0] || null;
+  if (!target.exerciseId || !normalizeExerciseName(target.exerciseName)) {
+    return byTarget;
+  }
+  const byName = getExerciseExecutions(sessions, { exerciseName: target.exerciseName }, options)[0] || null;
+  if (!byTarget) return byName;
+  if (!byName) return byTarget;
+  return byName.date > byTarget.date ? byName : byTarget;
+}
+
 export function getExerciseInitialSuggestion(
   sessions: GymSession[],
   targetValue: string | ExerciseMetricTarget,
   options: { excludeSessionId?: string; upToDate?: string } = {}
 ): ExerciseRecommendation | null {
-  const executions = getExerciseExecutions(sessions, targetValue, options);
-  const previous = executions[0];
+  const previous = getLatestExecutionAcrossIdsAndName(sessions, targetValue, options);
   if (!previous) return null;
 
   // Priorizar el primer set efectivo completado
@@ -390,10 +405,10 @@ export function getExerciseGhostValues(
   currentSessionId?: string,
   beforeDate?: string
 ): ExerciseGhostData | null {
-  const previous = getExerciseExecutions(sessions, targetValue, {
+  const previous = getLatestExecutionAcrossIdsAndName(sessions, targetValue, {
     excludeSessionId: currentSessionId,
     upToDate: beforeDate,
-  })[0];
+  });
   if (!previous) return null;
 
   const validSets: ExerciseGhostSet[] = previous.sets.map((set, idx) => ({
@@ -813,24 +828,66 @@ export function getExerciseHistory(
   targetValue: string | ExerciseMetricTarget
 ): ExerciseHistoryDetails {
   const target = metricTarget(targetValue);
-  const allPRs = calcDetailedPRs(sessions);
-  const normKey = normalizeExerciseName(target.exerciseName);
-  const idKey = target.exerciseId ? `id:${target.exerciseId}` : '';
-  const prs = (normKey ? allPRs[normKey] : undefined) || (idKey ? allPRs[idKey] : undefined) || {};
+  // Unify history by normalized exercise name when available so sessions from different routines/migrations merge cleanly
+  const lookupTarget: ExerciseMetricTarget = normalizeExerciseName(target.exerciseName)
+    ? { exerciseName: target.exerciseName }
+    : target;
 
   let equipment: ExerciseEquipment | undefined;
   let barWeight: number | undefined;
   let muscleGroup: MuscleGroup | string | undefined;
 
+  const prs: ExercisePRs = {
+    exerciseId: target.exerciseId,
+    exerciseName: target.exerciseName,
+  };
+
   const matchingSessions: ExerciseSessionHistoryPoint[] = [];
-  const executions = getExerciseExecutions(sessions, target);
+  const executions = getExerciseExecutions(sessions, lookupTarget);
+  const sessionMap = new Map<string, GymSession>();
+  for (const s of sessions || []) {
+    sessionMap.set(s.id, s);
+  }
+
+  // Process chronologically (oldest -> newest) first to compute accurate all-time PRs in a single fast pass
+  for (let i = executions.length - 1; i >= 0; i--) {
+    const execution = executions[i];
+    let sessionExVolume = 0;
+    for (const set of execution.sets) {
+      if (isWarmupSet(set)) continue;
+      const w = Number(set.weight) || 0;
+      const r = Number(set.reps) || 0;
+      if (w <= 0 && r <= 0) continue;
+
+      if (w > 0) {
+        if (!prs.maxWeight || w > prs.maxWeight.value || (w === prs.maxWeight.value && r > (prs.maxWeight.reps || 0))) {
+          prs.maxWeight = { value: w, weight: w, reps: r, date: execution.date, sessionId: execution.sessionId };
+        }
+      }
+      if (r > 0) {
+        if (!prs.maxReps || r > prs.maxReps.value || (r === prs.maxReps.value && w > (prs.maxReps.weight || 0))) {
+          prs.maxReps = { value: r, reps: r, weight: w, date: execution.date, sessionId: execution.sessionId };
+        }
+      }
+      if (w > 0 && r >= 1 && r <= 12) {
+        const e1rm = calculate1RM(w, r);
+        if (e1rm > 0 && (!prs.maxE1RM || e1rm > prs.maxE1RM.value)) {
+          prs.maxE1RM = { value: e1rm, weight: w, reps: r, date: execution.date, sessionId: execution.sessionId };
+        }
+      }
+      sessionExVolume += w * r;
+    }
+    if (sessionExVolume > 0 && (!prs.maxVolume || sessionExVolume > prs.maxVolume.value)) {
+      prs.maxVolume = { value: sessionExVolume, date: execution.date, sessionId: execution.sessionId };
+    }
+  }
 
   for (const execution of executions) {
-    const sourceExercise = sessions
-      .find((session) => session.id === execution.sessionId)
-      ?.exercises.find((exercise) =>
-        exercise.id === execution.exerciseId && exercise.name === execution.exerciseName
-      );
+    const sourceSession = sessionMap.get(execution.sessionId);
+    const sourceExercise = sourceSession?.exercises.find((exercise) =>
+      (execution.exerciseId && exercise.id === execution.exerciseId) ||
+      normalizeExerciseName(exercise.name) === normalizeExerciseName(execution.exerciseName)
+    );
     if (!equipment && sourceExercise?.equipment) equipment = sourceExercise.equipment;
     if (barWeight === undefined && typeof sourceExercise?.barWeight === 'number') barWeight = sourceExercise.barWeight;
     if (!muscleGroup && sourceExercise?.muscleGroup) muscleGroup = sourceExercise.muscleGroup;
@@ -970,6 +1027,60 @@ export function getGymProgressMetrics(
     exercises: [...targets.values()].map((target) =>
       getExerciseProgressMetrics(sessions, target, referenceDate)
     ),
+  };
+}
+
+/**
+ * Unifica el progreso por nombre normalizado de ejercicio para la vista Progreso y Récords Personales,
+ * evitando que sesiones históricas migradas con distintos IDs fragmenten un mismo ejercicio (ej. "Jalón al pecho").
+ */
+export function getUnifiedGymProgressMetrics(
+  sessions: GymSession[],
+  referenceDate = toLocalISO(new Date())
+): GymProgressMetrics {
+  const targets = new Map<string, { exerciseId?: string; exerciseName: string }>();
+  [...(sessions || [])]
+    .filter((session) => session.date <= referenceDate && isPerformedGymSession(session))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .forEach((session) => {
+      for (const exercise of session.exercises || []) {
+        if (getPerformedExerciseSets(session, exercise).length === 0) continue;
+        const key = getExercisePRKey(exercise);
+        if (!key) continue;
+        targets.set(key, { exerciseId: exercise.id, exerciseName: exercise.name.trim() });
+      }
+    });
+
+  const exercises = [...targets.entries()].map(([normKey, target]) => {
+    const base = getExerciseProgressMetrics(sessions, { exerciseName: target.exerciseName }, referenceDate);
+    let state = base.state;
+    // Si tiene al menos 2 ejecuciones pero quedaron ambas dentro de los últimos 30 días (o separadas >60 días),
+    // comparar la última ejecución contra el historial previo del mismo ejercicio para mostrar tendencia real.
+    if (state === 'insufficient_data') {
+      const allExecs = getExerciseExecutions(sessions, { exerciseName: target.exerciseName }, { upToDate: referenceDate });
+      if (allExecs.length >= 2) {
+        const latestBest = allExecs[0].bestSet;
+        const priorBest = bestSetAcrossExecutions(allExecs.slice(1));
+        if (latestBest && priorBest) {
+          state = comparePerformedSets(latestBest, priorBest) > 0 ? 'improved' : 'stable';
+        }
+      }
+    }
+    return {
+      ...base,
+      key: normKey,
+      exerciseId: target.exerciseId,
+      exerciseName: target.exerciseName,
+      state,
+    };
+  }).sort((a, b) =>
+    (b.lastExecution?.date || '').localeCompare(a.lastExecution?.date || '') ||
+    a.exerciseName.localeCompare(b.exerciseName, 'es')
+  );
+
+  return {
+    frequency: getGymFrequencyMetrics(sessions, referenceDate),
+    exercises,
   };
 }
 

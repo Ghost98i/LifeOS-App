@@ -24,7 +24,7 @@ interface GymExerciseArtworkProps {
  * exclusively from the curated local SVG registry; this component does not
  * draw, recolor or infer a unique illustration for every free-form name.
  */
-export const GymExerciseArtwork: React.FC<GymExerciseArtworkProps> = ({
+export const GymExerciseArtwork: React.FC<GymExerciseArtworkProps> = React.memo(({
   name,
   equipment,
   icon,
@@ -41,5 +41,5 @@ export const GymExerciseArtwork: React.FC<GymExerciseArtworkProps> = ({
       className={`gym-equipment-art ${compact ? 'gym-equipment-art-compact' : ''} ${className}`}
     />
   );
-};
+});
 

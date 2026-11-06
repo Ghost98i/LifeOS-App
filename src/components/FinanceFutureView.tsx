@@ -446,7 +446,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                   <Area
                     type="monotone"
                     dataKey="endingBalance"
-                    stroke={projection.isDeficit ? '#f43f5e' : '#10b981'}
+                    stroke={activeProj.isDeficit ? '#f43f5e' : '#10b981'}
                     strokeWidth={2}
                     fill="url(#futureTrajGradient)"
                   />

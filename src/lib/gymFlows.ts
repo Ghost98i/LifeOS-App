@@ -231,6 +231,9 @@ export function updateGymTemplateExercise(
   const found = findTemplateExercise(template, target);
   if (!found) return false;
   Object.assign(found.exercise, updates);
+  if ('icon' in updates && !updates.icon) {
+    delete found.exercise.icon;
+  }
   if (updates.restSeconds !== undefined && updates.restSecondsMode === undefined) {
     found.exercise.restSecondsMode = 'custom';
   }

@@ -851,22 +851,41 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
     expectedIncomes: Array.isArray(rawFinance.expectedIncomes)
       ? rawFinance.expectedIncomes
           .filter((inc: any) => inc && typeof inc === 'object' && String(inc.name || '').trim().length > 0 && Number(inc.amount || 0) > 0)
-          .map((inc: any) => ({
-            id: typeof inc.id === 'string' ? inc.id : uid(),
-            name: String(inc.name).trim(),
-            amount: Number(inc.amount || 0),
-            // Preserve the supplied code, including unknown strings for review; never infer a missing currency.
-            ...(typeof inc.currency === 'string' ? { currency: inc.currency } : {}),
-            startDate: typeof inc.startDate === 'string' ? inc.startDate : todayISO(),
-            frequency: ['once', 'weekly', 'biweekly', 'monthly', 'yearly'].includes(inc.frequency)
+          .map((inc: any) => {
+            const startDate = typeof inc.startDate === 'string' ? inc.startDate : todayISO();
+            const frequency = ['once', 'weekly', 'biweekly', 'monthly', 'yearly'].includes(inc.frequency)
               ? inc.frequency
-              : 'monthly',
-            active: inc.active !== false,
-            category: typeof inc.category === 'string' ? inc.category : null,
-            accountId: typeof inc.accountId === 'string' ? inc.accountId : null,
-            endDate: typeof inc.endDate === 'string' ? inc.endDate : null,
-            updatedAt: typeof inc.updatedAt === 'string' ? inc.updatedAt : undefined,
-          }))
+              : 'monthly';
+            const endDate = typeof inc.endDate === 'string' ? inc.endDate : null;
+            let active = inc.active !== false;
+            // Auto-heal: restore active status if prematurely deactivated before the end month/year elapsed
+            if (!active && endDate && frequency !== 'once') {
+              const isWithinValidHorizon = frequency === 'monthly'
+                ? startDate.slice(0, 7) <= endDate.slice(0, 7)
+                : frequency === 'yearly'
+                  ? startDate.slice(0, 4) <= endDate.slice(0, 4)
+                  : startDate <= endDate;
+              if (isWithinValidHorizon) {
+                active = true;
+              }
+            }
+            return {
+              id: typeof inc.id === 'string' ? inc.id : uid(),
+              name: String(inc.name).trim(),
+              amount: Number(inc.amount || 0),
+              // Preserve the supplied code, including unknown strings for review; never infer a missing currency.
+              ...(typeof inc.currency === 'string' ? { currency: inc.currency } : {}),
+              startDate,
+              frequency,
+              active,
+              category: typeof inc.category === 'string' ? inc.category : null,
+              accountId: typeof inc.accountId === 'string' ? inc.accountId : null,
+              endDate,
+              lastSettledTxId: typeof inc.lastSettledTxId === 'string' ? inc.lastSettledTxId : undefined,
+              settledTxIds: Array.isArray(inc.settledTxIds) ? inc.settledTxIds : undefined,
+              updatedAt: typeof inc.updatedAt === 'string' ? inc.updatedAt : undefined,
+            };
+          })
       : [],
     commitments: Array.isArray(rawFinance.commitments)
       ? rawFinance.commitments

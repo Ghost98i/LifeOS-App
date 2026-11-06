@@ -36,6 +36,19 @@ import taskSvg from '../assets/icons/icons8/icons8-checkmark-50.svg?raw';
 import expenseSvg from '../assets/icons/icons8/icons8-expense-50.svg?raw';
 import reminderSvg from '../assets/icons/icons8/icons8-reminder-50.svg?raw';
 import bellSvg from '../assets/icons/icons8/icons8-bell-50.svg?raw';
+import listSvg from '../assets/icons/icons8/icons8-bulleted-list-50.svg?raw';
+import activitySvg from '../assets/icons/icons8/icons8-pulse-50.svg?raw';
+import clockSvg from '../assets/icons/icons8/icons8-clock-50.svg?raw';
+import checkCircleSvg from '../assets/icons/icons8/icons8-checked-50.svg?raw';
+import playSvg from '../assets/icons/icons8/icons8-play-50.svg?raw';
+import flameSvg from '../assets/icons/icons8/icons8-fire-50.svg?raw';
+import sparklesSvg from '../assets/icons/icons8/icons8-sparkling-50.svg?raw';
+import repeatSvg from '../assets/icons/icons8/icons8-repeat-50.svg?raw';
+import scaleSvg from '../assets/icons/icons8/icons8-weighing-50.svg?raw';
+import moreSvg from '../assets/icons/icons8/icons8-more-50.svg?raw';
+import targetSvg from '../assets/icons/icons8/icons8-goal-50.svg?raw';
+import zapSvg from '../assets/icons/icons8/icons8-lightning-bolt-50.svg?raw';
+import trendingUpSvg from '../assets/icons/icons8/icons8-positive-dynamic-50.svg?raw';
 
 export type AppIconName =
   | 'home' | 'calendar' | 'calendarDays' | 'briefcase' | 'repeat' | 'wallet'
@@ -149,7 +162,20 @@ const icons8Sources: Partial<Record<AppIconName, string>> = {
   project: projectSvg,
   gift: giftSvg,
   stopwatch: stopwatchSvg,
-  product: productSvg
+  product: productSvg,
+  list: listSvg,
+  activity: activitySvg,
+  clock: clockSvg,
+  checkCircle: checkCircleSvg,
+  play: playSvg,
+  flame: flameSvg,
+  sparkles: sparklesSvg,
+  repeat: repeatSvg,
+  scale: scaleSvg,
+  more: moreSvg,
+  target: targetSvg,
+  zap: zapSvg,
+  trendingUp: trendingUpSvg
 };
 const icons8 = Object.fromEntries(Object.entries(icons8Sources).map(([name, source]) => [name, {
   viewBox: source.match(/viewBox="([^"]+)"/)![1],

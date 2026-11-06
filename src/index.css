@@ -1975,8 +1975,8 @@ button:active {
 }
 
 .gym-icon-fallback {
-  width: 72%;
-  height: 72%;
+  width: 82%;
+  height: 82%;
 }
 
 .gym-equipment-art {
@@ -1987,8 +1987,8 @@ button:active {
 }
 
 .gym-equipment-art-compact {
-  width: 1.65rem;
-  height: 1.65rem;
+  width: 2.1rem;
+  height: 2.1rem;
 }
 
 .gym-exercise-chip.bg-\[var\(--blue\)\] .gym-equipment-art {

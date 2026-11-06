@@ -1,16 +1,19 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { LifeOSState } from '../types';
 import { bodyCompositionEstimate } from '../lib/bodyComposition';
+import { calcIMC, imcCategory } from '../lib/calculations';
 import { fmtDate, todayISO } from '../lib/storage';
 import { AppIcon } from './AppIcon';
+import { ContextualHelp } from './ContextualHelp';
 import { PrivacyAmount, PrivacyInput } from './PrivacyAmount';
 
 interface BodyCompositionCardProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
+  children?: React.ReactNode;
 }
 
-export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state, onUpdateState }) => {
+export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = React.memo(({ state, onUpdateState, children }) => {
   const [showForm, setShowForm] = useState(false);
   const [date, setDate] = useState(todayISO());
   const [weight, setWeight] = useState('');
@@ -18,20 +21,44 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state,
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState(false);
 
-  const estimate = bodyCompositionEstimate(state);
-  const latestWeight = [...state.gym.weight].sort((a, b) => b.date.localeCompare(a.date))[0] || null;
-  const latestWaist = [...state.gym.measurements].sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+  const estimate = useMemo(
+    () => bodyCompositionEstimate(state),
+    [state]
+  );
+  const imc = useMemo(() => calcIMC(state), [state]);
+  const imcCat = useMemo(() => imcCategory(imc), [imc]);
+
+  const { latestWeight, prevWeight } = useMemo(() => {
+    const sorted = [...state.gym.weight].sort((a, b) => b.date.localeCompare(a.date));
+    return { latestWeight: sorted[0] || null, prevWeight: sorted[1] || null };
+  }, [state.gym.weight]);
+  const { latestWaist, prevWaist } = useMemo(() => {
+    const sorted = [...state.gym.measurements].sort((a, b) => b.date.localeCompare(a.date));
+    return { latestWaist: sorted[0] || null, prevWaist: sorted[1] || null };
+  }, [state.gym.measurements]);
+
+  const weightDelta = latestWeight && prevWeight ? +(latestWeight.kg - prevWeight.kg).toFixed(1) : null;
+  const waistDelta = latestWaist && prevWaist ? +(latestWaist.waist - prevWaist.waist).toFixed(1) : null;
 
   const saveSnapshot = (event: React.FormEvent) => {
     event.preventDefault();
     const kg = Number(weight);
-    const cm = Number(waist);
-    if (!Number.isFinite(kg) || kg < 30 || kg > 400 || !Number.isFinite(cm) || cm < 40 || cm > 250) return;
+    const hasWaistInput = waist.trim().length > 0;
+    const cm = hasWaistInput ? Number(waist) : (latestWaist?.waist ?? NaN);
+    const validWeight = Number.isFinite(kg) && kg >= 30 && kg <= 400;
+    const validWaist = Number.isFinite(cm) && cm >= 40 && cm <= 250;
+    if (!validWeight && !validWaist) return;
+    if (hasWaistInput && !validWaist) return;
+
     const result = onUpdateState((draft) => {
-      draft.gym.weight = draft.gym.weight.filter((item) => item.date !== date);
-      draft.gym.measurements = draft.gym.measurements.filter((item) => item.date !== date);
-      draft.gym.weight.push({ date, kg });
-      draft.gym.measurements.push({ date, waist: cm });
+      if (validWeight) {
+        draft.gym.weight = draft.gym.weight.filter((item) => item.date !== date);
+        draft.gym.weight.push({ date, kg });
+      }
+      if (hasWaistInput && validWaist) {
+        draft.gym.measurements = draft.gym.measurements.filter((item) => item.date !== date);
+        draft.gym.measurements.push({ date, waist: cm });
+      }
     });
     if (result === false) { setSaveError(true); return; }
     setSaveError(false);
@@ -54,13 +81,38 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state,
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex min-w-0 flex-1 basis-full items-center gap-2.5 sm:basis-auto">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-teal-500/10 text-teal-500 border border-teal-500/20">
-            <AppIcon name="scale" className="h-4 w-4" />
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-500/10 text-teal-500 border border-teal-500/20">
+            <AppIcon name="scale" className="h-4.5 w-4.5" />
           </span>
-          <div>
-            <h2 className="text-sm font-bold text-[var(--text)]">Composición corporal</h2>
-            <div className="text-[11px] text-[var(--text-soft)] tabular-nums">
-              <PrivacyAmount>{latestWeight ? `${latestWeight.kg} kg` : 'Sin peso'}</PrivacyAmount> · <PrivacyAmount>{latestWaist ? `${latestWaist.waist} cm cintura` : 'Sin cintura'}</PrivacyAmount>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1">
+              <h2 className="text-sm font-bold text-[var(--text)]">Composición corporal</h2>
+              <ContextualHelp label="Cómo se calcula la composición corporal">
+                Usa tu altura, sexo y cintura para estimar grasa corporal (fórmula RFM), masa magra libre de grasa, FFMI (desarrollo muscular relativo a tu estatura) e IMC orientativo. Medí la cintura a la altura del ombligo en ayunas para comparar con consistencia.
+              </ContextualHelp>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-[var(--text-soft)] tabular-nums">
+              <PrivacyAmount>{latestWeight ? `${latestWeight.kg} kg` : 'Sin peso'}</PrivacyAmount>
+              {weightDelta !== null && weightDelta !== 0 && (
+                <span className="text-[10px] text-[var(--text-faint)]">
+                  ({weightDelta > 0 ? `+${weightDelta}` : weightDelta} kg)
+                </span>
+              )}
+              <span>·</span>
+              <PrivacyAmount>{latestWaist ? `${latestWaist.waist} cm cintura` : 'Sin cintura'}</PrivacyAmount>
+              {waistDelta !== null && waistDelta !== 0 && (
+                <span className="text-[10px] text-[var(--text-faint)]">
+                  ({waistDelta > 0 ? `+${waistDelta}` : waistDelta} cm)
+                </span>
+              )}
+              {imc != null && (
+                <>
+                  <span>·</span>
+                  <span className="text-[var(--text-faint)]">
+                    IMC <PrivacyAmount>{imc.toFixed(1)}</PrivacyAmount> ({imcCat.label})
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -115,7 +167,7 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state,
             </label>
             <label>
               <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-                Cintura (cm)
+                Cintura (cm · opcional)
               </span>
               <PrivacyInput
                 type="number"
@@ -151,30 +203,40 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state,
 
       {/* Metrics Summary */}
       {estimate ? (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
-          <div className="rounded-xl bg-[var(--surface-muted)] p-2.5 border border-[var(--border)]/60">
-            <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-              Grasa · RFM
-            </span>
-            <PrivacyAmount as="strong" className="mt-0.5 block text-lg tabular-nums font-extrabold text-[var(--text)]">{`${estimate.rfmPercent.toFixed(1)}%`}</PrivacyAmount>
+        <div className="space-y-2.5 pt-1">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="rounded-xl bg-[var(--surface-muted)] p-2.5 border border-[var(--border)]/60">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
+                Grasa · RFM
+              </span>
+              <PrivacyAmount as="strong" className="mt-0.5 block text-lg tabular-nums font-extrabold text-[var(--text)]">{`${estimate.rfmPercent.toFixed(1)}%`}</PrivacyAmount>
+              <span className="mt-0.5 block text-[10px] text-[var(--text-faint)]">Cintura / altura</span>
+            </div>
+            <div className="rounded-xl bg-[var(--surface-muted)] p-2.5 border border-[var(--border)]/60">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
+                Masa Grasa
+              </span>
+              <PrivacyAmount as="strong" className="mt-0.5 block text-lg tabular-nums font-extrabold text-[var(--text)]">{`${estimate.fatMassKg.toFixed(1)} kg`}</PrivacyAmount>
+              <span className="mt-0.5 block text-[10px] text-[var(--text-faint)]">Tejido adiposo est.</span>
+            </div>
+            <div className="rounded-xl bg-[var(--surface-muted)] p-2.5 border border-[var(--border)]/60">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
+                Masa Magra
+              </span>
+              <PrivacyAmount as="strong" className="mt-0.5 block text-lg tabular-nums font-extrabold text-[var(--text)]">{`${estimate.leanMassKg.toFixed(1)} kg`}</PrivacyAmount>
+              <span className="mt-0.5 block text-[10px] text-[var(--text-faint)]">{`${(100 - estimate.rfmPercent).toFixed(0)}% libre de grasa`}</span>
+            </div>
+            <div className="rounded-xl bg-[var(--surface-muted)] p-2.5 border border-[var(--border)]/60">
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
+                FFMI
+              </span>
+              <PrivacyAmount as="strong" className="mt-0.5 block text-lg tabular-nums font-extrabold text-[var(--text)]">{estimate.ffmi.toFixed(1)}</PrivacyAmount>
+              <span className="mt-0.5 block text-[10px] text-[var(--text-faint)]">Masa magra / m²</span>
+            </div>
           </div>
-          <div className="rounded-xl bg-[var(--surface-muted)] p-2.5 border border-[var(--border)]/60">
-            <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-              Masa Grasa
-            </span>
-            <PrivacyAmount as="strong" className="mt-0.5 block text-lg tabular-nums font-extrabold text-[var(--text)]">{`${estimate.fatMassKg.toFixed(1)} kg`}</PrivacyAmount>
-          </div>
-          <div className="rounded-xl bg-[var(--surface-muted)] p-2.5 border border-[var(--border)]/60">
-            <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-              Masa Magra
-            </span>
-            <PrivacyAmount as="strong" className="mt-0.5 block text-lg tabular-nums font-extrabold text-[var(--text)]">{`${estimate.leanMassKg.toFixed(1)} kg`}</PrivacyAmount>
-          </div>
-          <div className="rounded-xl bg-[var(--surface-muted)] p-2.5 border border-[var(--border)]/60">
-            <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-              FFMI
-            </span>
-            <PrivacyAmount as="strong" className="mt-0.5 block text-lg tabular-nums font-extrabold text-[var(--text)]">{estimate.ffmi.toFixed(1)}</PrivacyAmount>
+
+          <div className="flex items-center justify-between gap-2 text-[11px] text-[var(--text-faint)]">
+            <span>Estimaciones orientativas (no mediciones clínicas) · {fmtDate(estimate.weight.date)}</span>
           </div>
         </div>
       ) : (
@@ -185,11 +247,7 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = ({ state,
         </p>
       )}
 
-      {estimate && (
-        <div className="text-xs text-[var(--text-soft)]">
-          Estimaciones de composición corporal, no mediciones clínicas. Calculadas con peso del {fmtDate(estimate.weight.date)} y cintura del {fmtDate(estimate.waist.date)}.
-        </div>
-      )}
+      {children}
     </section>
   );
-};
+});

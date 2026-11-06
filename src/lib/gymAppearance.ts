@@ -61,23 +61,27 @@ export function inferAutomaticRoutineIdentity(
     result[group] = (result[group] || 0) + 1;
     return result;
   }, {});
-  const nameIdentity = /descanso|recuperacion/i.test(routineName)
+  const nameIdentity = /descanso|recuperacion|rest/i.test(routineName)
     ? 'Descanso'
-    : /cardio|correr|bicicleta/i.test(routineName)
+    : /cardio|correr|running|bicicleta|spinning|hiit/i.test(routineName)
       ? 'Cardio'
-      : /pecho/i.test(routineName)
+      : /pecho|chest|bench|push|empuje/i.test(routineName)
         ? 'Pecho'
-        : /espalda|dorsal/i.test(routineName)
+        : /espalda|dorsal|back|pull|tiron|traccion/i.test(routineName)
           ? 'Espalda'
-          : /pierna|cuádriceps|isquio|glúteo|pantorrilla/i.test(routineName)
+          : /pierna|legs?|leg[\s-]?day|lower|tren inferior|cu[aá]driceps|isquio|gl[uú]teo|pantorrilla|squat/i.test(routineName)
             ? 'Piernas'
-            : /hombro|deltoide/i.test(routineName)
+            : /hombro|deltoide|shoulder/i.test(routineName)
               ? 'Hombros'
-              : /brazo|bíceps|tríceps/i.test(routineName)
+              : /brazo|arms?|b[ií]ceps|tr[ií]ceps|curls?|martillos?|hammer/i.test(routineName)
                 ? 'Brazos'
-                : /core|abdomen/i.test(routineName)
+                : /core|abdomen|abs|plancha|plank/i.test(routineName)
                   ? 'Core'
-                  : null;
+                  : /torso|tren superior|upper(?:\s*body)?/i.test(routineName)
+                    ? 'Torso'
+                    : /full[\s-]?body|cuerpo completo/i.test(routineName)
+                      ? 'Full body'
+                      : null;
   const ranked = Object.entries(groups).sort((a, b) => b[1] - a[1]);
   const dominant = ranked.length
     ? (ranked[0][1] > (ranked[1]?.[1] || 0) ? ranked[0][0] : 'Entrenamiento')
@@ -93,8 +97,10 @@ export function inferAutomaticRoutineIdentity(
   if (/espalda|dorsal/.test(normalized)) return identity(dominant, 'gym-lat-pulldown');
   if (/pecho/.test(normalized)) return identity(dominant, 'gym-bench-press');
   if (/hombro|deltoide/.test(normalized)) return identity(dominant, 'gym-shoulder-press');
-  if (/brazo|biceps|triceps/.test(normalized)) return identity(dominant, 'gym-dumbbell');
+  if (/brazo|biceps|triceps/.test(normalized)) return identity(dominant, 'gym-biceps');
   if (/core|abdomen/.test(normalized)) return identity(dominant, 'gym-yoga-mat');
+  if (/torso|tren superior|upper body/.test(normalized)) return identity(dominant, 'gym-torso');
+  if (/full[\s-]?body|cuerpo completo/.test(normalized)) return identity(dominant, 'gym-weightlifting');
   return identity(dominant, 'gym-fallback');
 }
 

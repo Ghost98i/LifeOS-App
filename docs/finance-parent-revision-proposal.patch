@@ -1,0 +1,21 @@
+diff --git a/firestore.rules b/firestore.rules
+--- a/firestore.rules
++++ b/firestore.rules
+@@ -289,7 +289,7 @@
+           && request.resource.data.parentRevision == null
+         ))
+         && (module != 'finance' || validFinanceCommercialWrite(userId))
+-        && (module != 'finance' || !userHasCommercialResale(userId) || (
++        && (module != 'finance' || (
+           ('parentRevision' in request.resource.data)
+           && request.resource.data.parentRevision == null
+         ));
+@@ -307,7 +307,7 @@
+         ))
+         && (module != 'finance' || (preservesFinanceProtocol() && validFinanceCommercialWrite(userId)
+           && preservesFinanceCommercial()))
+-        && (module != 'finance' || !userHasCommercialResale(userId) || (
++        && (module != 'finance' || (
+           ('parentRevision' in request.resource.data)
+           && request.resource.data.parentRevision is string
+           && ('revision' in resource.data)

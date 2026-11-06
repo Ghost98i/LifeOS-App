@@ -664,8 +664,10 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
     const actualAmount = paidAmount !== undefined && !isNaN(paidAmount) ? paidAmount : Number(com.amount);
     const date = paymentDate || todayISO();
     const cycle = targetCycle || deriveCycleIdentity(com, 'commitment').cycleKey;
+    let wasNewlyCreated = false;
     if (onUpdateState((draft) => {
       if (!draft.finance) return;
+      const initialTxCount = draft.finance.transactions.length;
       confirmFinancialCommitment(draft, {
         commitmentId: com.id,
         amount: actualAmount,
@@ -675,12 +677,17 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         targetCycle: cycle,
         allowAdvance,
       });
+      wasNewlyCreated = draft.finance.transactions.length > initialTxCount;
     }) === false) return false;
     playSound('coins');
-    const toastMsg = state.settings?.privacyMode
-      ? 'Pago registrado y compromiso actualizado.'
-      : `Pago registrado y compromiso actualizado: −${formatPlannedAmount(actualAmount, com.currency)}`;
-    showToast(toastMsg);
+    if (wasNewlyCreated) {
+      const toastMsg = state.settings?.privacyMode
+        ? 'Pago registrado y compromiso actualizado.'
+        : `Pago registrado y compromiso actualizado: −${formatPlannedAmount(actualAmount, com.currency)}`;
+      showToast(toastMsg);
+    } else {
+      showToast('El período actual ya estaba liquidado en movimientos. Se actualizó el compromiso sin duplicar saldo.', 'info');
+    }
     return true;
   };
 
@@ -889,26 +896,28 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       playSound('coins');
       showToast('Previsión vinculada al movimiento existente sin duplicar saldo.');
     } else {
-      let resultTx: Transaction | null = null;
+      let wasNewlyCreated = false;
       try {
         if (onUpdateState((draft) => {
           if (!draft.finance) return;
-          resultTx = confirmExpectedIncome(draft, {
+          const initialTxCount = draft.finance.transactions.length;
+          confirmExpectedIncome(draft, {
             expectedIncomeId: confirmingIncome.id,
             accountId: confirmIncomeAccountId || confirmingIncome.accountId,
             date: effectiveDate,
             targetCycle,
             allowAdvance: isFutureCycle ? confirmIncomeIsAdvance : undefined,
           });
+          wasNewlyCreated = draft.finance.transactions.length > initialTxCount;
         }) === false) return;
         playSound('coins');
-        if (resultTx && confirmingIncome.lastSettledTxId && (resultTx as any).id === confirmingIncome.lastSettledTxId) {
-          showToast('El período actual ya estaba liquidado. Saldo protegido sin duplicados.', 'info');
-        } else {
+        if (wasNewlyCreated) {
           const toastMsg = state.settings?.privacyMode
             ? 'Ingreso real registrado.'
             : `Ingreso real registrado: +${formatPlannedAmount(confirmingIncome.amount, confirmingIncome.currency)}`;
           showToast(toastMsg);
+        } else {
+          showToast('El período actual ya estaba liquidado en movimientos. Se actualizó la previsión al siguiente período sin duplicar saldo.', 'info');
         }
       } catch (err: any) {
         showToast(err.message || 'Error al confirmar el cobro', 'error');

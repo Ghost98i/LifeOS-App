@@ -516,7 +516,12 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
               {/* Fila Principal: Badge Biomecánico y Título a Ancho Completo */}
               <div className="c-header-main-row">
                 <div className="c-art-badge" aria-hidden="true">
-                  <GymExerciseArtwork name={exercise.name} equipment={visualEquipment} className="c-art-badge-icon" />
+                  <GymExerciseArtwork
+                    name={exercise.name}
+                    equipment={visualEquipment}
+                    icon={exercise.icon || undefined}
+                    className="c-art-badge-icon"
+                  />
                 </div>
                 <div className="c-meta">
                   <h2 className="c-exercise-title">{exercise.name}</h2>
@@ -1038,23 +1043,32 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
 
                 <form onSubmit={submitExercise} className="space-y-2 border-t border-[var(--border)] pt-4">
                   <p className="text-xs font-semibold text-[var(--text)]">Agregar ejercicio a la sesión</p>
-                  <input
-                    list="active-gym-exercise-suggestions"
-                    value={newExerciseName}
-                    onChange={(event) => {
-                      const name = event.target.value;
-                      setNewExerciseName(name);
-                      if (name) {
-                        setNewExerciseMuscle(inferMuscleGroup(name));
-                        const inferred = inferExerciseEquipment(name);
-                        setNewExerciseEquipment(inferred.equipment);
-                        setNewExerciseBar(inferred.barWeight);
-                      }
-                    }}
-                    placeholder="Nombre del ejercicio"
-                    aria-label="Nombre del ejercicio"
-                    className={`${controlClass} w-full`}
-                  />
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-muted)] text-[var(--gym-visual-accent)] ring-1 ring-inset ring-[var(--border)]">
+                      <GymExerciseArtwork
+                        name={newExerciseName.trim() || newExerciseMuscle}
+                        equipment={newExerciseName.trim() ? newExerciseEquipment : undefined}
+                        compact
+                      />
+                    </span>
+                    <input
+                      list="active-gym-exercise-suggestions"
+                      value={newExerciseName}
+                      onChange={(event) => {
+                        const name = event.target.value;
+                        setNewExerciseName(name);
+                        if (name.trim()) {
+                          setNewExerciseMuscle(inferMuscleGroup(name));
+                          const inferred = inferExerciseEquipment(name);
+                          setNewExerciseEquipment(inferred.equipment);
+                          setNewExerciseBar(inferred.barWeight);
+                        }
+                      }}
+                      placeholder="Ej: Curls, Martillo, Bench press..."
+                      aria-label="Nombre del ejercicio"
+                      className={`${controlClass} flex-1 min-w-0`}
+                    />
+                  </div>
                   <datalist id="active-gym-exercise-suggestions">
                     {exerciseSuggestions.map((item) => <option key={item} value={item} />)}
                   </datalist>

@@ -1,3 +1,4 @@
+import { normalizeStoredState } from './storage';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { defaultState } from './storage';
@@ -625,4 +626,86 @@ test('18. Borrado de previsión: Borrar ExpectedIncome recurrente preserva intac
   });
   assert.equal(state.finance.transactions.length, 0);
   assert.equal(state.finance.accounts[0].balance, 10000, 'Saldo revertido correctamente');
+});
+
+test('21. Previsión mensual con fin en diciembre: cobrar noviembre mantiene activa la previsión en diciembre', () => {
+  const state = setupState();
+  state.finance.expectedIncomes = [
+    {
+      id: 'inc-beca-dic',
+      name: 'Beca',
+      amount: 13782,
+      currency: 'UYU',
+      startDate: '2026-11-05',
+      frequency: 'monthly',
+      category: 'cat-sueldo',
+      accountId: 'acc-uyu',
+      endDate: '2026-12-01', // Usuario seleccionó diciembre como límite
+      active: true,
+    }
+  ];
+
+  // Cobrar ciclo de noviembre
+  const txNov = confirmExpectedIncome(state, {
+    expectedIncomeId: 'inc-beca-dic',
+    date: '2026-11-05',
+  });
+  assert.ok(txNov.id);
+
+  const beca = state.finance.expectedIncomes.find((i) => i.id === 'inc-beca-dic')!;
+  assert.equal(beca.startDate, '2026-12-05', 'Avanza a diciembre');
+  assert.equal(beca.active, true, 'DEBE permanecer activa para cobrar diciembre');
+  assert.equal(state.finance.accounts[0].balance, 23782);
+});
+
+test('22. Previsión mensual finaliza solo después de haber cobrado el último ciclo (diciembre)', () => {
+  const state = setupState();
+  state.finance.expectedIncomes = [
+    {
+      id: 'inc-beca-dic',
+      name: 'Beca',
+      amount: 13782,
+      currency: 'UYU',
+      startDate: '2026-12-05', // Ya en diciembre
+      frequency: 'monthly',
+      category: 'cat-sueldo',
+      accountId: 'acc-uyu',
+      endDate: '2026-12-01',
+      active: true,
+    }
+  ];
+
+  // Cobrar ciclo de diciembre
+  const txDic = confirmExpectedIncome(state, {
+    expectedIncomeId: 'inc-beca-dic',
+    date: '2026-12-05',
+  });
+  assert.ok(txDic.id);
+
+  const beca = state.finance.expectedIncomes.find((i) => i.id === 'inc-beca-dic')!;
+  assert.equal(beca.startDate, '2027-01-05', 'Avanza a enero');
+  assert.equal(beca.active, false, 'Se desactiva solo tras haber cobrado diciembre');
+});
+
+test('23. Auto-sanación en normalizeStoredState restaura previsiones mensualizadas con cobro pendiente en el mes límite', () => {
+  const raw = {
+    finance: {
+      expectedIncomes: [
+        {
+          id: 'inc-beca-inactiva',
+          name: 'Beca',
+          amount: 13782,
+          currency: 'UYU',
+          startDate: '2026-12-05',
+          frequency: 'monthly',
+          endDate: '2026-12-01',
+          active: false, // Fue desactivada erróneamente por bug anterior
+        }
+      ]
+    }
+  };
+
+  const normalized = normalizeStoredState(raw);
+  const beca = normalized.finance.expectedIncomes.find((i: any) => i.id === 'inc-beca-inactiva')!;
+  assert.equal(beca.active, true, 'Auto-sanación DEBE reactivar la previsión porque diciembre está en su horizonte de fin');
 });

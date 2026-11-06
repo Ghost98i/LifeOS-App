@@ -123,7 +123,14 @@ export function getCommitmentOccurrences(
 
   const pushIfValid = (dIso: string, isOverdue = false) => {
     if (occurrencesGenerated >= maxRemaining) return false;
-    if (endIso && dIso > endIso) return false;
+    const isPastEnd = endIso ? (
+      commitment.frequency === 'monthly'
+        ? dIso.slice(0, 7) > endIso.slice(0, 7)
+        : commitment.frequency === 'yearly'
+          ? dIso.slice(0, 4) > endIso.slice(0, 4)
+          : dIso > endIso
+    ) : false;
+    if (isPastEnd) return false;
 
     // Use dIso for occurrence date, but if overdue and before fromIso, project on fromIso for cash flow
     const effectiveDate = dIso < fromIso ? fromIso : dIso;
@@ -211,7 +218,7 @@ export function getCommitmentOccurrences(
       const d = new Date(curYear, curMonth, actualDay, 12);
       const iso = toIso(d);
       if (iso > horizonIso) break;
-      if (endIso && iso > endIso) break;
+      if (endIso && iso.slice(0, 7) > endIso.slice(0, 7)) break;
       // Do not duplicate overdue start date if it fell in the same month
       if (iso >= fromIso && iso >= startIso) {
         pushIfValid(iso, false);
@@ -243,7 +250,7 @@ export function getCommitmentOccurrences(
       const d = new Date(yr, targetMonth, actualDay, 12);
       const iso = toIso(d);
       if (iso > horizonIso) break;
-      if (endIso && iso > endIso) break;
+      if (endIso && iso.slice(0, 4) > endIso.slice(0, 4)) break;
       if (iso >= fromIso && iso >= startIso) {
         pushIfValid(iso, false);
       }
@@ -323,15 +330,22 @@ export function advanceCommitmentDueDate(commitment: FinancialCommitment): {
   const nextIso = toIso(nextDate);
 
   // If passed endDate, deactivate
-  if (commitment.endDate && nextIso > commitment.endDate) {
-    return {
-      nextDueDate: nextIso,
-      remainingOccurrences: newRemaining,
-      active: false,
-      status: 'paid',
-      currentInstallment: nextInstallment,
-      dueDay: anchorDay,
-    };
+  if (commitment.endDate) {
+    const isPastEnd = commitment.frequency === 'monthly'
+      ? nextIso.slice(0, 7) > commitment.endDate.slice(0, 7)
+      : commitment.frequency === 'yearly'
+        ? nextIso.slice(0, 4) > commitment.endDate.slice(0, 4)
+        : nextIso > commitment.endDate;
+    if (isPastEnd) {
+      return {
+        nextDueDate: nextIso,
+        remainingOccurrences: newRemaining,
+        active: false,
+        status: 'paid',
+        currentInstallment: nextInstallment,
+        dueDay: anchorDay,
+      };
+    }
   }
 
   return {
@@ -349,11 +363,14 @@ export function advanceCommitmentDueDate(commitment: FinancialCommitment): {
  * One-time expected incomes are marked active: false.
  * Recurring incomes advance to the next occurrence date.
  */
-export function advanceExpectedIncomeDate(income: ExpectedIncome): {
+export function advanceExpectedIncomeDate(
+  income: ExpectedIncome,
+  fromCycleDate?: string,
+): {
   startDate: string;
   active: boolean;
 } {
-  const currentIso = income.startDate || toIso(new Date());
+  const currentIso = fromCycleDate || income.startDate || toIso(new Date());
   if (income.frequency === 'once') {
     return {
       startDate: currentIso,
@@ -387,11 +404,18 @@ export function advanceExpectedIncomeDate(income: ExpectedIncome): {
   }
 
   const nextIso = toIso(nextDate);
-  if (income.endDate && nextIso > income.endDate) {
-    return {
-      startDate: nextIso,
-      active: false,
-    };
+  if (income.endDate) {
+    const isPastEnd = income.frequency === 'monthly'
+      ? nextIso.slice(0, 7) > income.endDate.slice(0, 7)
+      : income.frequency === 'yearly'
+        ? nextIso.slice(0, 4) > income.endDate.slice(0, 4)
+        : nextIso > income.endDate;
+    if (isPastEnd) {
+      return {
+        startDate: nextIso,
+        active: false,
+      };
+    }
   }
 
   return {

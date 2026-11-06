@@ -10,12 +10,14 @@ import {
   type MuscleGroup,
   type RoutineTemplate,
 } from '../types';
+import { isGymIconName } from './gymIconRegistry';
 import { normalizeGymSyncMetadata } from './gymSync';
 
 interface LegacyExercise {
   id?: unknown;
   name?: unknown;
   equipment?: unknown;
+  icon?: unknown;
   weight?: unknown;
   barWeight?: unknown;
   reps?: unknown;
@@ -55,29 +57,29 @@ function normalizedName(value: string): string {
 export function inferExerciseEquipment(name: string): { equipment: ExerciseEquipment; barWeight: number } {
   const value = normalizedName(name);
 
-  // Palabras clave explícitas de mancuerna / mancuernas
-  if (/(?:mancuerna|mancuernas|dumbbell|db|apertura|elevacion(?:es)? lateral|curl martillo|remo unilateral|vuelo)/.test(value)) {
+  // Palabras clave explícitas de mancuerna / mancuernas (español e inglés, singular y plural)
+  if (/(?:mancuernas?|dumbbells?|\bdbs?\b|aperturas?|martillos?|hammers?|concentrados?|alternos?|zottman|spider|kickbacks?|vuelos?|pajaros?|arnold|goblet|zancadas?|estocadas?|lunges?|bulgaras?|shrugs?|encogimientos?|elevacion(?:es)? (?:lateral|frontal)|lateral raises?|front raises?|patadas? de triceps|remo unilateral|single[\s-]?arm|one[\s-]?arm|chest fly|flies|flyes|\bcurls?\b(?!.*(?:barra|barbell|polea|cable|maquina|scott|predicador|femoral|isquio|nordic)))/.test(value)) {
     return { equipment: 'mancuerna', barWeight: 0 };
   }
 
   // Polea / Cable
-  if (/(?:polea|cable|jalon|jalón|cruce|face pull|pulley)/.test(value)) {
+  if (/(?:poleas?|cables?|jalon(?:es)?|lat[\s-]?pulldowns?|pulldowns?|pull[\s-]?downs?|cruces?|crossover|face[\s-]?pulls?|pulleys?|pushdowns?|tricep(?:s)? pushdowns?|gironda|remo sentado|seated rows?)/.test(value)) {
     return { equipment: 'polea', barWeight: 0 };
   }
 
   // Máquina / Prensa / Smith
-  if (/(?:maquina|máquina|prensa|hack|sill[oó]n|contractora|chest press|smith|multipower|gemelo en)/.test(value)) {
+  if (/(?:maquinas?|machines?|prensas?|leg[\s-]?press|hack|sillon|camilla|contractor(?:a)?|pec[\s-]?deck|mariposas?|chest press|smith|multipower|gemelos? en|pantorrillas? en|extension(?:es)? de cuadriceps|leg extensions?|curl femoral|leg curls?|isquiotibiales|caminadoras?|treadmills?|bicicletas?|bicis?|spinning|elipticas?)/.test(value)) {
     return { equipment: 'maquina', barWeight: 0 };
   }
 
   // Peso corporal / Calistenia
-  if (/(?:dominada|dominadas|fondo|fondos|pull[\s-]?up|chin[\s-]?up|dip|dips|plancha|flexion|flexiones|push[\s-]?up|colgado|abdominal)/.test(value)) {
+  if (/(?:dominadas?|fondos?(?!.*maquina)|pull[\s-]?ups?|chin[\s-]?ups?|muscle[\s-]?ups?|dips?|planchas?|planks?|flexiones|lagartijas|push[\s-]?ups?|colgado|abdominal(?:es)?|\babs\b|crunch(?:es)?|sit[\s-]?ups?|burpees?|estiramientos?|elongacion|stretching|elevacion(?:es)? de piernas|leg raises?|rueda abdominal|ab[\s-]?wheel)/.test(value)) {
     return { equipment: 'corporal', barWeight: 0 };
   }
 
   // Barra explícita o ejercicios estándar con barra
-  if (/(?:barra|barbell|banca|sentadilla|squat|peso muerto|deadlift|militar|hip thrust|remo con barra)/.test(value)) {
-    const isEZorShort = /(?:ez|w|frances|francés|corta)/.test(value);
+  if (/(?:barras?|barbells?|\bbbs?\b|banca|bench(?: press)?|incline press|decline press|sentadillas?|squats?|peso muerto|deadlifts?|rdls?|rumano|sumo|militar(?:es)?|military press|overhead press|\bohp\b|hip[\s-]?thrusts?|remo con barra|barbell rows?|pendlay|thrusters?|snatch|arranques?|envion|cargadas?|cleans?|frances|rompecraneos|skull[\s-]?crushers?|predicador|scott)/.test(value)) {
+    const isEZorShort = /(?:\bez\b|\bw\b|frances|rompecraneos|skull|predicador|scott|corta)/.test(value);
     return { equipment: 'barra', barWeight: isEZorShort ? 10 : 20 };
   }
 
@@ -92,15 +94,43 @@ export function inferExerciseEquipment(name: string): { equipment: ExerciseEquip
 
 export function inferMuscleGroup(name: string): MuscleGroup {
   const value = normalizedName(name);
-  // Movimientos como "jalón al pecho" describen el recorrido, no el grupo muscular.
-  // Las coincidencias específicas de espalda deben evaluarse antes que la palabra "pecho".
-  if (/(jalon|remo|dominada|pullover|espalda)/.test(value)) return 'Espalda';
-  if (/(press banca|pecho|pec deck|apertura|fondos)/.test(value)) return 'Pecho';
-  if (/(sentadilla|hack|prensa|femoral|cuadriceps|gemelo|aduccion|abduccion|peso muerto)/.test(value)) return 'Piernas';
-  if (/(hombro|deltoide|elevacion(?:es)? lateral(?:es)?|press militar|face pull)/.test(value)) return 'Hombros';
-  if (/(biceps|triceps|curl|trasnuca)/.test(value)) return 'Brazos';
-  if (/(abdominal|core|plancha)/.test(value)) return 'Core';
-  if (/(cinta|bicicleta|eliptica|cardio|correr)/.test(value)) return 'Cardio';
+  if (!value.trim()) return 'Otros';
+
+  // 1. Core (se evalúa antes que Piernas/Cardio para capturar "elevación de piernas" y "bicicleta abdominal")
+  if (/(?:\b(?:core|abdomen|abdominal(?:es)?|abs|planchas?|planks?|crunch(?:es)?|sit[\s-]?ups?|ab[\s-]?wheel|rueda abdominal|oblicuos?|lumbares?|hiperextension(?:es)?|hollow|dragon flag|woodchop(?:per)?)\b|elevacion(?:es)? de piernas|leg raises?|hanging leg|toes to bar|giros? rusos?|russian twists?)/.test(value)) {
+    return 'Core';
+  }
+
+  // 2. Cardio
+  if (/(?:\b(?:cardio|caminadoras?|treadmills?|bicicletas?|bicis?|spinning|ciclismo|bikes?|air[\s-]?bike|elipticas?|correr|running|trotes?|sprints?|hiit|burpees?|soga|escaladora|stairmaster|ergometro)\b|saltar la cuerda|jump rope|cinta de correr|cinta)/.test(value) && !/cinta elastica/.test(value)) {
+    return 'Cardio';
+  }
+
+  // 3. Hombros (se evalúa antes que Espalda/Pecho para capturar "face pull", "press militar", "shoulder press", "press de hombros")
+  if (/(?:\b(?:hombros?|shoulders?|deltoides?|delts?|militar(?:es)?|military press|overhead press|ohp|shoulder press|arnold press|vuelos?|pajaros?|rear delts?|face[\s-]?pulls?|encogimientos?|shrugs?|trapecios?|traps?)\b|elevacion(?:es)? (?:lateral(?:es)?|frontal(?:es)?|posterior(?:es)?)|lateral raises?|front raises?|press (?:de )?hombros?|remo al menton|upright rows?)/.test(value)) {
+    return 'Hombros';
+  }
+
+  // 4. Espalda (se evalúa antes que Pecho para capturar "jalón al pecho" o "remo al pecho")
+  if (/(?:\b(?:espalda|back|dorsal(?:es)?|lats?|jalon(?:es)?|lat[\s-]?pulldowns?|pulldowns?|pull[\s-]?downs?|remos?|rows?|dominadas?|pull[\s-]?ups?|chin[\s-]?ups?|muscle[\s-]?ups?|pullovers?|rack[\s-]?pulls?|seal rows?|pendlay|t[\s-]?bar|gironda)\b|\bpull\b)/.test(value)) {
+    return 'Espalda';
+  }
+
+  // 5. Brazos (se evalúa antes que Pecho para capturar "press francés", "press cerrado", "fondos de tríceps", "martillos", "curls")
+  if (/(?:\b(?:brazos?|arms?|biceps?|triceps?|curls?|martillos?|hammers?|predicador|scott|concentrados?|zottman|spider|rompecraneos|skull[\s-]?crushers?|kickbacks?|trasnuca|antebrazos?|forearms?)\b|press (?:frances|cerrado)|close[\s-]?grip|patadas? de triceps|extension(?:es)? de triceps|pushdowns?|tricep(?:s)? pushdowns?|fondos? (?:de|para) triceps|fondos? entre bancos)/.test(value)) {
+    return 'Brazos';
+  }
+
+  // 6. Pecho ("pecho", "bench press", "press banca", "push", "aperturas", "flexiones", "fondos")
+  if (/(?:\b(?:pecho|pectoral(?:es)?|chest|bench(?: press)?|banca|incline press|decline press|pec[\s-]?deck|mariposas?|contractor(?:a)?|aperturas?|fly|flies|flyes|cruces?|flexiones|lagartijas|push[\s-]?ups?|dips?|fondos?|svend|guillotina)\b|\bpush\b|press (?:de |en )?(?:banca|pecho)|press (?:inclinad[oa]|declinad[oa]|plan[oa]))/.test(value)) {
+    return 'Pecho';
+  }
+
+  // 7. Piernas ("leg day", "legs", "piernas", "sentadillas", "squats", "deadlift", "hip thrust", "gemelos")
+  if (/(?:\b(?:piernas?|legs?|leg[\s-]?day|lower(?: body)?|sentadillas?|squats?|prensas?|leg[\s-]?press|hack|deadlifts?|rdls?|rumano|sumo|femoral(?:es)?|isquios?|isquiotibiales?|hamstrings?|cuadriceps?|quads?|sillon|camilla|gemelos?|pantorrillas?|calves|calf|gluteos?|glutes?|hip[\s-]?thrusts?|zancadas?|estocadas?|lunges?|bulgaras?|split[\s-]?squats?|step[\s-]?ups?|aduccion(?:es)?|abduccion(?:es)?|aductores?|abductores?|good[\s-]?mornings?|nordic)\b|peso muerto|tren inferior|puente de gluteos?|extension(?:es)? de cuadriceps|elevacion(?:es)? de talones|leg curls?|leg extensions?|buenos dias)/.test(value)) {
+    return 'Piernas';
+  }
+
   return 'Otros';
 }
 
@@ -245,6 +275,7 @@ export function migrateExercise(
     id: exerciseId,
     name: exerciseName,
     equipment,
+    ...(isGymIconName(legacy.icon) ? { icon: legacy.icon } : {}),
     weight: numeric(legacy.weight) || (migratedSets[0]?.weight ?? 0),
     barWeight,
     sets: migratedSets,

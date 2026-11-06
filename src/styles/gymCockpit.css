@@ -24,7 +24,7 @@
   color: var(--text-soft); font-size: 13px; font-weight: 550; gap: 7px;
 }
 .gym-page .gym-section-nav > button[aria-current="page"] { border-bottom-color: var(--gym-visual-accent); color: var(--gym-visual-accent); font-weight: 650; }
-.gym-section-nav svg { width: 16px; height: 16px; flex-shrink: 0; }
+.gym-section-nav svg { width: 18px; height: 18px; flex-shrink: 0; }
 .gym-page .gym-workout-shell { overflow: visible; }
 .gym-page .gym-workout-topbar {
   border: 0; border-bottom: 1px solid var(--border); border-radius: 0; padding: 0 0 16px;
@@ -62,10 +62,10 @@
 .c-tool-btn:hover { border-color: var(--gym-visual-accent); color: var(--gym-visual-accent); }
 .c-header-main-row { display: flex; align-items: flex-start; gap: 14px; min-width: 0; }
 .gym-page .c-art-badge {
-  display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; flex-shrink: 0;
   border: 0; border-radius: 0; background: transparent; box-shadow: none; color: var(--text-soft);
 }
-.c-art-badge :is(.gym-equipment-art, .gym-icon, svg) { width: 36px; height: 36px; max-width: 100%; max-height: 100%; }
+.c-art-badge :is(.gym-equipment-art, .gym-icon, svg) { width: 42px; height: 42px; max-width: 100%; max-height: 100%; }
 .c-meta { flex: 1; min-width: 0; }
 .c-exercise-title { margin: 0; font-size: 23px; font-weight: 650; letter-spacing: -.035em; line-height: 1.3; color: var(--text); overflow-wrap: anywhere; }
 .c-meta-sub { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 2px; font-size: 12px; color: var(--text-soft); }
@@ -207,7 +207,7 @@
   .gym-routine-list > article { min-width: 0; }
   .gym-routine-list > :not(article) { grid-column: 1/-1; }
   .gym-routine-list > [data-editing="true"] { grid-column: 1/-1; }
-  .gym-progress-exercise { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1.1fr); gap: 20px 24px; align-items: start; }
+  .gym-progress-exercise { display: block; }
   .gym-progress-exercise > * { margin-block: 0; }
   .gym-progress-exercise > :first-child { grid-column: 1/-1; }
 }
