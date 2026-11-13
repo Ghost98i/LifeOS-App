@@ -9,6 +9,7 @@ import { fmtDate, fmtMoney, todayISO, uid } from '../lib/storage';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
 import { PrivacyAmount } from './PrivacyAmount';
+import { AppIcon } from './AppIcon';
 
 interface GuidedWeeklyReviewModalProps {
   state: LifeOSState;
@@ -178,7 +179,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
     });
 
     playSound('success');
-    showToast('¡Revisión semanal completada y guardada en Notas! 🎉', 'success');
+    showToast('¡Revisión semanal completada y guardada en Notas!', 'success');
     onClose();
   };
 
@@ -198,8 +199,8 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
         <div className="p-5 pb-3 border-b border-[var(--border)] bg-[var(--bg)]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-purple-500/15 text-purple-600 dark:text-purple-400 font-bold">
-                🧭
+              <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-purple-500/15 text-purple-600 dark:text-purple-400">
+                <AppIcon name="target" className="h-4 w-4" />
               </span>
               <div>
                 <h2 className="text-base font-extrabold text-[var(--text)] tracking-tight">
@@ -213,9 +214,10 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
             <button
               type="button"
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] font-bold flex items-center justify-center cursor-pointer transition"
+              className="w-8 h-8 rounded-full bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] flex items-center justify-center cursor-pointer transition"
+              aria-label="Cerrar revisión semanal"
             >
-              ✕
+              <AppIcon name="x" className="h-4 w-4" />
             </button>
           </div>
 
@@ -249,7 +251,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-bold text-[var(--text)]">Tareas & Cumplimiento 📋</h3>
+                  <h3 className="flex items-center gap-1.5 text-sm font-bold text-[var(--text)]"><AppIcon name="task" className="h-4 w-4 text-[var(--blue)]" /><span>Tareas &amp; Cumplimiento</span></h3>
                   <p className="text-xs text-[var(--text-faint)]">
                     Auditoría de tareas terminadas y pendientes en los últimos 7 días.
                   </p>
@@ -303,9 +305,10 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
                           <button
                             type="button"
                             onClick={() => handleDiscardOverdueTask(t.id)}
-                            className="rounded-lg border border-[var(--border)] px-2 py-1 text-[10px] font-semibold text-[var(--text-faint)] hover:text-rose-500 cursor-pointer"
+                            className="inline-flex items-center justify-center rounded-lg border border-[var(--border)] px-2 py-1 text-[10px] font-semibold text-[var(--text-faint)] hover:text-rose-500 cursor-pointer"
+                            aria-label="Descartar tarea"
                           >
-                            ✕
+                            <AppIcon name="x" className="h-3 w-3" />
                           </button>
                         </div>
                       </div>
@@ -313,8 +316,9 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
                   </div>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-[var(--border)] p-4 text-center text-xs text-emerald-600 bg-emerald-500/5">
-                  ✓ ¡Al día! No tenés tareas atrasadas acumuladas.
+                <div className="flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-[var(--border)] p-4 text-center text-xs text-emerald-600 bg-emerald-500/5">
+                  <AppIcon name="check" className="h-3.5 w-3.5 shrink-0" />
+                  <span>¡Al día! No tenés tareas atrasadas acumuladas.</span>
                 </div>
               )}
             </div>
@@ -324,7 +328,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
           {currentStep.key === 'gym' && (
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-bold text-[var(--text)]">Gimnasio & Entrenamiento 🏋️</h3>
+                <h3 className="flex items-center gap-1.5 text-sm font-bold text-[var(--text)]"><AppIcon name="dumbbell" className="h-4 w-4 text-emerald-500" /><span>Gimnasio &amp; Entrenamiento</span></h3>
                 <p className="text-xs text-[var(--text-faint)]">
                   Sesiones completadas, series ejecutadas y tonelaje acumulado.
                 </p>
@@ -402,7 +406,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
           {currentStep.key === 'finances' && (
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-bold text-[var(--text)]">Finanzas & Flujo Semanal 💰</h3>
+                <h3 className="flex items-center gap-1.5 text-sm font-bold text-[var(--text)]"><AppIcon name="wallet" className="h-4 w-4 text-amber-500" /><span>Finanzas &amp; Flujo Semanal</span></h3>
                 <p className="text-xs text-[var(--text-faint)]">
                   Gastos e ingresos reales registrados en los últimos 7 días.
                 </p>
@@ -466,7 +470,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
           {currentStep.key === 'sleep' && (
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-bold text-[var(--text)]">Descanso & Energía 🌙</h3>
+                <h3 className="flex items-center gap-1.5 text-sm font-bold text-[var(--text)]"><AppIcon name="moon" className="h-4 w-4 text-indigo-500" /><span>Descanso &amp; Energía</span></h3>
                 <p className="text-xs text-[var(--text-faint)]">
                   Horas de sueño y nivel de energía registrados en el checkout diario.
                 </p>
@@ -501,7 +505,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
 
               {reviewData.sleep.avgHours !== null && reviewData.sleep.avgHours < 7 && (
                 <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-3.5 flex items-start gap-2.5 text-xs text-rose-600 dark:text-rose-400">
-                  <span className="text-base">⚠️</span>
+                  <AppIcon name="alertTriangle" className="h-4 w-4 shrink-0 mt-0.5" />
                   <div>
                     <strong className="block font-bold">Déficit de sueño detectado</strong>
                     <p className="text-[11px] mt-0.5">
@@ -517,7 +521,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
           {currentStep.key === 'projects' && (
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-bold text-[var(--text)]">Proyectos & Bloqueos 🎯</h3>
+                <h3 className="flex items-center gap-1.5 text-sm font-bold text-[var(--text)]"><AppIcon name="target" className="h-4 w-4 text-purple-500" /><span>Proyectos &amp; Bloqueos</span></h3>
                 <p className="text-xs text-[var(--text-faint)]">
                   Estado de proyectos activos, próximos pasos y resolución de cuellos de botella.
                 </p>
@@ -549,9 +553,10 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
                           <button
                             type="button"
                             onClick={() => handleClearBlocker(b.id)}
-                            className="rounded-md bg-rose-500 text-white px-2 py-0.5 text-[10px] font-bold cursor-pointer hover:bg-rose-600"
+                            className="inline-flex items-center gap-1 rounded-md bg-rose-500 text-white px-2 py-0.5 text-[10px] font-bold cursor-pointer hover:bg-rose-600"
                           >
-                            Resolver bloqueo ✓
+                            <span>Resolver bloqueo</span>
+                            <AppIcon name="check" className="h-3 w-3" />
                           </button>
                         </div>
                         <p className="text-[var(--text-soft)]">{b.blockers}</p>
@@ -560,8 +565,9 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
                   </div>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-[var(--border)] p-4 text-center text-xs text-emerald-600 bg-emerald-500/5">
-                  ✓ Ningún proyecto activo reporta bloqueos en este momento.
+                <div className="flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-[var(--border)] p-4 text-center text-xs text-emerald-600 bg-emerald-500/5">
+                  <AppIcon name="check" className="h-3.5 w-3.5 shrink-0" />
+                  <span>Ningún proyecto activo reporta bloqueos en este momento.</span>
                 </div>
               )}
 
@@ -609,8 +615,9 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
           {currentStep.key === 'conclusions' && (
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-bold text-[var(--text)]">
-                  Prioridades & Conclusiones 💡
+                <h3 className="flex items-center gap-1.5 text-sm font-bold text-[var(--text)]">
+                  <AppIcon name="lightbulb" className="h-4 w-4 text-amber-500" />
+                  <span>Prioridades &amp; Conclusiones</span>
                 </h3>
                 <p className="text-xs text-[var(--text-faint)]">
                   Fijá tus objetivos clave para la próxima semana y guardá tus aprendizajes.
@@ -650,9 +657,10 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
                         <button
                           type="button"
                           onClick={() => handleRemovePriority(idx)}
-                          className="text-xs text-[var(--text-faint)] hover:text-rose-500 px-1 cursor-pointer"
+                          className="inline-flex items-center justify-center text-xs text-[var(--text-faint)] hover:text-rose-500 p-1 cursor-pointer"
+                          aria-label="Quitar prioridad"
                         >
-                          ✕
+                          <AppIcon name="x" className="h-3 w-3" />
                         </button>
                       </div>
                     ))}
@@ -711,7 +719,8 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
               onClick={handleCompleteReview}
               className="rounded-xl bg-purple-600 hover:bg-purple-700 px-6 py-2.5 text-xs font-extrabold text-white shadow-md cursor-pointer transition flex items-center gap-2"
             >
-              <span>🎉 Guardar Revisión & Conclusiones</span>
+              <AppIcon name="sparkles" className="h-4 w-4" />
+              <span>Guardar Revisión &amp; Conclusiones</span>
             </button>
           )}
         </div>

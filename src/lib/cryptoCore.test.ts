@@ -1161,3 +1161,70 @@ test('Revisión Final: cryptoSession.subscribe reacciona de forma inmediata a se
   cryptoSession.lock();
   assert.equal(callCount, 2);
 });
+
+test('Fase 8.5 — Compresión LZ-String en encryptPayload y decryptPayload con retrocompatibilidad', async () => {
+  const rawBytes = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(rawBytes);
+  const key = await globalThis.crypto.subtle.importKey('raw', rawBytes, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+
+  // 1. Cifrado con compresión
+  const sampleData = { modulo: 'gym', sesiones: Array.from({ length: 50 }, (_, i) => ({ id: `sesion-${i}`, ejercicios: ['press banca', 'sentadilla', 'peso muerto'] })) };
+  const envelope = await encryptPayload(sampleData, key);
+  assert.equal(envelope.compressed, true);
+
+  // 2. Descifrado de envelope comprimido
+  const decrypted = await decryptPayload<typeof sampleData>(envelope, key);
+  assert.deepEqual(decrypted, sampleData);
+
+  // 3. Retrocompatibilidad: Descifrado de envelope legacy (sin compressed o compressed: undefined/false)
+  const serializedLegacy = JSON.stringify(sampleData);
+  const encodedLegacy = new TextEncoder().encode(serializedLegacy);
+  const iv = new Uint8Array(12);
+  globalThis.crypto.getRandomValues(iv);
+  const legacyCiphertext = await globalThis.crypto.subtle.encrypt({ name: 'AES-GCM', iv, tagLength: 128 }, key, encodedLegacy);
+  const legacyEnvelope: typeof envelope = {
+    cryptoVersion: CURRENT_CRYPTO_VERSION,
+    algorithm: CRYPTO_ALGORITHM,
+    iv: bytesToBase64(iv),
+    ciphertext: bytesToBase64(new Uint8Array(legacyCiphertext)),
+    createdAt: new Date().toISOString(),
+    // compressed omitido intencionalmente para simular un envelope anterior
+  };
+  assert.equal(legacyEnvelope.compressed, undefined);
+  const decryptedLegacy = await decryptPayload<typeof sampleData>(legacyEnvelope, key);
+  assert.deepEqual(decryptedLegacy, sampleData);
+
+  // 4. Si compressed === true pero la descompresión falla / corrupto -> CryptoDecryptionError
+  const corruptedRaw = new TextEncoder().encode('ESTO_NO_ES_UTF16_LZ_COMPRIMIDO_VALIDO');
+  const badIv = new Uint8Array(12);
+  globalThis.crypto.getRandomValues(badIv);
+  const badCiphertext = await globalThis.crypto.subtle.encrypt({ name: 'AES-GCM', iv: badIv, tagLength: 128 }, key, corruptedRaw);
+  const fakeCompressedEnvelope = {
+    cryptoVersion: CURRENT_CRYPTO_VERSION,
+    algorithm: CRYPTO_ALGORITHM,
+    iv: bytesToBase64(badIv),
+    ciphertext: bytesToBase64(new Uint8Array(badCiphertext)),
+    compressed: true,
+    createdAt: new Date().toISOString(),
+  };
+  await assert.rejects(
+    async () => decryptPayload(fakeCompressedEnvelope, key),
+    CryptoDecryptionError
+  );
+});
+
+test('Fase 8.5 — Control de tamaño: payload > 900 KB lanza error descriptivo antes de cifrar', async () => {
+  const userId = 'test-gym-size-user';
+  const state = defaultState();
+  // Generar un payload gigante para gym (> 800 KB)
+  const bigString = 'X'.repeat(950 * 1024);
+  (state.gym as any).customHugeData = bigString;
+
+  await assert.rejects(
+    async () => writeCloudModulesGuarded(userId, state, ['gym'], 'test-device', {}),
+    {
+      name: 'Error',
+      message: 'La sesión de gimnasio es demasiado grande. Archiva o elimina sesiones antiguas para poder sincronizar.',
+    }
+  );
+});

@@ -122,7 +122,7 @@ test('Smart Priorities 2.0: suppresses blocked tasks and boosts unblocking tasks
   // Task A unblocks Task B, so it should receive unblocking boost
   const taskARec = recs.find((r) => r.text.includes('Aprobar presupuesto'));
   assert.ok(taskARec, 'Task A should be recommended');
-  assert.ok(taskARec.reason.includes('Desbloquea 1 tarea(s)'));
+  assert.ok(taskARec.reason.includes('Al completarla se desbloquea 1 tarea(s)'));
   assert.ok(taskARec.score > 70, 'Task A should have score boosted from base');
 });
 
@@ -234,7 +234,7 @@ test('adoptSmartDailyPriorities: multiple reasons are all present in DailyPriori
   assert.ok(Array.isArray(p!.reasons));
   assert.ok(p!.reasons!.includes('Prioridad alta'), 'Should include priority reason');
   assert.ok(p!.reasons!.includes('Vence hoy'), 'Should include deadline reason');
-  assert.ok(p!.reasons!.some((r) => r.includes('Desbloquea')), 'Should include unblocking reason');
+  assert.ok(p!.reasons!.some((r) => r.includes('Al completarla se desbloquea')), 'Should include unblocking reason');
 });
 
 test('SmartPriorities: score and order are unaffected by reasons — sorting is stable', () => {
@@ -294,4 +294,102 @@ test('reasons in DailyPriority match engine output exactly', () => {
   const adopted = state.dailyPriorities.find((p) => p.text.includes('Verificar coincidencia'));
   assert.ok(adopted, 'Must be adopted');
   assert.deepEqual(adopted!.reasons, engineRec!.reasons, 'Adopted reasons must match engine exactly');
+});
+
+test('SmartPriorities: reasons across all sources contain no emojis', () => {
+  const emojiRegex = /[\p{Extended_Pictographic}\uFE0F]/u;
+  const scenarios = [
+    { energy: 3, sleepHours: 5 },
+    { energy: 4, sleepHours: 7 },
+  ];
+
+  for (const ctx of scenarios) {
+    const state = defaultState();
+    const today = todayISO();
+    state.dailyContext.push({ date: today, energy: ctx.energy, sleepHours: ctx.sleepHours, mood: null, connection: null });
+    state.study.subjects.push({ id: 'sub-1', name: 'Física' });
+    state.study.exams.push({ id: 'ex-1', subjectId: 'sub-1', date: today, status: 'pendiente' });
+    state.jobs.applications.push({
+      id: 'job-1',
+      empresa: 'Acme',
+      puesto: 'Dev',
+      estado: 'cv_enviado',
+      fecha: today,
+      nextAction: 'Follow up',
+      nextActionDate: today,
+    });
+    state.finance.debts.push({ id: 'debt-1', name: 'Tarjeta', amount: 1000, dueDate: today });
+    state.resale.opportunities.push({
+      id: 'res-1',
+      item: 'Monitor',
+      buyPrice: 100,
+      marketPrice: 200,
+      status: 'nueva',
+      fecha: today,
+    });
+    state.todayExtras.push(
+      { id: 't-high', date: today, text: 'Tarea pesada', done: false, priority: 'alta', effort: 'alta' },
+      { id: 't-low', date: today, text: 'Tarea ligera', done: false, priority: 'alta', effort: 'baja' }
+    );
+
+    const recs = getSmartDailyRecommendations(state, 10);
+    assert.ok(recs.length > 0);
+    for (const rec of recs) {
+      assert.equal(emojiRegex.test(rec.reason), false, `reason should not contain emoji: ${rec.reason}`);
+      for (const r of rec.reasons || []) {
+        assert.equal(emojiRegex.test(r), false, `reason item should not contain emoji: ${r}`);
+      }
+    }
+  }
+});
+
+test('SmartPriorities: energía baja (energy: 2, sleepHours: 5) activa isLowEnergy y penaliza esfuerzo alto', () => {
+  const state = defaultState();
+  const today = todayISO();
+  state.dailyContext.push({ date: today, energy: 2, sleepHours: 5, mood: null, connection: null });
+  state.todayExtras.push(
+    { id: 't-high', date: today, text: 'Tarea pesada', done: false, priority: 'alta', effort: 'alta' },
+    { id: 't-low', date: today, text: 'Tarea ligera', done: false, priority: 'alta', effort: 'baja' }
+  );
+
+  const recs = getSmartDailyRecommendations(state, 5);
+  const highRec = recs.find((r) => r.text === 'Tarea pesada');
+  const lowRec = recs.find((r) => r.text === 'Tarea ligera');
+  const gymRec = recs.find((r) => r.source === 'gym');
+
+  assert.ok(highRec);
+  assert.ok(lowRec);
+  assert.ok(gymRec);
+  assert.equal(highRec!.score, 45);
+  assert.ok(highRec!.reasons?.includes('Baja energía hoy: evitar esfuerzo alto'));
+  assert.equal(lowRec!.score, 105);
+  assert.ok(lowRec!.reasons?.includes('Energía baja: tarea ligera recomendada'));
+  assert.equal(gymRec!.score, 30);
+  assert.ok(gymRec!.reasons?.includes('Recuperación necesaria por bajo descanso'));
+});
+
+test('SmartPriorities: energía normal (energy: 3, sleepHours: 7) NO se considera baja energía', () => {
+  const state = defaultState();
+  const today = todayISO();
+  state.dailyContext.push({ date: today, energy: 3, sleepHours: 7, mood: null, connection: null });
+  state.todayExtras.push(
+    { id: 't-high', date: today, text: 'Tarea pesada', done: false, priority: 'alta', effort: 'alta' },
+    { id: 't-low', date: today, text: 'Tarea ligera', done: false, priority: 'alta', effort: 'baja' }
+  );
+
+  const recs = getSmartDailyRecommendations(state, 5);
+  const highRec = recs.find((r) => r.text === 'Tarea pesada');
+  const lowRec = recs.find((r) => r.text === 'Tarea ligera');
+  const gymRec = recs.find((r) => r.source === 'gym');
+
+  assert.ok(highRec);
+  assert.ok(lowRec);
+  assert.ok(gymRec);
+  assert.equal(highRec!.score, 85);
+  assert.equal(highRec!.reasons?.includes('Baja energía hoy: evitar esfuerzo alto'), false);
+  assert.equal(highRec!.reasons?.includes('Buen descanso: metámosle intensidad'), false);
+  assert.equal(lowRec!.score, 85);
+  assert.equal(lowRec!.reasons?.includes('Energía baja: tarea ligera recomendada'), false);
+  assert.equal(gymRec!.score, 65);
+  assert.ok(gymRec!.reasons?.includes('Consistencia y salud física'));
 });

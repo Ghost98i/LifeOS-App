@@ -5,6 +5,7 @@ import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
 import { isModuleEnabled } from '../lib/moduleVisibility';
 import { applyDayCheckout, inspectDayCheckout, type DayCheckoutInput } from '../lib/checkoutFlows';
+import { AppIcon, type AppIconName } from './AppIcon';
 
 interface CheckoutModalProps {
   state: LifeOSState;
@@ -101,7 +102,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
       return;
     }
     saveFailedRef.current = false;
-    showToast('¡Día cerrado con éxito! 🌙 Todo guardado en 30 segundos.', 'success');
+    showToast('¡Día cerrado con éxito! Todo guardado en 30 segundos.', 'success');
     playSound('night');
     onClose();
   };
@@ -124,7 +125,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
           aria-label="Cerrar modal"
           className="absolute top-3 right-3 inline-flex h-9 w-9 items-center justify-center text-sm text-[var(--text-faint)] hover:text-[var(--text)] rounded-lg cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)]"
         >
-          ✕
+          <AppIcon name="x" className="h-4 w-4" />
         </button>
 
         <div>
@@ -138,7 +139,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)]/65 py-2.5">
               <span className="font-semibold text-sm text-[var(--text)]">Entrenamiento</span>
               {hasGymToday ? (
-                <span className="font-semibold text-emerald-500">✓ Sesión registrada</span>
+                <span className="inline-flex items-center gap-1 font-semibold text-emerald-500"><AppIcon name="check" className="h-3.5 w-3.5" /><span>Sesión registrada</span></span>
               ) : (
                 <label className="flex items-center gap-1.5 cursor-pointer text-[var(--text-soft)]">
                   <input
@@ -161,7 +162,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)]/65 py-2.5">
               <span className="font-semibold text-sm text-[var(--text)]">Estudios</span>
               {hasStudyToday ? (
-                <span className="font-semibold text-emerald-500">✓ Horas registradas</span>
+                <span className="inline-flex items-center gap-1 font-semibold text-emerald-500"><AppIcon name="check" className="h-3.5 w-3.5" /><span>Horas registradas</span></span>
               ) : (
                 <label className="flex items-center gap-1.5 cursor-pointer text-[var(--text-soft)]">
                   <input
@@ -181,7 +182,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)]/65 py-2.5">
               <span className="font-semibold text-sm text-[var(--text)]">Gastos</span>
               {hasTxToday ? (
-                <span className="font-semibold text-emerald-500">✓ Movimientos registrados</span>
+                <span className="inline-flex items-center gap-1 font-semibold text-emerald-500"><AppIcon name="check" className="h-3.5 w-3.5" /><span>Movimientos registrados</span></span>
               ) : (
                 <label className="flex items-center gap-1.5 cursor-pointer text-[var(--text-soft)]">
                   <input
@@ -237,28 +238,36 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
           <div className="space-y-2 border-b border-[var(--border)]/65 py-3">
             <div className="flex flex-wrap items-baseline justify-between gap-1.5">
               <span className="font-semibold text-sm text-[var(--text)]">Energía <span className="font-normal text-[var(--text-soft)]">· opcional</span></span>
-              <span className="font-medium text-[12px] text-[var(--text-soft)]">
-                {energyLevel === 1
-                  ? '😴 1 - Muy baja'
-                  : energyLevel === 2
-                  ? '🥱 2 - Baja'
-                  : energyLevel === 3
-                  ? '🔋 3 - Normal'
-                  : energyLevel === 4
-                  ? '⚡ 4 - Alta'
-                  : energyLevel === 5
-                  ? '🚀 5 - Máxima'
-                  : todayContext?.energy != null ? `${todayContext.energy}/5 en Estado` : 'Sin registro'}
+              <span className="inline-flex items-center gap-1 font-medium text-[12px] text-[var(--text-soft)]">
+                {(() => {
+                  const opts: { lvl: number; icon: AppIconName; label: string }[] = [
+                    { lvl: 1, icon: 'moon', label: 'Muy baja' },
+                    { lvl: 2, icon: 'clock', label: 'Baja' },
+                    { lvl: 3, icon: 'activity', label: 'Normal' },
+                    { lvl: 4, icon: 'zap', label: 'Alta' },
+                    { lvl: 5, icon: 'trendingUp', label: 'Máxima' },
+                  ];
+                  const selected = opts.find((o) => o.lvl === energyLevel);
+                  if (selected) {
+                    return (
+                      <>
+                        <AppIcon name={selected.icon} className="h-3.5 w-3.5" />
+                        <span>{`${selected.lvl} - ${selected.label}`}</span>
+                      </>
+                    );
+                  }
+                  return todayContext?.energy != null ? `${todayContext.energy}/5 en Estado` : 'Sin registro';
+                })()}
               </span>
             </div>
             <div className="grid grid-cols-5 gap-1.5">
-              {[
-                { lvl: 1, icon: '😴', label: 'Muy baja' },
-                { lvl: 2, icon: '🥱', label: 'Baja' },
-                { lvl: 3, icon: '🔋', label: 'Normal' },
-                { lvl: 4, icon: '⚡', label: 'Alta' },
-                { lvl: 5, icon: '🚀', label: 'Máxima' },
-              ].map((item) => (
+              {([
+                { lvl: 1, icon: 'moon', label: 'Muy baja' },
+                { lvl: 2, icon: 'clock', label: 'Baja' },
+                { lvl: 3, icon: 'activity', label: 'Normal' },
+                { lvl: 4, icon: 'zap', label: 'Alta' },
+                { lvl: 5, icon: 'trendingUp', label: 'Máxima' },
+              ] as { lvl: number; icon: AppIconName; label: string }[]).map((item) => (
                 <button
                   key={item.lvl}
                   type="button"
@@ -269,7 +278,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
                       : 'bg-[var(--bg)] border-[var(--border)] text-[var(--text-soft)] hover:border-[var(--border-hover)] hover:text-[var(--text)]'
                   }`}
                 >
-                  <span className="text-base">{item.icon}</span>
+                  <AppIcon name={item.icon} className="h-4 w-4" />
                   <span className="text-[11px] font-bold">{item.lvl}</span>
                 </button>
               ))}

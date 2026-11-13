@@ -895,6 +895,7 @@ export interface Settings {
   contextOptionalFactors?: ContextOptionalFactorKey[];
   dismissedAttentionKeys?: string[];
   attentionDismissals?: Record<string, AttentionDismissalRecord>;
+  motivosPrioridadesVisibles?: boolean;
 }
 
 export interface CheckoutLogDay {

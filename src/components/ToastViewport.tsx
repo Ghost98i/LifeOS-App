@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { LIFEOS_TOAST_EVENT, type LifeOSToast } from '../lib/toast';
 import { PrivateFinancialText } from './PrivacyAmount';
+import { AppIcon } from './AppIcon';
 
 export const ToastViewport: React.FC = () => {
   const [toasts, setToasts] = useState<LifeOSToast[]>([]);
@@ -44,7 +45,10 @@ export const ToastViewport: React.FC = () => {
         >
           <div className="flex items-start gap-3 min-w-0 flex-1">
             <span className="mt-0.5 shrink-0" aria-hidden="true">
-              {toast.tone === 'error' ? '!' : toast.tone === 'info' ? 'i' : '✓'}
+              <AppIcon
+                name={toast.tone === 'error' ? 'alertCircle' : toast.tone === 'info' ? 'bell' : 'check'}
+                className="h-4 w-4"
+              />
             </span>
             <span className="leading-snug break-words"><PrivateFinancialText>{toast.message}</PrivateFinancialText></span>
           </div>
@@ -54,10 +58,10 @@ export const ToastViewport: React.FC = () => {
               e.stopPropagation();
               dismissToast(toast.id);
             }}
-            className="shrink-0 -mr-1 -mt-1 p-1 text-xs opacity-60 hover:opacity-100 rounded-lg transition-opacity"
+            className="inline-flex items-center justify-center shrink-0 -mr-1 -mt-1 p-1 text-xs opacity-60 hover:opacity-100 rounded-lg transition-opacity"
             aria-label="Descartar aviso"
           >
-            ✕
+            <AppIcon name="x" className="h-3.5 w-3.5" />
           </button>
         </div>
       ))}

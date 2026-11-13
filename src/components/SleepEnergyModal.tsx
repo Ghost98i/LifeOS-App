@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { LifeOSState } from '../types';
 import { todayISO } from '../lib/storage';
 import { playSound } from '../lib/audio';
+import { AppIcon, type AppIconName } from './AppIcon';
 
 interface SleepEnergyModalProps {
   isOpen: boolean;
@@ -60,12 +61,12 @@ export const SleepEnergyModal: React.FC<SleepEnergyModalProps> = ({
     onClose();
   };
 
-  const energyLabels: Record<number, { icon: string; text: string }> = {
-    1: { icon: '😴', text: 'Muy baja' },
-    2: { icon: '🥱', text: 'Baja' },
-    3: { icon: '🔋', text: 'Normal' },
-    4: { icon: '⚡', text: 'Alta' },
-    5: { icon: '🚀', text: 'Máxima' },
+  const energyLabels: Record<number, { icon: AppIconName; text: string }> = {
+    1: { icon: 'moon', text: 'Muy baja' },
+    2: { icon: 'clock', text: 'Baja' },
+    3: { icon: 'activity', text: 'Normal' },
+    4: { icon: 'zap', text: 'Alta' },
+    5: { icon: 'trendingUp', text: 'Máxima' },
   };
 
   return (
@@ -82,8 +83,8 @@ export const SleepEnergyModal: React.FC<SleepEnergyModalProps> = ({
       >
         <div className="flex items-center justify-between pb-3 border-b border-[var(--border)]">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-lg border border-blue-500/20">
-              ⚡
+            <div className="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center border border-blue-500/20">
+              <AppIcon name="zap" className="h-4 w-4" />
             </div>
             <div>
               <h2 id="sleep-energy-title" className="text-base font-extrabold text-[var(--text)] tracking-tight">
@@ -101,9 +102,10 @@ export const SleepEnergyModal: React.FC<SleepEnergyModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-lg rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--bg-elevated)] cursor-pointer transition-colors"
+            className="inline-flex items-center justify-center p-1.5 rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--bg-elevated)] cursor-pointer transition-colors"
+            aria-label="Cerrar"
           >
-            ✕
+            <AppIcon name="x" className="h-4 w-4" />
           </button>
         </div>
 
@@ -111,7 +113,7 @@ export const SleepEnergyModal: React.FC<SleepEnergyModalProps> = ({
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[var(--text)] flex items-center gap-1.5">
-              <span>💤</span> Horas de sueño anoche
+              <AppIcon name="moon" className="h-3.5 w-3.5 text-indigo-500" /><span>Horas de sueño anoche</span>
             </span>
             <span className="text-xs tabular-nums font-extrabold text-[var(--blue)]">
               {sleepHours !== '' ? `${sleepHours} hs` : 'Sin definir'}
@@ -152,23 +154,26 @@ export const SleepEnergyModal: React.FC<SleepEnergyModalProps> = ({
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-[var(--text)] flex items-center gap-1.5">
-              <span>🔋</span> Nivel de vitalidad / energía
+              <AppIcon name="activity" className="h-3.5 w-3.5 text-amber-500" /><span>Nivel de vitalidad / energía</span>
             </span>
             <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
-              {energyLevel > 0
-                ? `${energyLabels[energyLevel]?.icon} ${energyLevel} - ${energyLabels[energyLevel]?.text}`
-                : 'Sin calificar'}
+              {energyLevel > 0 && energyLabels[energyLevel] ? (
+                <span className="inline-flex items-center gap-1">
+                  <AppIcon name={energyLabels[energyLevel].icon} className="h-3.5 w-3.5" />
+                  <span>{`${energyLevel} - ${energyLabels[energyLevel].text}`}</span>
+                </span>
+              ) : (
+                'Sin calificar'
+              )}
             </span>
           </div>
 
           <div className="grid grid-cols-5 gap-2">
-            {[
-              { lvl: 1, icon: '😴', label: 'Muy baja' },
-              { lvl: 2, icon: '🥱', label: 'Baja' },
-              { lvl: 3, icon: '🔋', label: 'Normal' },
-              { lvl: 4, icon: '⚡', label: 'Alta' },
-              { lvl: 5, icon: '🚀', label: 'Máxima' },
-            ].map((item) => (
+            {[1, 2, 3, 4, 5].map((lvl) => ({
+              lvl,
+              icon: energyLabels[lvl].icon,
+              label: energyLabels[lvl].text,
+            })).map((item) => (
               <button
                 key={item.lvl}
                 type="button"
@@ -179,7 +184,7 @@ export const SleepEnergyModal: React.FC<SleepEnergyModalProps> = ({
                     : 'bg-[var(--bg-elevated)] border-[var(--border)] text-[var(--text-soft)] hover:border-[var(--border-hover)] hover:text-[var(--text)]'
                 }`}
               >
-                <span className="text-lg">{item.icon}</span>
+                <AppIcon name={item.icon} className="h-4 w-4" />
                 <span className="text-[10px] font-bold">{item.lvl}</span>
               </button>
             ))}

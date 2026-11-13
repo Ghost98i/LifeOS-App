@@ -8,6 +8,7 @@ import { DashboardView } from './DashboardView';
 import { PersonalContextCard } from './PersonalContextCard';
 import { DismissedAttentionModal } from './DismissedAttentionModal';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
+import { TodayFocus } from './TodayFocus';
 
 test('Estado vacío mantiene registro y siete fechas sin montar indicadores ni gráfico vacíos', () => {
   const html = renderToStaticMarkup(<PersonalContextCard state={defaultState()} onUpdateState={() => true} />);
@@ -59,4 +60,37 @@ test('una primera revisión no aparece vacía ni se presenta como una revisión 
   assert.match(render(), /Revisá tu semana/);
   assert.doesNotMatch(render(), /Revisión semanal pendiente|señal/);
   assert.equal(state.settings.lastWeeklyReviewAt, null);
+});
+
+test('TodayFocus: muestra motivos con prefijo cuando motivosVisibles es true y los oculta cuando es false o manual', () => {
+  const today = todayISO();
+  const priorities = [
+    { id: 'p-smart', date: today, text: 'Repasar examen', done: false, rank: 1, reasons: ['Examen hoy', 'Impacto académico alto'] },
+    { id: 'p-manual', date: today, text: 'Tarea manual', done: false, rank: 2 },
+  ];
+
+  const htmlVisible = renderToStaticMarkup(
+    <TodayFocus
+      priorities={priorities}
+      onAdd={() => {}}
+      onToggle={() => {}}
+      onRemove={() => {}}
+      motivosVisibles={true}
+      onToggleMotivos={() => {}}
+    />
+  );
+  assert.match(htmlVisible, /Sugerido por: Examen hoy · Impacto académico alto/);
+  assert.equal((htmlVisible.match(/Sugerido por:/g) || []).length, 1);
+
+  const htmlHidden = renderToStaticMarkup(
+    <TodayFocus
+      priorities={priorities}
+      onAdd={() => {}}
+      onToggle={() => {}}
+      onRemove={() => {}}
+      motivosVisibles={false}
+      onToggleMotivos={() => {}}
+    />
+  );
+  assert.doesNotMatch(htmlHidden, /Sugerido por:/);
 });

@@ -89,11 +89,19 @@
 .c-check { color: var(--gym-visual-accent); flex-shrink: 0; }
 .c-set-pill-weight { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .gym-page .c-stage-card {
-  display: flex; flex-direction: column; gap: 16px; padding: 20px; border: 0; border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 16px; padding: 20px;
+}
+.gym-page .c-logging-phase {
+  padding-block: 16px; gap: 12px; border: 0; border-top: 1px solid var(--border);
   border-radius: 0 0 16px 16px; background: transparent; box-shadow: none;
 }
+.gym-page .c-rest-phase {
+  border: 1px solid var(--border); border-radius: 16px; background: var(--card);
+}
+@media (max-width: 1023px) {
+  .gym-page .c-logging-phase.is-rest-hidden-mobile { display: none; }
+}
 .c-set-position { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; font-size: 13px; font-weight: 600; color: var(--text); }
-.gym-page .c-logging-phase { padding-block: 16px; gap: 12px; }
 .c-set-position span { color: var(--text-soft); font-weight: 400; }
 .c-load-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
 .c-load-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 4px 0; }
@@ -120,23 +128,23 @@
 .c-copy-link { min-height: 44px; min-width: 44px; flex-shrink: 0; padding: 0 6px; border: 0; background: transparent; font-size: 12px; font-weight: 600; color: var(--gym-visual-accent); cursor: pointer; }
 .c-copy-link:hover { text-decoration: underline; }
 .c-primary-cta {
-  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 48px; padding: 12px;
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 48px; padding: 8px 14px;
   border: 1px solid transparent; border-radius: 10px; background: #4f46e5; color: #fff;
-  font-size: 14px; font-weight: 600; line-height: 1.4; cursor: pointer; box-shadow: none;
+  font-size: 14px; font-weight: 600; line-height: 1.25; cursor: pointer; box-shadow: none;
 }
 .c-primary-cta > svg { flex-shrink: 0; }
 .c-primary-cta:hover { background: #4338ca; }
 .c-primary-cta.is-completed { border-color: var(--gym-visual-accent); background: var(--gym-visual-soft); color: var(--gym-visual-accent); }
-.c-rest-focal-center { display: grid; grid-template-columns: 84px minmax(0,1fr); align-items: center; gap: 18px; padding: 0; }
-.c-rest-timer-wrap { display: grid; place-items: center; position: relative; width: 84px; height: 84px; }
+.c-rest-focal-center { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 0; text-align: center; }
+.c-rest-timer-wrap { display: grid; place-items: center; position: relative; }
 .c-rest-ring { position: absolute; inset: 0; transform: rotate(-90deg); }
 .c-timer-svg { width: 100%; height: 100%; }
 .c-timer-track { color: var(--border); }
 .c-timer-progress { color: var(--gym-visual-accent); transition: stroke-dashoffset 250ms linear; }
-.c-rest-timer-text { position: relative; z-index: 1; font-size: 23px; font-weight: 550; letter-spacing: -.035em; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
-.c-rest-details { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.c-rest-timer-text { position: relative; z-index: 1; letter-spacing: -.035em; line-height: 1; color: var(--gym-visual-accent); font-variant-numeric: tabular-nums; }
+.c-rest-details { display: flex; flex-direction: column; gap: 10px; width: 100%; min-width: 0; }
 .c-rest-label { font-size: 14px; font-weight: 600; line-height: 1.45; color: var(--text); letter-spacing: 0; }
-.c-rest-adjust-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.c-rest-adjust-row { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; width: 100%; }
 .c-rest-time-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 2px; min-height: 44px; min-width: 44px; padding: 0 8px;
   border: 1px solid var(--border); border-radius: 8px; background: transparent; color: var(--text-soft);
@@ -152,9 +160,9 @@
 .c-review-link { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 4px; border: 0; background: transparent; color: var(--text-soft); font-size: 12px; line-height: 1.5; font-weight: 400; cursor: pointer; }
 .c-review-link:hover { color: var(--gym-visual-accent); }
 .gym-cockpit-wrap > .gym-rest-origin-note { margin: 16px 16px 0; }
-.gym-rest-sticky-bar { padding: 0 16px 16px; }
+.gym-rest-sticky-bar { padding: 0; }
 .gym-rest-sticky-bar button { min-height: 44px; min-width: 44px; font-weight: 550; border-radius: 8px; }
-.gym-page .gym-workout-aside > :is(div,details) { padding: 0 0 16px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; box-shadow: none; }
+.gym-page .gym-workout-aside > :is(.gym-session-summary, details) { padding: 0 0 16px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; box-shadow: none; }
 .gym-workout-aside h3 { font-size: 13px; font-weight: 600; line-height: 1.5; }
 .gym-session-summary > div > div > p { margin-top: 4px; line-height: 1.6; font-variant-numeric: tabular-nums; }
 .gym-session-next-exercise { margin-top: 10px; line-height: 1.65; overflow-wrap: anywhere; }
@@ -190,17 +198,11 @@
 .gym-page .gym-rest-controls { grid-column: 1/-1; }
 .gym-page .gym-rest-skip, .gym-page .gym-rest-mini-skip { background: #4f46e5; box-shadow: none; font-weight: 600; }
 .gym-page .gym-rest-kicker, .gym-page .gym-rest-badge { font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: none; }
-@media (min-width: 1024px) {
-  .c-next-effort-cta { align-self: flex-start; width: fit-content; min-width: 260px; max-width: 100%; padding-inline: 24px; }
-}
 /* Use available content space, including when the global sidebar appears. */
 @container gym-page (min-width: 960px) {
-  .gym-page .gym-active-layout { grid-template-columns: minmax(0,1fr) clamp(280px,28%,400px); gap: 24px; }
-  .gym-page .gym-workout-aside { padding-top: 12px; }
-  .c-load-grid { width: 100%; max-width: 720px; }
+  .c-load-grid { width: 100%; }
   .c-set-pill { flex: 0 0 auto; min-width: 112px; }
   .c-series-strip { flex-wrap: wrap; }
-  .c-logging-phase .c-primary-cta { align-self: flex-start; width: fit-content; min-width: min(100%,320px); max-width: 100%; padding-inline: 24px; }
 }
 @container gym-page (min-width: 1200px) {
   .gym-routine-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 16px; align-items: start; }
@@ -236,13 +238,9 @@
   .c-load-col + .c-load-col { padding-left: 12px; }
   .c-load-input { font-size: 32px; }
   .c-set-pill { min-width: 88px; }
-  .c-rest-focal-center { grid-template-columns: 76px minmax(0,1fr); gap: 12px; }
-  .c-rest-timer-wrap { width: 76px; height: 76px; }
-  .c-rest-timer-text { font-size: 22px; }
   .c-rest-details { gap: 8px; }
   .c-rest-label { font-size: 13px; }
-  .c-rest-adjust-row { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 4px; }
-  .c-rest-time-btn { padding-inline: 4px; font-size: 12px; }
+  .c-rest-time-btn { padding-inline: 6px; font-size: 12px; }
   .c-review-link { font-size: 12px; }
   .c-next-effort-title { font-size: 13px; }
   .gym-page .gym-workout-aside { padding-inline: 2px; }

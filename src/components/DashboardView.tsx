@@ -16,6 +16,8 @@ import { formatRelativeTime, getActivityTimeline } from '../lib/activityTimeline
 import type { ActivityTimelineItem } from '../lib/activityTimeline';
 import { isModuleEnabled } from '../lib/moduleVisibility';
 import { TodayAgendaSection } from './TodayAgendaSection';
+import { PrioritiesWidget } from './PrioritiesWidget';
+import { loadTodayCustomization } from '../lib/viewCustomization';
 import { getTodayAttentionItems, getDismissedAttentionItems, nextAttentionDismissalTimestamp, type AttentionItem } from '../lib/todayAttention';
 import { DismissedAttentionModal } from './DismissedAttentionModal';
 
@@ -279,6 +281,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     setBackupDismissed(false);
     showToast('Todos los avisos fueron restaurados.', 'success');
   };
+  const isPrioritiesVisible = useMemo(() => {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const direct = window.localStorage.getItem('visibleWidgets');
+        if (direct) {
+          const parsed = JSON.parse(direct);
+          if (typeof parsed?.priorities === 'boolean') return parsed.priorities;
+          if (typeof parsed?.focus === 'boolean') return parsed.focus;
+        }
+      }
+    } catch {}
+
+    try {
+      const custom = loadTodayCustomization();
+      if (custom?.visibleWidgets) {
+        if (typeof custom.visibleWidgets.priorities === 'boolean') {
+          return custom.visibleWidgets.priorities;
+        }
+        if (typeof custom.visibleWidgets.focus === 'boolean') {
+          return custom.visibleWidgets.focus;
+        }
+      }
+    } catch {}
+
+    return true;
+  }, []);
+
   const dayClosed = Boolean(state.checkoutLog?.[todayIso]?.closedAt);
 
   const handleToggleItem = (item: TodayItem, entryKey?: string): boolean => {
@@ -443,14 +472,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     <div className="today-shell relative mx-auto flex w-full flex-col gap-3 sm:gap-4">
       <header
         data-hero-period={dayPeriod}
-        className="today-hero today-hero-size relative isolate flex overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--hero-bg)] p-3 sm:rounded-[26px] sm:px-6 sm:py-4"
+        className="today-hero today-hero-size relative isolate flex overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--hero-bg)] p-3 sm:rounded-[26px] sm:px-6 sm:py-4 lg:py-3.5"
       >
         <AlpineDayCycleBackdrop forcePeriod={dayPeriod} compact />
-        <div className="relative z-10 flex w-full flex-col items-start justify-between gap-2.5 sm:gap-3">
+        <div className="relative lg:static z-10 flex w-full flex-col items-start justify-between lg:justify-end gap-2.5 sm:gap-3">
           {!dayClosed ? (
-            <button type="button" onClick={() => onNavigate('checkout')} aria-label="Cerrar el día" className="today-hero-action inline-flex min-h-11 min-w-11 shrink-0 self-end items-center justify-center gap-1.5 rounded-[10px] px-2.5 text-[12px] font-medium tracking-[-0.01em] transition sm:px-3"><AppIcon name="moon" className="h-3.5 w-3.5 opacity-85" /><span className="hidden sm:inline">Cerrar el día</span></button>
+            <button type="button" onClick={() => onNavigate('checkout')} aria-label="Cerrar el día" className="today-hero-action inline-flex min-h-11 min-w-11 shrink-0 self-end items-center justify-center gap-1.5 rounded-[10px] px-2.5 text-[12px] font-medium tracking-[-0.01em] transition sm:px-3 lg:absolute lg:right-6 lg:top-4"><AppIcon name="moon" className="h-3.5 w-3.5 opacity-85" /><span className="hidden sm:inline">Cerrar el día</span></button>
           ) : (
-            <span className="today-hero-closed inline-flex shrink-0 self-end items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[12px] font-medium tracking-[-0.01em] sm:px-3 sm:py-1.5"><AppIcon name="check" className="h-3.5 w-3.5" />Día cerrado</span>
+            <span className="today-hero-closed inline-flex shrink-0 self-end items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[12px] font-medium tracking-[-0.01em] sm:px-3 sm:py-1.5 lg:absolute lg:right-6 lg:top-4"><AppIcon name="check" className="h-3.5 w-3.5" />Día cerrado</span>
           )}
           <section className="today-observatory-panel" aria-label="Momento actual en Celestian">
             <svg className="today-observatory-shape" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true" focusable="false">
@@ -506,7 +535,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
       {attentionItems.length > 0 && (
         <section
-          className="today-attention rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3.5 py-2.5 space-y-2.5"
+          className="today-attention rounded-2xl border border-[var(--border)] px-3.5 py-2 space-y-2"
           aria-labelledby="today-attention-title"
         >
           <h2 id="today-attention-title" className="sr-only">
@@ -517,30 +546,30 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               return (
                 <div
                   key={item.id}
-                  className={`today-attention-row ${idx > 0 ? 'pt-2.5 border-t border-[var(--border)]/70' : ''}`}
+                  className={`today-attention-row ${idx > 0 ? 'pt-2 border-t border-[var(--border)]/60' : ''}`}
                 >
-                  <span className={`today-attention-icon flex h-7 w-7 items-center justify-center rounded-lg ${item.urgency === 'info' ? 'bg-[var(--surface-muted)] text-[var(--text-soft)]' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
+                  <span className={`today-attention-icon flex h-6 w-6 items-center justify-center rounded-md ${item.urgency === 'info' ? 'bg-[var(--surface-muted)] text-[var(--text-soft)]' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
                     <AppIcon name="shield" className="h-3.5 w-3.5" />
                   </span>
                   <div className="today-attention-copy min-w-0">
-                    <strong className="block text-[13px] font-semibold text-[var(--text)]">
+                    <strong className="text-[13px] font-semibold text-[var(--text)]">
                       {item.title}
                     </strong>
-                    <span className="block break-words text-xs leading-relaxed text-[var(--text-soft)] sm:text-[13px]">
+                    <span className="text-xs leading-snug text-[var(--text-soft)]">
                       {item.detail}
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={onExportJSON}
-                    className="today-attention-action min-h-11 rounded-lg px-2.5 text-[13px] font-semibold text-[var(--blue)] hover:underline cursor-pointer"
+                    className="today-attention-action inline-flex min-h-8 sm:min-h-9 items-center rounded-lg px-2 text-xs font-semibold text-[var(--blue)] hover:underline cursor-pointer"
                   >
                     Descargar copia
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDismissAttention(item)}
-                    className="today-attention-dismiss flex h-11 w-11 items-center justify-center text-[var(--text-soft)] hover:text-rose-500 rounded-lg hover:bg-rose-500/10 transition cursor-pointer"
+                    className="today-attention-dismiss flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center text-[var(--text-soft)] hover:text-rose-500 rounded-lg hover:bg-rose-500/10 transition cursor-pointer"
                     aria-label="Descartar aviso de copia de seguridad"
                     title="Descartar aviso"
                   >
@@ -554,7 +583,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               return (
                 <div
                   key={item.id}
-                  className={idx > 0 ? 'pt-2.5 border-t border-[var(--border)]/70' : ''}
+                  className={idx > 0 ? 'pt-2 border-t border-[var(--border)]/60' : ''}
                 >
                   <WeeklyReviewCard
                     state={state}
@@ -599,25 +628,25 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             return (
               <div
                 key={item.id}
-                className={`today-attention-row ${idx > 0 ? 'pt-2.5 border-t border-[var(--border)]/70' : ''}`}
+                className={`today-attention-row ${idx > 0 ? 'pt-2 border-t border-[var(--border)]/60' : ''}`}
               >
                 <span
-                  className={`today-attention-icon flex h-7 w-7 items-center justify-center rounded-lg ${badgeStyle}`}
+                  className={`today-attention-icon flex h-6 w-6 items-center justify-center rounded-md ${badgeStyle}`}
                 >
                   <AppIcon name={iconName} className="h-3.5 w-3.5" />
                 </span>
                 <div className="today-attention-copy min-w-0">
-                  <strong className="block text-[13px] font-semibold text-[var(--text)]">
+                  <strong className="text-[13px] font-semibold text-[var(--text)]">
                     {item.title}
                   </strong>
-                  <span className="block break-words text-xs leading-relaxed text-[var(--text-soft)] sm:text-[13px]">
+                  <span className="text-xs leading-snug text-[var(--text-soft)]">
                     {item.detail}
                   </span>
                 </div>
                 <button
                   type="button"
                   onClick={() => handleAttentionAction(item)}
-                  className="today-attention-action inline-flex min-h-11 items-center gap-1 rounded-lg px-2.5 text-xs sm:text-[13px] font-semibold text-[var(--blue)] hover:underline cursor-pointer"
+                  className="today-attention-action inline-flex min-h-8 sm:min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-[var(--blue)] hover:underline cursor-pointer"
                 >
                   <span>{item.actionLabel}</span>
                   <AppIcon name="arrowRight" className="h-3 w-3" />
@@ -625,7 +654,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <button
                   type="button"
                   onClick={() => handleDismissAttention(item)}
-                  className="today-attention-dismiss flex h-11 w-11 items-center justify-center text-[var(--text-soft)] hover:text-rose-500 rounded-lg hover:bg-rose-500/10 transition cursor-pointer"
+                  className="today-attention-dismiss flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center text-[var(--text-soft)] hover:text-rose-500 rounded-lg hover:bg-rose-500/10 transition cursor-pointer"
                   aria-label={`Descartar aviso: ${item.title}`}
                   title="Descartar aviso"
                 >
@@ -635,11 +664,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             );
           })}
           {dismissedAttentionItems.length > 0 && (
-            <div className="flex items-center justify-end pt-1 border-t border-[var(--border)]/40 text-[11px]">
+            <div className="flex items-center justify-end pt-1 border-t border-[var(--border)]/45 text-[11px]">
               <button
                 type="button"
                 onClick={() => setShowDismissedModal(true)}
-                className="inline-flex min-h-11 items-center gap-1 text-[var(--text-soft)] hover:text-[var(--text)] transition underline cursor-pointer"
+                className="inline-flex min-h-7 sm:min-h-8 items-center gap-1 text-[var(--text-soft)] hover:text-[var(--text)] transition underline cursor-pointer"
                 aria-label={`Ver ${dismissedAttentionItems.length} aviso(s) descartado(s)`}
               >
                 <span>{dismissedAttentionItems.length === 1 ? '1 aviso descartado' : `${dismissedAttentionItems.length} avisos descartados`}</span>
@@ -649,8 +678,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </section>
       )}
 
-      {/* 3. Fila Principal: Agenda de hoy (izquierda) + Estado (derecha) */}
-      <div className="grid grid-cols-1 items-start gap-3 sm:gap-4 xl:grid-cols-2">
+      {/* 2 & 3. Bento principal: Agenda de hoy (7/12 izq) + Prioridades y Estado (5/12 der) en desktop */}
+      <div className="grid grid-cols-1 items-start gap-3 sm:gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:grid-rows-[auto_1fr]">
+        {/* Prioridades del día (Smart Priorities) */}
+        <PrioritiesWidget
+          state={state}
+          onUpdateState={onUpdateState}
+          className="lg:col-start-2 lg:row-start-1"
+        />
+
+        {/* Agenda de hoy */}
         <TodayAgendaSection
           entries={agendaEntries}
           pastPendingTasks={pastPendingExtras}
@@ -672,17 +709,21 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           openLabel={agendaOpenLabel}
           completionMotion={completionMotion}
           todayIso={todayIso}
+          className="lg:col-start-1 lg:row-start-1 lg:row-span-2"
         />
+
+        {/* Estado (Contexto personal) */}
         <PersonalContextCard
           state={state}
           onUpdateState={onUpdateState}
           onNavigate={onNavigate}
+          className="lg:col-start-2 lg:row-start-2"
         />
       </div>
 
       {/* 4. Actividad reciente */}
       {recentActivity.length > 0 && (
-        <section className="today-activity-surface rounded-2xl border border-[var(--border)] p-3.5 sm:px-5 sm:py-3 shadow-[var(--card-shadow)]" aria-labelledby="recent-activity-title">
+        <section className="today-activity-surface rounded-2xl border border-[var(--border)] p-3.5 sm:px-5 sm:py-3" aria-labelledby="recent-activity-title">
           <div className="space-y-2.5">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
@@ -716,7 +757,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   type="button"
                   onClick={() => handleActivityNavigate(activity)}
                   aria-label={`${activity.module === 'note' ? 'Abrir nota' : `Abrir módulo ${activityModuleToView[activity.module] || 'Hoy'}`}: ${activity.title}. ${formatRelativeTime(activity.timestamp)}`}
-                  className="today-activity-item group flex items-start gap-2.5 rounded-xl bg-[var(--card-subtle)] px-3 py-2.5 text-left transition hover:bg-[var(--surface-muted)] cursor-pointer"
+                  className="today-activity-item group flex items-start gap-2.5 rounded-xl border border-[var(--border)]/60 bg-[var(--card)]/80 px-3 py-2.5 text-left transition hover:bg-[var(--surface-muted)] cursor-pointer"
                 >
                   <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--blue)]">
                     <AppIcon name={activity.iconName} className="h-3.5 w-3.5" />
@@ -750,9 +791,10 @@ export const DashboardSkeleton: React.FC = () => (
   <div className="mx-auto w-full space-y-4 sm:space-y-5 animate-pulse">
     <div className="today-hero-size rounded-[22px] sm:rounded-[26px] border border-[var(--border)] bg-[var(--hero-bg)]" />
     <div className="h-12 rounded-2xl border border-[var(--border)] bg-[var(--card)] hidden sm:block" />
-    <div className="grid gap-3 sm:gap-4 xl:grid-cols-2">
-      <div className="h-[480px] rounded-2xl border border-[var(--border)] bg-[var(--card)]" />
-      <div className="h-[480px] rounded-2xl border border-[var(--border)] bg-[var(--card)]" />
+    <div className="grid grid-cols-1 items-start gap-3 sm:gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:grid-rows-[auto_1fr]">
+      <div className="h-[180px] rounded-2xl border border-[var(--border)] bg-[var(--card)] lg:col-start-2 lg:row-start-1" />
+      <div className="h-[480px] rounded-2xl border border-[var(--border)] bg-[var(--card)] lg:col-start-1 lg:row-start-1 lg:row-span-2" />
+      <div className="h-[284px] rounded-2xl border border-[var(--border)] bg-[var(--card)] lg:col-start-2 lg:row-start-2" />
     </div>
     <div className="h-14 rounded-2xl border border-[var(--border)] bg-[var(--card)]" />
   </div>

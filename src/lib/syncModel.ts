@@ -164,6 +164,15 @@ export function mergeSyncModule(
   if (module === 'gym' && candidate.gym) {
     candidate.gym = { ...candidate.gym, activeTimer: state.gym.activeTimer ?? null };
   }
+  if (module === 'context') {
+    const localDailyContext = state.dailyContext || [];
+    const remoteDailyContext = Array.isArray((pureRemote as any)?.dailyContext)
+      ? (pureRemote as any).dailyContext
+      : [];
+    if (localDailyContext.length > remoteDailyContext.length) {
+      candidate.dailyContext = localDailyContext;
+    }
+  }
   return normalizeStoredState(candidate);
 }
 
@@ -185,6 +194,15 @@ export function mergeSyncModuleWithConflicts(
   const candidate = { ...state, ...(mergedData as Partial<LifeOSState>) };
   if (module === 'gym' && candidate.gym) {
     candidate.gym = { ...candidate.gym, activeTimer: state.gym.activeTimer ?? null };
+  }
+  if (module === 'context') {
+    const localDailyContext = state.dailyContext || [];
+    const remoteDailyContext = Array.isArray((pureRemote as any)?.dailyContext)
+      ? (pureRemote as any).dailyContext
+      : [];
+    if (localDailyContext.length > remoteDailyContext.length) {
+      candidate.dailyContext = localDailyContext;
+    }
   }
   return { state: normalizeStoredState(candidate), conflicts };
 }

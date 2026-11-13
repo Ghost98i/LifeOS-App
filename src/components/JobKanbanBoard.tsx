@@ -151,7 +151,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                     <div className="min-w-0 flex-1">
                       <div className="flex min-w-0 items-center gap-1.5">
                         <h4 className="truncate text-sm font-bold text-[var(--text)]">{app.empresa}</h4>
-                        {app.link && <a href={app.link} target="_blank" rel="noreferrer" className="shrink-0 text-[var(--blue)]" title={tipo === 'concurso' ? 'Abrir publicación o bases' : 'Abrir publicación de la vacante'}><AppIcon name="external-link" className="h-3.5 w-3.5" /></a>}
+                        {app.link && <a href={app.link} target="_blank" rel="noreferrer" className="shrink-0 text-[var(--blue)]" title={tipo === 'concurso' ? 'Abrir publicación o bases' : 'Abrir publicación de la vacante'}><AppIcon name="externalLink" className="h-3.5 w-3.5" /></a>}
                       </div>
                       <p className="break-words text-xs font-medium text-[var(--text-soft)]">{app.puesto}</p>
                     </div>
@@ -254,7 +254,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                                 className="text-[var(--blue)] hover:opacity-80 transition-opacity"
                                 title={tipo === 'concurso' ? 'Abrir publicación o bases' : 'Abrir publicación de la vacante'}
                               >
-                                <AppIcon name="external-link" className="h-3 w-3" />
+                                <AppIcon name="externalLink" className="h-3 w-3" />
                               </a>
                             )}
                           </div>

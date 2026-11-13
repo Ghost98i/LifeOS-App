@@ -6,8 +6,14 @@ export const PwaUpdatePrompt: React.FC = () => {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     offlineReady: [offlineReady, setOfflineReady],
-    updateServiceWorker,
-  } = useRegisterSW();
+    updateServiceWorker: updateSW,
+  } = useRegisterSW({
+    onNeedRefresh() {
+      // Notifica disponibilidad de nueva versión en modo prompt
+    },
+    onOfflineReady() {
+    },
+  });
 
   const [alreadyAcked, setAlreadyAcked] = useState(() => {
     try {
@@ -56,8 +62,8 @@ export const PwaUpdatePrompt: React.FC = () => {
         <>
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-extrabold text-[var(--text)]">Hay una nueva versión de Celestian LifeOS</p>
-              <p className="mt-1 text-xs text-[var(--text-soft)]">Terminá de guardar tus formularios antes de actualizar.</p>
+              <p className="text-sm font-extrabold text-[var(--text)]">Nueva versión disponible</p>
+              <p className="mt-1 text-xs text-[var(--text-soft)]">Actualizá para ver los últimos cambios</p>
             </div>
             <button
               type="button"
@@ -72,10 +78,10 @@ export const PwaUpdatePrompt: React.FC = () => {
           <div className="mt-3 flex items-center gap-2">
             <button
               type="button"
-              onClick={() => void updateServiceWorker(true)}
+              onClick={() => void updateSW(true)}
               className="rounded-xl bg-[var(--blue)] px-3 py-1.5 text-xs font-extrabold text-white hover:opacity-90 transition cursor-pointer"
             >
-              Actualizar ahora
+              Actualizar
             </button>
             <button
               type="button"

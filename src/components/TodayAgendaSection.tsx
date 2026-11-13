@@ -161,7 +161,7 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
 
   return (
     <section
-      className={`today-agenda-surface flex flex-col overflow-hidden rounded-2xl border border-[var(--border)] shadow-[var(--card-shadow)] ${className || ''}`}
+      className={`today-agenda-surface today-primary-surface flex flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-[var(--card-shadow)] ${className || ''}`}
       aria-labelledby="today-agenda-title"
     >
       <div className="flex min-h-14 shrink-0 items-center justify-between gap-3 px-3.5 py-1.5 sm:px-4">

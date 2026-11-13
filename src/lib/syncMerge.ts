@@ -1303,7 +1303,15 @@ export function mergeGymModule(
 
 /** A workout is an atomic record for conflict decisions. Do not guess how to
  * combine two independently edited sets of weights/reps. */
-export function detectGymSessionConflicts(local: Gym, remote: Gym, baseline?: Gym, replacing = false): SyncConflictItem[] {
+export function detectGymSessionConflicts(
+  local: Gym,
+  remote: Gym,
+  baseline?: Gym,
+  replacing: boolean | Record<string, number> = false,
+  tombstones: Record<string, number> = {}
+): SyncConflictItem[] {
+  const isReplacing = typeof replacing === 'boolean' ? replacing : false;
+  const resolvedTombstones = typeof replacing === 'object' && replacing !== null ? replacing : tombstones;
   const localById = new Map(migrateGym(local).sessions.map((session) => [session.id, session]));
   const remoteById = new Map(migrateGym(remote).sessions.map((session) => [session.id, session]));
   const baseById = new Map((baseline ? migrateGym(baseline).sessions : []).map((session) => [session.id, session]));
@@ -1315,18 +1323,21 @@ export function detectGymSessionConflicts(local: Gym, remote: Gym, baseline?: Gy
     if (stableEqual(l, r)) continue;
     const bothEdited = Boolean(l && r && (!b || (!stableEqual(l, b) && !stableEqual(r, b))));
     const editVersusRemoval = Boolean(b && (!l || !r) && !stableEqual(l || r, b));
-    const incomingRemoval = Boolean(l && !r && (b || replacing));
+    const incomingRemoval = Boolean(l && !r && (b || isReplacing));
     // A confirmed workout must never be removed or stripped of exercises/sets
     // just because an incoming copy is older or incomplete.
-    const confirmedLoss = Boolean(l?.status === 'completed' && (replacing || r || b) && (
+    const confirmedLoss = Boolean(l?.status === 'completed' && (isReplacing || r || b) && (
       !r || r.status !== 'completed' || l.exercises.some((exercise) => {
         const counterpart = r.exercises.find((item) => item.id === exercise.id);
         return !counterpart || exercise.sets.some((set) => !counterpart.sets.some((item) => item.id === set.id));
       })
     ));
     const confirmedRemoteChange = Boolean(l?.status === 'completed' && r &&
-      !stableEqual(l, r) && (replacing || !b || !stableEqual(r, b)));
+      !stableEqual(l, r) && (isReplacing || !b || !stableEqual(r, b)));
     if (!bothEdited && !editVersusRemoval && !incomingRemoval && !confirmedLoss && !confirmedRemoteChange) continue;
+    const sessionPath = 'gym/' + gymSyncPath.session(id);
+    const tombstoneTime = resolvedTombstones[sessionPath] || 0;
+    if (tombstoneTime > 0 && tombstoneTime >= extractTimestamp(r || b || l)) continue;
     conflicts.push({
       id: `conflict-gym-session-${id}`,
       module: 'gym',
@@ -2213,6 +2224,8 @@ export function mergeModuleDataWithConflicts(
         (localData as { gym: Gym }).gym,
         (remoteData as { gym: Gym }).gym,
         baselineData ? (baselineData as { gym: Gym }).gym : undefined,
+        false,
+        tombstones,
       ));
       data = {
         gym: mergeGymModule(

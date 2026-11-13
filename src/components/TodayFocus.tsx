@@ -8,6 +8,9 @@ interface TodayFocusProps {
   onToggle: (priority: DailyPriority) => void;
   onRemove: (id: string) => void;
   onSmartSuggest?: () => void;
+  motivosVisibles?: boolean;
+  onToggleMotivos?: () => void;
+  title?: string;
 }
 
 export const TodayFocus: React.FC<TodayFocusProps> = ({
@@ -16,6 +19,9 @@ export const TodayFocus: React.FC<TodayFocusProps> = ({
   onToggle,
   onRemove,
   onSmartSuggest,
+  motivosVisibles = true,
+  onToggleMotivos,
+  title = 'Prioridades del día',
 }) => {
   const [text, setText] = useState('');
   const [adding, setAdding] = useState(false);
@@ -40,7 +46,7 @@ export const TodayFocus: React.FC<TodayFocusProps> = ({
           <div className="min-w-0">
             <div className="flex items-baseline gap-2">
               <h2 id="today-focus-title" className="text-[15px] font-bold tracking-[-0.025em] text-[var(--text)] sm:text-base">
-                Foco de hoy
+                {title}
               </h2>
               <span className="text-[11px] font-semibold tabular-nums text-[var(--text-faint)]">
                 {completedCount}/3
@@ -53,6 +59,18 @@ export const TodayFocus: React.FC<TodayFocusProps> = ({
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
+          {onToggleMotivos && (
+            <button
+              type="button"
+              onClick={onToggleMotivos}
+              title="Mostrar/ocultar motivos"
+              aria-label="Mostrar/ocultar motivos"
+              aria-pressed={motivosVisibles}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-faint)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text-soft)]"
+            >
+              <AppIcon name={motivosVisibles ? 'eye' : 'eyeOff'} className="h-3.5 w-3.5" />
+            </button>
+          )}
           {sorted.length < 3 && !adding && (
             <div className="flex items-center gap-1.5">
               {onSmartSuggest && (
@@ -126,7 +144,7 @@ export const TodayFocus: React.FC<TodayFocusProps> = ({
                     ? 'border-indigo-500/45 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'
                     : 'border-[var(--border)] bg-[var(--card-subtle)] text-[var(--text-soft)] hover:border-indigo-500'}`}
               >
-                {item.done ? '✓' : String(index + 1).padStart(2, '0')}
+                {item.done ? <AppIcon name="check" className="h-3.5 w-3.5" /> : String(item.rank ?? (index + 1)).padStart(2, '0')}
               </button>
               <button type="button" onClick={() => onToggle(item)} className="min-w-0 flex-1 select-none text-left">
                 <span className={`block leading-snug ${item.done
@@ -134,7 +152,11 @@ export const TodayFocus: React.FC<TodayFocusProps> = ({
                   : isRankOne
                     ? 'text-[13px] font-bold tracking-[-0.01em] text-[var(--text)] sm:text-sm'
                     : 'text-xs font-semibold text-[var(--text)] sm:text-[13px]'}`}>{item.text}</span>
-                {item.reasons && item.reasons.length > 0 && <span className="mt-0.5 block truncate text-[10px] font-medium text-[var(--text-faint)]">{item.reasons.join(' · ')}</span>}
+                {motivosVisibles && item.reasons && item.reasons.length > 0 && (
+                  <span className="mt-0.5 block line-clamp-2 text-[11px] text-[var(--text-soft)]">
+                    Sugerido por: {item.reasons.join(' · ')}
+                  </span>
+                )}
               </button>
               <button type="button" onClick={() => onRemove(item.id)} title="Quitar de las prioridades" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] transition hover:bg-rose-500/10 hover:text-rose-500 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"><AppIcon name="x" className="h-3 w-3" /></button>
             </div>

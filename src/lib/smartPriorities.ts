@@ -35,7 +35,8 @@ export interface SmartPriorityCandidate {
 export function scoreTask(
   task: UnifiedTask,
   today: string,
-  allTasks: Map<string, UnifiedTask>
+  allTasks: Map<string, UnifiedTask>,
+  context?: import('../types').DailyContextEntry | null
 ): TaskScoreResult {
   const reasons: string[] = [];
   const blockers = getBlockingTasks(task, allTasks);
@@ -75,7 +76,7 @@ export function scoreTask(
   if (unblocksCount > 0) {
     const boost = Math.min(unblocksCount, 3) * 6; // up to +18
     score += boost;
-    reasons.push(`Desbloquea ${unblocksCount} tarea(s)`);
+    reasons.push(`Al completarla se desbloquea ${unblocksCount} tarea(s)`);
   }
 
   // 4. Scheduled for today
@@ -87,6 +88,35 @@ export function scoreTask(
   if (blocked) {
     score -= 100;
     reasons.push(`Bloqueada por: ${blockingTaskNames.slice(0, 2).join(', ')}`);
+  }
+
+  // 6. Daily Energy & Sleep Penalty (Readiness Check)
+  // Energía: 1-2 = baja, 3 = normal, 4-5 = alta.
+  // Sueño: < 6.5h = insuficiente, >= 6.5h = ok.
+  if (context) {
+    const energy = context.energy;
+    const sleep = context.sleepHours;
+    
+    const hasEnergy = energy !== null && energy !== undefined;
+    const hasSleep = sleep !== null && sleep !== undefined;
+    
+    const isLowEnergy = (hasEnergy && energy <= 2) || (hasSleep && sleep < 6.5);
+    const isHighEnergy = hasEnergy && energy >= 4 && !isLowEnergy;
+
+    if (isLowEnergy) {
+      if (task.effort === 'alta' || task.effort === 'high') {
+        score -= 40;
+        reasons.push('Baja energía hoy: evitar esfuerzo alto');
+      } else if (task.effort === 'baja' || task.effort === 'low') {
+        score += 20;
+        reasons.push('Energía baja: tarea ligera recomendada');
+      }
+    } else if (isHighEnergy) {
+      if (task.effort === 'alta' || task.effort === 'high') {
+        score += 15;
+        reasons.push('Buen descanso: metámosle intensidad');
+      }
+    }
   }
 
   return {
@@ -103,6 +133,7 @@ export function getSmartDailyRecommendations(
   limit = 3
 ): SmartPriorityCandidate[] {
   const today = todayISO();
+  const todayContext = (state.dailyContext || []).find((c) => c.date === today) || null;
   const candidates: SmartPriorityCandidate[] = [];
   const unifiedTasks = getUnifiedTaskList(state);
   const taskMap = getUnifiedTaskMap(unifiedTasks);
@@ -116,13 +147,13 @@ export function getSmartDailyRecommendations(
         if (days <= 7) {
           const subject = (state.study?.subjects || []).find((s) => s.id === e.subjectId);
           const name = subject?.name || 'Materia';
-          const reason = days === 0 ? 'Examen HOY' : `Examen en ${days} día(s)`;
+          const reason = days === 0 ? 'Examen hoy' : `Examen en ${days} día(s)`;
           candidates.push({
             id: `exam-${e.id}`,
             text: `Repasar para examen de ${name}`,
             score: 100 - days, // Sooner = higher score (93-100)
             reason,
-            reasons: [reason, 'Objetivo académico crítico'],
+            reasons: [reason, 'Impacto académico alto'],
             source: 'exam',
           });
         }
@@ -153,13 +184,13 @@ export function getSmartDailyRecommendations(
       .filter((d) => d.dueDate && d.dueDate >= today && daysBetween(today, d.dueDate) <= 3)
       .forEach((d) => {
         const days = daysBetween(today, d.dueDate!);
-        const reason = days === 0 ? 'Vence HOY' : `Vence en ${days} día(s)`;
+        const reason = days === 0 ? 'Vence hoy' : `Vence en ${days} día(s)`;
         candidates.push({
           id: `debt-${d.id}`,
           text: `Pagar cuota de ${d.name}`,
           score: 88 - days,
           reason,
-          reasons: [reason, 'Salud financiera'],
+          reasons: [reason, 'Evita recargo'],
           source: 'debt',
         });
       });
@@ -176,7 +207,7 @@ export function getSmartDailyRecommendations(
       return !t.done && (t.date === today || (t.dueDate && t.dueDate <= today) || t.priority === 'alta');
     })
     .forEach((t) => {
-      const scored = scoreTask(t, today, taskMap);
+      const scored = scoreTask(t, today, taskMap, todayContext);
 
       // Do NOT recommend blocked tasks for top daily focus
       if (scored.isBlocked) return;
@@ -203,14 +234,33 @@ export function getSmartDailyRecommendations(
     );
     const isRestToday = (state.gym?.restDays || []).includes(today);
     if (!isTrainedToday && !isRestToday) {
-      candidates.push({
-        id: 'gym-today',
-        text: 'Completar entrenamiento del día',
-        score: 65,
-        reason: 'Consistencia y salud física',
-        reasons: ['Consistencia y salud física', 'Hábito diario'],
-        source: 'gym',
-      });
+      // Energía: 1-2 = baja, 3 = normal, 4-5 = alta.
+      // Sueño: < 6.5h = insuficiente, >= 6.5h = ok.
+      const energy = todayContext?.energy;
+      const sleep = todayContext?.sleepHours;
+      const hasEnergy = energy !== null && energy !== undefined;
+      const hasSleep = sleep !== null && sleep !== undefined;
+      const isLowEnergy = (hasEnergy && energy <= 2) || (hasSleep && sleep < 6.5);
+
+      if (isLowEnergy) {
+        candidates.push({
+          id: 'gym-today',
+          text: 'Descanso activo o movilidad (Baja energía)',
+          score: 30,
+          reason: 'Recuperación necesaria por bajo descanso',
+          reasons: ['Recuperación necesaria por bajo descanso'],
+          source: 'gym',
+        });
+      } else {
+        candidates.push({
+          id: 'gym-today',
+          text: 'Completar entrenamiento del día',
+          score: 65,
+          reason: 'Consistencia y salud física',
+          reasons: ['Consistencia y salud física', 'Hábito diario'],
+          source: 'gym',
+        });
+      }
     }
   }
 

@@ -172,14 +172,14 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
           <button
             type="button"
             onClick={handleTogglePause}
-            className={`min-h-9 rounded-xl px-2.5 text-xs font-bold transition-all active:scale-95 cursor-pointer ${
+            className={`inline-flex min-h-9 items-center justify-center rounded-xl px-2.5 text-xs font-bold transition-all active:scale-95 cursor-pointer ${
               status === 'running'
                 ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30'
                 : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30'
             }`}
             title={status === 'running' ? 'Pausar sesión' : 'Reanudar sesión'}
           >
-            {status === 'running' ? '⏸' : '▶'}
+            <AppIcon name={status === 'running' ? 'pause' : 'play'} className="h-3.5 w-3.5" />
           </button>
 
           <button

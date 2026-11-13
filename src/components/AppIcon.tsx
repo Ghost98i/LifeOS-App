@@ -58,6 +58,7 @@ export type AppIconName =
   | 'trophy' | 'play' | 'pause' | 'rotateCcw' | 'filter' | 'kanban' | 'list' | 'arrowRight' | 'arrowUp' | 'trash' | 'edit' | 'flame' | 'trendingUp'
   | 'eye' | 'eyeOff' | 'target' | 'zap' | 'bell' | 'chevronDown' | 'chevronUp' | 'x' | 'checkCircle' | 'activity'
   | 'lock' | 'unlock' | 'link'
+  | 'alertTriangle' | 'alertCircle' | 'mic' | 'mapPin' | 'externalLink' | 'arrowUpRight' | 'arrowDownRight' | 'download' | 'key' | 'user'
   | 'store' | 'inbox' | 'lightbulb' | 'touchpad' | 'graduation' | 'ai' | 'task' | 'expense' | 'reminder' | 'pin' | 'history' | 'transfer' | 'income' | 'exam' | 'project' | 'gift' | 'stopwatch' | 'product';
 
 interface AppIconProps extends React.SVGProps<SVGSVGElement> {
@@ -120,6 +121,16 @@ const paths: Partial<Record<AppIconName, React.ReactNode>> = {
   lock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></>,
   unlock: <><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></>,
   link: <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>,
+  alertTriangle: <><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></>,
+  alertCircle: <><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></>,
+  mic: <><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></>,
+  mapPin: <><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></>,
+  externalLink: <><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></>,
+  arrowUpRight: <><path d="M7 17 17 7"/><path d="M7 7h10v10"/></>,
+  arrowDownRight: <><path d="m7 7 10 10"/><path d="M17 7v10H7"/></>,
+  download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></>,
+  key: <><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3"/></>,
+  user: <><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></>,
 };
 
 // Icons by Icons8 (https://icons8.com). Original files remain unchanged.

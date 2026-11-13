@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { SYNC_MODULE_LABELS, type SyncModuleKey, type SyncConflictItem } from '../lib/syncModel';
+import { AppIcon } from './AppIcon';
 
 interface CloudConflictModalProps {
   onUseLocal: () => void;
@@ -37,7 +38,9 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
         className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl space-y-4"
       >
         <div className="flex items-center gap-3">
-          <div className="text-3xl">🛟</div>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400">
+            <AppIcon name="alertTriangle" className="h-5 w-5" />
+          </div>
           <div>
             <h2 id="cloud-conflict-title" className="text-lg font-extrabold text-[var(--text)]">
               Conflicto de sincronización detectado

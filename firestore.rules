@@ -7,23 +7,24 @@ service cloud.firestore {
     }
 
     function validModule(module) {
-      return module in [
+      return (module in [
         'profile', 'agenda', 'tasks', 'context', 'finance', 'gym', 'study',
         'streaming', 'jobs', 'resale', 'ideas', 'calendar', 'goals', 'notes',
         'checkout'
-      ];
+      ]) || module.matches('gym_(history|weight|measurements?)_chunk_[0-9]+');
     }
 
     // Single Source of Truth for CryptoEnvelope in Firestore
     function isValidCryptoEnvelope(envelope) {
       return envelope is map
-        && envelope.keys().hasOnly(['cryptoVersion', 'algorithm', 'iv', 'ciphertext', 'aad', 'createdAt'])
+        && envelope.keys().hasOnly(['cryptoVersion', 'algorithm', 'iv', 'ciphertext', 'aad', 'createdAt', 'compressed'])
         && envelope.cryptoVersion is int
         && envelope.cryptoVersion == 1
         && envelope.algorithm == 'AES-GCM-256'
         && envelope.iv is string
         && envelope.ciphertext is string
         && (!('aad' in envelope) || envelope.aad is string)
+        && (!('compressed' in envelope) || envelope.compressed is bool)
         && envelope.createdAt is string;
     }
 

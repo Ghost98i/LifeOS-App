@@ -1,4 +1,5 @@
 import React from 'react';
+import { AppIcon } from './AppIcon';
 
 interface AppErrorBoundaryProps {
   children?: any;
@@ -39,8 +40,8 @@ export class AppErrorBoundary extends React.Component<AppErrorBoundaryProps, Sta
 
     const content = (
       <section className="max-w-md w-full rounded-3xl border border-rose-500/25 bg-[var(--card)] p-6 text-center shadow-xl space-y-4">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500 text-2xl font-bold">
-          ⚠️
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-500">
+          <AppIcon name="alertTriangle" className="h-6 w-6" />
         </div>
         <div>
           <h2 className="text-lg font-extrabold text-[var(--text)]">{title}</h2>

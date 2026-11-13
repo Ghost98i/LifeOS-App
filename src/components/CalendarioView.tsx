@@ -481,7 +481,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                               title="Editar acontecimiento"
                               aria-label={`Editar ${item.name}`}
                             >
-                              <AppIcon name="pencil" className="h-3.5 w-3.5" />
+                              <AppIcon name="edit" className="h-3.5 w-3.5" />
                             </button>
                             <button
                               type="button"

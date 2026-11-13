@@ -66,8 +66,8 @@ try {
         assert.equal(measurement.overflow, false, `${width} ${theme} ${view}: page overflow`);
         assert.ok(Math.abs(measurement.root.x - reference.x) < 1 && Math.abs(measurement.root.width - reference.width) < 1, `${width} ${theme} ${view}: must share Hoy's actual global content bounds`);
         if (measurement.tabs && view.startsWith('gym-')) assert.ok(Math.abs(measurement.tabs.width - reference.width) < 1);
-        if (measurement.timer) assert.ok(measurement.timer.width <= 84);
-        if (measurement.cta && reference.width >= 960) assert.ok(measurement.cta.width < measurement.panel.width * .8, 'Desktop CTA must not stretch with the workspace');
+        if (measurement.timer) assert.ok(measurement.timer.width >= 180);
+        if (measurement.cta && reference.width >= 960) assert.ok(measurement.cta.width >= measurement.panel.width * 0.85, 'Desktop CTA must span the exercise card width');
       }
       results.push({ phase, width, height, theme, view, ...measurement });
       await fs.writeFile(`${output}/measurements.json`, JSON.stringify({ results, interactions, errors }, null, 2));

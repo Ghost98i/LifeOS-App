@@ -31,6 +31,7 @@ interface PersonalContextCardProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => boolean;
   onNavigate?: (view: ViewType) => void;
+  className?: string;
 }
 
 type Metric = 'energy' | 'sleep' | 'mood';
@@ -228,6 +229,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
   state,
   onUpdateState,
   onNavigate,
+  className = '',
 }) => {
   const today = todayISO();
   const weekDates = useMemo(() => Array.from({ length: 7 }, (_, index) => shiftISO(today, index - 6)), [today]);
@@ -426,7 +428,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
 
   return (
     <section
-      className="today-state-surface flex flex-col rounded-2xl border border-[var(--border)] p-3.5 sm:p-4"
+      className={`today-state-surface flex flex-col rounded-2xl border border-[var(--border)] p-3.5 sm:p-4 ${className}`}
       aria-labelledby="today-context-title"
     >
       <div>
@@ -629,7 +631,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
               >
                 <div className="flex items-center gap-1.5">
                   <AppIcon
-                    name={isOptionalContextExpanded ? 'chevron-down' : 'chevron-right'}
+                    name={isOptionalContextExpanded ? 'chevronDown' : 'chevronRight'}
                     className="h-3.5 w-3.5 text-[var(--text-muted)]"
                   />
                   <span className="text-[12px] font-semibold text-[var(--text)]">Contexto adicional (opcional)</span>
@@ -662,14 +664,14 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
                           type="button"
                           onClick={() => toggleOptionalFactor(key)}
                           aria-pressed={isActive}
-                          className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
+                          className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
                             isActive
                               ? 'border-[var(--border-strong)] bg-[var(--surface-muted)] font-semibold text-[var(--text)]'
                               : 'border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)]'
                           }`}
                         >
-                          {isActive ? '✓ ' : '+ '}
-                          {label}
+                          <AppIcon name={isActive ? 'check' : 'plus'} className="h-3 w-3 shrink-0" />
+                          <span>{label}</span>
                         </button>
                       );
                     })}
@@ -1029,8 +1031,8 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
                     className="rounded-xl border border-[var(--border)]/60 bg-[var(--surface-muted)]/35 p-2.5 text-xs transition-all"
                   >
                     <div className="flex items-start gap-2">
-                      <span className="select-none text-[12px] text-[var(--text-faint)] shrink-0 pt-0.5" aria-hidden="true">
-                        📝
+                      <span className="select-none text-[var(--text-faint)] shrink-0 pt-0.5" aria-hidden="true">
+                        <AppIcon name="note" className="h-3.5 w-3.5" />
                       </span>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-baseline justify-between gap-2">
@@ -1089,8 +1091,9 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
                   {evaluation.recommendation.whyRelevant}
                 </p>
                 <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 border-t border-amber-500/20 pt-2 text-[12px]">
-                  <span className="font-medium text-amber-950 dark:text-amber-100">
-                    💡 {evaluation.recommendation.optionToConsider}
+                  <span className="inline-flex items-center gap-1.5 font-medium text-amber-950 dark:text-amber-100">
+                    <AppIcon name="lightbulb" className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <span>{evaluation.recommendation.optionToConsider}</span>
                   </span>
                   <div className="flex items-center gap-2">
                     {onNavigate &&

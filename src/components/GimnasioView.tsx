@@ -29,6 +29,8 @@ import { ContextualHelp } from './ContextualHelp';
 import { GymExerciseArtwork } from './visual/GymExerciseArtwork';
 import { GymIcon } from './visual/GymIcon';
 import { PrivacyAmount, usePrivacyMode } from './PrivacyAmount';
+import { cryptoSession } from '../lib/cryptoCore';
+import { fetchGymHistoryChunk, GYM_CHUNK_SIZE } from '../lib/cloudSync';
 import {
   todayISO,
   DAYS,
@@ -163,11 +165,21 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   initialEditingTemplateId = null,
 }) => {
   const privacy = usePrivacyMode();
+  const todayContext = useMemo(() => state.dailyContext?.find(c => c.date === todayISO()), [state.dailyContext]);
+  const isLowEnergy = useMemo(() => {
+    if (!todayContext) return false;
+    return (todayContext.energy != null && todayContext.energy < 3) || (todayContext.sleepHours != null && todayContext.sleepHours < 6);
+  }, [todayContext]);
   const [activeTab, setActiveTab] = useState<'entrenar' | 'rutinas' | 'historial' | 'progresion'>(
     initialEditingTemplateId ? 'rutinas' : initialTab
   );
 
   const [sessionDate, setSessionDate] = useState(todayISO());
+  const [downloadedHistoryChunks, setDownloadedHistoryChunks] = useState<GymSession[][]>([]);
+  const [isLoadingMoreHistory, setIsLoadingMoreHistory] = useState(false);
+  const [hasMoreHistoryChunks, setHasMoreHistoryChunks] = useState(true);
+  const [historyFetchError, setHistoryFetchError] = useState<string | null>(null);
+  const [historyChunkIndex, setHistoryChunkIndex] = useState(0);
   const [sessionWeekLabel, setSessionWeekLabel] = useState('');
   const { today: launcherToday, plan: launcherPlan, select: setSessionTemplate } = useGymLauncher(state, activeTab);
   const sessionTemplate = launcherPlan.templateId;
@@ -297,13 +309,20 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
   const variacion = useMemo(() => activeTab === 'progresion' ? weightVariation(state) : null, [activeTab, state]);
   const isRestDayToday = launcherPlan.explicitRest;
-  const gymSessions = state.gym?.sessions;
+  const allVisibleGymSessions = useMemo(() => {
+    const flattenedDownloaded = downloadedHistoryChunks.flat();
+    if (flattenedDownloaded.length === 0) return state.gym?.sessions || [];
+    const localIds = new Set((state.gym?.sessions || []).map((s) => s.id));
+    const uniqueDownloaded = flattenedDownloaded.filter((s) => !localIds.has(s.id));
+    return [...(state.gym?.sessions || []), ...uniqueDownloaded];
+  }, [state.gym?.sessions, downloadedHistoryChunks]);
+  const gymSessions = allVisibleGymSessions;
   const sortedSessions = useMemo(() => {
-    return [...(gymSessions || [])].sort((a, b) =>
+    return [...(allVisibleGymSessions || [])].sort((a, b) =>
       (b.date || '').localeCompare(a.date || '') ||
       (b.finishedAt || b.startedAt || '').localeCompare(a.finishedAt || a.startedAt || '')
     );
-  }, [gymSessions]);
+  }, [allVisibleGymSessions]);
 
   const calendarOverview = useMemo(
     () => activeTab === 'progresion'
@@ -351,7 +370,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
   const handleDiscardStaleSession = (sessionId: string) => {
     const saved = onUpdateState((draft) => {
-      discardGymSession(draft.gym, sessionId);
+      discardGymSession(draft.gym, sessionId, storageUserId);
     });
     if (!saved) return;
     showToast('Sesión descartada.', 'info');
@@ -544,7 +563,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     const session = state.gym.sessions.find((candidate) => candidate.id === id);
     if (!session || !requestGymSessionDeletion(session, (message) => window.confirm(message))) return;
     const saved = onUpdateState((draft) => {
-      deleteGymSession(draft.gym, id);
+      deleteGymSession(draft.gym, id, storageUserId);
     });
     if (!saved) return;
     showToast('Sesión eliminada.', 'info');
@@ -899,8 +918,45 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
   const gymHistory = useMemo(() => {
     if (activeTab !== 'historial') return { recentWeeks: [], archivedMonths: [] };
-    return buildGymHistory(state.gym.sessions);
-  }, [activeTab, state.gym.sessions]);
+    return buildGymHistory(allVisibleGymSessions);
+  }, [activeTab, allVisibleGymSessions]);
+
+  const handleLoadMoreHistory = async () => {
+    if (isLoadingMoreHistory || !storageUserId) return;
+    setHistoryFetchError(null);
+
+    const isUnlocked = cryptoSession.isUnlocked(storageUserId);
+    if (!isUnlocked) {
+      setHistoryFetchError('Desbloqueá la sesión para ver el historial completo.');
+      return;
+    }
+
+    setIsLoadingMoreHistory(true);
+    try {
+      const sessionKey = cryptoSession.getKey(storageUserId);
+      const res = await fetchGymHistoryChunk(storageUserId, historyChunkIndex, sessionKey);
+      if (res.status === 'locked') {
+        setHistoryFetchError('Desbloqueá la sesión para ver el historial completo.');
+      } else if (res.status === 'error') {
+        setHistoryFetchError(res.message || 'Error al cargar fragmentos anteriores.');
+      } else if (res.status === 'success') {
+        const newSessions = (res.sessions || []) as GymSession[];
+        if (newSessions.length === 0) {
+          setHasMoreHistoryChunks(false);
+        } else {
+          setDownloadedHistoryChunks((prev) => [...prev, newSessions]);
+          setHistoryChunkIndex((prev) => prev + 1);
+          if (newSessions.length < GYM_CHUNK_SIZE) {
+            setHasMoreHistoryChunks(false);
+          }
+        }
+      }
+    } catch (err: any) {
+      setHistoryFetchError(err?.message || 'Error al conectar con la nube.');
+    } finally {
+      setIsLoadingMoreHistory(false);
+    }
+  };
 
   const calendarRestDates = useMemo(() => [
     ...(state.gym.restDays || []),
@@ -1044,6 +1100,42 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
           <span className="truncate">Progreso</span>
         </button>
       </nav>
+      )}
+
+      {isLowEnergy && todayContext?.dismissedRecommendationKey !== 'gym_low_energy_banner' && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 flex items-start justify-between gap-4 animate-in fade-in">
+          <div className="flex gap-3 items-start">
+            <span className="text-amber-600 dark:text-amber-500 mt-0.5">
+              <AppIcon name="bell" className="h-5 w-5" />
+            </span>
+            <div>
+              <h3 className="text-sm font-bold text-amber-900 dark:text-amber-300">Energía baja</h3>
+              <p className="text-xs text-amber-800 dark:text-amber-400/80 mt-1 max-w-2xl">
+                Tenés energía {todayContext?.energy}/5. Si te sentís cansado, priorizá la técnica, bajá la intensidad o hacé movilidad.
+              </p>
+            </div>
+          </div>
+          <button 
+            type="button"
+            onClick={() => {
+              onUpdateState((draft) => {
+                const today = todayISO();
+                if (!draft.dailyContext) draft.dailyContext = [];
+                let entry = draft.dailyContext.find(c => c.date === today);
+                if (!entry) {
+                  entry = { date: today, sleepHours: null, energy: null, mood: null, connection: null };
+                  draft.dailyContext.push(entry);
+                }
+                entry.dismissedRecommendationKey = 'gym_low_energy_banner';
+                entry.updatedAt = new Date().toISOString();
+              });
+            }}
+            className="text-amber-600 hover:text-amber-800 dark:text-amber-500 dark:hover:text-amber-400 p-1 shrink-0 cursor-pointer"
+            aria-label="Cerrar aviso de baja energía"
+          >
+            <AppIcon name="x" className="h-4 w-4" />
+          </button>
+        </div>
       )}
 
       {activeWorkoutSession && state.gym.activeTimer && activeTab !== 'entrenar' && (
@@ -1872,7 +1964,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                       key={session.id}
                       initiallyExpanded={session.id === calendarHistorySessionId}
                       session={session}
-                      allSessions={state.gym.sessions}
+                      allSessions={allVisibleGymSessions}
                       onFinishWorkout={() => handleFinishWorkout(session.id)}
                       onDeleteSession={() => handleDeleteSession(session.id)}
                       onEditSessionDate={(d) => handleEditSessionDate(session.id, d)}
@@ -1943,7 +2035,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                         key={session.id}
                         initiallyExpanded={session.id === calendarHistorySessionId}
                         session={session}
-                        allSessions={state.gym.sessions}
+                        allSessions={allVisibleGymSessions}
                         onFinishWorkout={() => handleFinishWorkout(session.id)}
                         onDeleteSession={() => handleDeleteSession(session.id)}
                         onEditSessionDate={(d) => handleEditSessionDate(session.id, d)}
@@ -1985,6 +2077,41 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
               ))}
             </div>
           )}
+
+          {/* Lazy Loading: Cargar más historial */}
+          <div className="pt-4 pb-8 flex flex-col items-center justify-center gap-3">
+            {historyFetchError && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-xs font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-2">
+                <AppIcon name="lock" className="h-4 w-4 shrink-0" />
+                <span>{historyFetchError}</span>
+              </div>
+            )}
+
+            {hasMoreHistoryChunks ? (
+              <button
+                type="button"
+                onClick={handleLoadMoreHistory}
+                disabled={isLoadingMoreHistory}
+                className="min-h-11 inline-flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-5 py-2.5 text-xs font-bold text-[var(--text)] hover:bg-[var(--surface-muted)] transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {isLoadingMoreHistory ? (
+                  <>
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-[var(--text)] border-t-transparent" />
+                    <span>Cargando historial anterior...</span>
+                  </>
+                ) : (
+                  <>
+                    <AppIcon name="history" className="h-4 w-4 text-[var(--blue)]" />
+                    <span>Cargar más historial</span>
+                  </>
+                )}
+              </button>
+            ) : (
+              <p className="text-xs text-[var(--text-faint)]">
+                {allVisibleGymSessions.length > 0 ? 'Fin del historial de entrenamientos.' : ''}
+              </p>
+            )}
+          </div>
         </div>
       )}
 

@@ -34,6 +34,8 @@ import {
   normalizeAllGymSessions,
   propagateExerciseConfiguration,
 } from './gymMigration';
+import { gymSyncPath } from './gymSync';
+import { recordEntityDeletion } from './syncMerge';
 
 export function getActiveGymSession(gym: Gym, _referenceDate?: string): GymSession | null {
   return [...(gym.sessions || [])]
@@ -112,7 +114,10 @@ export function finishGymSession(
   return { status: 'completed', session };
 }
 
-export function deleteGymSession(gym: Gym, sessionId: string): boolean {
+export function deleteGymSession(gym: Gym, sessionId: string, userId?: string | null): boolean {
+  if (userId) {
+    recordEntityDeletion(userId, 'gym/' + gymSyncPath.session(sessionId));
+  }
   const previousLength = gym.sessions.length;
   gym.sessions = gym.sessions.filter((session) => session.id !== sessionId);
   if (gym.activeTimer?.sessionId === sessionId) gym.activeTimer = null;

@@ -204,3 +204,60 @@ test('una rutina sin ejercicios queda identificada y no ofrece inicio directo', 
   assert.doesNotMatch(html, />Iniciar<\/button>/);
   assert.equal(writes, 0);
 });
+
+test('banner de baja energía: respeta umbrales, texto neutral y descarte persistido', () => {
+  const today = todayISO();
+  const stateEnergy3 = defaultState();
+  stateEnergy3.dailyContext = [{
+    date: today,
+    sleepHours: 7,
+    energy: 3,
+    mood: 3,
+    connection: null,
+  }];
+  const htmlEnergy3 = renderToStaticMarkup(
+    React.createElement(GimnasioView, { state: stateEnergy3, onUpdateState: () => undefined })
+  );
+  assert.doesNotMatch(htmlEnergy3, /Energía baja/);
+
+  const stateEnergy2 = defaultState();
+  stateEnergy2.dailyContext = [{
+    date: today,
+    sleepHours: 7,
+    energy: 2,
+    mood: 2,
+    connection: null,
+  }];
+  const htmlEnergy2 = renderToStaticMarkup(
+    React.createElement(GimnasioView, { state: stateEnergy2, onUpdateState: () => undefined })
+  );
+  assert.match(htmlEnergy2, /Energía baja/);
+  assert.match(htmlEnergy2, /Tenés energía 2\/5\. Si te sentís cansado, priorizá la técnica, bajá la intensidad o hacé movilidad\./);
+
+  const stateDismissed = defaultState();
+  stateDismissed.dailyContext = [{
+    date: today,
+    sleepHours: 7,
+    energy: 2,
+    mood: 2,
+    dismissedRecommendationKey: 'gym_low_energy_banner',
+    connection: null,
+  }];
+  const htmlDismissed = renderToStaticMarkup(
+    React.createElement(GimnasioView, { state: stateDismissed, onUpdateState: () => undefined })
+  );
+  assert.doesNotMatch(htmlDismissed, /Energía baja/);
+
+  const stateSleep5 = defaultState();
+  stateSleep5.dailyContext = [{
+    date: today,
+    sleepHours: 5,
+    energy: 4,
+    mood: 3,
+    connection: null,
+  }];
+  const htmlSleep5 = renderToStaticMarkup(
+    React.createElement(GimnasioView, { state: stateSleep5, onUpdateState: () => undefined })
+  );
+  assert.match(htmlSleep5, /Energía baja/);
+});

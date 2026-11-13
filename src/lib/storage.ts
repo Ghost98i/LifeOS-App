@@ -1211,6 +1211,9 @@ export function parseBackupJSON(text: string): LifeOSState {
   if (candidate?.settings?.onboardingCompleted === undefined) {
     normalized.settings.onboardingCompleted = true;
   }
+  if (normalized.gym && '_sync' in normalized.gym) {
+    delete normalized.gym._sync;
+  }
   return normalized;
 }
 
@@ -1381,19 +1384,46 @@ export function hasPersistedCommercial(userId?: string | null): boolean {
   }
 }
 
-export function saveStoredState(state: LifeOSState, userId?: string | null, commercialBase?: LifeOSState): boolean {
+export function saveStoredState(
+  state: LifeOSState,
+  userId?: string | null,
+  commercialBase?: LifeOSState,
+  options?: { allowCommercialOverride?: boolean }
+): boolean {
   try {
     const key = getStorageKey(userId);
     const previous = localStorage.getItem(key);
-    if (commercialBase) {
-      if (previous !== JSON.stringify(commercialBase)) return false;
-      assertCommercialTransition(commercialBase, state);
-    } else if (previous && changesStoredCommercial(JSON.parse(previous), state)) return false;
+    if (!options?.allowCommercialOverride) {
+      if (commercialBase) {
+        if (previous !== JSON.stringify(commercialBase)) return false;
+        assertCommercialTransition(commercialBase, state);
+      } else if (previous && changesStoredCommercial(JSON.parse(previous), state)) return false;
+    }
+
     const serialized = JSON.stringify(state);
-    localStorage.setItem(key, serialized);
+    try {
+      localStorage.setItem(key, serialized);
+    } catch (storageError) {
+      const errMessage = storageError instanceof Error ? storageError.message : String(storageError);
+      const isQuota =
+        (storageError instanceof Error &&
+          (storageError.name === 'QuotaExceededError' ||
+            storageError.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+            (storageError as { code?: number }).code === 22 ||
+            (storageError as { code?: number }).code === 1014)) ||
+        /quota|cuota|exceeded|storage/i.test(errMessage);
+      if (isQuota) {
+        const sizeKB = Math.round(serialized.length / 1024);
+        throw new Error(`Cuota de localStorage superada al guardar (${sizeKB} KB): ${errMessage}`);
+      }
+      throw storageError;
+    }
     return localStorage.getItem(key) === serialized;
   } catch (e) {
     console.error('Error saving to localStorage:', e);
+    if (e instanceof Error && /Cuota de localStorage superada|quota|cuota|exceeded/i.test(e.message)) {
+      throw e;
+    }
     return false;
   }
 }

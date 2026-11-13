@@ -25,6 +25,7 @@ export const CRYPTO_ALGORITHM = 'AES-GCM-256' as const;
 export const PBKDF2_RECOMMENDED_ITERATIONS = 600_000;
 export const WRAPPED_MDEK_STORAGE_PREFIX = 'lifeos-wrapped-mdek-v1';
 
+import LZString from 'lz-string';
 import { enrollDevice } from './deviceTrust';
 
 export interface CryptoEnvelope {
@@ -33,6 +34,7 @@ export interface CryptoEnvelope {
   iv: string; // Base64 encoded 96-bit IV
   ciphertext: string; // Base64 encoded ciphertext + 128-bit GCM tag
   aad?: string; // Optional Additional Authenticated Data string
+  compressed?: boolean;
   createdAt: string; // ISO 8601 timestamp
 }
 
@@ -437,7 +439,8 @@ export async function encryptPayload<T>(
   const subtle = getSubtleCrypto();
 
   const serialized = JSON.stringify(payload);
-  const encodedData = new TextEncoder().encode(serialized);
+  const compressedString = LZString.compressToUTF16(serialized);
+  const encodedData = new TextEncoder().encode(compressedString);
 
   // Fresh 96-bit IV
   const iv = new Uint8Array(12);
@@ -462,6 +465,7 @@ export async function encryptPayload<T>(
     iv: bytesToBase64(iv),
     ciphertext: bytesToBase64(ciphertextBytes),
     aad,
+    compressed: true,
     createdAt: new Date().toISOString(),
   };
 }
@@ -516,8 +520,23 @@ export async function decryptPayload<T>(
   }
 
   const decodedString = new TextDecoder().decode(decryptedBuffer);
+  let jsonString = decodedString;
+
+  if (envelope.compressed === true) {
+    let decompressed: string | null = null;
+    try {
+      decompressed = LZString.decompressFromUTF16(decodedString);
+    } catch {
+      throw new CryptoDecryptionError('Fallo en la descompresión del payload cifrado.');
+    }
+    if (decompressed === null) {
+      throw new CryptoDecryptionError('Fallo en la descompresión del payload cifrado.');
+    }
+    jsonString = decompressed;
+  }
+
   try {
-    return JSON.parse(decodedString) as T;
+    return JSON.parse(jsonString) as T;
   } catch {
     throw new CryptoDecryptionError('Los datos descifrados no son un JSON válido.');
   }

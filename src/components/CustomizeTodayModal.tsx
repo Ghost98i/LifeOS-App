@@ -135,19 +135,21 @@ export const CustomizeTodayModal: React.FC<CustomizeTodayModalProps> = ({
                       type="button"
                       disabled={idx === 0}
                       onClick={() => moveWidget(idx, 'up')}
-                      className="p-1 rounded hover:bg-[var(--surface-muted)] text-[var(--text-faint)] hover:text-[var(--text)] disabled:opacity-20 cursor-pointer"
+                      className="inline-flex items-center justify-center p-1 rounded hover:bg-[var(--surface-muted)] text-[var(--text-faint)] hover:text-[var(--text)] disabled:opacity-20 cursor-pointer"
+                      aria-label="Mover arriba"
                       title="Mover arriba"
                     >
-                      ▲
+                      <AppIcon name="chevronUp" className="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"
                       disabled={idx === currentCustomization.widgetOrder.length - 1}
                       onClick={() => moveWidget(idx, 'down')}
-                      className="p-1 rounded hover:bg-[var(--surface-muted)] text-[var(--text-faint)] hover:text-[var(--text)] disabled:opacity-20 cursor-pointer"
+                      className="inline-flex items-center justify-center p-1 rounded hover:bg-[var(--surface-muted)] text-[var(--text-faint)] hover:text-[var(--text)] disabled:opacity-20 cursor-pointer"
+                      aria-label="Mover abajo"
                       title="Mover abajo"
                     >
-                      ▼
+                      <AppIcon name="chevronDown" className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>

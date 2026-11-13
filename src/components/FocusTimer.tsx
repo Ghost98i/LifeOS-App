@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { playSound } from '../lib/audio';
+import { AppIcon } from './AppIcon';
 import { StudyAmbientPlayer } from './StudyAmbientPlayer';
 import { StudyActiveSession, StudySessionPhase } from '../types';
 import { assessStudySession, getNextPomodoroPhase, formatStudyDuration, type PomodoroSessionConfig } from '../lib/studyFlows';
@@ -494,13 +495,18 @@ export const FocusTimer: React.FC<FocusTimerProps> = ({
                 : 'bg-emerald-600 hover:bg-emerald-700'
             }`}
           >
-            {isRunning
-              ? '⏸ Pausar'
-              : isPaused
-              ? '▶ Reanudar'
-              : phase === 'focus'
-              ? '▶ Iniciar Enfoque'
-              : '▶ Iniciar Descanso'}
+            <span className="inline-flex items-center justify-center gap-1.5">
+              <AppIcon name={isRunning ? 'pause' : 'play'} className="h-3.5 w-3.5" />
+              <span>
+                {isRunning
+                  ? 'Pausar'
+                  : isPaused
+                  ? 'Reanudar'
+                  : phase === 'focus'
+                  ? 'Iniciar Enfoque'
+                  : 'Iniciar Descanso'}
+              </span>
+            </span>
           </button>
 
           {(isRunning || isPaused) && (
@@ -523,7 +529,7 @@ export const FocusTimer: React.FC<FocusTimerProps> = ({
             onClick={() => handleReset()}
             className="min-h-11 px-4 py-2.5 bg-[var(--card)] border border-[var(--border)] text-[var(--text-soft)] text-xs font-semibold rounded-xl hover:text-[var(--text)] cursor-pointer transition-colors"
           >
-            ↺ Reiniciar
+            <span className="inline-flex items-center justify-center gap-1.5"><AppIcon name="rotateCcw" className="h-3.5 w-3.5" /><span>Reiniciar</span></span>
           </button>
         </div>}
       </div>

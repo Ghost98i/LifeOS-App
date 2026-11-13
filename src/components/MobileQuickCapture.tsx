@@ -477,7 +477,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
         {/* Exit Confirmation Dialog */}
         {showExitConfirm && (
           <div className="absolute inset-0 z-50 rounded-t-3xl sm:rounded-3xl bg-[var(--card)]/95 backdrop-blur-sm p-6 flex flex-col justify-center items-center text-center gap-4 animate-fadeIn">
-            <span className="text-3xl">⚠️</span>
+            <AppIcon name="alertTriangle" className="h-8 w-8 text-amber-500" />
             <div>
               <h3 className="text-base font-bold text-[var(--text)]">¿Descartar cambios sin guardar?</h3>
               <p className="text-xs text-[var(--text-soft)] mt-1 max-w-xs">
@@ -548,15 +548,20 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
             className="w-11 h-11 shrink-0 rounded-full bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] font-bold flex items-center justify-center transition cursor-pointer"
             aria-label="Cerrar"
           >
-            ✕
+            <AppIcon name="x" className="h-4 w-4" />
           </button>
         </div>
 
-        {message && (
-          <p role={message.startsWith('✓') ? 'status' : 'alert'} className={`mb-3 text-sm leading-relaxed ${message.startsWith('✓') ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>
-            {message}
-          </p>
-        )}
+        {message && (() => {
+          const isSuccess = message.startsWith('✓');
+          const cleanMessage = isSuccess ? message.replace(/^✓\s*/, '') : message;
+          return (
+            <p role={isSuccess ? 'status' : 'alert'} className={`mb-3 flex items-center gap-1.5 text-sm leading-relaxed ${isSuccess ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>
+              <AppIcon name={isSuccess ? 'check' : 'alertCircle'} className="h-4 w-4 shrink-0" />
+              <span>{cleanMessage}</span>
+            </p>
+          );
+        })()}
 
         {activeTab === 'inbox' ? (
           <div className="space-y-3 py-1">
@@ -585,7 +590,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
 
             {(state.inbox || []).length === 0 ? (
               <div className="py-10 text-center space-y-3 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg)] p-6">
-                <span className="text-3xl block">✨</span>
+                <AppIcon name="sparkles" className="mx-auto h-7 w-7 text-[var(--blue)]" />
                 <p className="text-sm font-bold text-[var(--text)]">Bandeja al día</p>
                 <p className="text-xs text-[var(--text-faint)] max-w-xs mx-auto">
                   No tenés capturas pendientes de clasificar. Escribí cualquier idea o pensamiento rápido para procesarlo cuando quieras.
@@ -598,7 +603,8 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                   }}
                   className="mt-2 inline-flex items-center gap-1.5 rounded-xl bg-[var(--blue)] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[var(--blue-hover)] cursor-pointer"
                 >
-                  ⚡ Capturar en bandeja
+                  <AppIcon name="zap" className="h-3.5 w-3.5" />
+                  <span>Capturar en bandeja</span>
                 </button>
               </div>
             ) : (
@@ -615,10 +621,11 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                       <button
                         type="button"
                         onClick={() => handleDiscardInbox(item.id)}
-                        className="text-xs text-[var(--text-faint)] hover:text-rose-500 px-1.5 py-0.5 rounded cursor-pointer"
+                        className="inline-flex items-center justify-center text-xs text-[var(--text-faint)] hover:text-rose-500 px-1.5 py-0.5 rounded cursor-pointer"
+                        aria-label="Descartar"
                         title="Descartar"
                       >
-                        ✕
+                        <AppIcon name="x" className="h-3.5 w-3.5" />
                       </button>
                     </div>
 
@@ -630,32 +637,36 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                         <button
                           type="button"
                           onClick={() => handleConvertInbox(item.id, 'tarea')}
-                          className="rounded-lg bg-[var(--blue-soft)] border border-[var(--blue)]/30 px-2.5 py-1 text-[10px] font-bold text-[var(--blue)] hover:bg-[var(--blue)] hover:text-white transition cursor-pointer"
+                          className="inline-flex items-center gap-1 rounded-lg bg-[var(--blue-soft)] border border-[var(--blue)]/30 px-2.5 py-1 text-[10px] font-bold text-[var(--blue)] hover:bg-[var(--blue)] hover:text-white transition cursor-pointer"
                         >
-                          ✓ Tarea hoy
+                          <AppIcon name="check" className="h-3 w-3" />
+                          <span>Tarea hoy</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => handleConvertInbox(item.id, 'proyecto')}
-                          className="rounded-lg bg-purple-500/10 border border-purple-500/30 px-2.5 py-1 text-[10px] font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-500 hover:text-white transition cursor-pointer"
+                          className="inline-flex items-center gap-1 rounded-lg bg-purple-500/10 border border-purple-500/30 px-2.5 py-1 text-[10px] font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-500 hover:text-white transition cursor-pointer"
                         >
-                          🎯 Proyecto
+                          <AppIcon name="target" className="h-3 w-3" />
+                          <span>Proyecto</span>
                         </button>
                         {isModuleEnabled(state, 'notas') && (
                           <button
                             type="button"
                             onClick={() => handleConvertInbox(item.id, 'nota')}
-                            className="rounded-lg bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition cursor-pointer"
+                            className="inline-flex items-center gap-1 rounded-lg bg-amber-500/10 border border-amber-500/30 px-2.5 py-1 text-[10px] font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-500 hover:text-white transition cursor-pointer"
                           >
-                            📝 Nota
+                            <AppIcon name="note" className="h-3 w-3" />
+                            <span>Nota</span>
                           </button>
                         )}
                         <button
                           type="button"
                           onClick={() => handleConvertInbox(item.id, 'recordatorio')}
-                          className="rounded-lg bg-slate-500/10 border border-[var(--border)] px-2.5 py-1 text-[10px] font-bold text-[var(--text-soft)] hover:bg-[var(--text)] hover:text-[var(--bg)] transition cursor-pointer"
+                          className="inline-flex items-center gap-1 rounded-lg bg-slate-500/10 border border-[var(--border)] px-2.5 py-1 text-[10px] font-bold text-[var(--text-soft)] hover:bg-[var(--text)] hover:text-[var(--bg)] transition cursor-pointer"
                         >
-                          ⏰ Alerta
+                          <AppIcon name="clock" className="h-3 w-3" />
+                          <span>Alerta</span>
                         </button>
                       </div>
                     </div>
@@ -720,7 +731,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                     }`}
                     title="Dictado por voz"
                   >
-                    🎤
+                    <AppIcon name="mic" className="h-4 w-4" />
                   </button>
                 </div>
               </label>
@@ -958,7 +969,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                           }`}
                           title="Dictar por voz"
                         >
-                          🎙️
+                          <AppIcon name="mic" className="h-4 w-4" />
                         </button>
                       </div>
                     </label>
@@ -1153,7 +1164,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                     }`}
                     aria-label="Dictar por voz"
                   >
-                    🎙️
+                    <AppIcon name="mic" className="h-4 w-4" />
                   </button>
                 </div>
               </label>
@@ -1169,7 +1180,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                     onChange={(e) => setNotePinned(e.target.checked)}
                     className="rounded border-[var(--border)] text-[var(--blue)] focus:ring-0"
                   />
-                  <span>📌 Fijar nota arriba</span>
+                  <span className="inline-flex items-center gap-1.5"><AppIcon name="pin" className="h-3.5 w-3.5" /><span>Fijar nota arriba</span></span>
                 </label>
               </div>
             )}

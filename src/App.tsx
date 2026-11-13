@@ -3,7 +3,7 @@ import { reconcileFinancePublication } from './lib/financeSyncReconciliation';
 import { assertCommercialTransition } from './lib/commercialTransition';
 import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { PrivacyProvider } from './components/PrivacyAmount';
-import { ViewType, LifeOSState } from './types';
+import { ViewType, LifeOSState, DailyContextEntry } from './types';
 import { commercialHydrationBlock, changesStoredCommercial, defaultState, hasPersistedCommercial, loadRecoveryState, loadStoredState, parseBackupJSON, readStoredCommercial, saveRecoveryState, saveStoredState, todayISO } from './lib/storage';
 import {
   isModuleEnabled,
@@ -62,6 +62,7 @@ import {
 import {
   decodeCloudModuleData,
   cryptoSession,
+  loadWrappedKeyEnvelope,
   saveWrappedKeyEnvelope,
   clearWrappedKeyEnvelope,
   type WrappedKeyEnvelope,
@@ -92,6 +93,7 @@ import { MobileQuickCapture, type CaptureKind } from './components/MobileQuickCa
 import { MobileNav } from './components/MobileNav';
 import { ToastViewport } from './components/ToastViewport';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
+import { UnlockDeviceModal } from './components/UnlockDeviceModal';
 import { GymRestOverlay } from './components/GymRestOverlay';
 import { StudyActiveOverlay } from './components/StudyActiveOverlay';
 import { showToast } from './lib/toast';
@@ -145,6 +147,22 @@ export default function App() {
   const [storageUserId, setStorageUserId] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<CloudSyncStatus>(cloudSyncConfigured ? 'connecting' : 'unavailable');
   const [failedSyncModules, setFailedSyncModules] = useState<SyncModuleKey[]>([]);
+  const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
+  const [isCryptoUnlockOpen, setIsCryptoUnlockOpen] = useState(false);
+  const [, setCryptoSessionNonce] = useState(0);
+
+  useEffect(() => {
+    return cryptoSession.subscribe(() => {
+      setCryptoSessionNonce((n) => n + 1);
+    });
+  }, []);
+
+  const effectiveCloudUserId = cloudUser?.uid || storageUserId;
+  const isCryptoLockError = (syncStatus === 'error' || syncStatus === 'locked') && (
+    Boolean(syncErrorMessage && (syncErrorMessage.includes('Desbloqueá la sesión') || syncErrorMessage.toLowerCase().includes('desbloqueá') || syncErrorMessage.toLowerCase().includes('sesión'))) ||
+    Boolean(effectiveCloudUserId && !cryptoSession.isUnlocked(effectiveCloudUserId) && Boolean(loadWrappedKeyEnvelope(effectiveCloudUserId)))
+  );
+
   const [cloudConflict, setCloudConflict] = useState<{
     remoteState: LifeOSState;
     modules: SyncModuleKey[];
@@ -279,6 +297,8 @@ export default function App() {
   const resaleResolutionInProgressRef = useRef(false);
   const consecutiveDivergenceCountRef = useRef<number>(0);
   const deviceIdRef = useRef(getOrCreateDeviceId());
+  const isImportingBackupRef = useRef(false);
+  const importBackupTimeoutRef = useRef<number | null>(null);
 
   // Explicit demo-only diagnostics: no production financial payloads are logged.
   const traceFinanceSync = useCallback((event: string, detail: Record<string, unknown> = {}) => {
@@ -531,9 +551,17 @@ export default function App() {
 
         return res.completion
           .then(() => {
+            if (isImportingBackupRef.current) {
+              isImportingBackupRef.current = false;
+              if (importBackupTimeoutRef.current !== null) {
+                window.clearTimeout(importBackupTimeoutRef.current);
+                importBackupTimeoutRef.current = null;
+              }
+            }
             if (!isCurrentSession()) return;
             retryAttemptRef.current = 0;
             consecutiveDivergenceCountRef.current = 0;
+            setSyncErrorMessage(null);
             if (retryTimeoutRef.current !== null) {
               window.clearTimeout(retryTimeoutRef.current);
               retryTimeoutRef.current = null;
@@ -561,6 +589,13 @@ export default function App() {
             }
           })
           .catch(async (err) => {
+            if (isImportingBackupRef.current) {
+              isImportingBackupRef.current = false;
+              if (importBackupTimeoutRef.current !== null) {
+                window.clearTimeout(importBackupTimeoutRef.current);
+                importBackupTimeoutRef.current = null;
+              }
+            }
             if (!isCurrentSession()) return;
             if (err instanceof CloudRevisionConflict) {
               traceFinanceSync('publish-stale', { writes: res.writes });
@@ -660,6 +695,7 @@ export default function App() {
               return;
             }
             console.error('[CloudSync] Batch commit failed:', err);
+            setSyncErrorMessage(err instanceof Error ? err.message : String(err || ''));
             res.writes.forEach((write) => {
               const remaining = (pendingRevisionsRef.current[write.module] || []).filter((revision) => revision !== write.revision);
               if (remaining.length) pendingRevisionsRef.current[write.module] = remaining;
@@ -686,6 +722,7 @@ export default function App() {
       .catch((err) => {
         if (!isCurrentSession()) return;
         console.error('[CloudSync] Guarded write failed:', err);
+        setSyncErrorMessage(err instanceof Error ? err.message : String(err || ''));
         if (err instanceof ResaleProtocolConflict && modules.includes('resale')) {
           blockResaleConflict(modules, err.message, undefined, undefined, expectedRevisions);
           return;
@@ -1163,7 +1200,7 @@ export default function App() {
 
     const unsubscribe = subscribeCloudModules(cloudUser.uid, {
       onSnapshot: (snapshot) => {
-        if (!isCurrentSession()) return;
+        if (!isCurrentSession() || isImportingBackupRef.current) return;
         snapshotSeq += 1;
         const currentSeq = snapshotSeq;
 
@@ -1244,6 +1281,7 @@ export default function App() {
           if (hasLockedModule) {
             setFailedSyncModules([...failedSyncModulesRef.current]);
             setSyncStatus('locked');
+            setSyncErrorMessage('Desbloqueá la sesión para sincronizar módulos protegidos');
             return;
           }
 
@@ -1932,9 +1970,22 @@ export default function App() {
     if (financeWriteBlockedRef.current) { setSyncStatus('conflict'); return; }
     if (resaleWriteBlockedRef.current) { setSyncStatus('conflict'); return; }
     if (gymWriteBlockedRef.current) { setSyncStatus('conflict'); return; }
+    setSyncErrorMessage(null);
     retryAttemptRef.current = 0;
+    if (retryTimeoutRef.current !== null) {
+      window.clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
     const modules = failedSyncModules.length ? failedSyncModules : [...SYNC_MODULES];
     queueCloudSave(stateRef.current, modules);
+  };
+
+  const handleCryptoUnlocked = () => {
+    setSyncErrorMessage(null);
+    handleRetrySync();
+    if (syncStatus === 'locked' || failedSyncModules.length > 0) {
+      void handleForceSync();
+    }
   };
 
   const handleUseLocalState = () => {
@@ -2166,17 +2217,79 @@ export default function App() {
   };
 
   const handleImportState = (imported: LifeOSState, description?: string) => {
-    if (changesStoredCommercial(stateRef.current, imported)) {
-      showToast('La importación reemplazaría datos comerciales existentes. Se requiere revisión antes de continuar.', 'error');
+    isImportingBackupRef.current = true;
+    if (importBackupTimeoutRef.current !== null) {
+      window.clearTimeout(importBackupTimeoutRef.current);
+    }
+    importBackupTimeoutRef.current = window.setTimeout(() => {
+      isImportingBackupRef.current = false;
+      importBackupTimeoutRef.current = null;
+    }, 10000);
+
+    // 1. Eliminar gym._sync antes de saveStoredState manteniendo intactos sessions, weight, measurements, routineTemplates, settings y restDays
+    if (imported.gym && '_sync' in imported.gym) {
+      delete imported.gym._sync;
+    }
+    const importedState: LifeOSState = {
+      ...imported,
+      gym: imported.gym
+        ? {
+            sessions: imported.gym.sessions,
+            weight: imported.gym.weight,
+            measurements: imported.gym.measurements,
+            routineTemplates: imported.gym.routineTemplates,
+            settings: imported.gym.settings,
+            restDays: imported.gym.restDays,
+            activeTimer: imported.gym.activeTimer ?? null,
+          }
+        : imported.gym,
+    };
+
+    // 2. Si assertCommercialTransition falla por estado legacy, mostrar mensaje específico y NO bloquear la importación (el backup tiene prioridad)
+    try {
+      assertCommercialTransition(stateRef.current, importedState);
+    } catch (commercialError) {
+      const legacyDetail = commercialError instanceof Error ? commercialError.message : String(commercialError);
+      showToast(`Estado comercial legacy detectado (${legacyDetail}). Se prioriza el backup importado.`, 'info');
+    }
+
+    saveRecoveryState(stateRef.current, storageUserIdRef.current, 'import_backup', description || 'Previo a importar backup');
+
+    // 3. Persistir con saveStoredState; si falla, mostrar el mensaje de error exacto en el toast
+    try {
+      const saved = saveStoredState(importedState, storageUserIdRef.current, undefined, { allowCommercialOverride: true });
+      if (!saved) {
+        throw new Error('saveStoredState devolvió false: no se pudo confirmar la escritura en localStorage.');
+      }
+    } catch (saveError) {
+      isImportingBackupRef.current = false;
+      if (importBackupTimeoutRef.current !== null) {
+        window.clearTimeout(importBackupTimeoutRef.current);
+        importBackupTimeoutRef.current = null;
+      }
+      const exactMessage = saveError instanceof Error ? saveError.message : String(saveError);
+      showToast(exactMessage, 'error');
       return false;
     }
-    if (!saveRecoveryState(stateRef.current, storageUserIdRef.current, 'import_backup', description || 'Previo a importar backup')) {
-      showToast('No se pudo guardar una copia previa. La importación quedó detenida.', 'error');
-      return false;
+
+    stateRef.current = importedState;
+    setStateObj(() => ({
+      state: importedState,
+      storageBackend: 'localStorage',
+    }));
+
+    if (tabChannelRef.current && storageUserIdRef.current) {
+      try {
+        tabChannelRef.current.postMessage({
+          type: 'tab-state-update',
+          userId: storageUserIdRef.current,
+          state: importedState,
+        });
+      } catch {
+        // ignore broadcast serialization error
+      }
     }
-    if (!updateState((draft) => {
-      Object.assign(draft, imported);
-    })) return false;
+
     if (cloudUserRef.current) {
       const user = cloudUserRef.current;
       pendingRevisionsRef.current = {};
@@ -2185,12 +2298,12 @@ export default function App() {
       consecutiveDivergenceCountRef.current = 0;
       const nextBaselines = { ...baselinesRef.current };
       SYNC_MODULES.forEach((mod) => {
-        nextBaselines[mod] = syncModuleFingerprint(imported, mod);
-        baselineDataRef.current[mod] = syncModuleData(imported, mod);
+        nextBaselines[mod] = syncModuleFingerprint(importedState, mod);
+        baselineDataRef.current[mod] = syncModuleData(importedState, mod);
       });
       persistBaselines(user.uid, nextBaselines);
       saveCloudBaselineData(user.uid, baselineDataRef.current);
-      queueCloudSave(imported, [...SYNC_MODULES]);
+      queueCloudSave(importedState, [...SYNC_MODULES]);
     }
     showToast('Backup importado correctamente. Copia anterior guardada en recuperación.', 'success');
     return true;
@@ -2277,11 +2390,45 @@ export default function App() {
 
   const isPendingOnboarding = isUserPendingOnboarding(state, storageBackend);
 
-  const handleCompleteOnboarding = (selectedModuleIds: ViewType[]) => {
+  const handleCompleteOnboarding = (data: {
+    selectedModuleIds: ViewType[];
+    name: string;
+    initialContext: { sleepHours: number; energy: number; mood: number };
+  }) => {
     updateState((draft) => {
+      if (!draft.profile) {
+        draft.profile = { name: '', height: 170, bodyCompositionSex: null };
+      }
+      draft.profile.name = data.name.trim();
+
+      const today = todayISO();
+      if (!Array.isArray(draft.dailyContext)) {
+        draft.dailyContext = [];
+      }
+      const existingIndex = draft.dailyContext.findIndex((entry) => entry.date === today);
+      const nowIso = new Date().toISOString();
+      const contextEntry: DailyContextEntry = {
+        date: today,
+        sleepHours: data.initialContext.sleepHours,
+        energy: data.initialContext.energy,
+        mood: data.initialContext.mood,
+        connection: null,
+        recordedAt: nowIso,
+        updatedAt: nowIso,
+      };
+
+      if (existingIndex >= 0) {
+        draft.dailyContext[existingIndex] = {
+          ...draft.dailyContext[existingIndex],
+          ...contextEntry,
+        };
+      } else {
+        draft.dailyContext.push(contextEntry);
+      }
+
       draft.settings.onboardingCompleted = true;
       draft.settings.hiddenTabs = computeHiddenTabsFromSelection(
-        selectedModuleIds,
+        data.selectedModuleIds,
         draft.settings.hiddenTabs
       );
     });
@@ -2348,7 +2495,7 @@ export default function App() {
           onCloudSignOut={handleCloudSignOut}
         />
 
-        <main className={`mx-auto w-full flex-1 space-y-5 sm:space-y-6 p-3.5 sm:p-5 lg:p-8 ${mainBottomPadding} max-w-[1952px]`}>
+        <main className={`mx-auto w-full flex-1 space-y-5 sm:space-y-6 p-3.5 sm:p-5 lg:p-8 ${mainBottomPadding} max-w-[1440px]`}>
           {resaleWriteBlockedRef.current && (
             <div role="alert" className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-[var(--text)]">
               <strong>Mi negocio: sincronización detenida.</strong> Los cambios siguen en este dispositivo y aún no se sincronizaron. Requieren revisión antes de volver a subirlos.
@@ -2371,8 +2518,8 @@ export default function App() {
           {cloudSyncConfigured && !cloudUser && !dismissedAnywhereBanner && currentView !== 'gimnasio' && currentView !== 'config' && (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-blue-500/25 bg-blue-500/10 p-3 sm:px-4 text-xs">
               <div className="flex items-center gap-2.5 min-w-0">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 text-[var(--blue)] font-bold">
-                  ☁️
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 text-[var(--blue)]">
+                  <AppIcon name="cloud" className="h-4 w-4" />
                 </span>
                 <div className="min-w-0">
                   <p className="font-extrabold text-[var(--text)] truncate">Celestian LifeOS</p>
@@ -2390,18 +2537,46 @@ export default function App() {
                 <button
                   type="button"
                   onClick={handleDismissAnywhereBanner}
-                  className="p-1 text-sm font-bold text-[var(--text-faint)] hover:text-[var(--text)] transition-colors cursor-pointer"
+                  className="inline-flex items-center justify-center p-1 text-[var(--text-faint)] hover:text-[var(--text)] transition-colors cursor-pointer"
+                  aria-label="Descartar aviso"
                   title="Descartar aviso"
                 >
-                  ✕
+                  <AppIcon name="x" className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
           )}
-          {syncStatus === 'error' && (
+          {(syncStatus === 'error' || (syncStatus === 'locked' && isCryptoLockError)) && (
             <div className="flex flex-col gap-3 rounded-2xl border border-rose-500/25 bg-rose-500/10 p-4 text-xs text-rose-700 dark:text-rose-300 sm:flex-row sm:items-center">
-              <div className="flex-1"><strong className="block text-sm">No se pudo subir {failedSyncModules.length === 1 && failedSyncModules[0] === 'gym' ? 'Gimnasio' : 'los últimos cambios'}</strong><span className="mt-0.5 block">Siguen guardados en este dispositivo. No vuelvas a cargarlos en la PC: reintentá la sincronización.</span></div>
-              <button type="button" onClick={handleRetrySync} className="rounded-xl bg-rose-600 px-4 py-2.5 text-xs font-bold text-white">Reintentar</button>
+              <div className="flex-1">
+                <strong className="block text-sm">
+                  {isCryptoLockError
+                    ? `Sesión bloqueada: no se pudo sincronizar ${failedSyncModules.length === 1 && failedSyncModules[0] === 'gym' ? 'Gimnasio' : 'los cambios protegidos'}`
+                    : `No se pudo subir ${failedSyncModules.length === 1 && failedSyncModules[0] === 'gym' ? 'Gimnasio' : 'los últimos cambios'}`}
+                </strong>
+                <span className="mt-0.5 block">
+                  {isCryptoLockError
+                    ? 'Desbloqueá la sesión con tu Clave de Recuperación para reanudar la sincronización cifrada de extremo a extremo.'
+                    : 'Siguen guardados en este dispositivo. No vuelvas a cargarlos en la PC: reintentá la sincronización.'}
+                </span>
+              </div>
+              {isCryptoLockError ? (
+                <button
+                  type="button"
+                  onClick={() => setIsCryptoUnlockOpen(true)}
+                  className="rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] px-4 py-2.5 text-xs font-bold text-white transition-colors cursor-pointer shrink-0 shadow-2xs"
+                >
+                  Desbloquear y Sincronizar
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleRetrySync}
+                  className="rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2.5 text-xs font-bold text-white transition-colors cursor-pointer shrink-0"
+                >
+                  Reintentar
+                </button>
+              )}
             </div>
           )}
           {storageBackend === 'recovery' && (
@@ -2785,6 +2960,13 @@ export default function App() {
         onOpenStudies={() => handleNavigate('estudios')}
         currentView={currentView}
         isCoexisting={isGymOverlayActive}
+      />
+      <UnlockDeviceModal
+        isOpen={isCryptoUnlockOpen}
+        onClose={() => setIsCryptoUnlockOpen(false)}
+        userId={cloudUser?.uid || storageUserId || ''}
+        onUnlocked={handleCryptoUnlocked}
+        showToast={showToast}
       />
       {!__LIFEOS_PORTABLE__ && <PwaUpdatePrompt />}
     </div>

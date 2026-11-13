@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { LifeOSState } from '../types';
 import { AppIcon } from './AppIcon';
 import { ContextualHelp } from './ContextualHelp';
+import { UnlockDeviceModal } from './UnlockDeviceModal';
 import { showToast } from '../lib/toast';
 import { SYNC_MODULES } from '../lib/syncModel';
 import {
@@ -10,6 +11,9 @@ import {
   loadWrappedKeyEnvelope,
   cryptoSession,
   parseRecoveryKey,
+  base64ToBytes,
+  deriveKekFromRecoveryKey,
+  unwrapMdekWithKek,
   type WrappedKeyEnvelope,
 } from '../lib/cryptoCore';
 import {
@@ -89,6 +93,10 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
   const [currentKeyForRewrap, setCurrentKeyForRewrap] = useState<string>('');
   const [rewrapResultKey, setRewrapResultKey] = useState<string | null>(null);
   const [rewrapError, setRewrapError] = useState<string | null>(null);
+
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const [downloadKeyInput, setDownloadKeyInput] = useState('');
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   // Plaintext Inventory & Purge State (Stage E)
   const [plaintextInventory, setPlaintextInventory] = useState<CloudPlaintextInventory | null>(null);
@@ -499,6 +507,18 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                 <button
                   type="button"
                   onClick={() => {
+                    setDownloadKeyInput('');
+                    setDownloadError(null);
+                    setIsDownloadModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-xs font-semibold rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
+                >
+                  <AppIcon name="download" className="h-3.5 w-3.5" />
+                  <span>Descargar archivo de recuperación</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
                     setIsRewrapModalOpen(true);
                     setRewrapResultKey(null);
                     setCurrentKeyForRewrap('');
@@ -873,56 +893,17 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       )}
 
       {/* Modal: Desbloqueo de Dispositivo */}
-      {isUnlockModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div role="dialog" aria-modal="true" aria-label="Desbloquear este navegador" className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-blue-500/10 text-[var(--blue)]">
-                <AppIcon name="unlock" className="h-6 w-6" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-[var(--text)]">Desbloquear Dispositivo</h3>
-                <p className="text-xs text-[var(--text-soft)]">Ingresá tu Clave de Recuperación</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-[var(--text-soft)]">
-              Para descifrar los datos de tu cuenta en este dispositivo, ingresá la Clave de Recuperación que guardaste al activar la protección:
-            </p>
-
-            <div>
-              <textarea
-                rows={3}
-                value={unlockKeyInput}
-                onChange={(e) => setUnlockKeyInput(e.target.value)}
-                placeholder="Pegá tu clave de recuperación..."
-                className="w-full p-3 font-mono text-xs rounded-xl bg-[var(--bg)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
-              />
-              {unlockError && (
-                <p className="mt-1.5 text-xs text-rose-500 font-semibold">{unlockError}</p>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)]">
-              <button
-                type="button"
-                onClick={() => setIsUnlockModalOpen(false)}
-                className="px-4 py-2 border border-[var(--border)] text-xs font-semibold rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
-              >
-                Cancelar
-              </button>
-              <button
-                type="button"
-                disabled={!unlockKeyInput.trim()}
-                onClick={handleUnlockDevice}
-                className="px-5 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl cursor-pointer shadow-2xs disabled:opacity-50"
-              >
-                Desbloquear
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <UnlockDeviceModal
+        isOpen={isUnlockModalOpen}
+        onClose={() => setIsUnlockModalOpen(false)}
+        userId={storageUserId}
+        envelopeOverride={localEnvelope}
+        onUnlocked={(envelope) => {
+          setLocalEnvelope(envelope);
+          if (onForceSync) onForceSync();
+        }}
+        showToast={showToast}
+      />
 
       {/* Modal: Renovar clave de recuperación (Rewrap) */}
       {isRewrapModalOpen && (
@@ -1076,6 +1057,86 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                 className="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold rounded-xl cursor-pointer shadow-2xs disabled:opacity-50"
               >
                 Confirmar y Completar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {isDownloadModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div role="dialog" aria-modal="true" aria-label="Descargar archivo de recuperación" className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-blue-500/10 text-[var(--blue)]">
+                <AppIcon name="download" className="h-6 w-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-[var(--text)]">Descargar archivo de recuperación</h3>
+                <p className="text-xs text-[var(--text-soft)]">Ingresá tu clave actual para generar el archivo.</p>
+              </div>
+            </div>
+            <p className="text-xs text-[var(--text-soft)]">
+              Este archivo contiene la clave para desbloquear tu cuenta en un dispositivo nuevo. Guardalo en un lugar seguro y privado.
+            </p>
+            <div>
+              <textarea
+                rows={3}
+                value={downloadKeyInput}
+                onChange={(e) => setDownloadKeyInput(e.target.value)}
+                placeholder="Pegá tu Clave de Recuperación actual..."
+                className="w-full p-3 font-mono text-xs rounded-xl bg-[var(--bg)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
+              />
+              {downloadError && <p className="mt-1.5 text-xs text-rose-500 font-semibold">{downloadError}</p>}
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)]">
+              <button
+                type="button"
+                onClick={() => setIsDownloadModalOpen(false)}
+                className="px-4 py-2 border border-[var(--border)] text-xs font-semibold rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={!downloadKeyInput.trim()}
+                onClick={async () => {
+                  if (!localEnvelope || !storageUserId) {
+                    setDownloadError('No hay una clave local válida en este dispositivo.');
+                    return;
+                  }
+                  try {
+                    // Validar la clave haciendo un unwrap test
+                    const rawRecovery = await parseRecoveryKey(downloadKeyInput.trim());
+                    const salt = base64ToBytes(localEnvelope.kdf.salt);
+                    const kek = await deriveKekFromRecoveryKey(rawRecovery, salt);
+                    try {
+                      await unwrapMdekWithKek(localEnvelope.wrappedMdek, kek, localEnvelope.aad);
+                    } finally {
+                      rawRecovery.fill(0);
+                    }
+                    // Si llega acá, la clave es válida. Generar el archivo.
+                    const content = `CELESTIAN LIFEOS — ARCHIVO DE RECUPERACIÓN\nGenerado: ${new Date().toLocaleString('es-UY')}\n\n` +
+                      `CLAVE DE RECUPERACIÓN:\n${downloadKeyInput.trim()}\n\n` +
+                      `WRAPPED KEY ENVELOPE (No modificar):\n${JSON.stringify(localEnvelope, null, 2)}\n\n` +
+                      `AVISO DE SEGURIDAD:\n` +
+                      `- Cualquier persona que tenga este archivo y acceso a tu cuenta de Google puede descifrar tus datos.\n` +
+                      `- Guardalo en un pendrive cifrado o gestor de contraseñas.\n` +
+                      `- Si perdés este archivo y tu clave, tus datos cifrados no se podrán recuperar.\n`;
+                    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `celestian-recovery-key-${new Date().toISOString().slice(0, 10)}.txt`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    showToast('Archivo descargado. Guardalo en un lugar seguro.');
+                    setIsDownloadModalOpen(false);
+                  } catch (err: any) {
+                    setDownloadError('La clave ingresada no es correcta o no coincide con este dispositivo.');
+                  }
+                }}
+                className="px-5 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl cursor-pointer shadow-2xs disabled:opacity-50"
+              >
+                Descargar archivo
               </button>
             </div>
           </div>
