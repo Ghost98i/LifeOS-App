@@ -380,6 +380,7 @@ try {
     const { page, context } = await newPage();
     try {
       await navigate(page, 'Configuración');
+      await page.getByRole('tab', { name: 'Preferencias', exact: true }).click();
       const profile = page.locator('form').filter({ has: page.getByRole('button', { name: 'Guardar cambios', exact: true }) });
       const name = profile.locator('input[type="text"]').first();
       await name.fill('Perfil cambiado sintético');
@@ -390,6 +391,7 @@ try {
       await diskFailure(page, false);
       await profile.getByRole('button', { name: 'Guardar cambios', exact: true }).click();
       assert.equal((await local(page)).profile.name, 'Perfil cambiado sintético');
+      await page.getByRole('tab', { name: 'Copias y Datos', exact: true }).click();
       const imported = await local(page);
       imported.profile.name = 'Perfil importado sintético';
       await page.locator('input[type="file"]').setInputFiles({ name: 'backup-sintetico.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(imported)) });
@@ -403,7 +405,9 @@ try {
       await confirm.click();
       await confirm.waitFor({ state: 'hidden' });
       assert.equal((await local(page)).profile.name, imported.profile.name);
+      await page.getByRole('tab', { name: 'Preferencias', exact: true }).click();
       assert.equal(await name.inputValue(), imported.profile.name);
+      await page.getByRole('tab', { name: 'Copias y Datos', exact: true }).click();
       await page.getByRole('button', { name: 'Restaurar Copia de Recuperación', exact: true }).click();
       await page.getByRole('button', { name: 'Restaurar Copia', exact: true }).click();
       assert.equal((await local(page)).profile.name, 'Perfil cambiado sintético');

@@ -116,17 +116,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             return (
               <React.Fragment key={item.id}>
                 {showPrincipalHeader && (
-                  <span className="mb-1 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-faint)]">
+                  <span className="mb-1 px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-faint)]/75">
                     Principal
                   </span>
                 )}
                 {showOrganizarHeader && (
-                  <span className="mb-1 mt-4 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-faint)]">
+                  <span className="mb-1 mt-4 px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-faint)]/75">
                     Organización
                   </span>
                 )}
                 {showSistemaHeader && (
-                  <span className="mb-1 mt-4 px-3 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--text-faint)]">
+                  <span className="mb-1 mt-4 px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-faint)]/75">
                     Sistema
                   </span>
                 )}
@@ -136,20 +136,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onCloseMobile();
                   }}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium transition-all cursor-pointer ${
+                  className={`group relative flex w-full items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-left text-sm transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-[var(--surface-accent)] font-bold text-[var(--text)] border border-[var(--border)]'
-                      : 'text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] border border-transparent'
+                      ? 'bg-[var(--surface-muted)]/50 font-bold text-[var(--text)]'
+                      : 'font-medium text-[var(--text-soft)] hover:bg-[var(--surface-muted)]/40 hover:text-[var(--text)]'
                   }`}
                 >
                   {/* Subtle active left pill indicator */}
                   {isActive && (
-                    <span className="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-gradient-to-b from-indigo-500 to-blue-500" />
+                    <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-[var(--blue)]" />
                   )}
-                  <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center">
                   <AppIcon
                     name={item.icon}
-                    className={`h-[22px] w-[22px] shrink-0 transition-colors ${
+                    className={`h-5 w-5 shrink-0 transition-colors ${
                       isActive ? 'text-[#4F46E5] dark:text-indigo-400' : 'text-[var(--text-soft)] group-hover:text-[var(--text)]'
                     }`}
                   />

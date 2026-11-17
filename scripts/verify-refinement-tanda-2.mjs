@@ -161,10 +161,11 @@ if (phase === 'after' && !['matrix','config'].includes(process.argv[3])) {
   assert.equal(await page.evaluate(async()=>{const {cryptoSession}=await import('/src/lib/cryptoCore.ts');return cryptoSession.isUnlocked('synthetic-tanda-2');}),false);
   await page.screenshot({path:`${dir}/security-invalid-key-${theme}-${width}.png`,fullPage:true});
   await unlock.getByRole('button',{name:'Cancelar',exact:true}).click();
-  await page.locator('#config-diagnostics > summary').click();
+  await page.getByRole('tab',{name:'Diagnóstico',exact:true}).click();
   await page.getByText('Almacenamiento y detalles técnicos',{exact:true}).click();
   await page.getByRole('button',{name:'Diagnosticar',exact:true}).click();
   await page.screenshot({path:`${dir}/diagnostics-${theme}-${width}.png`,fullPage:true});
+  await page.getByRole('tab',{name:'Copias y Datos',exact:true}).click();
   await page.getByRole('button',{name:'Restaurar copia de emergencia',exact:true}).click();
   const restore=page.getByRole('dialog',{name:'Restaurar copia de emergencia',exact:true});
   await page.screenshot({path:`${dir}/restore-confirmation-${theme}-${width}.png`,fullPage:true});
@@ -183,6 +184,7 @@ if (phase === 'after' && !['matrix','config'].includes(process.argv[3])) {
   assert.deepEqual(await page.evaluate(()=>window.fixtureCalls),['sync','sign-out']);
   await page.getByRole('button',{name:'Descargar copia',exact:true}).click();
   assert.deepEqual(await page.evaluate(()=>window.fixtureCalls),['sync','sign-out','export']);
+  await page.getByRole('tab',{name:'Preferencias',exact:true}).click();
   await page.getByLabel('Nombre o apodo',{exact:true}).fill('Perfil actualizado');
   await page.getByRole('button',{name:'Guardar cambios',exact:true}).click();
   assert.equal(await page.evaluate(()=>window.fixtureState.profile.name),'Perfil actualizado');

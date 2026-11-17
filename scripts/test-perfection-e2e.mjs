@@ -152,8 +152,9 @@ try {
     console.log('PASS: 11 modules at 3 sizes, no page overflow or uncaught errors');
     await page.setViewportSize({ width: 1920, height: 1080 });
     await page.goto(`${origin}/?view=config`);
+    await page.getByRole('button', { name: 'Créditos, privacidad y términos' }).click();
     await page.getByText('Privacidad, seguridad y tratamiento de datos', { exact: true }).click();
-    assert.equal(await page.getByText(/no cifra esa copia ni los backups JSON/).isVisible(), true);
+    assert.equal(await page.getByText(/no altera los backups JSON descargados/).isVisible(), true);
     assert.equal(await page.getByRole('link', { name: /Ver atribución, modificaciones y licencia/ }).getAttribute('target'), '_blank');
     await page.getByTitle('Cambiar a modo claro', { exact: true }).click();
     await page.waitForTimeout(350);

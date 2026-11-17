@@ -42,16 +42,31 @@ test('explorar cada subpantalla de Finanzas no modifica saldos, obligaciones ni 
   }
 });
 
-test('una copia exportada registrada y una copia local de emergencia se muestran por separado', () => {
+test('una copia exportada registrada y una copia local de emergencia se muestran por separado y respetan las pestañas', () => {
   const state = defaultState();
   state.settings.lastBackupAt = '2026-10-28 18:30';
-  const html = renderToStaticMarkup(React.createElement(ConfigView, {
+
+  const accountHtml = renderToStaticMarkup(React.createElement(ConfigView, {
     state, onUpdateState: () => {}, onExportJSON: () => {},
   }));
-  assert.match(html, /Última exportación registrada/);
-  assert.match(html, /Descargar copia/);
-  assert.doesNotMatch(html, /Snapshot listo|Copia de emergencia en este navegador/);
-  const reset = html.indexOf('aria-label="Reiniciar datos"');
-  assert.ok(reset > html.indexOf('id="config-backups"'));
-  assert.ok(reset > html.indexOf('id="config-diagnostics"'));
+  assert.match(accountHtml, /role="tablist"/);
+  assert.match(accountHtml, /id="config-account"/);
+  assert.match(accountHtml, /id="security-section"/);
+  assert.doesNotMatch(accountHtml, /id="config-backups"/);
+  assert.doesNotMatch(accountHtml, /id="config-diagnostics"/);
+
+  const backupsHtml = renderToStaticMarkup(React.createElement(ConfigView, {
+    state, onUpdateState: () => {}, onExportJSON: () => {}, initialTab: 'copias',
+  }));
+  assert.match(backupsHtml, /Última exportación registrada/);
+  assert.match(backupsHtml, /Descargar copia/);
+  assert.doesNotMatch(backupsHtml, /Snapshot listo|Copia de emergencia en este navegador/);
+  const reset = backupsHtml.indexOf('aria-label="Reiniciar datos"');
+  assert.ok(reset > backupsHtml.indexOf('id="config-backups"'));
+
+  const diagnosticsHtml = renderToStaticMarkup(React.createElement(ConfigView, {
+    state, onUpdateState: () => {}, onExportJSON: () => {}, initialTab: 'diagnostico',
+  }));
+  assert.match(diagnosticsHtml, /id="config-diagnostics"/);
+  assert.match(diagnosticsHtml, /Diagnóstico de datos/);
 });

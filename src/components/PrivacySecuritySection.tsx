@@ -417,7 +417,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       </div>
 
       {/* Main Status Panel */}
-      <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl p-4 space-y-3">
+      <div className="border-t border-[var(--border)] pt-4 space-y-3">
         {/* Pending Rotation Fail-Safe Banner (Stage E) */}
         {pendingRotation && (
           <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2 mb-2">
@@ -482,7 +482,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
             </div>
 
             {/* Session status */}
-            <div className="pt-2 border-t border-[var(--border)] flex flex-wrap items-center justify-between gap-2.5">
+            <div className="pt-3 border-t border-[var(--border)] space-y-3">
               <div className="flex items-center gap-2 text-xs">
                 <span className={`h-2 w-2 rounded-full ${isSessionUnlocked ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                 <span className="text-[var(--text-soft)]">
@@ -493,42 +493,45 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                 </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                {!isSessionUnlocked && (
+              <div className="flex flex-wrap items-center justify-between gap-2.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  {!isSessionUnlocked && (
+                    <button
+                      type="button"
+                      onClick={() => setIsUnlockModalOpen(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl cursor-pointer shadow-2xs"
+                    >
+                      <AppIcon name="unlock" className="h-3.5 w-3.5" />
+                      <span>Desbloquear con clave</span>
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => setIsUnlockModalOpen(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl cursor-pointer shadow-2xs"
+                    onClick={() => {
+                      setDownloadKeyInput('');
+                      setDownloadError(null);
+                      setIsDownloadModalOpen(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-xs font-semibold rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
                   >
-                    <AppIcon name="unlock" className="h-3.5 w-3.5" />
-                    <span>Desbloquear con clave</span>
+                    <AppIcon name="download" className="h-3.5 w-3.5" />
+                    <span>Descargar archivo de recuperación</span>
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDownloadKeyInput('');
-                    setDownloadError(null);
-                    setIsDownloadModalOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-xs font-semibold rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
-                >
-                  <AppIcon name="download" className="h-3.5 w-3.5" />
-                  <span>Descargar archivo de recuperación</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsRewrapModalOpen(true);
-                    setRewrapResultKey(null);
-                    setCurrentKeyForRewrap('');
-                    setRewrapError(null);
-                  }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-xs font-semibold rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
-                >
-                  <AppIcon name="rotateCcw" className="h-3.5 w-3.5" />
-                  <span>Renovar clave de recuperación</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsRewrapModalOpen(true);
+                      setRewrapResultKey(null);
+                      setCurrentKeyForRewrap('');
+                      setRewrapError(null);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-xs font-semibold rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
+                  >
+                    <AppIcon name="rotateCcw" className="h-3.5 w-3.5" />
+                    <span>Renovar clave de recuperación</span>
+                  </button>
+                </div>
+
                 {(isEnrolled || isSessionUnlocked) && (
                   <button
                     type="button"
@@ -630,17 +633,17 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
         )}
       </div>
 
-      {/* Security Scope Guarantee Card - Progressive Disclosure */}
-      <details className="group rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/30 transition-colors">
-        <summary className="flex items-center justify-between p-3.5 cursor-pointer text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] select-none">
+      {/* Security Scope Guarantee - Progressive Disclosure */}
+      <details className="group border-t border-[var(--border)] pt-4">
+        <summary className="flex items-center justify-between cursor-pointer text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] select-none">
           <div className="flex items-center gap-2">
             <AppIcon name="shield" className="h-3.5 w-3.5 text-[var(--blue)]" />
             <span>Qué protege el cifrado y cómo recuperar el acceso</span>
           </div>
           <span className="text-[10px] text-[var(--text-faint)] group-open:rotate-180 transition-transform">▼</span>
         </summary>
-        <div className="p-3.5 pt-1 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs border-t border-[var(--border)]">
-          <div className="p-3 rounded-lg bg-[var(--card)] border border-[var(--border)] space-y-1.5">
+        <div className="pt-3 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div className="space-y-1.5">
             <div className="flex items-center gap-1.5 font-bold text-[var(--text)]">
               <span className="text-emerald-500">✓</span>
               <span>Alcance al activar</span>
@@ -652,7 +655,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
               <li>Cifrado en reposo y en tránsito hacia la nube.</li>
             </ul>
           </div>
-          <div className="p-3 rounded-lg bg-[var(--card)] border border-[var(--border)] space-y-1.5">
+          <div className="space-y-1.5">
             <div className="flex items-center gap-1.5 font-bold text-[var(--text)]">
               <span className="text-[var(--blue)]">ℹ</span>
               <span>Transparencia y responsabilidades</span>

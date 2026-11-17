@@ -26,6 +26,23 @@ import { getDismissedAttentionItems, nextAttentionDismissalTimestamp, type Atten
 import { DismissedAttentionModal } from './DismissedAttentionModal';
 import type { AttentionDismissalRecord } from '../types';
 
+export type ConfigTab = 'cuenta' | 'preferencias' | 'copias' | 'diagnostico';
+
+const CONFIG_TABS: ReadonlyArray<{ id: ConfigTab; label: string }> = [
+  { id: 'cuenta', label: 'Cuenta y Seguridad' },
+  { id: 'preferencias', label: 'Preferencias' },
+  { id: 'copias', label: 'Copias y Datos' },
+  { id: 'diagnostico', label: 'Diagnóstico' },
+];
+
+const resolveTabFromHash = (hash: string): ConfigTab | null => {
+  if (hash === '#config-account' || hash === '#security-section') return 'cuenta';
+  if (hash === '#config-preferences') return 'preferencias';
+  if (hash === '#config-backups') return 'copias';
+  if (hash === '#config-diagnostics') return 'diagnostico';
+  return null;
+};
+
 interface ConfigViewProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
@@ -43,6 +60,7 @@ interface ConfigViewProps {
   onCloudSignIn?: () => void;
   onCloudSignOut?: () => void;
   onForceSync?: () => void;
+  initialTab?: ConfigTab;
 }
 
 export const ConfigView: React.FC<ConfigViewProps> = ({
@@ -62,7 +80,15 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   onCloudSignIn,
   onCloudSignOut,
   onForceSync,
+  initialTab = 'cuenta',
 }) => {
+  const [activeTab, setActiveTab] = useState<ConfigTab>(() => {
+    if (typeof window !== 'undefined') {
+      const fromHash = resolveTabFromHash(window.location.hash);
+      if (fromHash) return fromHash;
+    }
+    return initialTab;
+  });
   const [profileName, setProfileName] = useState(state.profile?.name || '');
   const [profileHeight, setProfileHeight] = useState(String(state.profile?.height || 170));
   const [profileBodySex, setProfileBodySex] = useState<'' | 'male' | 'female'>(state.profile?.bodyCompositionSex || '');
@@ -105,6 +131,9 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
   const [isRepairModalOpen, setIsRepairModalOpen] = useState(false);
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
+  const [avatarError, setAvatarError] = useState(false);
+  useEffect(() => { setAvatarError(false); }, [cloudUser?.photoURL]);
   const [accountDiffs, setAccountDiffs] = useState<Array<{
     id: string;
     name: string;
@@ -161,18 +190,29 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   };
 
   useEffect(() => {
-    if (!importPreview && !isResetModalOpen && !isRestoreModalOpen && !isRepairModalOpen) return;
+    if (typeof window === 'undefined') return;
+    const handleHashChange = () => {
+      const fromHash = resolveTabFromHash(window.location.hash);
+      if (fromHash) setActiveTab(fromHash);
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  useEffect(() => {
+    if (!importPreview && !isResetModalOpen && !isRestoreModalOpen && !isRepairModalOpen && !isAboutModalOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (importPreview) setImportPreview(null);
         if (isResetModalOpen) setIsResetModalOpen(false);
         if (isRestoreModalOpen) setIsRestoreModalOpen(false);
         if (isRepairModalOpen) setIsRepairModalOpen(false);
+        if (isAboutModalOpen) setIsAboutModalOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [importPreview, isResetModalOpen, isRestoreModalOpen, isRepairModalOpen]);
+  }, [importPreview, isResetModalOpen, isRestoreModalOpen, isRepairModalOpen, isAboutModalOpen]);
 
   const handleOpenRepairModal = () => {
     const diffs = (state.finance?.accounts || [])
@@ -380,18 +420,46 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   })();
 
   return (
-    <div className="config-refinement space-y-5 sm:space-y-6">
+    <div className="config-refinement max-w-4xl space-y-6">
       <PageHeader
         title="Configuración"
+        actions={(
+          <button
+            type="button"
+            onClick={() => setIsAboutModalOpen(true)}
+            aria-label="Créditos, privacidad y términos"
+            title="Créditos, privacidad y términos"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition-colors cursor-pointer"
+          >
+            <AppIcon name="alertCircle" className="h-4 w-4" />
+          </button>
+        )}
       />
 
-      <nav aria-label="Secciones de Configuración" className="flex flex-wrap gap-x-5 gap-y-2 border-b border-[var(--border)] pb-3 text-sm font-semibold text-[var(--text-soft)]">
-        <a href="#config-account" className="min-h-10 content-center hover:text-[var(--blue)]">Mi cuenta</a>
-        <a href="#security-section" className="min-h-10 content-center hover:text-[var(--blue)]">Privacidad y seguridad</a>
-        <a href="#config-backups" className="min-h-10 content-center hover:text-[var(--blue)]">Copias de seguridad</a>
-        <a href="#config-preferences" className="min-h-10 content-center hover:text-[var(--blue)]">Preferencias</a>
-        <a href="#config-diagnostics" className="min-h-10 content-center hover:text-[var(--blue)]">Diagnóstico</a>
-      </nav>
+      <div role="tablist" aria-label="Secciones de Configuración" className="flex items-center gap-6 border-b border-[var(--border)] w-full overflow-x-auto">
+        {CONFIG_TABS.map((tab) => {
+          const isSelected = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={isSelected}
+              onClick={() => setActiveTab(tab.id)}
+              className={`relative py-3 text-sm transition-colors cursor-pointer whitespace-nowrap ${
+                isSelected
+                  ? 'font-bold text-[var(--text)]'
+                  : 'font-medium text-[var(--text-soft)] hover:text-[var(--text)]'
+              }`}
+            >
+              {tab.label}
+              {isSelected && (
+                <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[3px] rounded-full bg-[var(--blue)]" />
+              )}
+            </button>
+          );
+        })}
+      </div>
       {/* Alerta prioritaria si hay discrepancia en finanzas */}
       {discrepantShadows.length > 0 && (
         <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
@@ -419,7 +487,8 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
         </div>
       )}
 
-      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
+      {activeTab === 'cuenta' && (
+        <div role="tabpanel" aria-label="Cuenta y Seguridad" className="grid grid-cols-1 gap-5">
           {/* Mi cuenta */}
           <div id="config-account" className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xs">
             <div className="flex items-center justify-between gap-2">
@@ -437,13 +506,18 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
             {cloudConfigured ? (
               cloudUser ? (
                 <div className="space-y-3 pt-1">
-                  <div className="flex flex-col items-start sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)]">
+                  <div className="flex flex-col items-start sm:flex-row sm:items-center justify-between gap-3 py-1">
                     <div className="flex items-center gap-3 min-w-0">
-                      {cloudUser.photoURL ? (
-                        <img src={cloudUser.photoURL} alt={cloudUser.name} className="h-10 w-10 rounded-full border border-[var(--border)] shrink-0" />
+                      {cloudUser.photoURL && !avatarError ? (
+                        <img
+                          src={cloudUser.photoURL}
+                          alt={cloudUser.name}
+                          onError={() => setAvatarError(true)}
+                          className="h-10 w-10 rounded-full border border-[var(--border)] shrink-0"
+                        />
                       ) : (
-                        <div className="h-10 w-10 rounded-full bg-[var(--blue)]/20 text-[var(--blue)] flex items-center justify-center font-bold text-sm shrink-0">
-                          {cloudUser.name ? cloudUser.name[0].toUpperCase() : 'G'}
+                        <div className="h-10 w-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                          {(cloudUser.name || cloudUser.email || 'C')[0].toUpperCase()}
                         </div>
                       )}
                       <div className="min-w-0">
@@ -510,7 +584,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           </div>
 
           {/* Privacidad y Cifrado de Extremo a Extremo */}
-          <div id="security-section" className="xl:col-start-2 xl:row-start-1 xl:row-span-2">
+          <div id="security-section">
             <PrivacySecuritySection
               state={state}
               storageUserId={effectiveUserId}
@@ -518,7 +592,11 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               onForceSync={onForceSync}
             />
           </div>
+        </div>
+      )}
 
+      {activeTab === 'copias' && (
+        <div role="tabpanel" aria-label="Copias y Datos" className="space-y-4">
           {/* Backup y Gestión de Datos */}
           <div id="config-backups" className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xs">
             <div>
@@ -589,10 +667,27 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
           </div>
 
-      </div>
-      <section id="config-preferences" className="space-y-4">
-        <h2 className="text-lg font-bold text-[var(--text)]">Preferencias</h2>
-        <div className="grid items-start gap-6 xl:grid-cols-2">
+          {/* Zona de peligro: Reiniciar datos */}
+          <section className="rounded-2xl border border-rose-500/30 bg-[var(--card)] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3" aria-label="Reiniciar datos">
+            <div>
+              <h2 className="text-sm font-bold text-[var(--text)]">Reiniciar datos</h2>
+              <p className="text-xs text-[var(--text-soft)]">Reemplaza los datos actuales por los valores iniciales.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsResetModalOpen(true)}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-bold rounded-xl hover:bg-red-500/20 cursor-pointer transition-colors shadow-2xs self-start sm:self-auto"
+            >
+              <AppIcon name="trash" className="h-3.5 w-3.5" />
+              <span>Reiniciar datos</span>
+            </button>
+          </section>
+        </div>
+      )}
+
+      {activeTab === 'preferencias' && (
+        <section id="config-preferences" role="tabpanel" aria-label="Preferencias" className="space-y-4">
+          <div className="grid grid-cols-1 gap-5">
           {/* Formulario de Perfil y Metas */}
           <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xs">
             <div className="space-y-1">
@@ -670,7 +765,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
             </form>
           </div>
 
-<div className="space-y-6">          {/* Módulos visibles */}
+          {/* Módulos visibles */}
           <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 space-y-3 shadow-2xs">
             <div>
               <h2 className="text-sm font-bold text-[var(--text)]">Módulos visibles</h2>
@@ -716,9 +811,10 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               })}
             </div>
           </div>
+          </div>
 
           {/* Recordatorios de Atención ahora */}
-          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 space-y-3 shadow-2xs">
+          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-2xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h2 className="text-sm font-bold text-[var(--text)] flex items-center gap-2">
@@ -743,14 +839,18 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               )}
             </div>
           </div>
-</div>
-        </div>
-      </section>
+        </section>
+      )}
+
+      {activeTab === 'diagnostico' && (
+        <div role="tabpanel" aria-label="Diagnóstico">
           {/* Auditoría y Consistencia */}
-          <details id="config-diagnostics" className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xs">
-            <summary className="min-h-11 cursor-pointer text-base font-bold text-[var(--text)]">Diagnóstico de datos <span className="ml-2 text-sm font-normal text-[var(--text-soft)]">Saldos y almacenamiento</span></summary>
+          <section id="config-diagnostics" className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xs">
+            <div>
+              <h2 className="text-base font-bold text-[var(--text)]">Diagnóstico de datos <span className="ml-2 text-sm font-normal text-[var(--text-soft)]">Saldos y almacenamiento</span></h2>
+            </div>
             {/* Tarjeta Finanzas */}
-            <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl p-3.5 space-y-3">
+            <div className="border-t border-[var(--border)] pt-4 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <AppIcon name="wallet" className="h-4 w-4 text-[var(--emerald)]" />
@@ -820,7 +920,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
             {/* Tarjeta Gimnasio */}
             {(!isModuleHidden(state, 'gimnasio') || staleGymCount > 0) && (
-              <div className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-xl p-3.5 space-y-2.5">
+              <div className="border-t border-[var(--border)] pt-4 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <AppIcon name="dumbbell" className="h-4 w-4 text-[var(--purple)]" />
@@ -901,62 +1001,9 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 )}
               </div>
             </details>
-          </details>
-
-
-      <section className="rounded-2xl border border-rose-500/30 p-4 sm:p-5" aria-label="Reiniciar datos">
-        <h2 className="text-base font-bold text-[var(--text)]">Reiniciar datos</h2>
-        <p className="mt-1 text-sm text-[var(--text-soft)]">Reemplaza los datos actuales por los valores iniciales. Revisá la confirmación antes de continuar.</p>
-            <div className="pt-3">
-              <button
-                type="button"
-                onClick={() => setIsResetModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-bold rounded-xl hover:bg-red-500/20 cursor-pointer transition-colors shadow-2xs"
-              >
-                <AppIcon name="trash" className="h-3.5 w-3.5" />
-                <span>Reiniciar datos</span>
-              </button>
-            </div>
-      </section>
-          {/* Acerca de Celestian, Privacidad y Licencias */}
-          <section className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3" aria-labelledby="about-celestian-title">
-            <div className="space-y-1">
-              <h2 id="about-celestian-title" className="text-sm font-bold text-[var(--text)]">Acerca de Celestian</h2>
-              <p className="text-xs text-[var(--text-soft)]">
-                Organización personal con almacenamiento local y sincronización opcional con Google.
-              </p>
-            </div>
-            <div className="space-y-2 pt-1 border-t border-[var(--border)]">
-              <details className="text-xs text-[var(--text-soft)] rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/30 p-2.5">
-                <summary className="min-h-8 cursor-pointer font-semibold text-[var(--text)] select-none">
-                  Privacidad, seguridad y tratamiento de datos
-                </summary>
-                <div className="space-y-2 pt-2 leading-relaxed border-t border-[var(--border)]/50 mt-1.5">
-                  <p>La base de datos local se guarda de forma autónoma en el almacenamiento del navegador. El cifrado de sincronización E2EE protege tus módulos antes de subirlos a Firebase, pero no altera los backups JSON descargados. Recordá guardar periódicamente un respaldo fuera de este dispositivo.</p>
-                  <p>Al conectar tu cuenta de Google, la sincronización se realiza mediante Firebase. Si activás la protección de extremo a extremo, la clave de recuperación nunca sale de tu navegador.</p>
-                  <p>El clima consulta Open-Meteo según la ubicación seleccionada. Las funciones de asistencia no envían datos sin tu consentimiento.</p>
-                </div>
-              </details>
-
-              <details className="text-xs text-[var(--text-soft)] rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/30 p-2.5">
-                <summary className="min-h-8 cursor-pointer font-semibold text-[var(--text)] select-none">
-                  Política de privacidad y términos y condiciones
-                </summary>
-                <p className="pt-2 leading-relaxed border-t border-[var(--border)]/50 mt-1.5">
-                  Esta descripción refleja el funcionamiento técnico actual de la aplicación. Celestian es una herramienta de productividad personal diseñada con principios de soberanía de datos del usuario.
-                </p>
-              </details>
-
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/30 p-2.5 space-y-1.5">
-                <h3 className="text-xs font-semibold text-[var(--text)]">Créditos y licencias</h3>
-                <p className="text-xs text-[var(--text-soft)]">Iconos por <a href="https://icons8.com" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-[var(--blue)]">Icons8</a>.</p>
-                <p className="text-xs text-[var(--text-soft)]">Fotografía panorámica del Hero adaptada de una obra de Andrew Bossi.</p>
-                <a href="/creditos.html" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-8 items-center text-xs font-semibold text-[var(--blue)] underline underline-offset-2 hover:text-[var(--blue-hover)]">
-                  Ver atribución, modificaciones y licencia (nueva pestaña)
-                </a>
-              </div>
-            </div>
           </section>
+        </div>
+      )}
 
       {/* Modal 1: Revisar copia antes de importar */}
       {importPreview && (
@@ -1260,6 +1307,63 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold text-xs rounded-xl cursor-pointer shadow-2xs"
               >
                 Aplicar Reparación de Saldos
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal 5: Privacidad y términos */}
+      {isAboutModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div role="dialog" aria-modal="true" aria-label="Privacidad y términos" className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <h3 className="text-base font-bold text-[var(--text)]">Privacidad, términos y créditos</h3>
+                <p className="text-xs text-[var(--text-soft)]">
+                  Organización personal con almacenamiento local y sincronización opcional con Google.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAboutModalOpen(false)}
+                aria-label="Cerrar"
+                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg cursor-pointer"
+              >
+                <AppIcon name="x" className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-[var(--text-soft)] leading-relaxed max-h-[60vh] overflow-y-auto pr-1">
+              <div className="border-t border-[var(--border)] pt-3 space-y-1.5">
+                <h4 className="font-bold text-[var(--text)]">Privacidad, seguridad y tratamiento de datos</h4>
+                <p>La base de datos local se guarda de forma autónoma en el almacenamiento del navegador. El cifrado de sincronización E2EE protege tus módulos antes de subirlos a Firebase, pero no altera los backups JSON descargados. Recordá guardar periódicamente un respaldo fuera de este dispositivo.</p>
+                <p>Al conectar tu cuenta de Google, la sincronización se realiza mediante Firebase. Si activás la protección de extremo a extremo, la clave de recuperación nunca sale de tu navegador.</p>
+                <p>El clima consulta Open-Meteo según la ubicación seleccionada. Las funciones de asistencia no envían datos sin tu consentimiento.</p>
+              </div>
+
+              <div className="border-t border-[var(--border)] pt-3 space-y-1.5">
+                <h4 className="font-bold text-[var(--text)]">Política de privacidad y términos y condiciones</h4>
+                <p>Esta descripción refleja el funcionamiento técnico actual de la aplicación. Celestian es una herramienta de productividad personal diseñada con principios de soberanía de datos del usuario.</p>
+              </div>
+
+              <div className="border-t border-[var(--border)] pt-3 space-y-1">
+                <h4 className="font-bold text-[var(--text)]">Créditos y licencias</h4>
+                <p>Iconos por <a href="https://icons8.com" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-[var(--blue)]">Icons8</a>.</p>
+                <p>Fotografía panorámica del Hero adaptada de una obra de Andrew Bossi.</p>
+                <a href="/creditos.html" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-8 items-center text-xs font-semibold text-[var(--blue)] underline underline-offset-2 hover:text-[var(--blue-hover)]">
+                  Ver atribución, modificaciones y licencia (nueva pestaña)
+                </a>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-[var(--border)]">
+              <button
+                type="button"
+                onClick={() => setIsAboutModalOpen(false)}
+                className="px-4 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl cursor-pointer shadow-2xs"
+              >
+                Cerrar
               </button>
             </div>
           </div>

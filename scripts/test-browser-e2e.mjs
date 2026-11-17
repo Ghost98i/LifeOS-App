@@ -806,8 +806,9 @@ async function main() {
       const residualCapsule = page.locator('.today-attention-dismissed');
       assert.equal(await residualCapsule.count(), 0, 'No debe existir cápsula residual de descartados en Hoy');
 
-      // 3. Vamos a Configuración para gestionar avisos silenciados
+      // 3. Vamos a Configuración -> Preferencias para gestionar avisos silenciados
       await page.click('aside nav button:has-text("Configuración")');
+      await page.getByRole('tab', { name: 'Preferencias', exact: true }).click();
       await page.waitForSelector('h2:has-text("Recordatorios de «Atención ahora»")', { timeout: 4000 });
 
       const manageBtn = page.locator('button:has-text("Gestionar avisos silenciados")');
