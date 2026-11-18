@@ -6,11 +6,16 @@ import {
   FinancedAcquisition,
   AttentionDismissalRecord,
   AttentionDismissalStatus,
+  StudyQuestion,
+  StudyPracticeAttempt,
+  StudyPracticeSession,
+  StudyTopicPracticeStats,
 } from '../types';
 import { assertCommercialTransition } from './commercialTransition';
 import { migrateGym } from './gymMigration';
 import { DEFAULT_FINANCE_CATEGORIES, normalizeCategories } from './financeCategories';
 import { isAttentionOccurrenceEligible } from './todayAttention';
+import { normalizeJobKeyDates } from './jobApplications';
 import { type CommercialIssue, type CommercialSet } from './commercialContract';
 import { reconstructDurableCommercial, validateDurableCommercial, type ReconstructedCommercial } from './commercialDurable';
 
@@ -58,6 +63,9 @@ export interface RecoveryMetadata {
   tasksCount: number;
   gymSessionsCount: number;
   commitmentsCount: number;
+  studyQuestionsCount?: number;
+  studyPracticeAttemptsCount?: number;
+  jobApplicationsCount?: number;
   schemaVersion?: number;
 }
 
@@ -75,6 +83,9 @@ export interface BackupPreviewSummary {
   tasksCount: number;
   gymSessionsCount: number;
   studySubjectsCount: number;
+  studyQuestionsCount?: number;
+  studyPracticeAttemptsCount?: number;
+  jobApplicationsCount?: number;
   commitmentsCount: number;
   backupDate?: string | null;
   lastBackupAt?: string | null;
@@ -468,7 +479,15 @@ export function defaultState(): LifeOSState {
         allowManualRestEditing: false,
       },
     },
-    study: { subjects: [], exams: [], studyLog: [], activeSession: null },
+    study: {
+      subjects: [],
+      exams: [],
+      studyLog: [],
+      activeSession: null,
+      questions: [],
+      practiceAttempts: [],
+      activePracticeSession: null,
+    },
     streaming: { sessions: [], monthlyGoal: 12, preStreamChecklist: [], contentPipeline: [] },
     jobs: { opportunities: [], applications: [] },
     resale: { opportunities: [], inventory: [] },
@@ -500,6 +519,7 @@ export function hasMeaningfulData(state: LifeOSState): boolean {
     state.finance?.expectedIncomes || [], state.finance?.commitments || [], state.finance?.agreements || [],
     state.gym?.weight || [], state.gym?.measurements || [], state.gym?.sessions || [], state.gym?.routineTemplates || [],
     state.study?.subjects || [], state.study?.exams || [], state.study?.studyLog || [],
+    state.study?.questions || [], state.study?.practiceAttempts || [],
     state.streaming?.sessions || [], state.jobs?.opportunities || [], state.jobs?.applications || [],
     state.resale?.opportunities || [], state.resale?.inventory || [], state.ideas || [], state.calendarEvents || [],
     state.goals || [], state.projects || [], state.inbox || [],
@@ -659,6 +679,15 @@ export function pruneAttentionDismissals(
         continue;
       }
 
+      if (prefix === 'job_deadline') {
+        const date = parts[3];
+        if (date && date < refDate && daysBetween(date, refDate) > 14) {
+          continue;
+        }
+        pruned[key] = record;
+        continue;
+      }
+
       if (
         prefix === 'finance_commitment' ||
         prefix === 'finance_agreement' ||
@@ -700,6 +729,15 @@ export function pruneAttentionDismissals(
 
     if (prefix === 'study_exam' || prefix === 'agenda_event') {
       const date = parts[2];
+      if (date && date < refDate && daysBetween(date, refDate) > 14) {
+        continue;
+      }
+      pruned[key] = record;
+      continue;
+    }
+
+    if (prefix === 'job_deadline') {
+      const date = parts[3];
       if (date && date < refDate && daysBetween(date, refDate) > 14) {
         continue;
       }
@@ -969,7 +1007,19 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
   const rawJobs: any = candidate.jobs || {};
   const jobs = {
     opportunities: Array.isArray(rawJobs.opportunities) ? rawJobs.opportunities : [],
-    applications: Array.isArray(rawJobs.applications) ? rawJobs.applications : [],
+    applications: Array.isArray(rawJobs.applications)
+      ? rawJobs.applications
+          .filter((app: any) => app && typeof app === 'object')
+          .map((app: any) => {
+            const { followUpNotes: rawFollowUp, keyDates: rawKeyDates, ...rest } = app;
+            return {
+              ...rest,
+              id: typeof app.id === 'string' && app.id ? app.id : uid(),
+              ...(typeof rawFollowUp === 'string' ? { followUpNotes: rawFollowUp } : {}),
+              keyDates: normalizeJobKeyDates(rawKeyDates),
+            };
+          })
+      : [],
   };
 
   // Gym
@@ -1071,12 +1121,36 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
               ? {
                   topics: sub.topics
                     .filter((t: any) => t && typeof t.title === 'string' && t.title.trim())
-                    .map((t: any) => ({
-                      id: typeof t.id === 'string' && t.id ? t.id : uid(),
-                      title: t.title.trim(),
-                      done: Boolean(t.done),
-                      ...(typeof t.updatedAt === 'number' ? { updatedAt: t.updatedAt } : {}),
-                    })),
+                    .map((t: any) => {
+                      let practice: StudyTopicPracticeStats | undefined;
+                      if (t.practice && typeof t.practice === 'object') {
+                        const attempts = typeof t.practice.attempts === 'number' && Number.isFinite(t.practice.attempts)
+                          ? Math.max(0, Math.round(t.practice.attempts))
+                          : 0;
+                        const correct = typeof t.practice.correct === 'number' && Number.isFinite(t.practice.correct)
+                          ? Math.max(0, Math.round(t.practice.correct))
+                          : 0;
+                        const lastPracticedAt = typeof t.practice.lastPracticedAt === 'number' && Number.isFinite(t.practice.lastPracticedAt)
+                          ? t.practice.lastPracticedAt
+                          : undefined;
+                        const bestScore = typeof t.practice.bestScore === 'number' && Number.isFinite(t.practice.bestScore)
+                          ? clamp(Math.round(t.practice.bestScore), 0, 100)
+                          : undefined;
+                        practice = {
+                          attempts,
+                          correct,
+                          ...(lastPracticedAt !== undefined ? { lastPracticedAt } : {}),
+                          ...(bestScore !== undefined ? { bestScore } : {}),
+                        };
+                      }
+                      return {
+                        id: typeof t.id === 'string' && t.id ? t.id : uid(),
+                        title: t.title.trim(),
+                        done: Boolean(t.done),
+                        ...(typeof t.updatedAt === 'number' ? { updatedAt: t.updatedAt } : {}),
+                        ...(practice ? { practice } : {}),
+                      };
+                    }),
                 }
               : {}),
           }))
@@ -1100,6 +1174,104 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
         : [],
       studyLog: Array.isArray(candidate.study?.studyLog) ? candidate.study.studyLog : [],
       activeSession: candidate.study?.activeSession || null,
+      questions: Array.isArray(candidate.study?.questions)
+        ? candidate.study.questions.reduce<StudyQuestion[]>((acc, q: any) => {
+            if (!q || typeof q !== 'object') return acc;
+            const prompt = typeof q.prompt === 'string' ? q.prompt.trim() : '';
+            const subjectId = typeof q.subjectId === 'string' ? q.subjectId.trim() : '';
+            if (!prompt || !subjectId || !Array.isArray(q.options)) return acc;
+            const options = q.options
+              .filter((o: any) => o && typeof o === 'object' && typeof o.text === 'string' && o.text.trim())
+              .map((o: any) => ({
+                id: typeof o.id === 'string' && o.id ? o.id : uid(),
+                text: o.text.trim(),
+              }));
+            if (options.length < 2 || options.length > 6) return acc;
+            const correctOptionId =
+              typeof q.correctOptionId === 'string' && options.some((o: { id: string }) => o.id === q.correctOptionId)
+                ? q.correctOptionId
+                : options[0].id;
+            acc.push({
+              id: typeof q.id === 'string' && q.id ? q.id : uid(),
+              subjectId,
+              topicId: typeof q.topicId === 'string' && q.topicId ? q.topicId : null,
+              kind: 'multiple_choice',
+              prompt,
+              options,
+              correctOptionId,
+              ...(typeof q.explanation === 'string' && q.explanation.trim() ? { explanation: q.explanation.trim() } : {}),
+              ...(typeof q.updatedAt === 'number' && Number.isFinite(q.updatedAt) ? { updatedAt: q.updatedAt } : {}),
+            });
+            return acc;
+          }, [])
+        : [],
+      practiceAttempts: Array.isArray(candidate.study?.practiceAttempts)
+        ? candidate.study.practiceAttempts.reduce<StudyPracticeAttempt[]>((acc, att: any) => {
+            if (!att || typeof att !== 'object') return acc;
+            const subjectId = typeof att.subjectId === 'string' ? att.subjectId.trim() : '';
+            const date = typeof att.date === 'string' ? att.date.trim().slice(0, 10) : '';
+            if (!subjectId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return acc;
+            const answers = Array.isArray(att.answers)
+              ? att.answers
+                  .filter((a: any) => a && typeof a === 'object' && typeof a.questionId === 'string' && typeof a.optionId === 'string')
+                  .map((a: any) => ({
+                    questionId: a.questionId,
+                    optionId: a.optionId,
+                    correct: Boolean(a.correct),
+                    elapsedMs: typeof a.elapsedMs === 'number' && Number.isFinite(a.elapsedMs) ? Math.max(0, a.elapsedMs) : 0,
+                  }))
+              : [];
+            acc.push({
+              id: typeof att.id === 'string' && att.id ? att.id : uid(),
+              date,
+              subjectId,
+              topicId: typeof att.topicId === 'string' && att.topicId ? att.topicId : null,
+              mode: att.mode === 'simulacro' ? 'simulacro' : 'practica',
+              penalty: att.penalty === 'medio' || att.penalty === 'total' ? att.penalty : 'ninguno',
+              totalQuestions: typeof att.totalQuestions === 'number' && Number.isFinite(att.totalQuestions) ? Math.max(0, Math.round(att.totalQuestions)) : answers.length,
+              correctCount: typeof att.correctCount === 'number' && Number.isFinite(att.correctCount) ? Math.max(0, Math.round(att.correctCount)) : 0,
+              score: typeof att.score === 'number' && Number.isFinite(att.score) ? clamp(Math.round(att.score), 0, 100) : 0,
+              durationSec: typeof att.durationSec === 'number' && Number.isFinite(att.durationSec) ? Math.max(0, Math.round(att.durationSec)) : 0,
+              answers,
+              studyLogId: typeof att.studyLogId === 'string' ? att.studyLogId : null,
+              createdAt: typeof att.createdAt === 'number' && Number.isFinite(att.createdAt) ? att.createdAt : 0,
+            });
+            return acc;
+          }, [])
+        : [],
+      activePracticeSession: (() => {
+        const s = candidate.study?.activePracticeSession;
+        if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
+        if (typeof s.id !== 'string' || !s.id || typeof s.subjectId !== 'string' || !s.subjectId) return null;
+        if (!Array.isArray(s.questionIds) || s.questionIds.length === 0) return null;
+        const questionIds = s.questionIds.filter((id: any) => typeof id === 'string' && id.length > 0);
+        if (questionIds.length === 0) return null;
+        const normalized: StudyPracticeSession = {
+          id: s.id,
+          subjectId: s.subjectId,
+          topicId: typeof s.topicId === 'string' && s.topicId ? s.topicId : null,
+          mode: s.mode === 'simulacro' ? 'simulacro' : 'practica',
+          penalty: s.penalty === 'medio' || s.penalty === 'total' ? s.penalty : 'ninguno',
+          questionIds,
+          currentIndex: typeof s.currentIndex === 'number' && Number.isFinite(s.currentIndex)
+            ? clamp(Math.round(s.currentIndex), 0, questionIds.length - 1)
+            : 0,
+          answers: Array.isArray(s.answers)
+            ? s.answers
+                .filter((a: any) => a && typeof a === 'object' && typeof a.questionId === 'string' && typeof a.optionId === 'string')
+                .map((a: any) => ({
+                  questionId: a.questionId,
+                  optionId: a.optionId,
+                  correct: Boolean(a.correct),
+                  elapsedMs: typeof a.elapsedMs === 'number' && Number.isFinite(a.elapsedMs) ? Math.max(0, a.elapsedMs) : 0,
+                }))
+            : [],
+          startedAt: typeof s.startedAt === 'number' && Number.isFinite(s.startedAt) ? s.startedAt : Date.now(),
+          endsAt: typeof s.endsAt === 'number' && Number.isFinite(s.endsAt) ? s.endsAt : null,
+          immediateFeedback: Boolean(s.immediateFeedback),
+        };
+        return normalized;
+      })(),
     },
     streaming: {
       ...def.streaming,
@@ -1163,7 +1335,20 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
         attentionDismissals,
       };
     })(),
-    checkoutLog: candidate.checkoutLog && typeof candidate.checkoutLog === 'object' ? candidate.checkoutLog : {},
+    checkoutLog: (() => {
+      const rawLog = candidate.checkoutLog;
+      if (!rawLog || typeof rawLog !== 'object' || Array.isArray(rawLog)) return {};
+      const out: LifeOSState['checkoutLog'] = {};
+      for (const [dateKey, entry] of Object.entries(rawLog)) {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue;
+        const { rolledOverAt, ...rest } = entry as Record<string, any>;
+        out[dateKey] = {
+          ...rest,
+          ...(typeof rolledOverAt === 'string' && rolledOverAt.trim() ? { rolledOverAt: rolledOverAt.trim() } : {}),
+        };
+      }
+      return out;
+    })(),
   };
 }
 
@@ -1301,6 +1486,9 @@ export function inspectBackupJSON(text: string): BackupPreviewSummary {
     tasksCount: (normalized.todayExtras?.length || 0) + (normalized.tasksRecurring?.length || 0),
     gymSessionsCount: normalized.gym?.sessions?.length || 0,
     studySubjectsCount: normalized.study?.subjects?.length || 0,
+    studyQuestionsCount: normalized.study?.questions?.length || 0,
+    studyPracticeAttemptsCount: normalized.study?.practiceAttempts?.length || 0,
+    jobApplicationsCount: normalized.jobs?.applications?.length || 0,
     commitmentsCount: normalized.finance?.commitments?.length || 0,
     backupDate: rawState?.settings?.lastBackupAt || null,
     lastBackupAt: rawState?.settings?.lastBackupAt || null,
@@ -1393,6 +1581,9 @@ export function saveRecoveryState(
       tasksCount: (state.todayExtras?.length || 0) + (state.tasksRecurring?.length || 0),
       gymSessionsCount: state.gym?.sessions?.length || 0,
       commitmentsCount: state.finance?.commitments?.length || 0,
+      studyQuestionsCount: state.study?.questions?.length || 0,
+      studyPracticeAttemptsCount: state.study?.practiceAttempts?.length || 0,
+      jobApplicationsCount: state.jobs?.applications?.length || 0,
       schemaVersion: CURRENT_SCHEMA_VERSION,
     };
     const envelope: RecoveryEnvelope = {

@@ -1,6 +1,104 @@
-import { JobApplication, JobApplicationStatus, JobApplicationType } from '../types';
+import { JobApplication, JobApplicationStatus, JobApplicationType, JobKeyDate, JobKeyDateKind } from '../types';
+import { daysBetween, todayISO } from './storage';
 
 export type JobTypeFilter = JobApplicationType | 'todos';
+
+export const JOB_KEY_DATE_KINDS: readonly JobKeyDateKind[] = ['inscripcion', 'prueba', 'entrevista', 'otro'] as const;
+
+export const JOB_KEY_DATE_LABELS: Record<JobKeyDateKind, string> = {
+  inscripcion: 'Inscripción',
+  prueba: 'Prueba',
+  entrevista: 'Entrevista',
+  otro: 'Otro',
+};
+
+export const CLOSED_JOB_STATUSES: ReadonlySet<JobApplicationStatus> = new Set([
+  'rechazado',
+  'no_seleccionado',
+  'contratado',
+  'ingreso_confirmado',
+]);
+
+export function isJobApplicationActive(application: Pick<JobApplication, 'estado'>): boolean {
+  return !CLOSED_JOB_STATUSES.has(application.estado);
+}
+
+export function normalizeJobKeyDates(raw: unknown): JobKeyDate[] {
+  if (!Array.isArray(raw)) return [];
+  const result: JobKeyDate[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const candidate = item as Partial<JobKeyDate>;
+    const kind = candidate.kind;
+    const date = typeof candidate.date === 'string' ? candidate.date.trim().slice(0, 10) : '';
+    if (!kind || !(JOB_KEY_DATE_KINDS as readonly string[]).includes(kind)) continue;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const time =
+      typeof candidate.time === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(candidate.time.trim())
+        ? candidate.time.trim()
+        : null;
+    const note = typeof candidate.note === 'string' && candidate.note.trim() ? candidate.note.trim() : undefined;
+    result.push({
+      id: typeof candidate.id === 'string' && candidate.id.trim() ? candidate.id.trim() : `${kind}-${date}-${result.length}`,
+      kind,
+      date,
+      time,
+      ...(note ? { note } : {}),
+    });
+  }
+  return result;
+}
+
+export interface DisplayJobKeyDate extends JobKeyDate {
+  isLegacyNextAction?: boolean;
+}
+
+/**
+ * Returns structured `keyDates` plus legacy `nextActionDate` (if present) as a virtual `'otro'` entry
+ * for display without migrating or deleting `nextActionDate`.
+ */
+export function getEffectiveJobKeyDates(
+  application: Pick<JobApplication, 'keyDates' | 'nextActionDate' | 'nextAction'>,
+): DisplayJobKeyDate[] {
+  const list: DisplayJobKeyDate[] = normalizeJobKeyDates(application.keyDates).map((kd) => ({ ...kd }));
+  const nextDate = typeof application.nextActionDate === 'string' ? application.nextActionDate.trim().slice(0, 10) : '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(nextDate)) {
+    list.push({
+      id: 'legacy-next-action',
+      kind: 'otro',
+      date: nextDate,
+      time: null,
+      note: application.nextAction?.trim() || 'Seguimiento',
+      isLegacyNextAction: true,
+    });
+  }
+  return list.sort((a, b) => a.date.localeCompare(b.date) || (a.time || '99:99').localeCompare(b.time || '99:99'));
+}
+
+export type JobKeyDateProximity = 'overdue' | 'today' | 'soon' | 'future';
+
+export interface NextJobKeyDateInfo {
+  keyDate: DisplayJobKeyDate;
+  daysUntil: number;
+  proximity: JobKeyDateProximity;
+}
+
+/**
+ * Returns the earliest key date (showing overdue dates first so past deadlines are never hidden)
+ * along with its proximity status relative to `todayIso`.
+ */
+export function getNextJobKeyDate(
+  application: Pick<JobApplication, 'keyDates' | 'nextActionDate' | 'nextAction'>,
+  todayIso: string = todayISO(),
+): NextJobKeyDateInfo | null {
+  const sorted = getEffectiveJobKeyDates(application);
+  if (sorted.length === 0) return null;
+  const first = sorted[0];
+  const daysUntil = daysBetween(todayIso, first.date);
+  const proximity: JobKeyDateProximity =
+    daysUntil < 0 ? 'overdue' : daysUntil === 0 ? 'today' : daysUntil <= 7 ? 'soon' : 'future';
+  return { keyDate: first, daysUntil, proximity };
+}
 
 export interface JobStagePresentation {
   id: JobApplicationStatus;

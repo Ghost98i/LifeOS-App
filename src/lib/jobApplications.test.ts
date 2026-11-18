@@ -5,9 +5,13 @@ import { mergeJobsModule } from './syncMerge';
 import { jobStats, todayItems } from './calculations';
 import {
   filterJobApplications,
+  getEffectiveJobKeyDates,
   getJobApplicationType,
+  getNextJobKeyDate,
+  isJobApplicationActive,
   isJobStatusForType,
   JOB_STAGES,
+  normalizeJobKeyDates,
   saveJobApplication,
 } from './jobApplications';
 import { JobApplication } from '../types';
@@ -130,4 +134,86 @@ test('seguimientos de concursos siguen llegando a Hoy con la integración existe
   assert.equal(followups.length, 1);
   assert.match(followups[0].text, /Organismo X/);
   assert.equal(followups[0].kind, 'complete-followup');
+});
+
+test('fechas clave: normalización descarta entradas inválidas, nextActionDate se muestra como otro sin duplicar y fechas vencidas no se ocultan', () => {
+  const cleaned = normalizeJobKeyDates([
+    { id: 'kd-1', kind: 'prueba', date: '2026-11-20', time: '09:30', note: 'Teórica' },
+    { id: 'bad-date', kind: 'entrevista', date: 'no-iso' },
+    { id: 'bad-kind', kind: 'desconocido', date: '2026-11-22' },
+    null,
+  ]);
+  assert.equal(cleaned.length, 1);
+  assert.equal(cleaned[0].id, 'kd-1');
+  assert.equal(cleaned[0].time, '09:30');
+
+  const appWithLegacyNext: JobApplication = {
+    id: 'app-1',
+    empresa: 'Organismo Y',
+    puesto: 'Técnico',
+    estado: 'inscripto',
+    fecha: '2026-11-01',
+    nextAction: 'Consultar lista',
+    nextActionDate: '2026-11-25',
+    keyDates: [{ id: 'kd-past', kind: 'inscripcion', date: '2026-11-10', note: 'Vencida' }],
+  };
+  const effective = getEffectiveJobKeyDates(appWithLegacyNext);
+  assert.equal(effective.length, 2);
+  assert.equal(effective[1].kind, 'otro');
+  assert.equal(effective[1].isLegacyNextAction, true);
+
+  // Fechas pasadas aparecen como vencidas en getNextJobKeyDate, no se ocultan
+  const next = getNextJobKeyDate(appWithLegacyNext, '2026-11-18');
+  assert.ok(next);
+  assert.equal(next.proximity, 'overdue');
+  assert.equal(next.keyDate.id, 'kd-past');
+
+  assert.equal(isJobApplicationActive({ estado: 'entrevista' }), true);
+  assert.equal(isJobApplicationActive({ estado: 'rechazado' }), false);
+  assert.equal(isJobApplicationActive({ estado: 'no_seleccionado' }), false);
+  assert.equal(isJobApplicationActive({ estado: 'contratado' }), false);
+  assert.equal(isJobApplicationActive({ estado: 'ingreso_confirmado' }), false);
+});
+
+test('mergeJobsModule conserva keyDates con tombstones y followUpNotes entre dispositivos', () => {
+  const baseApp: JobApplication = {
+    id: 'app-sync',
+    empresa: 'Acme',
+    puesto: 'Dev',
+    estado: 'entrevista',
+    fecha: '2026-11-01',
+    keyDates: [
+      { id: 'kd-base', kind: 'inscripcion', date: '2026-11-05' },
+      { id: 'kd-del', kind: 'otro', date: '2026-11-08' },
+    ],
+  };
+  const localApp: JobApplication = {
+    ...baseApp,
+    followUpNotes: 'Contactar el lunes',
+    keyDates: [
+      baseApp.keyDates![0],
+      { id: 'kd-local', kind: 'entrevista', date: '2026-11-20', time: '14:00' },
+    ],
+  };
+  const remoteApp: JobApplication = {
+    ...baseApp,
+    notas: 'Postulación prioritaria',
+    keyDates: [
+      ...baseApp.keyDates!,
+      { id: 'kd-remote', kind: 'prueba', date: '2026-11-22' },
+    ],
+  };
+  const merged = mergeJobsModule(
+    { opportunities: [], applications: [localApp] },
+    { opportunities: [], applications: [remoteApp] },
+    { opportunities: [], applications: [baseApp] },
+    { 'kd-del': 5000 },
+  );
+  assert.equal(merged.applications.length, 1);
+  const mergedApp = merged.applications[0];
+  assert.equal(mergedApp.followUpNotes, 'Contactar el lunes');
+  assert.equal(mergedApp.notas, 'Postulación prioritaria');
+  assert.equal(mergedApp.keyDates?.some((k) => k.id === 'kd-del'), false);
+  assert.equal(mergedApp.keyDates?.some((k) => k.id === 'kd-local'), true);
+  assert.equal(mergedApp.keyDates?.some((k) => k.id === 'kd-remote'), true);
 });

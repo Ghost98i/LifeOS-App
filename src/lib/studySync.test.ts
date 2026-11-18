@@ -255,3 +255,129 @@ test('Sincronización Fase 1A: compatibilidad con exámenes legados sin title ni
   assert.equal(merged.exams[0].time, undefined);
   assert.equal(merged.exams[0].status, 'pendiente');
 });
+
+test('Sincronización Repaso: activePracticeSession es local, preguntas/intentos se mergean y respetan tombstones', () => {
+  const state = defaultState();
+  state.study.activePracticeSession = {
+    id: 'local-practice-1',
+    subjectId: 'sub-1',
+    mode: 'simulacro',
+    penalty: 'medio',
+    questionIds: ['q1'],
+    currentIndex: 0,
+    answers: [],
+    startedAt: 1000,
+    endsAt: 301_000,
+    immediateFeedback: false,
+  };
+  const payload = syncModuleData(state, 'study') as { study: Study };
+  assert.equal(payload.study.activePracticeSession, undefined);
+
+  const baseline: Study = {
+    subjects: [
+      {
+        id: 'sub-1',
+        name: 'Álgebra',
+        topics: [{ id: 'top-1', title: 'Matrices', done: false, updatedAt: 1000 }],
+        updatedAt: 1000,
+      },
+    ],
+    exams: [],
+    studyLog: [],
+    questions: [
+      {
+        id: 'q-base',
+        subjectId: 'sub-1',
+        topicId: 'top-1',
+        prompt: 'Base',
+        options: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }],
+        correctOptionId: 'a',
+        updatedAt: 1000,
+      },
+      {
+        id: 'q-del',
+        subjectId: 'sub-1',
+        prompt: 'A borrar',
+        options: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }],
+        correctOptionId: 'a',
+        updatedAt: 1000,
+      },
+    ],
+    practiceAttempts: [],
+  };
+
+  const local: Study = {
+    ...baseline,
+    subjects: [
+      {
+        ...baseline.subjects[0],
+        topics: [
+          {
+            id: 'top-1',
+            title: 'Matrices',
+            done: false,
+            updatedAt: 3000,
+            practice: { attempts: 1, correct: 1, bestScore: 100, lastPracticedAt: 3000 },
+          },
+        ],
+        updatedAt: 3000,
+      },
+    ],
+    questions: [baseline.questions![0]], // q-del eliminada localmente
+    practiceAttempts: [
+      {
+        id: 'att-local',
+        date: '2026-11-18',
+        subjectId: 'sub-1',
+        topicId: 'top-1',
+        mode: 'practica',
+        penalty: 'ninguno',
+        totalQuestions: 1,
+        correctCount: 1,
+        score: 100,
+        durationSec: 70,
+        answers: [{ questionId: 'q-base', optionId: 'a', correct: true, elapsedMs: 5000 }],
+        createdAt: 3000,
+      },
+    ],
+    activePracticeSession: state.study.activePracticeSession,
+  };
+
+  const remote: Study = {
+    ...baseline,
+    questions: [
+      ...baseline.questions!,
+      {
+        id: 'q-remote',
+        subjectId: 'sub-1',
+        prompt: 'Remota',
+        options: [{ id: 'a', text: '1' }, { id: 'b', text: '2' }],
+        correctOptionId: 'a',
+        updatedAt: 2500,
+      },
+    ],
+    practiceAttempts: [
+      {
+        id: 'att-remote',
+        date: '2026-11-18',
+        subjectId: 'sub-1',
+        mode: 'simulacro',
+        penalty: 'medio',
+        totalQuestions: 1,
+        correctCount: 1,
+        score: 100,
+        durationSec: 80,
+        answers: [],
+        createdAt: 2500,
+      },
+    ],
+  };
+
+  const merged = mergeStudyModule(local, remote, baseline, { 'q-del': 2000 });
+  assert.equal(merged.questions?.some((q) => q.id === 'q-del'), false);
+  assert.equal(merged.questions?.some((q) => q.id === 'q-base'), true);
+  assert.equal(merged.questions?.some((q) => q.id === 'q-remote'), true);
+  assert.equal(merged.practiceAttempts?.length, 2);
+  assert.equal(merged.subjects[0].topics![0].practice?.attempts, 1);
+  assert.equal(merged.activePracticeSession?.id, 'local-practice-1');
+});

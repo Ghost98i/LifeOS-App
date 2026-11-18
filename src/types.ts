@@ -607,11 +607,19 @@ export interface Gym {
   _sync?: GymSyncMetadata;
 }
 
+export interface StudyTopicPracticeStats {
+  attempts: number;
+  correct: number;
+  lastPracticedAt?: number;
+  bestScore?: number;
+}
+
 export interface StudyTopic {
   id: string;
   title: string;
   done: boolean;
   updatedAt?: number;
+  practice?: StudyTopicPracticeStats;
 }
 
 export interface Subject {
@@ -667,11 +675,73 @@ export interface StudyActiveSession {
   longBreakMinutes?: number;
 }
 
+export type StudyQuestionKind = 'multiple_choice';
+
+export interface StudyQuestionOption {
+  id: string;
+  text: string;
+}
+
+export interface StudyQuestion {
+  id: string;
+  subjectId: string;
+  topicId?: string | null;
+  kind?: StudyQuestionKind;
+  prompt: string;
+  options: StudyQuestionOption[];
+  correctOptionId: string;
+  explanation?: string;
+  updatedAt?: number;
+}
+
+export type StudyPracticeMode = 'practica' | 'simulacro';
+export type StudyPenaltyMode = 'ninguno' | 'medio' | 'total';
+
+export interface StudyPracticeAnswer {
+  questionId: string;
+  optionId: string;
+  correct: boolean;
+  elapsedMs: number;
+}
+
+export interface StudyPracticeAttempt {
+  id: string;
+  date: string;
+  subjectId: string;
+  topicId?: string | null;
+  mode: StudyPracticeMode;
+  penalty: StudyPenaltyMode;
+  totalQuestions: number;
+  correctCount: number;
+  score: number;
+  durationSec: number;
+  answers: StudyPracticeAnswer[];
+  studyLogId?: string | null;
+  createdAt: number;
+}
+
+export interface StudyPracticeSession {
+  id: string;
+  subjectId: string;
+  topicId?: string | null;
+  mode: StudyPracticeMode;
+  penalty: StudyPenaltyMode;
+  questionIds: string[];
+  currentIndex: number;
+  answers: StudyPracticeAnswer[];
+  startedAt: number;
+  endsAt?: number | null;
+  immediateFeedback: boolean;
+}
+
 export interface Study {
   subjects: Subject[];
   exams: Exam[];
   studyLog: StudyLog[];
   activeSession?: StudyActiveSession | null;
+  questions?: StudyQuestion[];
+  practiceAttempts?: StudyPracticeAttempt[];
+  activePracticeSession?: StudyPracticeSession | null;
 }
 
 export interface StreamSession {
@@ -719,6 +789,16 @@ export type JobApplicationStatus =
   | 'pendiente_inscripcion' | 'inscripto' | 'sorteo_preseleccion' | 'prueba_evaluacion'
   | 'esperando_resultados' | 'lista_prelacion' | 'ingreso_confirmado' | 'no_seleccionado';
 
+export type JobKeyDateKind = 'inscripcion' | 'prueba' | 'entrevista' | 'otro';
+
+export interface JobKeyDate {
+  id: string;
+  kind: JobKeyDateKind;
+  date: string;
+  time?: string | null;
+  note?: string;
+}
+
 export interface JobApplication {
   id: string;
   /** Missing on legacy records; those are treated as conventional employment. */
@@ -729,9 +809,11 @@ export interface JobApplication {
   fecha: string;
   reclutador?: string;
   notas?: string;
+  followUpNotes?: string;
   link?: string;
   nextAction?: string;
   nextActionDate?: string;
+  keyDates?: JobKeyDate[];
   sourceOpportunityId?: string | null;
 }
 
@@ -916,6 +998,7 @@ export interface CheckoutLogDay {
   reflectionPostitId?: string;
   sleepHours?: number;
   energyLevel?: number;
+  rolledOverAt?: string;
 }
 
 export interface LifeOSState {

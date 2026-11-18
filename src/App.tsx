@@ -2171,6 +2171,8 @@ export default function App() {
       setInitialFocusId(options?.focusId || null);
     } else if (view === 'estudios') {
       setInitialFocusId(options?.focusId || null);
+    } else if (view === 'trabajo') {
+      setInitialFocusId(options?.focusId || null);
     } else if (view === 'dashboard') {
       setInitialFocusId(options?.focusId || null);
     } else if (view === 'agenda') {
@@ -2638,7 +2640,12 @@ export default function App() {
               )}
 
               {currentView === 'trabajo' && (
-                <TrabajoView state={state} onUpdateState={updateState} />
+                <TrabajoView
+                  state={state}
+                  onUpdateState={updateState}
+                  initialFocusId={initialFocusId}
+                  focusNonce={focusNonce}
+                />
               )}
 
               {currentView === 'reventa' && (

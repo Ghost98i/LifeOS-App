@@ -16,6 +16,7 @@ import type {
   Idea,
   InboxItem,
   JobApplication,
+  JobKeyDate,
   JobOpportunity,
   Jobs,
   LifeOSState,
@@ -37,6 +38,10 @@ import type {
   StreamSession,
   Study,
   StudyLog,
+  StudyPracticeAttempt,
+  StudyQuestion,
+  StudyTopic,
+  StudyTopicPracticeStats,
   Subject,
   TaskRecurring,
   TodayExtra,
@@ -194,6 +199,8 @@ function collectEntityIds(state: LifeOSState): Set<string> {
     add(state.study.subjects);
     add(state.study.exams);
     add(state.study.studyLog);
+    add(state.study.questions);
+    add(state.study.practiceAttempts);
   }
 
   if (state.streaming) {
@@ -205,6 +212,9 @@ function collectEntityIds(state: LifeOSState): Set<string> {
   if (state.jobs) {
     add(state.jobs.opportunities);
     add(state.jobs.applications);
+    for (const app of state.jobs.applications || []) {
+      add(app.keyDates);
+    }
   }
 
   if (state.resale) {
@@ -268,6 +278,7 @@ function extractTimestamp(item: unknown): number {
     const t = new Date(obj.date).getTime();
     if (!Number.isNaN(t)) return t;
   }
+  if (typeof obj.createdAt === 'number') return obj.createdAt;
   if (typeof obj.createdAt === 'string') {
     const t = new Date(obj.createdAt).getTime();
     if (!Number.isNaN(t)) return t;
@@ -1767,6 +1778,35 @@ export function mergeCalendarModule(
   };
 }
 
+function mergeTopicPracticeStats(
+  localStats?: StudyTopicPracticeStats,
+  remoteStats?: StudyTopicPracticeStats,
+  baseStats?: StudyTopicPracticeStats
+): StudyTopicPracticeStats | undefined {
+  if (!localStats && !remoteStats) return undefined;
+  if (localStats && !remoteStats) return { ...localStats };
+  if (!localStats && remoteStats) return { ...remoteStats };
+  const l = localStats!;
+  const r = remoteStats!;
+  const baseAttempts = baseStats?.attempts ?? 0;
+  const baseCorrect = baseStats?.correct ?? 0;
+  const attempts = baseStats
+    ? Math.max(0, l.attempts + r.attempts - baseAttempts)
+    : Math.max(l.attempts, r.attempts);
+  const correct = baseStats
+    ? Math.max(0, l.correct + r.correct - baseCorrect)
+    : Math.max(l.correct, r.correct);
+  const lastPracticedAt = Math.max(l.lastPracticedAt || 0, r.lastPracticedAt || 0) || undefined;
+  const scores = [l.bestScore, r.bestScore].filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+  const bestScore = scores.length > 0 ? Math.max(...scores) : undefined;
+  return {
+    attempts,
+    correct,
+    ...(lastPracticedAt !== undefined ? { lastPracticedAt } : {}),
+    ...(bestScore !== undefined ? { bestScore } : {}),
+  };
+}
+
 export function mergeStudyModule(
   local: Study,
   remote: Study,
@@ -1780,7 +1820,52 @@ export function mergeStudyModule(
       remote.subjects,
       baseline?.subjects,
       tombstones,
-      undefined,
+      (lSub, rSub, bSub) => {
+        if (bSub && lSub.name !== bSub.name && rSub.name !== bSub.name && lSub.name !== rSub.name && onConflict) {
+          onConflict({
+            id: `conflict-study-subject-${lSub.id}`,
+            module: 'study',
+            entityType: 'entity',
+            entityId: lSub.id,
+            field: 'name',
+            label: `Materia: ${lSub.name}`,
+            localSummary: lSub.name,
+            remoteSummary: rSub.name,
+            baseSummary: bSub.name,
+            localValue: lSub,
+            remoteValue: rSub,
+            baseValue: bSub,
+          });
+        }
+        const mergedTopics = (lSub.topics || rSub.topics)
+          ? mergeEntityCollection<StudyTopic>(
+              lSub.topics || [],
+              rSub.topics || [],
+              bSub?.topics,
+              tombstones,
+              (lTop, rTop, bTop) => {
+                const lTs = extractTimestamp(lTop);
+                const rTs = extractTimestamp(rTop);
+                const winner = rTs > lTs ? rTop : lTop;
+                const practice = mergeTopicPracticeStats(lTop.practice, rTop.practice, bTop?.practice);
+                return {
+                  ...winner,
+                  ...(practice ? { practice } : {}),
+                };
+              }
+            )
+          : undefined;
+        const lTs = extractTimestamp(lSub);
+        const rTs = extractTimestamp(rSub);
+        const primary = rTs > lTs ? rSub : lSub;
+        const secondary = rTs > lTs ? lSub : rSub;
+        return {
+          ...secondary,
+          ...primary,
+          ...(mergedTopics !== undefined ? { topics: mergedTopics } : {}),
+          updatedAt: Math.max(lTs, rTs) || primary.updatedAt,
+        };
+      },
       onConflict,
       { module: 'study', entityType: 'Materia', getLabel: (s) => s.name }
     ),
@@ -1802,7 +1887,26 @@ export function mergeStudyModule(
       onConflict,
       { module: 'study', entityType: 'Registro de estudio', getLabel: (l) => `${l.minutes} min el ${l.date}` }
     ),
+    questions: mergeEntityCollection<StudyQuestion>(
+      local.questions || [],
+      remote.questions || [],
+      baseline?.questions,
+      tombstones,
+      undefined,
+      onConflict,
+      { module: 'study', entityType: 'Pregunta de repaso', getLabel: (q) => q.prompt.slice(0, 40) }
+    ),
+    practiceAttempts: mergeEntityCollection<StudyPracticeAttempt>(
+      local.practiceAttempts || [],
+      remote.practiceAttempts || [],
+      baseline?.practiceAttempts,
+      tombstones,
+      undefined,
+      onConflict,
+      { module: 'study', entityType: 'Intento de repaso', getLabel: (a) => `Repaso ${a.date} (${a.score}%)` }
+    ),
     activeSession: local.activeSession || null,
+    activePracticeSession: local.activePracticeSession || null,
   };
 }
 
@@ -1839,20 +1943,70 @@ export function mergeJobsModule(
   local: Jobs,
   remote: Jobs,
   baseline?: Jobs,
-  tombstones: Record<string, number> = {}
+  tombstones: Record<string, number> = {},
+  onConflict?: (conflict: SyncConflictItem) => void
 ): Jobs {
   return {
     opportunities: mergeEntityCollection<JobOpportunity>(
       local.opportunities,
       remote.opportunities,
       baseline?.opportunities,
-      tombstones
+      tombstones,
+      undefined,
+      onConflict,
+      { module: 'jobs', entityType: 'Oportunidad laboral', getLabel: (o) => o.empresa }
     ),
     applications: mergeEntityCollection<JobApplication>(
       local.applications,
       remote.applications,
       baseline?.applications,
-      tombstones
+      tombstones,
+      (lApp, rApp, bApp) => {
+        const mergedKeyDates = (lApp.keyDates || rApp.keyDates || bApp?.keyDates)
+          ? mergeEntityCollection<JobKeyDate>(
+              lApp.keyDates || [],
+              rApp.keyDates || [],
+              bApp?.keyDates,
+              tombstones
+            )
+          : undefined;
+
+        let followUpNotes = rApp.followUpNotes ?? lApp.followUpNotes;
+        if (bApp) {
+          const lChanged = (lApp.followUpNotes || '') !== (bApp.followUpNotes || '');
+          const rChanged = (rApp.followUpNotes || '') !== (bApp.followUpNotes || '');
+          if (lChanged && !rChanged) followUpNotes = lApp.followUpNotes;
+          else if (rChanged && !lChanged) followUpNotes = rApp.followUpNotes;
+          else if (lChanged && rChanged) followUpNotes = lApp.followUpNotes || rApp.followUpNotes;
+        } else if (lApp.followUpNotes && !rApp.followUpNotes) {
+          followUpNotes = lApp.followUpNotes;
+        }
+
+        const mergedBase = bApp
+          ? (() => {
+              const out: Record<string, unknown> = { ...bApp };
+              const allKeys = new Set([...Object.keys(lApp), ...Object.keys(rApp)]);
+              for (const k of allKeys) {
+                if (k === 'keyDates' || k === 'followUpNotes') continue;
+                const lVal = (lApp as unknown as Record<string, unknown>)[k];
+                const rVal = (rApp as unknown as Record<string, unknown>)[k];
+                const bVal = (bApp as unknown as Record<string, unknown>)[k];
+                if (stableEqual(lVal, bVal) && !stableEqual(rVal, bVal)) out[k] = rVal;
+                else if (stableEqual(rVal, bVal) && !stableEqual(lVal, bVal)) out[k] = lVal;
+                else out[k] = rVal !== undefined ? rVal : lVal;
+              }
+              return out as unknown as JobApplication;
+            })()
+          : { ...lApp, ...rApp };
+
+        return {
+          ...mergedBase,
+          ...(followUpNotes !== undefined ? { followUpNotes } : {}),
+          ...(mergedKeyDates !== undefined ? { keyDates: mergedKeyDates } : {}),
+        };
+      },
+      onConflict,
+      { module: 'jobs', entityType: 'Postulación', getLabel: (a) => `${a.empresa} (${a.puesto})` }
     ),
   };
 }
@@ -2043,9 +2197,14 @@ export function mergeCheckoutModule(
   ]);
 
   for (const d of allDates) {
+    const lDay = local.checkoutLog?.[d] || {};
+    const rDay = remote.checkoutLog?.[d] || {};
+    const rolledOverAt =
+      [lDay.rolledOverAt, rDay.rolledOverAt].find((v) => typeof v === 'string' && v.trim().length > 0);
     merged[d] = {
-      ...(local.checkoutLog?.[d] || {}),
-      ...(remote.checkoutLog?.[d] || {}),
+      ...lDay,
+      ...rDay,
+      ...(rolledOverAt ? { rolledOverAt } : {}),
     };
   }
 
@@ -2329,7 +2488,8 @@ export function mergeModuleDataWithConflicts(
           (localData as { jobs: Jobs }).jobs,
           (remoteData as { jobs: Jobs }).jobs,
           baselineData ? (baselineData as { jobs: Jobs }).jobs : undefined,
-          tombstones
+          tombstones,
+          onConflict
         ),
       };
       break;

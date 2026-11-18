@@ -626,6 +626,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   return 'clock';
                 case 'exam_upcoming':
                   return 'book';
+                case 'job_deadline_upcoming':
+                  return 'briefcase';
                 case 'agenda_event_soon':
                 case 'agenda_event_tomorrow':
                   return 'calendarDays';

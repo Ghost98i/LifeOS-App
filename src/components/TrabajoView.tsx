@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { JobApplication, JobApplicationType, LifeOSState } from '../types';
+import { JobApplication, JobApplicationType, JobKeyDate, JobKeyDateKind, LifeOSState } from '../types';
 import { todayISO, fmtDate, uid } from '../lib/storage';
 import { jobStats } from '../lib/calculations';
 import { JobKanbanBoard } from './JobKanbanBoard';
@@ -7,20 +7,27 @@ import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 import { ContextualHelp } from './ContextualHelp';
 import { showToast } from '../lib/toast';
+import { focusTargetElement } from '../lib/navigationFocus';
 import {
   filterJobApplications,
   getJobApplicationType,
   getJobStageLabel,
+  getNextJobKeyDate,
   isJobStatusForType,
+  JOB_KEY_DATE_KINDS,
+  JOB_KEY_DATE_LABELS,
   JOB_STAGES,
   JobApplicationDraft,
   JobTypeFilter,
+  normalizeJobKeyDates,
   saveJobApplication,
 } from '../lib/jobApplications';
 
 interface TrabajoViewProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
+  initialFocusId?: string | null;
+  focusNonce?: number;
 }
 
 const NO_JOB_APPLICATIONS: JobApplication[] = [];
@@ -33,9 +40,11 @@ const emptyForm = (tipo: JobApplicationType = 'convencional'): JobApplicationDra
   fecha: todayISO(),
   reclutador: '',
   notas: '',
+  followUpNotes: '',
   link: '',
   nextAction: '',
   nextActionDate: '',
+  keyDates: [],
 });
 
 const initialProcessType = (applications: JobApplication[]): JobTypeFilter =>
@@ -43,7 +52,7 @@ const initialProcessType = (applications: JobApplication[]): JobTypeFilter =>
     ? 'concurso'
     : 'convencional';
 
-export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }) => {
+export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState, initialFocusId, focusNonce }) => {
   const applications = state.jobs?.applications || NO_JOB_APPLICATIONS;
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
   const [processType, setProcessType] = useState<JobTypeFilter>(() => initialProcessType(applications));
@@ -51,9 +60,36 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<JobApplicationDraft>(() => emptyForm(initialProcessType(applications) === 'concurso' ? 'concurso' : 'convencional'));
+  const [newKeyDateKind, setNewKeyDateKind] = useState<JobKeyDateKind>('entrevista');
+  const [newKeyDateValue, setNewKeyDateValue] = useState<string>('');
+  const [newKeyDateTime, setNewKeyDateTime] = useState<string>('');
+  const [newKeyDateNote, setNewKeyDateNote] = useState<string>('');
   const [tableSearch, setTableSearch] = useState('');
   const [formError, setFormError] = useState('');
   const today = todayISO();
+
+  const focusedAppId = initialFocusId?.startsWith('job-app-')
+    ? initialFocusId.slice('job-app-'.length)
+    : null;
+
+  useEffect(() => {
+    if (!focusedAppId) return;
+    const target = applications.find((a) => a.id === focusedAppId);
+    if (!target) return;
+    const targetTipo = getJobApplicationType(target);
+    if (processType !== 'todos' && processType !== targetTipo) {
+      setProcessType(targetTipo);
+      setProcessTypeChosen(true);
+    }
+    const desktopEl = typeof document !== 'undefined' ? document.getElementById(`job-app-${focusedAppId}`) : null;
+    const useMobile =
+      viewMode === 'kanban' &&
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      !window.matchMedia('(min-width: 1024px)').matches &&
+      (!desktopEl || desktopEl.getClientRects().length === 0);
+    return focusTargetElement(useMobile ? `job-app-mobile-${focusedAppId}` : `job-app-${focusedAppId}`);
+  }, [focusedAppId, focusNonce, applications, processType, viewMode]);
 
   // If persisted data arrives after the view mounts, choose a useful initial pipeline only
   // until the user has made a process selection of their own.
@@ -73,7 +109,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
     .sort((a, b) => (a.nextActionDate || '').localeCompare(b.nextActionDate || ''));
   const visibleApplications = scopedApplications.filter((application) => {
     const query = tableSearch.trim().toLocaleLowerCase();
-    return !query || [application.empresa, application.puesto, application.estado, application.reclutador, application.notas, application.nextAction]
+    return !query || [application.empresa, application.puesto, application.estado, application.reclutador, application.notas, application.followUpNotes, application.nextAction]
       .some((value) => value?.toLocaleLowerCase().includes(query));
   });
   const stageCompatible = isJobStatusForType(form.tipo, form.estado);
@@ -83,9 +119,17 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
     setProcessTypeChosen(true);
   };
 
+  const resetNewKeyDateInputs = () => {
+    setNewKeyDateKind('entrevista');
+    setNewKeyDateValue('');
+    setNewKeyDateTime('');
+    setNewKeyDateNote('');
+  };
+
   const openCreateForm = () => {
     setEditingId(null);
     setForm(emptyForm(processType === 'todos' ? 'convencional' : processType));
+    resetNewKeyDateInputs();
     setFormError('');
     setFormOpen(true);
   };
@@ -101,10 +145,13 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
       fecha: application.fecha,
       reclutador: application.reclutador || '',
       notas: application.notas || '',
+      followUpNotes: application.followUpNotes || '',
       link: application.link || '',
       nextAction: application.nextAction || '',
       nextActionDate: application.nextActionDate || '',
+      keyDates: normalizeJobKeyDates(application.keyDates),
     });
+    resetNewKeyDateInputs();
     setFormError('');
     setFormOpen(true);
   };
@@ -112,7 +159,42 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
   const closeForm = () => {
     setFormOpen(false);
     setEditingId(null);
+    resetNewKeyDateInputs();
     setFormError('');
+  };
+
+  const handleAddKeyDateToForm = () => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(newKeyDateValue)) {
+      setFormError('Elegí una fecha válida (YYYY-MM-DD) para la fecha clave.');
+      return;
+    }
+    const nextItem: JobKeyDate = {
+      id: uid(),
+      kind: newKeyDateKind,
+      date: newKeyDateValue,
+      time: newKeyDateTime.trim() || null,
+      ...(newKeyDateNote.trim() ? { note: newKeyDateNote.trim() } : {}),
+    };
+    setForm((prev) => ({
+      ...prev,
+      keyDates: [...(prev.keyDates || []), nextItem],
+    }));
+    resetNewKeyDateInputs();
+    setFormError('');
+  };
+
+  const handleUpdateFormKeyDate = (id: string, patch: Partial<JobKeyDate>) => {
+    setForm((prev) => ({
+      ...prev,
+      keyDates: (prev.keyDates || []).map((kd) => (kd.id === id ? { ...kd, ...patch } : kd)),
+    }));
+  };
+
+  const handleDeleteFormKeyDate = (id: string) => {
+    setForm((prev) => ({
+      ...prev,
+      keyDates: (prev.keyDates || []).filter((kd) => kd.id !== id),
+    }));
   };
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -127,7 +209,9 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
       ...form,
       empresa: form.empresa.trim(),
       puesto: form.puesto.trim(),
-      reclutador: form.reclutador.trim(),
+      reclutador: form.reclutador?.trim() || '',
+      followUpNotes: form.followUpNotes?.trim() || '',
+      keyDates: normalizeJobKeyDates(form.keyDates),
     };
     const saved = onUpdateState((stateDraft) => {
       if (!stateDraft.jobs) stateDraft.jobs = { opportunities: [], applications: [] };
@@ -257,8 +341,111 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
             <label className={labelClass}>{form.tipo === 'concurso' ? 'Contacto / referente' : 'Contacto / LinkedIn'}<input value={form.reclutador} onChange={(e) => setForm({ ...form, reclutador: e.target.value })} placeholder="Opcional" className={`${fieldClass} mt-1`} /></label>
             <label className={labelClass}>Enlace a la publicación<input type="url" value={form.link} onChange={(e) => setForm({ ...form, link: e.target.value })} placeholder="https://…" className={`${fieldClass} mt-1`} /></label>
             <label className={`${labelClass} sm:col-span-2 lg:col-span-3`}>Notas<textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} className={`${fieldClass} mt-1 resize-y`} /></label>
+            <label className={`${labelClass} sm:col-span-2 lg:col-span-3`}>Notas de seguimiento<textarea rows={2} value={form.followUpNotes || ''} onChange={(e) => setForm({ ...form, followUpNotes: e.target.value })} placeholder="Avances, contactos o próximos pasos de seguimiento…" className={`${fieldClass} mt-1 resize-y`} /></label>
             <label className={labelClass}>Próxima acción<input value={form.nextAction} onChange={(e) => setForm({ ...form, nextAction: e.target.value })} placeholder="Ej.: Consultar por el proceso" className={`${fieldClass} mt-1`} /></label>
             <label className={labelClass}>Fecha del seguimiento<input type="date" value={form.nextActionDate} onChange={(e) => setForm({ ...form, nextActionDate: e.target.value })} className={`${fieldClass} mt-1`} /></label>
+
+            <div className="sm:col-span-2 lg:col-span-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-bold text-[var(--text)]">Fechas clave (inscripción, pruebas, entrevistas)</span>
+                {form.nextActionDate && (
+                  <span className="text-[11px] text-[var(--text-soft)]">
+                    Seguimiento ({fmtDate(form.nextActionDate)}) se muestra como tipo Otro
+                  </span>
+                )}
+              </div>
+
+              {(form.keyDates || []).length > 0 && (
+                <ul className="space-y-2">
+                  {(form.keyDates || []).map((kd) => (
+                    <li key={kd.id} className="grid grid-cols-1 gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 sm:grid-cols-[130px_140px_110px_1fr_auto] items-center">
+                      <select
+                        aria-label="Tipo de fecha clave"
+                        value={kd.kind}
+                        onChange={(e) => handleUpdateFormKeyDate(kd.id, { kind: e.target.value as JobKeyDateKind })}
+                        className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-xs text-[var(--text)]"
+                      >
+                        {JOB_KEY_DATE_KINDS.map((kind) => (
+                          <option key={kind} value={kind}>{JOB_KEY_DATE_LABELS[kind]}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="date"
+                        aria-label="Fecha clave"
+                        value={kd.date}
+                        onChange={(e) => handleUpdateFormKeyDate(kd.id, { date: e.target.value })}
+                        className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-xs text-[var(--text)]"
+                      />
+                      <input
+                        type="time"
+                        aria-label="Hora de fecha clave"
+                        value={kd.time || ''}
+                        onChange={(e) => handleUpdateFormKeyDate(kd.id, { time: e.target.value || null })}
+                        className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-xs text-[var(--text)]"
+                      />
+                      <input
+                        type="text"
+                        aria-label="Nota de fecha clave"
+                        value={kd.note || ''}
+                        placeholder="Nota opcional"
+                        onChange={(e) => handleUpdateFormKeyDate(kd.id, { note: e.target.value })}
+                        className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-xs text-[var(--text)]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFormKeyDate(kd.id)}
+                        aria-label="Eliminar fecha clave"
+                        className="min-h-9 rounded-lg px-2 text-xs font-semibold text-red-500 hover:bg-red-500/10 cursor-pointer"
+                      >
+                        Quitar
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[130px_140px_110px_1fr_auto] items-center">
+                <select
+                  aria-label="Tipo de nueva fecha clave"
+                  value={newKeyDateKind}
+                  onChange={(e) => setNewKeyDateKind(e.target.value as JobKeyDateKind)}
+                  className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--text)]"
+                >
+                  {JOB_KEY_DATE_KINDS.map((kind) => (
+                    <option key={kind} value={kind}>{JOB_KEY_DATE_LABELS[kind]}</option>
+                  ))}
+                </select>
+                <input
+                  type="date"
+                  aria-label="Nueva fecha clave"
+                  value={newKeyDateValue}
+                  onChange={(e) => setNewKeyDateValue(e.target.value)}
+                  className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--text)]"
+                />
+                <input
+                  type="time"
+                  aria-label="Hora de nueva fecha clave"
+                  value={newKeyDateTime}
+                  onChange={(e) => setNewKeyDateTime(e.target.value)}
+                  className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--text)]"
+                />
+                <input
+                  type="text"
+                  aria-label="Detalle de nueva fecha clave"
+                  value={newKeyDateNote}
+                  onChange={(e) => setNewKeyDateNote(e.target.value)}
+                  placeholder="Ej.: Entrevista técnica / Prueba escrita"
+                  className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--text)]"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddKeyDateToForm}
+                  className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-bold text-[var(--blue)] hover:bg-[var(--surface-muted)] cursor-pointer"
+                >
+                  + Fecha clave
+                </button>
+              </div>
+            </div>
             {formError && <p role="alert" className="text-sm font-medium text-amber-700 dark:text-amber-300 sm:col-span-2 lg:col-span-3">{formError}</p>}
             <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
               <button type="submit" disabled={!stageCompatible} className="min-h-11 rounded-xl bg-[var(--blue)] px-4 py-2 text-sm font-bold text-white hover:bg-[var(--blue-hover)] disabled:cursor-not-allowed disabled:opacity-50">{editingId ? 'Guardar cambios' : 'Agregar postulación'}</button>
@@ -316,7 +503,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
             </div>
           ) : viewMode === 'kanban' ? (
             <div className="job-kanban-panorama">
-              <JobKanbanBoard applications={scopedApplications} tipo={processType} onSetEstado={handleSetEstado} onEditApplication={openEditForm} onDeleteApplication={handleDeleteApplication} />
+              <JobKanbanBoard applications={scopedApplications} tipo={processType} focusedAppId={focusedAppId} onSetEstado={handleSetEstado} onEditApplication={openEditForm} onDeleteApplication={handleDeleteApplication} />
             </div>
           ) : (
             <div className="space-y-3">
@@ -327,7 +514,8 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
                   <tbody className="divide-y divide-[var(--border)]">
                     {visibleApplications.sort((a, b) => b.fecha.localeCompare(a.fecha)).map((application) => {
                       const tipo = getJobApplicationType(application);
-                      return <tr key={application.id} className="hover:bg-[var(--bg)]/50"><td className="px-3 py-3"><span className="inline-flex rounded-md border border-[var(--border)] px-2 py-1 text-xs font-semibold text-[var(--text-soft)]">{typeLabel(tipo)}</span></td><td className="px-3 py-3 font-bold text-[var(--text)]">{application.empresa}{application.link && <a href={application.link} target="_blank" rel="noreferrer" className="ml-2 whitespace-nowrap text-[var(--blue)] hover:underline">Ver publicación ↗</a>}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.puesto}{application.notas && <p className="mt-1 max-w-xs truncate text-xs text-[var(--text-faint)]">{application.notas}</p>}</td><td className="px-3 py-3"><select aria-label={`Estado de ${application.empresa}`} value={application.estado} onChange={(e) => handleSetEstado(application.id, e.target.value as JobApplication['estado'])} className="max-w-[180px] rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-2 text-xs text-[var(--text)]">{JOB_STAGES[tipo].map((stage) => <option key={stage.id} value={stage.id}>{getJobStageLabel(tipo, stage.id)}</option>)}</select></td><td className="px-3 py-3 tabular-nums text-[var(--text-soft)]">{fmtDate(application.fecha)}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.reclutador || '—'}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.nextAction ? <>{application.nextAction}<br />{application.nextActionDate && fmtDate(application.nextActionDate)}</> : '—'}</td><td className="whitespace-nowrap px-3 py-3"><button type="button" onClick={() => openEditForm(application)} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)]">Editar</button><button type="button" onClick={() => handleDeleteApplication(application.id)} className="min-h-10 rounded-lg px-2 text-xs text-[var(--text-faint)] hover:text-red-500" aria-label={`Eliminar postulación de ${application.empresa}`}>Eliminar</button></td></tr>;
+                      const nextKey = getNextJobKeyDate(application, today);
+                      return <tr key={application.id} id={`job-app-${application.id}`} className="hover:bg-[var(--bg)]/50"><td className="px-3 py-3"><span className="inline-flex rounded-md border border-[var(--border)] px-2 py-1 text-xs font-semibold text-[var(--text-soft)]">{typeLabel(tipo)}</span></td><td className="px-3 py-3 font-bold text-[var(--text)]">{application.empresa}{application.link && <a href={application.link} target="_blank" rel="noreferrer" className="ml-2 whitespace-nowrap text-[var(--blue)] hover:underline">Ver publicación ↗</a>}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.puesto}{application.notas && <p className="mt-1 max-w-xs truncate text-xs text-[var(--text-faint)]">{application.notas}</p>}{application.followUpNotes && <p className="mt-1 max-w-xs truncate text-xs text-[var(--text-soft)]">Seg.: {application.followUpNotes}</p>}</td><td className="px-3 py-3"><select aria-label={`Estado de ${application.empresa}`} value={application.estado} onChange={(e) => handleSetEstado(application.id, e.target.value as JobApplication['estado'])} className="max-w-[180px] rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-2 text-xs text-[var(--text)]">{JOB_STAGES[tipo].map((stage) => <option key={stage.id} value={stage.id}>{getJobStageLabel(tipo, stage.id)}</option>)}</select></td><td className="px-3 py-3 tabular-nums text-[var(--text-soft)]">{fmtDate(application.fecha)}{nextKey && !nextKey.keyDate.isLegacyNextAction && <span className={`mt-1 block w-fit rounded px-1.5 py-0.5 text-[10px] font-bold ${nextKey.proximity === 'overdue' ? 'bg-red-500/15 text-red-600 dark:text-red-400' : nextKey.proximity === 'today' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'}`}>{JOB_KEY_DATE_LABELS[nextKey.keyDate.kind]}: {fmtDate(nextKey.keyDate.date)}</span>}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.reclutador || '—'}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.nextAction ? <>{application.nextAction}<br />{application.nextActionDate && fmtDate(application.nextActionDate)}</> : '—'}</td><td className="whitespace-nowrap px-3 py-3"><button type="button" onClick={() => openEditForm(application)} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)]">Editar</button><button type="button" onClick={() => handleDeleteApplication(application.id)} className="min-h-10 rounded-lg px-2 text-xs text-[var(--text-faint)] hover:text-red-500" aria-label={`Eliminar postulación de ${application.empresa}`}>Eliminar</button></td></tr>;
                     })}
                     {visibleApplications.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-sm text-[var(--text-faint)]">{scopedApplications.length === 0 ? 'No hay postulaciones para este tipo de proceso.' : 'No hay postulaciones que coincidan con esa búsqueda.'}</td></tr>}
                   </tbody>

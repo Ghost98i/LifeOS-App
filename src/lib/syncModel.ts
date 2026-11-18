@@ -87,6 +87,7 @@ export function syncModuleData(state: LifeOSState, module: SyncModuleKey): unkno
     case 'study': {
       const syncedStudy = { ...state.study };
       delete syncedStudy.activeSession;
+      delete syncedStudy.activePracticeSession;
       return { study: syncedStudy };
     }
     case 'streaming': return { streaming: state.streaming };
@@ -143,6 +144,13 @@ export function applySyncModule(state: LifeOSState, module: SyncModuleKey, data:
   if (module === 'gym' && candidate.gym) {
     candidate.gym = { ...candidate.gym, activeTimer: state.gym.activeTimer ?? null };
   }
+  if (module === 'study' && candidate.study) {
+    candidate.study = {
+      ...candidate.study,
+      activeSession: state.study.activeSession ?? null,
+      activePracticeSession: state.study.activePracticeSession ?? null,
+    };
+  }
   return normalizeStoredState(candidate);
 }
 
@@ -176,6 +184,13 @@ export function mergeSyncModule(
   if (module === 'gym' && candidate.gym) {
     candidate.gym = { ...candidate.gym, activeTimer: state.gym.activeTimer ?? null };
   }
+  if (module === 'study' && candidate.study) {
+    candidate.study = {
+      ...candidate.study,
+      activeSession: state.study.activeSession ?? null,
+      activePracticeSession: state.study.activePracticeSession ?? null,
+    };
+  }
   if (module === 'context') {
     const localDailyContext = state.dailyContext || [];
     const remoteDailyContext = Array.isArray((pureRemote as any)?.dailyContext)
@@ -206,6 +221,13 @@ export function mergeSyncModuleWithConflicts(
   const candidate = { ...state, ...(mergedData as Partial<LifeOSState>) };
   if (module === 'gym' && candidate.gym) {
     candidate.gym = { ...candidate.gym, activeTimer: state.gym.activeTimer ?? null };
+  }
+  if (module === 'study' && candidate.study) {
+    candidate.study = {
+      ...candidate.study,
+      activeSession: state.study.activeSession ?? null,
+      activePracticeSession: state.study.activePracticeSession ?? null,
+    };
   }
   if (module === 'context') {
     const localDailyContext = state.dailyContext || [];

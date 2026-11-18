@@ -56,7 +56,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [eventName, setEventName] = useState('');
   const [eventDate, setEventDate] = useState(todayIso);
-  const [eventType, setEventType] = useState<keyof typeof EVENT_TYPE_META>('cumpleanos');
+  const [eventType, setEventType] = useState<CalendarEvent['type']>('cumpleanos');
   const [eventRecurring, setEventRecurring] = useState(false);
   const [eventTime, setEventTime] = useState('');
   const eventNameInputRef = useRef<HTMLInputElement>(null);
@@ -154,7 +154,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
     setEditingEventId(evt.id);
     setEventName(evt.name);
     setEventDate(evt.date);
-    setEventType((evt.type in EVENT_TYPE_META ? evt.type : 'otro') as keyof typeof EVENT_TYPE_META);
+    setEventType((evt.type in EVENT_TYPE_META ? evt.type : 'otro') as CalendarEvent['type']);
     setEventRecurring(Boolean(evt.recurring));
     setEventTime(evt.time || '');
     setShowEventModal(true);
@@ -266,6 +266,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
     item.taskRef ? (item.isDeadline ? 'Tarea · vencimiento' : 'Tarea programada')
       : item.financialType === 'commitment' ? 'Compromiso financiero'
       : item.financialType === 'income' ? 'Ingreso previsto'
+      : item.type === 'job_deadline' ? 'Trabajo · fecha clave'
       : item.type === 'examen' ? 'Estudios · examen'
       : item.type === 'entrega' ? 'Tarea · vencimiento'
       : item.id.startsWith('scheduled-extra-') ? 'Elemento programado'
@@ -275,10 +276,10 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
     item.financialType === 'income' ? 'bg-emerald-500'
       : item.financialType === 'commitment' || item.type === 'entrega' || item.type === 'importante' ? 'bg-rose-500'
       : item.type === 'examen' || item.type === 'otro' ? 'bg-amber-500'
+      : item.type === 'job_deadline' || item.type === 'cita' ? 'bg-indigo-500'
       : item.type === 'cumpleanos' ? 'bg-purple-500'
       : item.type === 'aniversario' ? 'bg-pink-500'
       : item.type === 'reunion' ? 'bg-cyan-500'
-      : item.type === 'cita' ? 'bg-indigo-500'
       : item.type === 'tramite' ? 'bg-slate-500'
       : item.type === 'viaje' ? 'bg-sky-500'
       : item.type === 'recordatorio' ? 'bg-orange-500'
@@ -468,7 +469,13 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                       </span>
                       <button
                         type="button"
-                        onClick={() => setSelectedItem(item)}
+                        onClick={() => {
+                          if (item.type === 'job_deadline' && item.jobApplicationId && onNavigateToRecord) {
+                            onNavigateToRecord('trabajo', { focusId: `job-app-${item.jobApplicationId}` });
+                          } else {
+                            setSelectedItem(item);
+                          }
+                        }}
                         className="min-w-0 flex-1 text-left cursor-pointer"
                       >
                         <span className={`block text-xs sm:text-sm font-semibold text-[var(--text)] leading-snug ${item.isDone ? 'line-through opacity-60' : ''}`}>
@@ -672,7 +679,9 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                     onChange={(e) => setEventType(e.target.value as any)}
                     className="w-full px-3 py-2 text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)] cursor-pointer"
                   >
-                    {Object.entries(EVENT_TYPE_META).map(([k, v]) => (
+                    {Object.entries(EVENT_TYPE_META)
+                      .filter(([k]) => k !== 'job_deadline')
+                      .map(([k, v]) => (
                       <option key={k} value={k}>
                         {v.icon} {v.label}
                       </option>
@@ -752,6 +761,8 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                     ? 'Compromiso Financiero'
                     : selectedItem.financialType === 'income'
                     ? 'Ingreso Previsto'
+                    : selectedItem.type === 'job_deadline'
+                    ? 'Trabajo · Fecha clave'
                     : selectedItem.type === 'examen'
                     ? 'Examen'
                     : selectedItem.type === 'entrega'
@@ -783,6 +794,19 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
             {selectedItem.taskRef && onNavigateToRecord && <button type="button" className="min-h-11 rounded-xl bg-[var(--blue)] px-4 text-sm font-semibold text-white" onClick={() => {
               const target = datedTaskDestination(selectedItem.taskRef!); setSelectedItem(null); onNavigateToRecord(target.view, target.options);
             }}>Abrir tarea original</button>}
+            {selectedItem.type === 'job_deadline' && selectedItem.jobApplicationId && onNavigateToRecord && (
+              <button
+                type="button"
+                className="min-h-11 rounded-xl bg-[var(--blue)] px-4 text-sm font-semibold text-white cursor-pointer"
+                onClick={() => {
+                  const appId = selectedItem.jobApplicationId!;
+                  setSelectedItem(null);
+                  onNavigateToRecord('trabajo', { focusId: `job-app-${appId}` });
+                }}
+              >
+                Abrir postulación en Trabajo
+              </button>
+            )}
             {selectedItem.financialAmount !== undefined && (
               <div className="p-3.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)] space-y-2">
                 <div className="flex items-center justify-between">

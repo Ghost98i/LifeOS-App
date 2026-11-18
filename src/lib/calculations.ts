@@ -16,6 +16,7 @@ import {
   CashFlowDayPoint,
   CashFlowForecastItem,
   JobApplicationType,
+  JobKeyDateKind,
 } from '../types';
 import {
   todayISO,
@@ -38,7 +39,7 @@ import {
   getUnblockedCountIfCompleted,
 } from './taskDependencies';
 import { isModuleEnabled } from './moduleVisibility';
-import { filterJobApplications, getJobApplicationType } from './jobApplications';
+import { filterJobApplications, getJobApplicationType, isJobApplicationActive, JOB_KEY_DATE_LABELS, normalizeJobKeyDates } from './jobApplications';
 import { getPerformedGymVolume, isPerformedGymSession } from './gymFlows';
 import { calcDetailedPRs } from './gymMetrics';
 import { resaleItemCurrency, resaleProfitAmount } from './resaleMoney';
@@ -1113,6 +1114,7 @@ export const EVENT_TYPE_META = {
   tramite: { label: 'Trámite', icon: '🏛️', pill: 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200' },
   viaje: { label: 'Viaje', icon: '✈️', pill: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300' },
   recordatorio: { label: 'Recordatorio', icon: '🔔', pill: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300' },
+  job_deadline: { label: 'Fecha clave de Trabajo', icon: '💼', pill: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300 font-bold' },
 };
 
 export function eventsOnDate(state: LifeOSState, iso: string): CalendarEvent[] {
@@ -1133,7 +1135,7 @@ export interface CalendarDisplayItem {
   name: string;
   date: string;
   time?: string;
-  type: keyof typeof EVENT_TYPE_META | 'entrega' | 'examen' | 'finanza_compromiso' | 'finanza_ingreso';
+  type: keyof typeof EVENT_TYPE_META | 'entrega' | 'examen' | 'finanza_compromiso' | 'finanza_ingreso' | 'job_deadline';
   icon: string;
   pill: string;
   isDone?: boolean;
@@ -1145,6 +1147,8 @@ export interface CalendarDisplayItem {
   frequency?: string;
   remainingOccurrences?: number | null;
   category?: string | null;
+  jobApplicationId?: string;
+  jobKeyDateKind?: JobKeyDateKind;
   /** Read-only source reference, never a second persisted task. */
   taskRef?: import('./datedAgendaTasks').AgendaTaskReference;
 }
@@ -1300,6 +1304,29 @@ export function calendarItemsOnDate(state: LifeOSState, iso: string): CalendarDi
           financialId: inc.id,
           frequency: inc.frequency,
           category: inc.category,
+        });
+      }
+    }
+  }
+
+  // 7. Job Application Key Dates (virtual derived items; no CalendarEvent created)
+  if (isModuleEnabled(state, 'trabajo')) {
+    for (const app of state.jobs?.applications || []) {
+      if (!isJobApplicationActive(app)) continue;
+      for (const kd of normalizeJobKeyDates(app.keyDates)) {
+        if (kd.date !== iso) continue;
+        const kindLabel = JOB_KEY_DATE_LABELS[kd.kind] || 'Fecha clave';
+        items.push({
+          id: `job:${app.id}:${kd.id}`,
+          name: `${kindLabel} · ${app.empresa}${app.puesto ? ` (${app.puesto})` : ''}`,
+          date: iso,
+          time: kd.time || undefined,
+          type: 'job_deadline',
+          icon: EVENT_TYPE_META.job_deadline.icon,
+          pill: EVENT_TYPE_META.job_deadline.pill,
+          isDeadline: true,
+          jobApplicationId: app.id,
+          jobKeyDateKind: kd.kind,
         });
       }
     }

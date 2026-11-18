@@ -1,20 +1,43 @@
 import React, { useEffect, useState } from 'react';
 import { JobApplication, JobApplicationType } from '../types';
 import { fmtDate, todayISO } from '../lib/storage';
-import { filterJobApplications, JOB_STAGES, getJobStageLabel } from '../lib/jobApplications';
+import {
+  filterJobApplications,
+  getNextJobKeyDate,
+  JOB_KEY_DATE_LABELS,
+  JOB_STAGES,
+  getJobStageLabel,
+  type JobKeyDateProximity,
+} from '../lib/jobApplications';
 import { AppIcon } from './AppIcon';
 
 interface JobKanbanBoardProps {
   applications: JobApplication[];
   tipo: JobApplicationType;
+  focusedAppId?: string | null;
   onSetEstado: (id: string, newEstado: JobApplication['estado']) => void;
   onEditApplication: (application: JobApplication) => void;
   onDeleteApplication: (id: string) => void;
 }
 
+const PROXIMITY_STYLE: Record<JobKeyDateProximity, string> = {
+  overdue: 'border border-red-500/30 bg-red-500/15 text-red-600 dark:text-red-400',
+  today: 'border border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300',
+  soon: 'border border-indigo-500/30 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300',
+  future: 'bg-[var(--surface-muted)] text-[var(--text-soft)]',
+};
+
+function formatProximityBadge(proximity: JobKeyDateProximity, daysUntil: number): string {
+  if (proximity === 'overdue') return daysUntil === -1 ? 'Venció ayer' : `Vencida (${Math.abs(daysUntil)} d)`;
+  if (proximity === 'today') return 'Hoy';
+  if (proximity === 'soon') return daysUntil === 1 ? 'Mañana' : `En ${daysUntil} d`;
+  return 'Próxima';
+}
+
 export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
   applications,
   tipo,
+  focusedAppId,
   onSetEstado,
   onEditApplication,
   onDeleteApplication,
@@ -32,6 +55,14 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
     }
   }, [columns, selectedStage, applications]);
 
+  useEffect(() => {
+    if (!focusedAppId) return;
+    const focused = applications.find((a) => a.id === focusedAppId);
+    if (focused && columns.some((c) => c.id === focused.estado)) {
+      setSelectedStage(focused.estado);
+    }
+  }, [focusedAppId, applications, columns]);
+
   const filteredApps = filterJobApplications(applications, tipo).filter((app) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -39,6 +70,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
       app.empresa.toLowerCase().includes(q) ||
       app.puesto.toLowerCase().includes(q) ||
       (app.reclutador && app.reclutador.toLowerCase().includes(q)) ||
+      (app.followUpNotes && app.followUpNotes.toLowerCase().includes(q)) ||
       (app.nextAction && app.nextAction.toLowerCase().includes(q))
     );
   });
@@ -146,8 +178,9 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
           <div className="space-y-2.5 p-2.5">
             {activeStageApplications.map((app) => {
               const isFollowupDue = Boolean(app.nextActionDate && app.nextActionDate <= today);
+              const nextKey = getNextJobKeyDate(app, today);
               return (
-                <article key={app.id} className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-xs">
+                <article key={app.id} id={`job-app-mobile-${app.id}`} className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-xs">
                   <div className="flex min-w-0 items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex min-w-0 items-center gap-1.5">
@@ -159,10 +192,21 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                     <button type="button" onClick={() => onDeleteApplication(app.id)} className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] hover:bg-red-500/10 hover:text-red-500" aria-label={`Eliminar postulación de ${app.empresa}`} title="Eliminar postulación"><AppIcon name="x" className="h-4 w-4" /></button>
                   </div>
 
-                  {(app.reclutador || app.notas) && <div className="mt-2 space-y-1 text-xs text-[var(--text-soft)]">
+                  {(app.reclutador || app.notas || app.followUpNotes) && <div className="mt-2 space-y-1 text-xs text-[var(--text-soft)]">
                     {app.reclutador && <p className="break-words">Contacto: {app.reclutador}</p>}
                     {app.notas && <p className="break-words text-xs text-[var(--text-faint)]">{app.notas}</p>}
+                    {app.followUpNotes && <p className="break-words text-xs text-[var(--text-soft)]">Seguimiento: {app.followUpNotes}</p>}
                   </div>}
+                  {nextKey && !nextKey.keyDate.isLegacyNextAction && (
+                    <div className={`mt-2.5 flex min-w-0 items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs ${PROXIMITY_STYLE[nextKey.proximity]}`}>
+                      <span className="truncate font-semibold">
+                        {JOB_KEY_DATE_LABELS[nextKey.keyDate.kind]} · {formatProximityBadge(nextKey.proximity, nextKey.daysUntil)}
+                      </span>
+                      <span className="shrink-0 font-bold tabular-nums">
+                        {fmtDate(nextKey.keyDate.date)}{nextKey.keyDate.time ? ` ${nextKey.keyDate.time}` : ''}
+                      </span>
+                    </div>
+                  )}
                   {(app.nextAction || app.nextActionDate) && <div className={`mt-2.5 flex min-w-0 items-start justify-between gap-2 rounded-lg px-2 py-1.5 text-xs ${isFollowupDue ? 'border border-red-500/30 bg-red-500/15 text-red-600 dark:text-red-400' : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'}`}>
                     <span className="flex min-w-0 items-center gap-1.5 break-words"><AppIcon name="clock" className="h-3.5 w-3.5 shrink-0" /><span>{app.nextAction || 'Seguimiento'}</span></span>
                     {app.nextActionDate && <span className="shrink-0 text-xs font-bold tabular-nums">{fmtDate(app.nextActionDate)}</span>}
@@ -228,10 +272,12 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                   const isBeingDragged = draggedAppId === app.id;
                   const isFollowupDue =
                     app.nextActionDate && app.nextActionDate <= today;
+                  const nextKey = getNextJobKeyDate(app, today);
 
                   return (
                     <div
                       key={app.id}
+                      id={`job-app-${app.id}`}
                       draggable
                       onDragStart={(e) => handleDragStart(e, app.id)}
                       onDragEnd={handleDragEnd}
@@ -293,7 +339,27 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                             {app.notas}
                           </p>
                         )}
+                        {app.followUpNotes && (
+                          <p className="line-clamp-2 text-[var(--text-soft)] text-xs">
+                            Seguimiento: {app.followUpNotes}
+                          </p>
+                        )}
                       </div>
+
+                      {/* Próxima fecha clave */}
+                      {nextKey && !nextKey.keyDate.isLegacyNextAction && (
+                        <div
+                          className={`mt-2.5 flex items-center justify-between gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors ${PROXIMITY_STYLE[nextKey.proximity]}`}
+                          title={nextKey.keyDate.note || JOB_KEY_DATE_LABELS[nextKey.keyDate.kind]}
+                        >
+                          <span className="truncate font-semibold">
+                            {JOB_KEY_DATE_LABELS[nextKey.keyDate.kind]} · {formatProximityBadge(nextKey.proximity, nextKey.daysUntil)}
+                          </span>
+                          <span className="tabular-nums text-xs font-bold shrink-0">
+                            {fmtDate(nextKey.keyDate.date)}{nextKey.keyDate.time ? ` ${nextKey.keyDate.time}` : ''}
+                          </span>
+                        </div>
+                      )}
 
                       {/* Next Action & Followup date */}
                       {(app.nextAction || app.nextActionDate) && (

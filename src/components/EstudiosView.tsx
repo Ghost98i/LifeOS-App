@@ -5,10 +5,12 @@ import type { LifeOSState, Exam, Subject, StudyLog, StudySessionPhase } from '..
 import { FocusTimer } from './FocusTimer';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
+import { StudyPracticeSection } from './StudyPracticeSection';
 import { playSound } from '../lib/audio';
 import {
   todayISO,
   fmtDate,
+  localISODate,
   uid,
 } from '../lib/storage';
 import {
@@ -78,6 +80,9 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
   }, [initialFocusId, focusNonce]);
 
   // Filtros y estados de visualización
+  const [studyTab, setStudyTab] = useState<'overview' | 'practice'>(() =>
+    state.study?.activePracticeSession ? 'practice' : 'overview'
+  );
   const [examTab, setExamTab] = useState<'upcoming' | 'pending_results' | 'completed' | 'all'>('all');
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string | null>(null);
   const [subjectError, setSubjectError] = useState<string | null>(null);
@@ -719,7 +724,44 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
       {/* -------------------------------------------------------------------- */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <PageHeader title="Estudios" />
+        <div role="tablist" aria-label="Secciones de Estudios" className="inline-flex rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 self-start sm:self-auto">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={studyTab === 'overview'}
+            onClick={() => setStudyTab('overview')}
+            className={`min-h-9 rounded-lg px-3.5 text-xs font-bold transition cursor-pointer ${
+              studyTab === 'overview'
+                ? 'bg-[var(--blue)] text-white shadow-xs'
+                : 'text-[var(--text-soft)] hover:text-[var(--text)]'
+            }`}
+          >
+            Materias y exámenes
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={studyTab === 'practice'}
+            onClick={() => setStudyTab('practice')}
+            className={`min-h-9 rounded-lg px-3.5 text-xs font-bold transition cursor-pointer ${
+              studyTab === 'practice'
+                ? 'bg-[var(--blue)] text-white shadow-xs'
+                : 'text-[var(--text-soft)] hover:text-[var(--text)]'
+            }`}
+          >
+            Repaso{(state.study?.questions?.length || 0) > 0 ? ` (${state.study?.questions?.length})` : ''}
+          </button>
+        </div>
       </div>
+
+      {studyTab === 'practice' ? (
+        <StudyPracticeSection
+          state={state}
+          subjects={subjects}
+          onUpdateState={onUpdateState}
+        />
+      ) : (
+        <>
 
       {/* -------------------------------------------------------------------- */}
       {/* B. Métricas resumen de un vistazo */}
@@ -1050,8 +1092,17 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                                   }`}>
                                     {topic.done && <AppIcon name="check" className="h-3 w-3" />}
                                   </span>
-                                  <span className={`text-xs break-words ${topic.done ? 'line-through text-[var(--text-faint)]' : 'text-[var(--text)]'}`}>
-                                    {topic.title}
+                                  <span className="min-w-0 flex-1">
+                                    <span className={`block text-xs break-words ${topic.done ? 'line-through text-[var(--text-faint)]' : 'text-[var(--text)]'}`}>
+                                      {topic.title}
+                                    </span>
+                                    {topic.practice && topic.practice.attempts > 0 && (
+                                      <span className="block text-[10px] text-[var(--text-soft)] tabular-nums mt-0.5">
+                                        {topic.practice.attempts} {topic.practice.attempts === 1 ? 'repaso' : 'repasos'} · {topic.practice.correct} aciertos
+                                        {topic.practice.bestScore !== undefined ? ` · mejor ${topic.practice.bestScore}%` : ''}
+                                        {topic.practice.lastPracticedAt ? ` · último ${fmtDate(localISODate(new Date(topic.practice.lastPracticedAt)))}` : ''}
+                                      </span>
+                                    )}
                                   </span>
                                 </button>
                                 <button
@@ -1846,6 +1897,8 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

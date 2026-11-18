@@ -218,3 +218,37 @@ test('calendarItemsOnDate enmascara montos con privacyMode y respeta módulos oc
   assert.equal(calendarItemsOnDate(state, '2026-11-20').length, 0);
 });
 
+test('calendarItemsOnDate proyecta fechas clave activas de Trabajo como ítems virtuales job_deadline y respeta visibilidad', () => {
+  const state = defaultState();
+  state.settings.hiddenTabs = state.settings.hiddenTabs.filter((t) => t !== 'trabajo');
+  state.jobs.applications = [
+    {
+      id: 'app-1',
+      empresa: 'Empresa Sol',
+      puesto: 'Backend',
+      estado: 'entrevista',
+      fecha: '2026-11-01',
+      keyDates: [{ id: 'kd-1', kind: 'entrevista', date: '2026-11-22', time: '15:00' }],
+    },
+    {
+      id: 'app-closed',
+      empresa: 'Cerrada',
+      puesto: 'PM',
+      estado: 'contratado',
+      fecha: '2026-11-01',
+      keyDates: [{ id: 'kd-2', kind: 'otro', date: '2026-11-22' }],
+    },
+  ];
+
+  const items = calendarItemsOnDate(state, '2026-11-22');
+  assert.equal(items.length, 1);
+  assert.equal(items[0].id, 'job:app-1:kd-1');
+  assert.equal(items[0].type, 'job_deadline');
+  assert.equal(items[0].jobApplicationId, 'app-1');
+  assert.equal(items[0].time, '15:00');
+  assert.equal(state.calendarEvents.length, 0, 'No debe crear CalendarEvent reales');
+
+  state.settings.hiddenTabs = ['trabajo'];
+  assert.equal(calendarItemsOnDate(state, '2026-11-22').length, 0);
+});
+

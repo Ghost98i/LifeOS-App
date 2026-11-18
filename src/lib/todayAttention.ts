@@ -5,12 +5,14 @@ import { deriveAgreementSchedule } from './financeAgreements';
 import { isWeeklyReviewDue } from './review';
 import { hasBackupContent } from './todayMaintenance';
 import { confirmedFinancialCurrency, formatPlannedAmount } from './financeCurrencyPolicy';
+import { isJobApplicationActive, JOB_KEY_DATE_LABELS, normalizeJobKeyDates } from './jobApplications';
 
 export type AttentionSignalKind =
   | 'financial_commitment_due'
   | 'financial_agreement_due'
   | 'task_overdue'
   | 'exam_upcoming'
+  | 'job_deadline_upcoming'
   | 'backup_urgent'
   | 'weekly_review_due'
   | 'agenda_event_soon'
@@ -444,6 +446,69 @@ export function getAllAttentionCandidates(
   }
 
   // =========================================================================
+  // Señal E: Fechas clave próximas o vencidas recientes en Trabajo (<= 7 días, hasta 14 días vencidas)
+  // =========================================================================
+  if (isModuleEnabled(state, 'trabajo')) {
+    const applications = state.jobs?.applications || [];
+    for (const app of applications) {
+      if (!isJobApplicationActive(app)) continue;
+      const keyDates = normalizeJobKeyDates(app.keyDates);
+      for (const kd of keyDates) {
+        const daysUntil = daysBetween(today, kd.date);
+        // Incluye vencidas recientes (últimos 14 días), hoy (0) y próximas (<= 7 días)
+        if (daysUntil > 7 || daysUntil < -14) continue;
+
+        const kindLabel = JOB_KEY_DATE_LABELS[kd.kind] || 'Fecha clave';
+        const isOverdue = daysUntil < 0;
+        const isToday = daysUntil === 0;
+        const isTomorrow = daysUntil === 1;
+        const timeSuffix = kd.time ? ` a las ${kd.time}` : '';
+        const noteSuffix = kd.note ? ` · ${kd.note}` : '';
+        const roleLabel = app.puesto ? `${app.empresa} (${app.puesto})` : app.empresa;
+
+        const title = isOverdue
+          ? `${kindLabel} vencida`
+          : isToday
+          ? `${kindLabel} hoy`
+          : isTomorrow
+          ? `${kindLabel} mañana`
+          : `${kindLabel} en ${daysUntil} días`;
+
+        const detail = isOverdue
+          ? `${roleLabel}: ${kindLabel.toLowerCase()} venció ${formatDaysOverdue(Math.abs(daysUntil))}${timeSuffix}${noteSuffix}.`
+          : isToday
+          ? `${roleLabel}: ${kindLabel.toLowerCase()} programada para hoy${timeSuffix}${noteSuffix}.`
+          : `${roleLabel}: ${kindLabel.toLowerCase()} el ${fmtDate(kd.date)}${timeSuffix}${noteSuffix}.`;
+
+        // Vencida pesa más que hoy y futura (regla de scoring)
+        const score = isOverdue
+          ? Math.min(110, 96 + Math.min(Math.abs(daysUntil), 14))
+          : isToday
+          ? 94
+          : isTomorrow
+          ? 86
+          : Math.max(70, 82 - daysUntil);
+
+        candidates.push({
+          id: `attention-job-${app.id}-${kd.id}`,
+          dismissKey: `job_deadline:${app.id}:${kd.kind}:${kd.date}`,
+          signalKind: 'job_deadline_upcoming',
+          module: 'trabajo',
+          title,
+          detail,
+          actionLabel: 'Ver postulación',
+          urgency: isOverdue ? 'critical' : isToday || isTomorrow ? 'urgent' : 'warning',
+          score,
+          targetView: 'trabajo',
+          targetFocusId: `job-app-${app.id}`,
+          sourceRecordId: app.id,
+          dueDate: kd.date,
+        });
+      }
+    }
+  }
+
+  // =========================================================================
   // Avisos de sistema y mantenimiento existentes (Backup y Revisión Semanal)
   // =========================================================================
   const daysSinceBackup = state.settings?.lastBackupAt
@@ -596,6 +661,18 @@ export function isAttentionOccurrenceEligible(
     const ev = (state.calendarEvents || []).find((e) => e.id === eventId);
     if (!ev) return false;
     if (date && date < referenceDateIso) return false;
+    return true;
+  }
+
+  if (prefix === 'job_deadline') {
+    const appId = parts[1];
+    const kind = parts[2];
+    const date = parts[3];
+    const app = (state.jobs?.applications || []).find((a) => a.id === appId);
+    if (!app || !isJobApplicationActive(app)) return false;
+    const hasMatch = normalizeJobKeyDates(app.keyDates).some((kd) => kd.kind === kind && kd.date === date);
+    if (!hasMatch) return false;
+    if (date && daysBetween(date, referenceDateIso) > 14) return false;
     return true;
   }
 

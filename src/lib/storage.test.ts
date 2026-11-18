@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CURRENT_SCHEMA_VERSION, defaultState, hasMeaningfulData, localISODate, normalizeStoredState, parseBackupJSON } from './storage';
+import { detectDeletedEntityIds, detectRestoredEntityIds } from './syncMerge';
+import { mergeSyncModule, syncModuleData } from './syncModel';
 
 test('localISODate respeta el día local cerca del cambio de fecha UTC', () => {
   const previousTimezone = process.env.TZ;
@@ -320,4 +322,147 @@ test('hasMeaningfulData detecta compromisos, acuerdos, proyectos e inbox como da
     source: 'quick-capture',
   });
   assert.equal(hasMeaningfulData(withInbox), true);
+});
+
+test('payload legacy sin questions, practiceAttempts, keyDates ni rolledOverAt carga, se normaliza y vuelve a guardar sin errores', () => {
+  const legacyPayload = {
+    schemaVersion: 2,
+    profile: { name: 'Legacy', height: 175 },
+    study: {
+      subjects: [{ id: 's1', name: 'Matemática', topics: [{ id: 't1', title: 'Límites', done: true }] }],
+      exams: [],
+      studyLog: [],
+    },
+    jobs: {
+      opportunities: [],
+      applications: [
+        { id: 'job-leg', empresa: 'Antigua SA', puesto: 'Soporte', estado: 'cv_enviado', fecha: '2026-10-01' },
+      ],
+    },
+    checkoutLog: {
+      '2026-10-01': { closedAt: '22:00', dailyNote: 'Sin campos nuevos' },
+    },
+  };
+
+  const normalized = normalizeStoredState(legacyPayload);
+  assert.deepEqual(normalized.study.questions, []);
+  assert.deepEqual(normalized.study.practiceAttempts, []);
+  assert.equal(normalized.study.activePracticeSession, null);
+  assert.deepEqual(normalized.jobs.applications[0].keyDates, []);
+  assert.equal(normalized.checkoutLog['2026-10-01'].rolledOverAt, undefined);
+
+  const roundTripped = parseBackupJSON(JSON.stringify(normalized));
+  assert.deepEqual(roundTripped.study.questions, []);
+  assert.deepEqual(roundTripped.jobs.applications[0].keyDates, []);
+  assert.equal(roundTripped.checkoutLog['2026-10-01'].dailyNote, 'Sin campos nuevos');
+});
+
+test('convergencia: estado local con datos nuevos + remoto legacy mergean sin pérdida ni duplicados y detectan tombstones', () => {
+  const local = defaultState();
+  local.study.subjects = [
+    {
+      id: 'sub-1',
+      name: 'Física',
+      topics: [
+        {
+          id: 'top-1',
+          title: 'Cinemática',
+          done: false,
+          updatedAt: 5000,
+          practice: { attempts: 2, correct: 4, bestScore: 100, lastPracticedAt: 5000 },
+        },
+      ],
+      updatedAt: 5000,
+    },
+  ];
+  local.study.questions = [
+    {
+      id: 'q-1',
+      subjectId: 'sub-1',
+      topicId: 'top-1',
+      kind: 'multiple_choice',
+      prompt: '¿Unidad de fuerza?',
+      options: [{ id: 'o1', text: 'Newton' }, { id: 'o2', text: 'Joule' }],
+      correctOptionId: 'o1',
+      updatedAt: 5000,
+    },
+  ];
+  local.study.practiceAttempts = [
+    {
+      id: 'att-1',
+      date: '2026-11-18',
+      subjectId: 'sub-1',
+      topicId: 'top-1',
+      mode: 'practica',
+      penalty: 'ninguno',
+      totalQuestions: 1,
+      correctCount: 1,
+      score: 100,
+      durationSec: 65,
+      answers: [{ questionId: 'q-1', optionId: 'o1', correct: true, elapsedMs: 5000 }],
+      createdAt: 5000,
+    },
+  ];
+  local.jobs.applications = [
+    {
+      id: 'app-1',
+      empresa: 'Empresa Nueva',
+      puesto: 'Dev',
+      estado: 'entrevista',
+      fecha: '2026-11-10',
+      followUpNotes: 'Confirmar sala',
+      keyDates: [{ id: 'kd-1', kind: 'entrevista', date: '2026-11-20', time: '11:00' }],
+    },
+  ];
+  local.checkoutLog = {
+    '2026-11-18': { closedAt: '22:15', rolledOverAt: '2026-11-18T22:10:00.000Z' },
+  };
+
+  // Remoto legacy sin los campos nuevos
+  const remoteLegacyStudy = {
+    study: {
+      subjects: [{ id: 'sub-1', name: 'Física', updatedAt: 1000 }],
+      exams: [],
+      studyLog: [{ id: 'log-rem', date: '2026-11-17', minutes: 30 }],
+    },
+  };
+  const remoteLegacyJobs = {
+    jobs: {
+      opportunities: [],
+      applications: [{ id: 'app-1', empresa: 'Empresa Nueva', puesto: 'Dev', estado: 'entrevista', fecha: '2026-11-10' }],
+    },
+  };
+  const remoteLegacyCheckout = {
+    checkoutLog: {
+      '2026-11-18': { closedAt: '22:15', dailyNote: 'Nota remota' },
+    },
+  };
+
+  let merged = mergeSyncModule(local, 'study', remoteLegacyStudy);
+  merged = mergeSyncModule(merged, 'jobs', remoteLegacyJobs);
+  merged = mergeSyncModule(merged, 'checkout', remoteLegacyCheckout);
+
+  assert.equal(merged.study.questions?.length, 1);
+  assert.equal(merged.study.practiceAttempts?.length, 1);
+  assert.equal(merged.study.studyLog.length, 1);
+  assert.equal(merged.study.subjects[0].topics?.[0].practice?.attempts, 2);
+  assert.equal(merged.jobs.applications[0].keyDates?.length, 1);
+  assert.equal(merged.jobs.applications[0].followUpNotes, 'Confirmar sala');
+  assert.equal(merged.checkoutLog['2026-11-18'].rolledOverAt, '2026-11-18T22:10:00.000Z');
+  assert.equal(merged.checkoutLog['2026-11-18'].dailyNote, 'Nota remota');
+
+  // Tombstones: detectDeletedEntityIds y detectRestoredEntityIds contemplan preguntas, intentos y keyDates
+  const afterDelete = structuredClone(merged);
+  afterDelete.study.questions = [];
+  afterDelete.study.practiceAttempts = [];
+  afterDelete.jobs.applications[0].keyDates = [];
+  const deleted = detectDeletedEntityIds(merged, afterDelete);
+  assert.ok(deleted.includes('q-1'));
+  assert.ok(deleted.includes('att-1'));
+  assert.ok(deleted.includes('kd-1'));
+  const restored = detectRestoredEntityIds(afterDelete, merged);
+  assert.ok(restored.includes('q-1'));
+  assert.ok(restored.includes('att-1'));
+  assert.ok(restored.includes('kd-1'));
+  assert.equal((syncModuleData(merged, 'study') as any).activePracticeSession, undefined);
 });

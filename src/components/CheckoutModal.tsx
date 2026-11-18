@@ -1,11 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { LifeOSState, DayKey } from '../types';
-import { todayISO, fmtDate, DAYS } from '../lib/storage';
+import { todayISO, fmtDate, formatMoney, DAYS } from '../lib/storage';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
 import { isModuleEnabled } from '../lib/moduleVisibility';
-import { applyDayCheckout, inspectDayCheckout, type DayCheckoutInput } from '../lib/checkoutFlows';
+import {
+  applyDayCheckout,
+  deriveDayCheckoutSummary,
+  inspectDayCheckout,
+  rolloverPendingExtrasToTomorrow,
+  undoRolloverPendingExtras,
+  type DayCheckoutInput,
+  type RolloverExtrasResult,
+} from '../lib/checkoutFlows';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 import { AppIcon, type AppIconName } from './AppIcon';
+import { PrivacyAmount } from './PrivacyAmount';
 
 interface CheckoutModalProps {
   state: LifeOSState;
@@ -14,31 +24,15 @@ interface CheckoutModalProps {
 }
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateState, onClose }) => {
-  const previousFocusedElementRef = useRef<HTMLElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const isConfirmingRef = useRef(false);
   const saveFailedRef = useRef(false);
 
-  useEffect(() => {
-    if (document.activeElement instanceof HTMLElement) {
-      previousFocusedElementRef.current = document.activeElement;
-    }
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      if (previousFocusedElementRef.current && typeof previousFocusedElementRef.current.focus === 'function') {
-        previousFocusedElementRef.current.focus();
-      }
-    };
-  }, [onClose]);
+  useDialogFocus(true, dialogRef, onClose);
 
   const iso = todayISO();
   const existingLog = state.checkoutLog[iso] || {};
+  const summary = deriveDayCheckoutSummary(state, iso);
 
   const [trainedSkipped, setTrainedSkipped] = useState(Boolean(existingLog.trainedSkipped ?? state.gym.restDays?.includes(iso)));
   const [trainedSkippedTouched, setTrainedSkippedTouched] = useState(false);
@@ -107,12 +101,41 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
     onClose();
   };
 
+  const handleRolloverPending = () => {
+    if (summary.alreadyRolledOver || summary.tasks.pendingExtrasCount === 0) return;
+    let rolloverOutcome: RolloverExtrasResult | null = null;
+    const saved = onUpdateState((draft) => {
+      rolloverOutcome = rolloverPendingExtrasToTomorrow(draft, iso);
+    });
+    if (!saved || !rolloverOutcome) return;
+    const res = rolloverOutcome as RolloverExtrasResult;
+    if (res.movedCount > 0) {
+      showToast(
+        res.movedCount === 1
+          ? '1 tarea pendiente reprogramada para mañana.'
+          : `${res.movedCount} tareas pendientes reprogramadas para mañana.`,
+        'success',
+        {
+          actionLabel: 'Deshacer',
+          onAction: () => {
+            if (onUpdateState((draft) => {
+              undoRolloverPendingExtras(draft, iso, res.movedSnapshots);
+            })) {
+              showToast('Reprogramación revertida.', 'info');
+            }
+          },
+        },
+      );
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in"
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="checkout-modal-title"
@@ -132,6 +155,96 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
           <h2 id="checkout-modal-title" className="pr-10 text-[1.375rem] font-bold tracking-tight text-[var(--text)]">Cerrar el día</h2>
           <p className="mt-0.5 text-[13px] text-[var(--text-soft)]">{fmtDate(iso)}</p>
         </div>
+
+        {/* Resumen automático del día (calculado en render, no persistido) */}
+        <section
+          aria-label="Resumen del día"
+          className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 space-y-2.5 text-xs"
+        >
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-lg border border-[var(--border)]/70 bg-[var(--card)] px-2.5 py-2">
+              <span className="block text-[11px] text-[var(--text-soft)]">Tareas de hoy</span>
+              <strong className="mt-0.5 block text-sm font-bold tabular-nums text-[var(--text)]">
+                {summary.tasks.total > 0
+                  ? `${summary.tasks.completed}/${summary.tasks.total} (${summary.tasks.completionPct}%)`
+                  : 'Sin tareas'}
+              </strong>
+              {summary.tasks.pending > 0 && (
+                <span className="block text-[11px] text-amber-600 dark:text-amber-400 tabular-nums">
+                  {summary.tasks.pending} {summary.tasks.pending === 1 ? 'pendiente' : 'pendientes'}
+                </span>
+              )}
+            </div>
+
+            {isModuleEnabled(state, 'estudios') && (
+              <div className="rounded-lg border border-[var(--border)]/70 bg-[var(--card)] px-2.5 py-2">
+                <span className="block text-[11px] text-[var(--text-soft)]">Estudio</span>
+                <strong className="mt-0.5 block text-sm font-bold tabular-nums text-[var(--text)]">
+                  {summary.study.minutesToday} min
+                </strong>
+                <span className="block text-[11px] text-[var(--text-faint)] tabular-nums">
+                  {summary.study.plannedMinutes
+                    ? `Meta activa: ${summary.study.plannedMinutes} min`
+                    : 'Sin sesión planificada'}
+                </span>
+              </div>
+            )}
+
+            {isModuleEnabled(state, 'gimnasio') && (
+              <div className="rounded-lg border border-[var(--border)]/70 bg-[var(--card)] px-2.5 py-2">
+                <span className="block text-[11px] text-[var(--text-soft)]">Entrenamiento</span>
+                <strong className="mt-0.5 block text-sm font-bold text-[var(--text)]">
+                  {summary.training.trained
+                    ? 'Sesión completada'
+                    : summary.training.restDay
+                    ? 'Día de descanso'
+                    : 'Sin registro'}
+                </strong>
+              </div>
+            )}
+
+            {isModuleEnabled(state, 'finanzas') && (
+              <div className="rounded-lg border border-[var(--border)]/70 bg-[var(--card)] px-2.5 py-2">
+                <span className="block text-[11px] text-[var(--text-soft)]">Gasto de hoy</span>
+                <strong className="mt-0.5 block text-sm font-bold tabular-nums text-[var(--text)]">
+                  <PrivacyAmount>
+                    {formatMoney(summary.spending.spentToday, summary.spending.currency)}
+                  </PrivacyAmount>
+                </strong>
+                <span className="block text-[11px] text-[var(--text-faint)] tabular-nums">
+                  {summary.spending.dailyLimit !== null ? (
+                    <>
+                      Tope diario:{' '}
+                      <PrivacyAmount>
+                        {formatMoney(summary.spending.dailyLimit, summary.spending.currency)}
+                      </PrivacyAmount>
+                    </>
+                  ) : (
+                    'Sin tope definido'
+                  )}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {(summary.tasks.pendingExtrasCount > 0 || summary.alreadyRolledOver) && (
+            <div className="flex items-center justify-between gap-2 pt-1 border-t border-[var(--border)]/60">
+              <span className="text-[11px] text-[var(--text-soft)]">
+                {summary.alreadyRolledOver
+                  ? 'Las tareas puntuales pendientes ya se pasaron a mañana.'
+                  : `${summary.tasks.pendingExtrasCount} ${summary.tasks.pendingExtrasCount === 1 ? 'tarea puntual pendiente' : 'tareas puntuales pendientes'} para pasar a mañana.`}
+              </span>
+              <button
+                type="button"
+                disabled={summary.alreadyRolledOver}
+                onClick={handleRolloverPending}
+                className="shrink-0 min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 text-xs font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {summary.alreadyRolledOver ? 'Ya reprogramadas' : 'Reprogramar pendientes a mañana'}
+              </button>
+            </div>
+          )}
+        </section>
 
         <div className="text-[13px]">
           {/* Gym Check */}

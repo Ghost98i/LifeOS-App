@@ -1530,3 +1530,62 @@ test('Atención ahora — Verificación de convergencia 2: Historial podado y r�
   );
 });
 
+test('Atención ahora — Trabajo: fechas clave <=7 días y vencidas recientes emiten job_deadline_upcoming, respetan cerradas y módulo deshabilitado', () => {
+  const state = defaultState();
+  const today = '2026-11-18';
+  state.settings.lastBackupAt = today;
+  state.settings.lastWeeklyReviewAt = today;
+  state.settings.hiddenTabs = state.settings.hiddenTabs.filter((t) => t !== 'trabajo');
+
+  state.jobs.applications = [
+    {
+      id: 'app-active',
+      empresa: 'Banco República',
+      puesto: 'Analista',
+      estado: 'prueba_evaluacion',
+      tipo: 'concurso',
+      fecha: '2026-11-01',
+      keyDates: [
+        { id: 'kd-soon', kind: 'prueba', date: '2026-11-21', time: '10:00' }, // +3 días
+        { id: 'kd-far', kind: 'otro', date: '2026-12-10' }, // >7 días: no debe emitir
+      ],
+    },
+    {
+      id: 'app-overdue',
+      empresa: 'Tech UY',
+      puesto: 'Frontend',
+      estado: 'entrevista',
+      fecha: '2026-11-01',
+      keyDates: [
+        { id: 'kd-past', kind: 'entrevista', date: '2026-11-16' }, // vencida hace 2 días
+      ],
+    },
+    {
+      id: 'app-closed',
+      empresa: 'Cerrada SA',
+      puesto: 'QA',
+      estado: 'rechazado',
+      fecha: '2026-11-01',
+      keyDates: [{ id: 'kd-closed', kind: 'entrevista', date: '2026-11-19' }],
+    },
+  ];
+
+  const items = getTodayAttentionItems(state, { todayIso: today });
+  assert.equal(items.length, 2);
+  // Vencida pesa más que futura
+  assert.equal(items[0].signalKind, 'job_deadline_upcoming');
+  assert.equal(items[0].sourceRecordId, 'app-overdue');
+  assert.equal(items[0].targetView, 'trabajo');
+  assert.equal(items[0].targetFocusId, 'job-app-app-overdue');
+  assert.equal(items[0].dismissKey, 'job_deadline:app-overdue:entrevista:2026-11-16');
+  assert.equal(items[1].sourceRecordId, 'app-active');
+  assert.equal(items[1].dismissKey, 'job_deadline:app-active:prueba:2026-11-21');
+  assert.equal(items.some((i) => i.sourceRecordId === 'app-closed'), false);
+  assert.equal(isAttentionOccurrenceEligible('job_deadline:app-active:prueba:2026-11-21', state, today), true);
+  assert.equal(isAttentionOccurrenceEligible('job_deadline:app-closed:entrevista:2026-11-19', state, today), false);
+
+  // Con módulo trabajo deshabilitado no aparece nada
+  state.settings.hiddenTabs = ['trabajo'];
+  assert.equal(getTodayAttentionItems(state, { todayIso: today }).length, 0);
+});
+
