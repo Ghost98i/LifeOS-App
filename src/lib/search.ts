@@ -1,9 +1,12 @@
 import type { LifeOSState, ViewType } from '../types';
 import type { AppIconName } from '../components/AppIcon';
-import { fmtMoney } from './storage';
+import { formatMoney } from './storage';
 import { getCategoryName } from './financeCategories';
 import { isModuleEnabled } from './moduleVisibility';
 import { getJobApplicationType, getJobStageLabel } from './jobApplications';
+import { resolveTransactionCurrency } from './calculations';
+import { confirmedFinancialCurrency } from './financeCurrencyPolicy';
+import { maskFinancialText } from './financialPrivacy';
 
 export type SearchCategoryKey =
   | 'actions'
@@ -77,8 +80,11 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
 
   const candidates: SearchResult[] = [];
   const privacyMode = Boolean(state.settings?.privacyMode);
-  const maskMoney = (amount: number, prefix: string = '') =>
-    privacyMode ? `${prefix}$U ••••` : `${prefix}${fmtMoney(amount)}`;
+  const maskMoney = (amount: number, prefix: string = '', currency: string = 'UYU') => {
+    const cur = (currency || 'UYU').toUpperCase();
+    const sym = cur === 'USD' ? 'US$' : '$U';
+    return privacyMode ? `${prefix}${sym} ••••` : `${prefix}${formatMoney(amount, cur)}`;
+  };
 
   const consider = (
     result: Omit<SearchResult, 'score'>,
@@ -143,14 +149,18 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
 
   // 3. Transacciones y Finanzas (Módulo 'finanzas')
   if (isModuleEnabled(state, 'finanzas')) {
+    const accounts = state.finance?.accounts || [];
+
     (state.finance?.transactions || []).forEach((item) => {
       const catName = getCategoryName(state.finance?.categories, item.category);
       const isIngreso = item.type === 'ingreso';
-      const formattedAmount = maskMoney(item.amount);
+      const txCurrency = resolveTransactionCurrency(item, accounts);
+      const formattedAmount = maskMoney(item.amount, '', txCurrency);
       const badgeSign = isIngreso ? '+' : '-';
-      const badgeText = privacyMode ? `${badgeSign}••••` : `${badgeSign}${fmtMoney(item.amount)}`;
+      const badgeText = privacyMode ? `${badgeSign}••••` : `${badgeSign}${formatMoney(item.amount, txCurrency)}`;
       const subtitle = `${isIngreso ? 'Ingreso' : 'Gasto'} · ${formattedAmount} · ${catName} · ${item.date}`;
-      const title = item.note || catName;
+      const rawTitle = item.note || catName;
+      const title = maskFinancialText(rawTitle, privacyMode);
 
       consider(
         {
@@ -166,26 +176,27 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
           isSensitive: true,
         },
         [catName, item.category, item.type],
-        [item.date, item.amount]
+        privacyMode ? [item.date] : [item.date, item.amount]
       );
     });
 
-    (state.finance?.accounts || []).forEach((item) =>
+    accounts.forEach((item) => {
+      const cur = (item.currency || 'UYU').toUpperCase();
       consider(
         {
           id: `account-${item.id}`,
           icon: '💳',
           iconName: 'wallet',
-          title: item.name,
-          subtitle: `Cuenta · Saldo: ${maskMoney(item.balance)}`,
+          title: maskFinancialText(item.name, privacyMode),
+          subtitle: `Cuenta · Saldo: ${maskMoney(item.balance, '', cur)}`,
           view: 'finanzas',
           category: 'finance',
           isSensitive: true,
         },
-        ['cuenta'],
-        [item.balance]
-      )
-    );
+        ['cuenta', cur],
+        privacyMode ? [] : [item.balance]
+      );
+    });
 
     (state.finance?.transfers || []).forEach((item) =>
       consider(
@@ -193,14 +204,14 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
           id: `transfer-${item.id}`,
           icon: '⇄',
           iconName: 'repeat',
-          title: item.note || 'Transferencia',
+          title: maskFinancialText(item.note || 'Transferencia', privacyMode),
           subtitle: `${maskMoney(item.amount)} · ${item.date}`,
           view: 'finanzas',
           category: 'finance',
           isSensitive: true,
         },
         ['transferencia', item.date],
-        [item.amount]
+        privacyMode ? [] : [item.amount]
       )
     );
 
@@ -210,16 +221,74 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
           id: `subscription-${item.id}`,
           icon: '🔔',
           iconName: 'clock',
-          title: item.name,
+          title: maskFinancialText(item.name, privacyMode),
           subtitle: `Suscripción · ${maskMoney(item.amount)}/mes`,
           view: 'finanzas',
           category: 'finance',
           isSensitive: true,
         },
         ['suscripcion', 'servicio'],
-        [item.amount]
+        privacyMode ? [] : [item.amount]
       )
     );
+
+    (state.finance?.commitments || []).forEach((item) => {
+      const cur = confirmedFinancialCurrency(item.currency) || 'UYU';
+      consider(
+        {
+          id: `commitment-${item.id}`,
+          icon: '💳',
+          iconName: 'calendar',
+          title: maskFinancialText(item.name, privacyMode),
+          subtitle: `Compromiso · ${maskMoney(item.amount, '', cur)} · Vence: ${item.nextDueDate}`,
+          view: 'finanzas',
+          category: 'finance',
+          badge: privacyMode ? '-••••' : `-${formatMoney(item.amount, cur)}`,
+          isSensitive: true,
+        },
+        ['compromiso', 'vencimiento', item.category, item.nextDueDate],
+        privacyMode ? [] : [item.amount, item.notes]
+      );
+    });
+
+    (state.finance?.expectedIncomes || []).forEach((item) => {
+      const cur = confirmedFinancialCurrency(item.currency) || 'UYU';
+      consider(
+        {
+          id: `expected-income-${item.id}`,
+          icon: '💰',
+          iconName: 'trendingUp',
+          title: maskFinancialText(item.name, privacyMode),
+          subtitle: `Ingreso previsto · ${maskMoney(item.amount, '', cur)} · ${item.startDate}`,
+          view: 'finanzas',
+          category: 'finance',
+          badge: privacyMode ? '+••••' : `+${formatMoney(item.amount, cur)}`,
+          isSensitive: true,
+        },
+        ['ingreso previsto', 'cobro', item.category, item.startDate],
+        privacyMode ? [] : [item.amount]
+      );
+    });
+
+    (state.finance?.agreements || [])
+      .filter((a) => a.status !== 'cancelled' && !a.deletedAt)
+      .forEach((item) => {
+        const cur = (item.currency || 'UYU').toUpperCase();
+        consider(
+          {
+            id: `agreement-${item.id}`,
+            icon: '📑',
+            iconName: 'wallet',
+            title: maskFinancialText(item.title, privacyMode),
+            subtitle: `Acuerdo / Cuotas · ${item.creditorName} · ${maskMoney(item.initialRemainingBalance, '', cur)}`,
+            view: 'finanzas',
+            category: 'finance',
+            isSensitive: true,
+          },
+          ['acuerdo', 'cuota', 'financiacion', item.creditorName],
+          privacyMode ? [] : [item.initialRemainingBalance, item.notes]
+        );
+      });
 
     (state.finance?.debts || []).forEach((item) =>
       consider(
@@ -227,14 +296,14 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
           id: `debt-${item.id}`,
           icon: '🧾',
           iconName: 'wallet',
-          title: item.name,
+          title: maskFinancialText(item.name, privacyMode),
           subtitle: `Deuda · ${maskMoney(item.amount)}`,
           view: 'finanzas',
           category: 'finance',
           isSensitive: true,
         },
         ['deuda', 'compromiso'],
-        [item.amount]
+        privacyMode ? [] : [item.amount]
       )
     );
 
@@ -244,14 +313,14 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
           id: `investment-${item.id}`,
           icon: '📈',
           iconName: 'trendingUp',
-          title: item.name,
+          title: maskFinancialText(item.name, privacyMode),
           subtitle: `Inversión · ${maskMoney(item.amount)}`,
           view: 'finanzas',
           category: 'finance',
           isSensitive: true,
         },
         ['inversion'],
-        [item.amount]
+        privacyMode ? [] : [item.amount]
       )
     );
   }
@@ -553,6 +622,22 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
         },
         ['enlace', 'link'],
         [item.url]
+      )
+    );
+
+    (state.notes?.possessions || []).forEach((item) =>
+      consider(
+        {
+          id: `possession-${item.id}`,
+          icon: '🎁',
+          iconName: 'note',
+          title: item.name,
+          subtitle: `Mis cosas (${item.category})${item.location ? ` · 📍 ${item.location}` : ''}`,
+          view: 'notas',
+          category: 'notes',
+        },
+        ['objeto', 'regalo', 'cosas', item.category, item.location],
+        [item.note]
       )
     );
 

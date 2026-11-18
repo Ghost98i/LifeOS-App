@@ -3,8 +3,9 @@ import { useDialogFocus } from '../hooks/useDialogFocus';
 import type { JobApplication, JobApplicationType, LifeOSState, ViewType } from '../types';
 import { AppIcon, type AppIconName } from './AppIcon';
 import { searchLifeOS, type SearchResult } from '../lib/search';
-import { fmtMoney, todayISO, uid } from '../lib/storage';
-import { PrivacyAmount } from './PrivacyAmount';
+import { formatMoney, todayISO, uid } from '../lib/storage';
+import { PrivateFinancialText, PrivacyAmount } from './PrivacyAmount';
+import { maskFinancialText } from '../lib/financialPrivacy';
 import { addTransaction } from '../lib/financeFlows';
 import { showToast } from '../lib/toast';
 import { playSound } from '../lib/audio';
@@ -520,8 +521,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         });
         if (saved === false) return;
       }
-      const accName = state.finance.accounts.find((a) => a.id === accountId)?.name || 'Cuenta';
-      const toastAmount = state.settings.privacyMode ? '$U ••••' : fmtMoney(amountNum);
+      const accObj = state.finance.accounts.find((a) => a.id === accountId);
+      const accName = maskFinancialText(accObj?.name || 'Cuenta', Boolean(state.settings.privacyMode));
+      const accCur = accObj?.currency || 'UYU';
+      const toastAmount = state.settings.privacyMode ? '••••' : formatMoney(amountNum, accCur);
       showToast(`Gasto de ${toastAmount} registrado en ${accName}`);
       playSound('success');
       onClose();
@@ -597,7 +600,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         {mode === 'palette' && (
           <>
             {/* Search Input Row */}
-            <div className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-3.5 bg-[var(--bg-elevated)]/50">
+            <div className="command-search-row flex items-center gap-3 border-b border-[var(--border)] px-4 py-3.5 bg-[var(--bg-elevated)]/50 transition-colors">
               <AppIcon name="search" className="h-5 w-5 shrink-0 text-[var(--text-faint)]" />
               <input
                 ref={inputRef}
@@ -807,8 +810,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                   Monto a Registrar
                 </label>
                 <div className="relative">
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 tabular-nums font-bold text-lg text-[var(--text-faint)]">
-                    $
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 tabular-nums font-bold text-sm text-[var(--text-faint)]">
+                    {state.finance.accounts.find((a) => a.id === expenseAccount)?.currency === 'USD' ? 'US$' : '$U'}
                   </span>
                   <input
                     ref={expenseAmountRef}
@@ -819,7 +822,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                     onChange={(e) => setExpenseAmount(e.target.value)}
                     placeholder="0.00"
                     required
-                    className="w-full pl-8 pr-4 py-2.5 text-xl font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue)]/20 outline-none text-[var(--text)]"
+                    className="w-full pl-11 pr-4 py-2.5 text-xl font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue)]/20 outline-none text-[var(--text)]"
                   />
                 </div>
 
@@ -860,9 +863,11 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                               : 'border-[var(--border)] bg-[var(--bg-elevated)] hover:bg-[var(--surface-muted)]'
                           }`}
                         >
-                          <span className="text-xs font-bold text-[var(--text)] truncate w-full">{acc.name}</span>
+                          <span className="text-xs font-bold text-[var(--text)] truncate w-full">
+                            <PrivateFinancialText>{acc.name}</PrivateFinancialText>
+                          </span>
                           <span className="text-[11px] tabular-nums text-[var(--text-soft)] mt-0.5">
-                            <PrivacyAmount>{fmtMoney(acc.balance)}</PrivacyAmount>
+                            <PrivacyAmount>{formatMoney(acc.balance, acc.currency)}</PrivacyAmount>
                           </span>
                         </button>
                       );

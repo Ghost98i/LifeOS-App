@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applySyncModule, buildStateFromModules, changedSyncModules, classifyInitialModuleChanges, syncDataFingerprint, syncModuleData, syncModuleFingerprint } from './syncModel';
+import { applySyncModule, buildStateFromModules, changedSyncModules, classifyInitialModuleChanges, mergeSyncModule, syncDataFingerprint, syncModuleData, syncModuleFingerprint } from './syncModel';
 import { defaultState } from './storage';
 
 test('sincroniza únicamente los módulos que cambiaron', () => {
@@ -91,4 +91,26 @@ test('stableStringify y syncDataFingerprint: campos undefined producen huella id
     syncDataFingerprint(nestedWithoutUndef),
     'Objetos anidados con undefined deben generar la misma huella que sin la propiedad'
   );
+});
+
+test('mergeSyncModule context conserva fechas nuevas remotas aunque local tenga más días acumulados', () => {
+  const state = defaultState();
+  state.dailyContext = [
+    { date: '2026-10-01', energy: 4, mood: 4, sleepHours: 7, connection: null },
+    { date: '2026-10-02', energy: 3, mood: 3, sleepHours: 6, connection: null },
+    { date: '2026-10-03', energy: 5, mood: 5, sleepHours: 8, connection: null },
+  ];
+  const remoteContext = {
+    dailyContext: [
+      { date: '2026-10-01', energy: 4, mood: 4, sleepHours: 7, connection: null },
+      { date: '2026-10-04', energy: 2, mood: 3, sleepHours: 5.5, connection: null },
+    ],
+  };
+
+  const merged = mergeSyncModule(state, 'context', remoteContext);
+  assert.deepEqual(
+    merged.dailyContext.map((d) => d.date),
+    ['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04']
+  );
+  assert.equal(merged.dailyContext.find((d) => d.date === '2026-10-04')?.sleepHours, 5.5);
 });

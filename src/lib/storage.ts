@@ -376,7 +376,6 @@ export const TEMPLATE_ESTUDIANTE: Record<DayKey, { time: string; activity: strin
     { time: '08:00', activity: 'Clases' },
     { time: '13:00', activity: 'Almuerzo' },
     { time: '14:30', activity: 'Estudio' },
-    { time: '14:30', activity: 'Estudio' },
     { time: '19:00', activity: 'Stream' },
   ],
   miercoles: [
@@ -498,12 +497,13 @@ export function hasMeaningfulData(state: LifeOSState): boolean {
     state.todayExtras || [], state.dailyPriorities || [], state.dailyContext || [],
     state.finance?.transactions || [], state.finance?.transfers || [], state.finance?.reconciliations || [],
     state.finance?.debts || [], state.finance?.investments || [], state.finance?.subscriptions || [],
-    state.finance?.expectedIncomes || [],
+    state.finance?.expectedIncomes || [], state.finance?.commitments || [], state.finance?.agreements || [],
     state.gym?.weight || [], state.gym?.measurements || [], state.gym?.sessions || [], state.gym?.routineTemplates || [],
     state.study?.subjects || [], state.study?.exams || [], state.study?.studyLog || [],
     state.streaming?.sessions || [], state.jobs?.opportunities || [], state.jobs?.applications || [],
     state.resale?.opportunities || [], state.resale?.inventory || [], state.ideas || [], state.calendarEvents || [],
-    state.goals || [], state.notes?.postits || [], state.notes?.shopping || [], state.notes?.links || [], state.notes?.possessions || [],
+    state.goals || [], state.projects || [], state.inbox || [],
+    state.notes?.postits || [], state.notes?.shopping || [], state.notes?.links || [], state.notes?.possessions || [],
   ];
 
   return Boolean(
@@ -890,24 +890,42 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
     commitments: Array.isArray(rawFinance.commitments)
       ? rawFinance.commitments
           .filter((c: any) => c && typeof c === 'object' && String(c.name || '').trim().length > 0 && Number(c.amount || 0) > 0)
-          .map((c: any) => ({
-            id: typeof c.id === 'string' ? c.id : uid(),
-            name: String(c.name).trim(),
-            amount: Number(c.amount || 0),
-            ...(typeof c.currency === 'string' ? { currency: c.currency } : {}),
-            category: typeof c.category === 'string' ? c.category : 'Varios',
-            frequency: ['once', 'weekly', 'biweekly', 'monthly', 'yearly'].includes(c.frequency) ? c.frequency : 'monthly',
-            nextDueDate: typeof c.nextDueDate === 'string' ? c.nextDueDate : todayISO(),
-            active: c.active !== false && (typeof c.remainingOccurrences !== 'number' || c.remainingOccurrences > 0),
-            accountId: typeof c.accountId === 'string' ? c.accountId : null,
-            endDate: typeof c.endDate === 'string' ? c.endDate : null,
-            totalOccurrences: typeof c.totalOccurrences === 'number' && Number.isFinite(c.totalOccurrences) && c.totalOccurrences > 0 ? Math.round(c.totalOccurrences) : null,
-            remainingOccurrences: typeof c.remainingOccurrences === 'number' && Number.isFinite(c.remainingOccurrences) ? Math.max(0, Math.round(c.remainingOccurrences)) : null,
-            dueDay: typeof c.dueDay === 'number' && Number.isFinite(c.dueDay) ? Math.max(1, Math.min(31, Math.round(c.dueDay))) : (typeof c.nextDueDate === 'string' ? new Date(`${c.nextDueDate}T12:00:00`).getDate() : null),
-            notes: typeof c.notes === 'string' ? c.notes : undefined,
-            createdAt: typeof c.createdAt === 'string' ? c.createdAt : undefined,
-            updatedAt: typeof c.updatedAt === 'string' ? c.updatedAt : undefined,
-          }))
+          .map((c: any) => {
+            const hasPaidOrCancelled = c.status === 'paid' || c.status === 'cancelled';
+            const remOcc = typeof c.remainingOccurrences === 'number' && Number.isFinite(c.remainingOccurrences)
+              ? Math.max(0, Math.round(c.remainingOccurrences))
+              : null;
+            return {
+              id: typeof c.id === 'string' ? c.id : uid(),
+              name: String(c.name).trim(),
+              amount: Number(c.amount || 0),
+              ...(typeof c.currency === 'string' ? { currency: c.currency } : {}),
+              category: typeof c.category === 'string' ? c.category : 'Varios',
+              frequency: ['once', 'weekly', 'biweekly', 'monthly', 'yearly'].includes(c.frequency) ? c.frequency : 'monthly',
+              nextDueDate: typeof c.nextDueDate === 'string' ? c.nextDueDate : todayISO(),
+              active: c.active !== false && !hasPaidOrCancelled && (remOcc === null || remOcc > 0),
+              ...(['pending', 'paid', 'cancelled'].includes(c.status) ? { status: c.status } : {}),
+              accountId: typeof c.accountId === 'string' ? c.accountId : null,
+              endDate: typeof c.endDate === 'string' ? c.endDate : null,
+              totalOccurrences: typeof c.totalOccurrences === 'number' && Number.isFinite(c.totalOccurrences) && c.totalOccurrences > 0 ? Math.round(c.totalOccurrences) : null,
+              remainingOccurrences: remOcc,
+              ...(typeof c.currentInstallment === 'number' && Number.isFinite(c.currentInstallment) && c.currentInstallment > 0
+                ? { currentInstallment: Math.round(c.currentInstallment) }
+                : c.currentInstallment === null ? { currentInstallment: null } : {}),
+              ...(typeof c.totalInstallments === 'number' && Number.isFinite(c.totalInstallments) && c.totalInstallments > 0
+                ? { totalInstallments: Math.round(c.totalInstallments) }
+                : c.totalInstallments === null ? { totalInstallments: null } : {}),
+              ...(typeof c.installmentAmount === 'number' && Number.isFinite(c.installmentAmount) && c.installmentAmount > 0
+                ? { installmentAmount: roundMoney(c.installmentAmount) }
+                : c.installmentAmount === null ? { installmentAmount: null } : {}),
+              dueDay: typeof c.dueDay === 'number' && Number.isFinite(c.dueDay) ? Math.max(1, Math.min(31, Math.round(c.dueDay))) : (typeof c.nextDueDate === 'string' ? new Date(`${c.nextDueDate}T12:00:00`).getDate() : null),
+              notes: typeof c.notes === 'string' ? c.notes : undefined,
+              ...(typeof c.lastSettledTxId === 'string' ? { lastSettledTxId: c.lastSettledTxId } : c.lastSettledTxId === null ? { lastSettledTxId: null } : {}),
+              ...(Array.isArray(c.settledTxIds) ? { settledTxIds: c.settledTxIds.filter((id: any) => typeof id === 'string') } : {}),
+              createdAt: typeof c.createdAt === 'string' ? c.createdAt : undefined,
+              updatedAt: typeof c.updatedAt === 'string' ? c.updatedAt : undefined,
+            };
+          })
       : [],
     agreements: Array.isArray(rawFinance.agreements)
       ? rawFinance.agreements
@@ -991,6 +1009,8 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
         text: typeof item.text === 'string' ? item.text : '',
         createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
         source: ['quick-capture', 'voice', 'manual'].includes(item.source) ? item.source : 'quick-capture',
+        ...(typeof item.notes === 'string' ? { notes: item.notes } : {}),
+        ...(typeof item.updatedAt === 'string' ? { updatedAt: item.updatedAt } : {}),
       }))
     : [];
 

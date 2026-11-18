@@ -22,7 +22,6 @@ import {
   fetchAccountCapability,
   fetchCloudKeyEnvelope,
   setCloudKeyEnvelope,
-  unlockDeviceWithRecoveryKey,
   getRotationPendingState,
   resolvePendingRotation,
   type AccountSyncCapability,
@@ -85,8 +84,6 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
 
   // Unlock Modal (when device needs MDEK from local envelope or cloud envelope)
   const [isUnlockModalOpen, setIsUnlockModalOpen] = useState<boolean>(false);
-  const [unlockKeyInput, setUnlockKeyInput] = useState<string>('');
-  const [unlockError, setUnlockError] = useState<string | null>(null);
 
   // Key Replacement Modal (Rewrap)
   const [isRewrapModalOpen, setIsRewrapModalOpen] = useState<boolean>(false);
@@ -275,26 +272,18 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
     }
   };
 
-  // Device Unlock Flow (handles both local envelope and clean second-device cloud recovery)
-  const handleUnlockDevice = async () => {
-    if (!storageUserId) return;
-    setUnlockError(null);
-    try {
-      const res = await unlockDeviceWithRecoveryKey(
-        storageUserId,
-        unlockKeyInput,
-        localEnvelope || undefined
-      );
-
-      setLocalEnvelope(res.envelope);
-      showToast('Dispositivo desbloqueado correctamente.');
-      setIsUnlockModalOpen(false);
-      setUnlockKeyInput('');
-      if (onForceSync) onForceSync();
-    } catch (err: any) {
-      setUnlockError(err?.message || 'Clave de recuperación incorrecta. Comprobá los caracteres.');
-    }
-  };
+  useEffect(() => {
+    if (wizardStep === 0 && !isRewrapModalOpen && !isResolveModalOpen && !isDownloadModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (wizardStep > 0 && !isMigrating) setWizardStep(0);
+      if (isRewrapModalOpen) setIsRewrapModalOpen(false);
+      if (isResolveModalOpen) setIsResolveModalOpen(false);
+      if (isDownloadModalOpen) setIsDownloadModalOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [wizardStep, isMigrating, isRewrapModalOpen, isResolveModalOpen, isDownloadModalOpen]);
 
   // Key Replacement (Rewrap) Flow with cloud synchronization and partial failure defense
   const handleRewrapKey = async () => {
@@ -903,6 +892,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
         envelopeOverride={localEnvelope}
         onUnlocked={(envelope) => {
           setLocalEnvelope(envelope);
+          if (storageUserId) isDeviceEnrolled(storageUserId).then(setIsEnrolled).catch(() => {});
           if (onForceSync) onForceSync();
         }}
         showToast={showToast}
@@ -1133,7 +1123,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                     URL.revokeObjectURL(url);
                     showToast('Archivo descargado. Guardalo en un lugar seguro.');
                     setIsDownloadModalOpen(false);
-                  } catch (err: any) {
+                  } catch {
                     setDownloadError('La clave ingresada no es correcta o no coincide con este dispositivo.');
                   }
                 }}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ViewType, LifeOSState } from '../types';
 import { isSoundEnabled, setSoundEnabled, playSound } from '../lib/audio';
 import type { CloudSyncStatus, CloudUser } from '../lib/cloudSync';
@@ -60,6 +60,33 @@ export const Topbar: React.FC<TopbarProps> = ({
   }, []);
   const [showCloudMenu, setShowCloudMenu] = useState(false);
   const [showQuickMenu, setShowQuickMenu] = useState(false);
+  const quickMenuContainerRef = useRef<HTMLDivElement>(null);
+  const cloudMenuContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showCloudMenu && !showQuickMenu) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (showQuickMenu && quickMenuContainerRef.current && target && !quickMenuContainerRef.current.contains(target)) {
+        setShowQuickMenu(false);
+      }
+      if (showCloudMenu && cloudMenuContainerRef.current && target && !cloudMenuContainerRef.current.contains(target)) {
+        setShowCloudMenu(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowQuickMenu(false);
+        setShowCloudMenu(false);
+      }
+    };
+    window.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showCloudMenu, showQuickMenu]);
   const actions = QUICK_ACTIONS.filter((q) => isModuleEnabled(state, q.view));
   const currentMeta: Record<ViewType, { icon: AppIconName; label: string }> = {
     dashboard: { icon: 'home', label: 'Hoy' }, agenda: { icon: 'calendar', label: 'Agenda' }, calendario: { icon: 'calendarDays', label: 'Calendario' },
@@ -169,7 +196,7 @@ export const Topbar: React.FC<TopbarProps> = ({
 
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2 ml-auto">
         {/* Quick Action Split-Button */}
-        <div className="relative hidden sm:flex items-center">
+        <div ref={quickMenuContainerRef} className="relative hidden sm:flex items-center">
           <div className="inline-flex h-9 items-stretch overflow-hidden rounded-xl bg-[var(--blue)] shadow-xs">
             <button
               type="button"
@@ -238,8 +265,9 @@ export const Topbar: React.FC<TopbarProps> = ({
         </div>
 
         {/* Visual Sync Status with Micro-LED */}
-        <div className="relative shrink-0">
+        <div ref={cloudMenuContainerRef} className="relative shrink-0">
           <button
+            type="button"
             onClick={() => {
               if (cloudConfigured) {
                 if (cloudUser) {
@@ -249,6 +277,8 @@ export const Topbar: React.FC<TopbarProps> = ({
                 }
               }
             }}
+            aria-expanded={cloudConfigured && cloudUser ? showCloudMenu : undefined}
+            aria-haspopup={cloudConfigured && cloudUser ? 'menu' : undefined}
             className={`flex h-9 min-w-8 sm:min-w-9 items-center justify-center gap-1.5 rounded-xl border px-2 sm:px-2.5 text-xs font-semibold transition-all ${syncLed.badgeClass} ${cloudConfigured ? 'cursor-pointer hover:opacity-90' : 'cursor-default'}`}
             aria-label={cloudConfigured && !cloudUser ? 'Conectar con Google' : `Sincronización: ${syncLed.label}`}
             title={

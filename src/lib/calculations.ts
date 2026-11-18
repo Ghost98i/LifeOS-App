@@ -20,6 +20,7 @@ import {
 import {
   todayISO,
   sameMonth,
+  sameYear,
   monthLabel,
   daysBetween,
   withinCurrentWeek,
@@ -28,7 +29,9 @@ import {
   clamp,
   sumMoney,
   roundMoney,
+  formatMoney,
 } from './storage';
+import { maskFinancialText } from './financialPrivacy';
 import {
   getUnifiedTaskMap,
   getBlockingTasks,
@@ -630,6 +633,14 @@ export function calcSpentMonth(state: LifeOSState, offset = 0, currency?: string
   return sumMoney(txs.map((t) => t.amount));
 }
 
+export function calcSpentYear(state: LifeOSState, refDate: Date = new Date(), currency?: string): number {
+  const targetCur = resolveTargetCurrency(state, currency);
+  const accounts = state.finance?.accounts || [];
+  const txs = (state.finance?.transactions || [])
+    .filter((t) => t.type === 'gasto' && isOperationalTransaction(t) && sameYear(t.date, refDate) && resolveTransactionCurrency(t, accounts) === targetCur);
+  return sumMoney(txs.map((t) => t.amount));
+}
+
 export function calcIncomeMonth(state: LifeOSState, offset = 0, currency?: string): number {
   const targetCur = resolveTargetCurrency(state, currency);
   const accounts = state.finance?.accounts || [];
@@ -1128,6 +1139,7 @@ export interface CalendarDisplayItem {
   isDone?: boolean;
   isDeadline?: boolean;
   financialAmount?: number;
+  financialCurrency?: string;
   financialType?: 'commitment' | 'income';
   financialId?: string;
   frequency?: string;
@@ -1139,6 +1151,7 @@ export interface CalendarDisplayItem {
 
 export function calendarItemsOnDate(state: LifeOSState, iso: string): CalendarDisplayItem[] {
   const items: CalendarDisplayItem[] = [];
+  const privacyActive = Boolean(state.settings?.privacyMode);
 
   // 1. Regular Calendar Events
   const baseEvents = eventsOnDate(state, iso);
@@ -1156,24 +1169,26 @@ export function calendarItemsOnDate(state: LifeOSState, iso: string): CalendarDi
   }
 
   // 2. Study Exams
-  for (const ex of state.study?.exams || []) {
-    if (ex.date === iso) {
-      const subject = ex.subjectId ? (state.study?.subjects || []).find((s) => s.id === ex.subjectId) : null;
-      const subName = subject?.name || 'Materia';
-      const rawTitle = ex.title?.trim();
-      const displayName = rawTitle
-        ? (subject ? `${rawTitle} · ${subject.name}` : rawTitle)
-        : (subject ? `Examen: ${subName}` : 'Examen');
-      items.push({
-        id: `exam-${ex.id}`,
-        name: displayName,
-        date: iso,
-        time: ex.time || undefined,
-        type: 'examen',
-        icon: '📝',
-        pill: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 font-bold',
-        isDone: ex.status === 'aprobado',
-      });
+  if (isModuleEnabled(state, 'estudios')) {
+    for (const ex of state.study?.exams || []) {
+      if (ex.date === iso) {
+        const subject = ex.subjectId ? (state.study?.subjects || []).find((s) => s.id === ex.subjectId) : null;
+        const subName = subject?.name || 'Materia';
+        const rawTitle = ex.title?.trim();
+        const displayName = rawTitle
+          ? (subject ? `${rawTitle} · ${subject.name}` : rawTitle)
+          : (subject ? `Examen: ${subName}` : 'Examen');
+        items.push({
+          id: `exam-${ex.id}`,
+          name: displayName,
+          date: iso,
+          time: ex.time || undefined,
+          type: 'examen',
+          icon: '📝',
+          pill: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 font-bold',
+          isDone: ex.status === 'aprobado',
+        });
+      }
     }
   }
 
@@ -1212,70 +1227,81 @@ export function calendarItemsOnDate(state: LifeOSState, iso: string): CalendarDi
   }
 
   // 4. Project tasks deadlines
-  for (const p of state.projects || []) {
-    for (const t of p.tasks || []) {
-      if (t.dueDate === iso) {
-        items.push({
-          id: `deadline-task-${t.id}`,
-          taskRef: { source: 'project_task', id: t.id, projectId: p.id },
-          name: `[${p.name}] ${t.text}`,
-          date: iso,
-          type: 'entrega',
-          icon: '⏱️',
-          pill: t.done
-            ? 'bg-emerald-50 text-emerald-600 line-through dark:bg-emerald-950/30 dark:text-emerald-400'
-            : 'bg-rose-100 text-rose-800 font-bold dark:bg-rose-900/40 dark:text-rose-300',
-          isDone: t.done,
-          isDeadline: true,
-        });
+  if (isModuleEnabled(state, 'notas')) {
+    for (const p of state.projects || []) {
+      for (const t of p.tasks || []) {
+        if (t.dueDate === iso) {
+          items.push({
+            id: `deadline-task-${t.id}`,
+            taskRef: { source: 'project_task', id: t.id, projectId: p.id },
+            name: `[${p.name}] ${t.text}`,
+            date: iso,
+            type: 'entrega',
+            icon: '⏱️',
+            pill: t.done
+              ? 'bg-emerald-50 text-emerald-600 line-through dark:bg-emerald-950/30 dark:text-emerald-400'
+              : 'bg-rose-100 text-rose-800 font-bold dark:bg-rose-900/40 dark:text-rose-300',
+            isDone: t.done,
+            isDeadline: true,
+          });
+        }
       }
     }
   }
 
-  // 5. Financial Commitments
-  for (const com of state.finance?.commitments || []) {
-    if (!com.active || Number(com.amount || 0) <= 0) continue;
-    const occs = getCommitmentOccurrences(com, iso, iso, false);
-    if (occs.length > 0) {
-      const remainingLabel =
-        com.remainingOccurrences !== null && com.remainingOccurrences !== undefined
-          ? ` (${com.remainingOccurrences} rest.)`
-          : '';
-      items.push({
-        id: `cal-com-${com.id}-${iso}`,
-        name: `${com.name}: -$${com.amount.toLocaleString('es-UY')}${remainingLabel}`,
-        date: iso,
-        type: 'finanza_compromiso',
-        icon: '💳',
-        pill: 'bg-rose-100 text-rose-800 font-bold dark:bg-rose-900/40 dark:text-rose-300',
-        financialAmount: com.amount,
-        financialType: 'commitment',
-        financialId: com.id,
-        frequency: com.frequency,
-        remainingOccurrences: com.remainingOccurrences,
-        category: com.category,
-      });
+  // 5. Financial Commitments & 6. Expected Incomes
+  if (isModuleEnabled(state, 'finanzas')) {
+    for (const com of state.finance?.commitments || []) {
+      if (!com.active || Number(com.amount || 0) <= 0) continue;
+      const occs = getCommitmentOccurrences(com, iso, iso, false);
+      if (occs.length > 0) {
+        const remainingLabel =
+          com.remainingOccurrences !== null && com.remainingOccurrences !== undefined
+            ? ` (${com.remainingOccurrences} rest.)`
+            : '';
+        const cur = confirmedFinancialCurrency(com.currency) || 'UYU';
+        const safeName = maskFinancialText(com.name, privacyActive);
+        const amountLabel = privacyActive ? '••••' : formatMoney(com.amount, cur);
+        items.push({
+          id: `cal-com-${com.id}-${iso}`,
+          name: `${safeName}: -${amountLabel}${remainingLabel}`,
+          date: iso,
+          type: 'finanza_compromiso',
+          icon: '💳',
+          pill: 'bg-rose-100 text-rose-800 font-bold dark:bg-rose-900/40 dark:text-rose-300',
+          financialAmount: com.amount,
+          financialCurrency: cur,
+          financialType: 'commitment',
+          financialId: com.id,
+          frequency: com.frequency,
+          remainingOccurrences: com.remainingOccurrences,
+          category: com.category,
+        });
+      }
     }
-  }
 
-  // 6. Expected Incomes
-  for (const inc of state.finance?.expectedIncomes || []) {
-    if (!inc.active || Number(inc.amount || 0) <= 0) continue;
-    const occs = getExpectedIncomeOccurrences(inc, iso, iso);
-    if (occs.length > 0) {
-      items.push({
-        id: `cal-inc-${inc.id}-${iso}`,
-        name: `${inc.name}: +$${inc.amount.toLocaleString('es-UY')}`,
-        date: iso,
-        type: 'finanza_ingreso',
-        icon: '💰',
-        pill: 'bg-emerald-100 text-emerald-800 font-bold dark:bg-emerald-900/40 dark:text-emerald-300',
-        financialAmount: inc.amount,
-        financialType: 'income',
-        financialId: inc.id,
-        frequency: inc.frequency,
-        category: inc.category,
-      });
+    for (const inc of state.finance?.expectedIncomes || []) {
+      if (!inc.active || Number(inc.amount || 0) <= 0) continue;
+      const occs = getExpectedIncomeOccurrences(inc, iso, iso);
+      if (occs.length > 0) {
+        const cur = confirmedFinancialCurrency(inc.currency) || 'UYU';
+        const safeName = maskFinancialText(inc.name, privacyActive);
+        const amountLabel = privacyActive ? '••••' : formatMoney(inc.amount, cur);
+        items.push({
+          id: `cal-inc-${inc.id}-${iso}`,
+          name: `${safeName}: +${amountLabel}`,
+          date: iso,
+          type: 'finanza_ingreso',
+          icon: '💰',
+          pill: 'bg-emerald-100 text-emerald-800 font-bold dark:bg-emerald-900/40 dark:text-emerald-300',
+          financialAmount: inc.amount,
+          financialCurrency: cur,
+          financialType: 'income',
+          financialId: inc.id,
+          frequency: inc.frequency,
+          category: inc.category,
+        });
+      }
     }
   }
 

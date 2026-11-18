@@ -2938,18 +2938,6 @@ export default function App() {
         onToggleTheme={handleToggleTheme}
         onTogglePrivacy={handleTogglePrivacy}
       /></Suspense>}
-      <button
-        type="button"
-        onClick={() => {
-          setSearchQuery('');
-          setIsSearchOpen(true);
-        }}
-        className="fixed bottom-20 right-3.5 z-30 flex h-10 w-10 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)]/90 text-[var(--text)] shadow-lg backdrop-blur-md transition-all active:scale-95 lg:hidden"
-        aria-label="Abrir paleta de comandos"
-        title="Paleta de Comandos (Ctrl + K)"
-      >
-        <AppIcon name="search" className="h-4 w-4 text-[var(--blue)]" />
-      </button>
       <ToastViewport />
       {isModuleEnabled(state, 'gimnasio') && currentView !== 'gimnasio' && (
         <GymRestOverlay state={state} onUpdateState={updateState} onOpenGym={() => handleNavigate('gimnasio')} />

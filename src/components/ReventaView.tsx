@@ -1,12 +1,12 @@
 import { CommercialWorkspace } from './CommercialWorkspace';
 import type { CloudSyncStatus } from '../lib/cloudSync';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { LifeOSState, ResaleItem } from '../types';
 import { resaleStats } from '../lib/calculations';
 import { deleteResaleItem, planResaleDeletion, recordResalePurchase, recordResaleSale, resaleProfit, type ResaleDeletionPlan } from '../lib/resaleFlows';
 import { resaleItemCurrency } from '../lib/resaleMoney';
 import { fmtDate, formatMoney, todayISO } from '../lib/storage';
-import { PrivacyAmount } from './PrivacyAmount';
+import { PrivateFinancialText, PrivacyAmount } from './PrivacyAmount';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 import { CommercialCostCalculator } from './CommercialCostCalculator';
@@ -61,7 +61,7 @@ const SellForm: React.FC<SellFormProps> = ({ item, state, onUpdateState, onClose
       <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Envío</span><input type="number" value={shippingCost} onChange={(event) => setShippingCost(event.target.value)} placeholder="0" className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs tabular-nums" /></label>
       <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Plataforma</span><input type="number" value={platformFees} onChange={(event) => setPlatformFees(event.target.value)} placeholder="0" className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs tabular-nums" /></label>
       <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Impuestos</span><input type="number" value={taxes} onChange={(event) => setTaxes(event.target.value)} placeholder="0" className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs tabular-nums" /></label>
-      <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Cuenta</span><select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs">{(state.finance?.accounts || []).map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
+      <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Cuenta</span><select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs">{(state.finance?.accounts || []).map((account) => <option key={account.id} value={account.id}><PrivateFinancialText>{account.name}</PrivateFinancialText></option>)}</select></label>
       <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Fecha</span><input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs" /></label>
       <div className="col-span-2 rounded-lg border border-emerald-500/20 bg-[var(--card)] p-2 sm:col-span-2"><span className="flex items-center gap-1 text-xs font-bold text-[var(--text-faint)]">Ganancia estimada<ContextualHelp label="Ganancia estimada">Precio de venta menos compra y costos de venta ingresados. No incluye otros gastos del negocio.</ContextualHelp></span><strong className={`tabular-nums text-sm ${estimate !== null && estimate < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-[var(--text)]'}`}><PrivacyAmount>{estimate === null ? 'No comparable entre monedas' : fmtMoney(estimate, selectedCurrency)}</PrivacyAmount></strong></div>
       {message && <p className="col-span-2 text-xs font-bold text-red-500 sm:col-span-4">{message}</p>}
@@ -81,6 +81,14 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState, 
   const [sellingId, setSellingId] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [deletion, setDeletion] = useState<ResaleDeletionPlan | null>(null);
+  useEffect(() => {
+    if (!deletion) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDeletion(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [deletion]);
   const stats = resaleStats(state);
   const availableItems = inventory.filter((candidate) => candidate.status === 'comprado');
   const soldItems = [...inventory].filter((candidate) => candidate.status === 'vendido').sort((a, b) => (b.sellDate || '').localeCompare(a.sellDate || ''));
@@ -224,7 +232,7 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState, 
               <form onSubmit={addPurchase} className="flex flex-wrap items-end gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
                 <label className="min-w-[170px] flex-1"><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Producto</span><input required value={item} onChange={(event) => setItem(event.target.value)} placeholder="Ej.: RTX 3060" className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs text-[var(--text)]" /></label>
                 <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Compra</span><input required type="number" value={buyPrice} onChange={(event) => setBuyPrice(event.target.value)} placeholder="0" className="w-28 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs tabular-nums" /></label>
-                <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Cuenta</span><select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs">{(state.finance?.accounts || []).map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
+                <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Cuenta</span><select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs">{(state.finance?.accounts || []).map((account) => <option key={account.id} value={account.id}><PrivateFinancialText>{account.name}</PrivateFinancialText></option>)}</select></label>
                 <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Fecha</span><input type="date" value={buyDate} onChange={(event) => setBuyDate(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs" /></label>
                 <button className="rounded-xl bg-[var(--blue)] px-4 py-2 text-xs font-bold text-white">Comprar</button>
               </form>{message && <p className="text-xs font-bold text-[var(--blue)]">{message}</p>}
@@ -342,8 +350,8 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState, 
           )}
 
           {deletion && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-              <div role="dialog" aria-modal="true" aria-label="Confirmar eliminación de Reventa" className="w-full max-w-md rounded-2xl border border-rose-500/40 bg-[var(--card)] p-4 text-sm text-[var(--text)] shadow-xl">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setDeletion(null)}>
+              <div role="dialog" aria-modal="true" aria-label="Confirmar eliminación de Reventa" className="w-full max-w-md rounded-2xl border border-rose-500/40 bg-[var(--card)] p-4 text-sm text-[var(--text)] shadow-xl" onClick={(e) => e.stopPropagation()}>
                 <h2 className="font-bold">Eliminar «{deletion.itemName}»</h2>
                 <p className="mt-1 text-xs text-[var(--text-soft)]">Se quitará el artículo y su historial de compra y venta en Mi negocio.</p>
                 {deletion.transactions.length > 0 && (

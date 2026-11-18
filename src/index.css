@@ -1563,11 +1563,17 @@ button:active {
   opacity: 0.72;
 }
 
-/* Quick Capture 2.2: Unified focus indicator on container without internal double outline */
+/* Quick Capture 2.2 & Command Palette: Unified focus indicator on container without internal double outline */
 .today-command-bar input:focus,
-.today-command-bar input:focus-visible {
+.today-command-bar input:focus-visible,
+.command-search-row input:focus,
+.command-search-row input:focus-visible {
   outline: none !important;
   box-shadow: none !important;
+}
+
+.command-search-row:focus-within {
+  border-bottom-color: color-mix(in srgb, var(--blue) 45%, var(--border)) !important;
 }
 
 .today-command-bar:focus-within {

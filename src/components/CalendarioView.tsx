@@ -3,9 +3,10 @@ import { LifeOSState, CalendarEvent, ViewType } from '../types';
 import {
   todayISO,
   fmtDate,
-  fmtMoney,
+  formatMoney,
   uid,
 } from '../lib/storage';
+import { PrivacyAmount } from './PrivacyAmount';
 import {
   EVENT_TYPE_META,
   calendarItemsOnDate,
@@ -215,36 +216,49 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
   };
 
   const handleConfirmFinancialFromCalendar = (item: CalendarDisplayItem) => {
-    if (item.financialType === 'commitment') {
-      const saved = onUpdateState((draft) => {
-        if (!draft.finance) return;
-        const target = draft.finance.commitments?.find((c) => c.id === item.financialId);
-        if (!target) return;
-        confirmFinancialCommitment(draft, {
-          commitmentId: target.id,
-          accountId: target.accountId,
-          date: item.date || todayIso,
+    const cur = item.financialCurrency || 'UYU';
+    const privacyActive = Boolean(state.settings?.privacyMode);
+    try {
+      if (item.financialType === 'commitment') {
+        const saved = onUpdateState((draft) => {
+          if (!draft.finance) return;
+          const target = draft.finance.commitments?.find((c) => c.id === item.financialId);
+          if (!target) return;
+          confirmFinancialCommitment(draft, {
+            commitmentId: target.id,
+            accountId: target.accountId,
+            date: item.date || todayIso,
+          });
         });
-      });
-      if (!saved) return;
-      playSound('coins');
-      showToast(`Pago registrado: -$${Number(item.financialAmount || 0).toLocaleString('es-UY')}`, 'success');
-      setSelectedItem(null);
-    } else if (item.financialType === 'income') {
-      const saved = onUpdateState((draft) => {
-        if (!draft.finance) return;
-        const target = draft.finance.expectedIncomes?.find((i) => i.id === item.financialId);
-        if (!target) return;
-        confirmExpectedIncome(draft, {
-          expectedIncomeId: target.id,
-          accountId: target.accountId,
-          date: item.date || todayIso,
+        if (!saved) return;
+        playSound('coins');
+        const amtLabel = privacyActive ? '••••' : formatMoney(Number(item.financialAmount || 0), cur);
+        showToast(`Pago registrado: -${amtLabel}`, 'success');
+        setSelectedItem(null);
+      } else if (item.financialType === 'income') {
+        const saved = onUpdateState((draft) => {
+          if (!draft.finance) return;
+          const target = draft.finance.expectedIncomes?.find((i) => i.id === item.financialId);
+          if (!target) return;
+          confirmExpectedIncome(draft, {
+            expectedIncomeId: target.id,
+            accountId: target.accountId,
+            date: item.date || todayIso,
+          });
         });
-      });
-      if (!saved) return;
-      playSound('coins');
-      showToast(`Ingreso registrado: +$${Number(item.financialAmount || 0).toLocaleString('es-UY')}`, 'success');
-      setSelectedItem(null);
+        if (!saved) return;
+        playSound('coins');
+        const amtLabel = privacyActive ? '••••' : formatMoney(Number(item.financialAmount || 0), cur);
+        showToast(`Ingreso registrado: +${amtLabel}`, 'success');
+        setSelectedItem(null);
+      }
+    } catch (err) {
+      showToast(
+        err instanceof Error
+          ? err.message
+          : 'No se pudo confirmar el movimiento desde el calendario.',
+        'error'
+      );
     }
   };
 
@@ -466,7 +480,9 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                         </span>
                         {item.financialAmount !== undefined && (
                           <span className={`inline-block mt-1 text-[11px] font-bold tabular-nums ${item.financialType === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
-                            {item.financialType === 'income' ? '+' : '−'}{fmtMoney(item.financialAmount)}
+                            <PrivacyAmount>
+                              {item.financialType === 'income' ? '+' : '−'}{formatMoney(item.financialAmount, item.financialCurrency || 'UYU')}
+                            </PrivacyAmount>
                           </span>
                         )}
                       </button>
@@ -778,7 +794,9 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                         : 'text-rose-600 dark:text-rose-400'
                     }`}
                   >
-                    {selectedItem.financialType === 'income' ? '+' : '−'}{fmtMoney(selectedItem.financialAmount)}
+                    <PrivacyAmount>
+                      {selectedItem.financialType === 'income' ? '+' : '−'}{formatMoney(selectedItem.financialAmount, selectedItem.financialCurrency || 'UYU')}
+                    </PrivacyAmount>
                   </span>
                 </div>
                 {selectedItem.frequency && (

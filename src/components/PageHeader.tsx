@@ -16,7 +16,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   actions,
 }) => {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 pb-2">
+    <div className="flex flex-wrap items-center justify-between gap-3 pb-2">
       <div className="min-w-0">
         {category && <span className="eyebrow block mb-1">{category}</span>}
         <div className="flex items-center gap-2.5 flex-wrap">

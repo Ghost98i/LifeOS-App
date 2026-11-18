@@ -679,13 +679,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       )}
 
       {/* 2 & 3. Bento principal: Agenda de hoy (7/12 izq) + Prioridades y Estado (5/12 der) en desktop */}
-      <div className="grid grid-cols-1 items-start gap-3 sm:gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:grid-rows-[auto_1fr]">
+      <div
+        className={`grid grid-cols-1 items-start gap-3 sm:gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] ${
+          isPrioritiesVisible ? 'lg:grid-rows-[auto_1fr]' : ''
+        }`}
+      >
         {/* Prioridades del día (Smart Priorities) */}
-        <PrioritiesWidget
-          state={state}
-          onUpdateState={onUpdateState}
-          className="lg:col-start-2 lg:row-start-1"
-        />
+        {isPrioritiesVisible && (
+          <PrioritiesWidget
+            state={state}
+            onUpdateState={onUpdateState}
+            className="lg:col-start-2 lg:row-start-1"
+          />
+        )}
 
         {/* Agenda de hoy */}
         <TodayAgendaSection
@@ -709,7 +715,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           openLabel={agendaOpenLabel}
           completionMotion={completionMotion}
           todayIso={todayIso}
-          className="lg:col-start-1 lg:row-start-1 lg:row-span-2"
+          className={`lg:col-start-1 lg:row-start-1 ${isPrioritiesVisible ? 'lg:row-span-2' : ''}`}
         />
 
         {/* Estado (Contexto personal) */}
@@ -717,7 +723,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           state={state}
           onUpdateState={onUpdateState}
           onNavigate={onNavigate}
-          className="lg:col-start-2 lg:row-start-2"
+          className={`lg:col-start-2 ${isPrioritiesVisible ? 'lg:row-start-2' : 'lg:row-start-1'}`}
         />
       </div>
 
@@ -788,7 +794,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 };
 
 export const DashboardSkeleton: React.FC = () => (
-  <div className="mx-auto w-full space-y-4 sm:space-y-5 animate-pulse">
+  <div role="status" aria-busy="true" aria-label="Cargando vista" className="mx-auto w-full space-y-4 sm:space-y-5 animate-pulse">
     <div className="today-hero-size rounded-[22px] sm:rounded-[26px] border border-[var(--border)] bg-[var(--hero-bg)]" />
     <div className="h-12 rounded-2xl border border-[var(--border)] bg-[var(--card)] hidden sm:block" />
     <div className="grid grid-cols-1 items-start gap-3 sm:gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:grid-rows-[auto_1fr]">

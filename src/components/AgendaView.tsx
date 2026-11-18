@@ -698,8 +698,8 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 shadow-2xs">
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base sm:text-lg font-bold text-[var(--text)] capitalize">
-                {dayLabel} {dayDate.getDate()} de {dayDate.toLocaleDateString('es-UY', { month: 'long' })}
+              <h3 className="text-base sm:text-lg font-bold text-[var(--text)]">
+                {dayLabel} {dayDate.getDate()} de {dayDate.toLocaleDateString('es-UY', { month: 'long' }).toLocaleLowerCase('es-UY')}
               </h3>
               {isToday && (
                 <span className="rounded-md bg-[var(--blue)] px-2 py-0.5 text-xs font-extrabold text-white">

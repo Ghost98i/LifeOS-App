@@ -15,7 +15,7 @@ function observedBundle(t: { skip: (reason: string) => void }): string | null {
     t.skip('El artefacto publicado archivado no está disponible en este entorno.');
     return null;
   }
-  const source = readFileSync(bundlePath, 'utf8');
+  const source = readFileSync(bundlePath, 'utf8').replace(/\r\n/g, '\n');
   assert.equal(createHash('sha256').update(source).digest('hex'), observedSha256);
   return source;
 }

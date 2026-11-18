@@ -13,13 +13,13 @@ import { confirmedFinancialCurrency, formatPlannedAmount, requireFinancialCurren
 import {
   todayISO,
   formatMoney,
-  sameYear,
   uid,
   parseDecimalInput,
 } from '../lib/storage';
 import {
   calcNetWorth,
   calcSpentMonth,
+  calcSpentYear,
   calcIncomeMonth,
   calcFixedSpentMonth,
   calcMonthComparison,
@@ -213,9 +213,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   const monthGroups = groupTransactionsByMonth(state);
 
   const today = new Date();
-  const totalGastadoAnio = (state.finance?.transactions || [])
-    .filter((t) => t.type === 'gasto' && t.origin !== 'adjustment' && sameYear(t.date, today))
-    .reduce((s, t) => s + Number(t.amount || 0), 0);
+  const totalGastadoAnio = calcSpentYear(state, today);
 
   const fijoMes = calcFixedSpentMonth(state, 0);
   const gastoVariable = Math.max(0, gastado - fijoMes);

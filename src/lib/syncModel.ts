@@ -146,6 +146,18 @@ export function applySyncModule(state: LifeOSState, module: SyncModuleKey, data:
   return normalizeStoredState(candidate);
 }
 
+function preserveLocalDailyContextWithRemoteNewDates(
+  localDailyContext: LifeOSState['dailyContext'],
+  remoteDailyContext: unknown[]
+): LifeOSState['dailyContext'] {
+  const localDates = new Set(localDailyContext.map((item) => item.date));
+  const remoteOnly = remoteDailyContext.filter(
+    (item: any) => item && typeof item === 'object' && typeof item.date === 'string' && !localDates.has(item.date)
+  ) as LifeOSState['dailyContext'];
+  if (remoteOnly.length === 0) return localDailyContext;
+  return [...localDailyContext, ...remoteOnly].sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export function mergeSyncModule(
   state: LifeOSState,
   module: SyncModuleKey,
@@ -170,7 +182,7 @@ export function mergeSyncModule(
       ? (pureRemote as any).dailyContext
       : [];
     if (localDailyContext.length > remoteDailyContext.length) {
-      candidate.dailyContext = localDailyContext;
+      candidate.dailyContext = preserveLocalDailyContextWithRemoteNewDates(localDailyContext, remoteDailyContext);
     }
   }
   return normalizeStoredState(candidate);
@@ -201,7 +213,7 @@ export function mergeSyncModuleWithConflicts(
       ? (pureRemote as any).dailyContext
       : [];
     if (localDailyContext.length > remoteDailyContext.length) {
-      candidate.dailyContext = localDailyContext;
+      candidate.dailyContext = preserveLocalDailyContextWithRemoteNewDates(localDailyContext, remoteDailyContext);
     }
   }
   return { state: normalizeStoredState(candidate), conflicts };

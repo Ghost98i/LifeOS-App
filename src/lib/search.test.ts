@@ -181,3 +181,35 @@ test('política de límite global evalúa todos los módulos y prioriza por scor
   assert.equal(res[0].title, 'Objetivo Principal');
   assert.equal(res[0].view, 'notas');
 });
+
+test('privacyMode impide sondear montos por cifra exacta e indexa compromisos y mis cosas', () => {
+  const state = defaultState();
+  state.finance.accounts = [{ id: 'usd-acc', name: 'Cuenta Dólares', currency: 'USD', balance: 4321 }];
+  state.finance.commitments.push({
+    id: 'com-1',
+    name: 'Servidor Cloud',
+    amount: 25,
+    currency: 'USD',
+    frequency: 'monthly',
+    nextDueDate: '2026-12-01',
+    active: true,
+  });
+  state.notes.possessions.push({
+    id: 'pos-1',
+    name: 'Auriculares Sony',
+    category: 'Audio',
+    location: 'Escritorio',
+  });
+
+  state.settings.privacyMode = false;
+  assert.equal(searchLifeOS(state, '4321').some((r) => r.id === 'account-usd-acc'), true);
+  assert.equal(searchLifeOS(state, 'Auriculares')[0]?.view, 'notas');
+  const comNormal = searchLifeOS(state, 'Servidor Cloud')[0];
+  assert.ok(comNormal?.subtitle.includes('US$ 25'));
+
+  state.settings.privacyMode = true;
+  assert.equal(searchLifeOS(state, '4321').some((r) => r.id === 'account-usd-acc'), false);
+  const comPrivate = searchLifeOS(state, 'Servidor Cloud')[0];
+  assert.ok(comPrivate?.subtitle.includes('US$ ••••'));
+  assert.ok(!comPrivate?.subtitle.includes('25'));
+});

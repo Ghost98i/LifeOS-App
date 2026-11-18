@@ -1256,7 +1256,7 @@ async function writeCloudModulesGuardedInternal(
           }
         }
       } catch (err) {
-        if (isPermissionDenied(err)) {
+        if (isPermissionDenied(err) && !modules.includes('resale') && !modules.includes('finance')) {
           for (const entry of payloads) {
             try {
               const snap = await getDoc(doc(modulesCollection(userId, db), entry.module));
@@ -1335,7 +1335,7 @@ async function writeCloudModulesGuardedInternal(
     try {
       await batch.completion;
     } catch (err) {
-      if (isPermissionDenied(err)) {
+      if (isPermissionDenied(err) && !modules.includes('resale') && !modules.includes('finance')) {
         const healedRevisions: SyncRevisionMap = { ...baseRevisions };
         try {
           const { db } = services();
@@ -1445,7 +1445,7 @@ export async function writeCloudModulesGuarded(
   try {
     return await attemptWrite(baseRevisions);
   } catch (err) {
-    if (isPermissionDenied(err)) {
+    if (isPermissionDenied(err) && !modules.includes('resale') && !modules.includes('finance')) {
       const healedRevisions: SyncRevisionMap = { ...baseRevisions };
       try {
         const { db } = services();

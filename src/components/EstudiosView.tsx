@@ -104,6 +104,18 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
   const [examInputGrade, setExamInputGrade] = useState('');
   const [examInputError, setExamInputError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!editingLog && !subjectModalOpen && !examModalOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (editingLog) setEditingLog(null);
+      if (subjectModalOpen) setSubjectModalOpen(false);
+      if (examModalOpen) setExamModalOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editingLog, subjectModalOpen, examModalOpen]);
+
   const saveStudyChange = (updater: (draft: LifeOSState) => void) => {
     try { return onUpdateState(updater); }
     catch (error) { showToast(error instanceof Error ? error.message : 'No se pudo guardar Estudios.', 'error'); return false; }
@@ -747,9 +759,9 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                 return (
                   <div
                     key={s.id}
-                    className={`py-3 flex items-center justify-between text-xs gap-3 rounded-xl px-2 transition-colors ${
+                    className={`py-3 flex items-center justify-between text-xs gap-3 rounded-xl px-2.5 transition-colors ${
                       isSelected
-                        ? 'bg-[var(--surface-muted)] border-l-4 border-indigo-500'
+                        ? 'bg-[var(--blue-soft)] ring-1 ring-inset ring-[var(--blue)]/35'
                         : 'hover:bg-[var(--surface-muted)]/50'
                     }`}
                   >
@@ -1092,12 +1104,16 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
       {/* -------------------------------------------------------------------- */}
       {editingLog && (
         <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="edit-log-modal-title"
+          onClick={() => setEditingLog(null)}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
         >
-          <div className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl space-y-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="edit-log-modal-title"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl space-y-4"
+          >
             <div className="flex items-center justify-between">
               <h3 id="edit-log-modal-title" className="text-sm font-bold text-[var(--text)]">
                 Corregir registro de estudio
@@ -1186,12 +1202,16 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
       {/* -------------------------------------------------------------------- */}
       {subjectModalOpen && (
         <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="subject-modal-title"
+          onClick={() => setSubjectModalOpen(false)}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
         >
-          <div className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl space-y-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="subject-modal-title"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl space-y-4"
+          >
             <div className="flex items-center justify-between">
               <h3 id="subject-modal-title" className="text-sm font-bold text-[var(--text)]">
                 {editingSubject ? 'Editar materia' : 'Nueva materia'}
@@ -1252,12 +1272,16 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
       {/* -------------------------------------------------------------------- */}
       {examModalOpen && (
         <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="exam-modal-title"
+          onClick={() => setExamModalOpen(false)}
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
         >
-          <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 shadow-2xl space-y-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="exam-modal-title"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 shadow-2xl space-y-4"
+          >
             <div className="flex items-center justify-between">
               <h3 id="exam-modal-title" className="text-sm font-bold text-[var(--text)]">
                 {editingExam ? 'Editar evaluación' : 'Nueva evaluación'}

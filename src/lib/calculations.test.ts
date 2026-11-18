@@ -4,6 +4,7 @@ import {
   routineScheduledFor,
   todayItems,
   calcPRs,
+  calcSpentYear,
   findNowAndNext,
   todayGymStatus,
   studyMinutesForDate,
@@ -185,5 +186,35 @@ test('examApprovalPct calcula la tasa de aprobados sobre resueltos', () => {
   const pct = examApprovalPct(state);
   assert.ok(pct !== null);
   assert.equal(Math.round(pct), 67);
+});
+
+test('calcSpentYear separa monedas y excluye pagos de deuda / ajustes', () => {
+  const state = defaultState();
+  state.finance.accounts = [
+    { id: 'uyu', name: 'Pesos', currency: 'UYU', balance: 10000 },
+    { id: 'usd', name: 'Dólares', currency: 'USD', balance: 500 },
+  ];
+  state.finance.transactions = [
+    { id: 't1', accountId: 'uyu', type: 'gasto', amount: 1500, category: 'Comida', date: '2026-05-10', fixed: 'variable', origin: 'manual' },
+    { id: 't2', accountId: 'usd', type: 'gasto', amount: 200, category: 'Viajes', date: '2026-06-15', fixed: 'variable', origin: 'manual' },
+    { id: 't3', accountId: 'uyu', type: 'gasto', amount: 3000, category: 'Cuotas', date: '2026-07-01', fixed: 'fijo', origin: 'debt_payment', agreementId: 'agr-1' },
+  ];
+  assert.equal(calcSpentYear(state, new Date('2026-11-18T12:00:00')), 1500);
+  assert.equal(calcSpentYear(state, new Date('2026-11-18T12:00:00'), 'USD'), 200);
+});
+
+test('calendarItemsOnDate enmascara montos con privacyMode y respeta módulos ocultos', () => {
+  const state = defaultState();
+  state.finance.commitments = [
+    { id: 'c1', name: 'Internet Fibra', amount: 1890, currency: 'UYU', frequency: 'monthly', nextDueDate: '2026-11-20', active: true },
+  ];
+  state.settings.privacyMode = true;
+  const maskedItems = calendarItemsOnDate(state, '2026-11-20');
+  assert.equal(maskedItems.length, 1);
+  assert.ok(!maskedItems[0].name.includes('1.890'));
+  assert.ok(maskedItems[0].name.includes('••••'));
+
+  state.settings.hiddenTabs = ['finanzas'];
+  assert.equal(calendarItemsOnDate(state, '2026-11-20').length, 0);
 });
 

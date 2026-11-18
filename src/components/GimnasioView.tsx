@@ -309,13 +309,14 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
   const variacion = useMemo(() => activeTab === 'progresion' ? weightVariation(state) : null, [activeTab, state]);
   const isRestDayToday = launcherPlan.explicitRest;
+  const localGymSessions = state.gym.sessions;
   const allVisibleGymSessions = useMemo(() => {
     const flattenedDownloaded = downloadedHistoryChunks.flat();
-    if (flattenedDownloaded.length === 0) return state.gym?.sessions || [];
-    const localIds = new Set((state.gym?.sessions || []).map((s) => s.id));
+    if (flattenedDownloaded.length === 0) return localGymSessions || [];
+    const localIds = new Set((localGymSessions || []).map((s) => s.id));
     const uniqueDownloaded = flattenedDownloaded.filter((s) => !localIds.has(s.id));
-    return [...(state.gym?.sessions || []), ...uniqueDownloaded];
-  }, [state.gym?.sessions, downloadedHistoryChunks]);
+    return [...(localGymSessions || []), ...uniqueDownloaded];
+  }, [localGymSessions, downloadedHistoryChunks]);
   const gymSessions = allVisibleGymSessions;
   const sortedSessions = useMemo(() => {
     return [...(allVisibleGymSessions || [])].sort((a, b) =>

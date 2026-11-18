@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { CURRENT_SCHEMA_VERSION, localISODate, normalizeStoredState, parseBackupJSON } from './storage';
+import { CURRENT_SCHEMA_VERSION, defaultState, hasMeaningfulData, localISODate, normalizeStoredState, parseBackupJSON } from './storage';
 
 test('localISODate respeta el día local cerca del cambio de fecha UTC', () => {
   const previousTimezone = process.env.TZ;
@@ -233,4 +233,91 @@ test('Finanzas 1.3C-D1 — Normalización y persistencia de acquisition en Finan
     },
   });
   assert.equal(stateCorruptAcq.finance.agreements[0].acquisition, null, 'Acquisition con datos inválidos se degrada limpiamente a null');
+});
+
+test('normalizeStoredState preserva cuotas e idempotencia en commitments y metadatos en inbox', () => {
+  const reloaded = normalizeStoredState({
+    finance: {
+      commitments: [
+        {
+          id: 'com-cuotas-1',
+          name: 'Notebook en cuotas',
+          amount: 4500,
+          currency: 'UYU',
+          category: 'Tecnología',
+          frequency: 'monthly',
+          nextDueDate: '2026-12-10',
+          active: true,
+          status: 'pending',
+          currentInstallment: 3,
+          totalInstallments: 6,
+          installmentAmount: 4500,
+          remainingOccurrences: 4,
+          lastSettledTxId: 'tx-settled-2',
+          settledTxIds: ['tx-settled-1', 'tx-settled-2'],
+        },
+        {
+          id: 'com-paid-1',
+          name: 'Seguro anual saldado',
+          amount: 12000,
+          currency: 'UYU',
+          frequency: 'once',
+          nextDueDate: '2026-11-01',
+          active: true,
+          status: 'paid',
+          lastSettledTxId: 'tx-paid-1',
+        },
+      ],
+    },
+    inbox: [
+      {
+        id: 'inb-1',
+        text: 'Averiguar seguro médico',
+        createdAt: '2026-11-18T10:00:00.000Z',
+        updatedAt: '2026-11-18T11:30:00.000Z',
+        notes: 'Consultar cobertura odontológica',
+        source: 'manual',
+      },
+    ],
+  });
+
+  const activeCom = reloaded.finance.commitments[0];
+  assert.equal(activeCom.status, 'pending');
+  assert.equal(activeCom.currentInstallment, 3);
+  assert.equal(activeCom.totalInstallments, 6);
+  assert.equal(activeCom.installmentAmount, 4500);
+  assert.equal(activeCom.lastSettledTxId, 'tx-settled-2');
+  assert.deepEqual(activeCom.settledTxIds, ['tx-settled-1', 'tx-settled-2']);
+
+  const paidCom = reloaded.finance.commitments[1];
+  assert.equal(paidCom.status, 'paid');
+  assert.equal(paidCom.active, false, 'Un compromiso marcado como paid no debe reactivarse al recargar');
+
+  assert.equal(reloaded.inbox[0].notes, 'Consultar cobertura odontológica');
+  assert.equal(reloaded.inbox[0].updatedAt, '2026-11-18T11:30:00.000Z');
+});
+
+test('hasMeaningfulData detecta compromisos, acuerdos, proyectos e inbox como datos reales', () => {
+  const empty = defaultState();
+  assert.equal(hasMeaningfulData(empty), false);
+
+  const withCommitment = defaultState();
+  withCommitment.finance.commitments.push({
+    id: 'c1',
+    name: 'Alquiler',
+    amount: 18000,
+    frequency: 'monthly',
+    nextDueDate: '2026-12-05',
+    active: true,
+  });
+  assert.equal(hasMeaningfulData(withCommitment), true);
+
+  const withInbox = defaultState();
+  withInbox.inbox.push({
+    id: 'i1',
+    text: 'Idea rápida',
+    createdAt: '2026-11-18T10:00:00.000Z',
+    source: 'quick-capture',
+  });
+  assert.equal(hasMeaningfulData(withInbox), true);
 });
