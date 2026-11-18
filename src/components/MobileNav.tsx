@@ -38,8 +38,12 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   const { slot2, slot4 } = getMobileNavSlots(state || (hiddenTabs ? { settings: { hiddenTabs } as any } : undefined));
 
   const itemClass = (active: boolean) =>
-    `flex min-w-0 flex-1 flex-col items-center gap-1 py-1 text-[11px] transition-colors ${
+    `flex min-w-0 flex-1 flex-col items-center gap-0.5 py-1 text-[11px] transition-colors cursor-pointer ${
       active ? 'text-[var(--text)] font-bold' : 'text-[var(--text-faint)] hover:text-[var(--text-soft)]'
+    }`;
+  const iconPillClass = (active: boolean) =>
+    `flex h-7 w-12 items-center justify-center rounded-full transition-colors ${
+      active ? 'bg-[var(--blue-soft)] text-[var(--blue)]' : ''
     }`;
   const moreActive = !['dashboard', slot2?.id, slot4?.id].filter(Boolean).includes(currentView);
 
@@ -139,59 +143,72 @@ export const MobileNav: React.FC<MobileNavProps> = ({
       {/* Main Bottom Tabs */}
       <div className="flex items-end px-2 pt-1 pb-[max(.45rem,env(safe-area-inset-bottom))]">
         <button
+          type="button"
           onClick={() => onNavigate('dashboard')}
           className={itemClass(currentView === 'dashboard')}
           aria-label="Ir a Hoy"
           aria-current={currentView === 'dashboard' ? 'page' : undefined}
         >
-          <AppIcon name="home" className="h-[21px] w-[21px]" />
+          <span className={iconPillClass(currentView === 'dashboard')}>
+            <AppIcon name="home" className="h-[19px] w-[19px]" />
+          </span>
           <span>Hoy</span>
         </button>
         {slot2 ? (
           <button
+            type="button"
             onClick={() => onNavigate(slot2.id)}
             className={itemClass(currentView === slot2.id)}
             aria-label={`Ir a ${slot2.label}`}
             aria-current={currentView === slot2.id ? 'page' : undefined}
           >
-            <AppIcon name={slot2.icon} className="h-[21px] w-[21px]" />
-            <span className="truncate max-w-[64px]">{slot2.label}</span>
+            <span className={iconPillClass(currentView === slot2.id)}>
+              <AppIcon name={slot2.icon} className="h-[19px] w-[19px]" />
+            </span>
+            <span className="truncate max-w-[68px]">{slot2.label}</span>
           </button>
         ) : (
           <div className="flex min-w-0 flex-1" />
         )}
         <button
+          type="button"
           onClick={onOpenCapture}
-          className="relative mx-2 -mt-5 flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white shadow-md active:scale-95 transition-transform cursor-pointer border border-white/20"
+          className="relative mx-2 -mt-4 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white shadow-md active:scale-95 transition-all cursor-pointer border border-white/15"
           aria-label="Captura rápida"
         >
-          <AppIcon name="squarePlus" className="h-7 w-7 text-white" />
+          <AppIcon name="squarePlus" className="h-6 w-6 text-white" />
           {inboxCount > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-black text-slate-900 border-2 border-[var(--card)] animate-pulse">
+            <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-black text-slate-900 border-2 border-[var(--card)]">
               {inboxCount}
             </span>
           )}
         </button>
         {slot4 ? (
           <button
+            type="button"
             onClick={() => onNavigate(slot4.id)}
             className={itemClass(currentView === slot4.id)}
             aria-label={`Ir a ${slot4.label}`}
             aria-current={currentView === slot4.id ? 'page' : undefined}
           >
-            <AppIcon name={slot4.icon} className="h-[21px] w-[21px]" />
-            <span className="truncate max-w-[64px]">{slot4.label}</span>
+            <span className={iconPillClass(currentView === slot4.id)}>
+              <AppIcon name={slot4.icon} className="h-[19px] w-[19px]" />
+            </span>
+            <span className="truncate max-w-[68px]">{slot4.label}</span>
           </button>
         ) : (
           <div className="flex min-w-0 flex-1" />
         )}
         <button
+          type="button"
           onClick={onOpenMore}
           className={itemClass(moreActive)}
           aria-label="Abrir más secciones"
           aria-current={moreActive ? 'page' : undefined}
         >
-          <AppIcon name="more" className="h-[21px] w-[21px]" />
+          <span className={iconPillClass(moreActive)}>
+            <AppIcon name="more" className="h-[19px] w-[19px]" />
+          </span>
           <span>Más</span>
         </button>
       </div>

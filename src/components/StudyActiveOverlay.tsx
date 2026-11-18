@@ -116,16 +116,16 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
   return (
     <aside
       aria-label="Sesión de estudio en curso"
-      className={`fixed z-[64] overflow-hidden rounded-2xl border border-blue-500/30 bg-slate-950/95 text-white shadow-2xl backdrop-blur-md transition-all duration-200 ${
+      className={`fixed z-[59] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] text-[var(--text)] shadow-[var(--card-shadow)] transition-all duration-200 ${
         isCoexisting
-          ? 'bottom-[calc(6.25rem+env(safe-area-inset-bottom)+5.5rem)] left-3 right-3 sm:right-5 sm:left-auto sm:w-[360px] lg:bottom-5 lg:left-[248px] lg:right-auto'
-          : 'bottom-[calc(6.25rem+env(safe-area-inset-bottom))] left-3 right-3 sm:right-auto sm:w-[360px] sm:left-5 lg:bottom-5 lg:left-[248px]'
+          ? 'bottom-[calc(5.25rem+env(safe-area-inset-bottom)+5.25rem)] left-3 right-3 sm:right-5 sm:left-auto sm:w-[360px] lg:bottom-5 lg:left-[248px] lg:right-auto'
+          : 'bottom-[calc(5.25rem+env(safe-area-inset-bottom))] left-3 right-3 sm:right-auto sm:w-[360px] sm:left-5 lg:bottom-5 lg:left-[248px]'
       }`}
     >
-      <div className="h-1 bg-white/10">
+      <div className="h-1 bg-[var(--surface-muted)]">
         <div
           className={`h-full transition-all duration-300 ${
-            status === 'paused' ? 'bg-amber-400' : 'bg-[var(--blue)]'
+            status === 'paused' ? 'bg-amber-500' : 'bg-[var(--blue)]'
           }`}
           style={{
             width: `${Math.max(
@@ -146,17 +146,17 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
           <div className="flex items-center gap-1.5">
             <span
               className={`inline-block h-2 w-2 rounded-full ${
-                status === 'running' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                status === 'running' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
               }`}
             />
-            <span className="block truncate text-[10px] font-black uppercase tracking-wider text-[var(--blue-light,theme(colors.blue.300))] group-hover:underline">
+            <span className="block truncate text-[11px] font-bold text-[var(--blue)] group-hover:underline">
               {phaseLabel}
             </span>
           </div>
-          <strong className="text-xl font-bold tabular-nums block mt-0.5">
+          <strong className="text-xl font-bold tabular-nums tracking-tight text-[var(--text)] block mt-0.5">
             {timeFormatted}
             {status === 'paused' && (
-              <span className="text-xs font-semibold text-amber-300 ml-2">(Pausado)</span>
+              <span className="text-xs font-semibold text-amber-600 dark:text-amber-400 ml-2">(Pausado)</span>
             )}
           </strong>
         </button>
@@ -174,8 +174,8 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
             onClick={handleTogglePause}
             className={`inline-flex min-h-9 items-center justify-center rounded-xl px-2.5 text-xs font-bold transition-all active:scale-95 cursor-pointer ${
               status === 'running'
-                ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30'
-                : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30'
+                ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25 border border-amber-500/30'
+                : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30'
             }`}
             title={status === 'running' ? 'Pausar sesión' : 'Reanudar sesión'}
           >
@@ -194,7 +194,7 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
           <button
             type="button"
             onClick={handleDiscard}
-            className="min-h-9 rounded-xl bg-white/10 px-2 text-xs font-bold text-slate-300 transition-colors hover:bg-red-500/20 hover:text-red-300 active:scale-95 cursor-pointer"
+            className="min-h-9 rounded-xl border border-[var(--border)] bg-[var(--card-subtle)] px-2 text-xs font-bold text-[var(--text-soft)] transition-colors hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-300 active:scale-95 cursor-pointer"
             title="Descartar sesión"
             aria-label="Descartar sesión"
           >

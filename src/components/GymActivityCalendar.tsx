@@ -92,20 +92,24 @@ export const GymActivityCalendar: React.FC<GymActivityCalendarProps> = React.mem
           <tbody>{weeks.map((week, row) => <tr key={row}>{week.map((date, column) => {
             if (!date) return <td key={`empty-${column}`} aria-hidden="true" />;
             const count = index.byDate.get(date)?.length || 0;
+            const isRestDay = !count && rest.has(date);
             return <td key={date} role="gridcell" aria-selected={date === selected}>
-              <button type="button" data-calendar-date={date} data-trained={count > 0 || undefined} tabIndex={date === selected ? 0 : -1} aria-current={date === today ? 'date' : undefined}
+              <button type="button" data-calendar-date={date} data-trained={count > 0 || undefined} data-rest={isRestDay || undefined} tabIndex={date === selected ? 0 : -1} aria-current={date === today ? 'date' : undefined}
                 aria-label={`${fullDate(date)}${date === today ? ', hoy' : ''}${count ? `, ${count} ${count === 1 ? 'sesión completada' : 'sesiones completadas'}` : rest.has(date) ? ', descanso registrado' : ''}`}
                 onClick={() => selectDate(date)} onKeyDown={event => {
                   const next = gymActivityKeyboardDate(date, event.key);
                   if (next) { event.preventDefault(); selectDate(next, true); }
                 }}>
                 <span>{Number(date.slice(-2))}</span>
-                {count > 0 && <AppIcon name="dumbbell" className="h-5 w-5" />}
+                {count > 0 ? <AppIcon name="dumbbell" className="h-4 w-4" /> : isRestDay ? <span className="gym-activity-rest-dot" aria-hidden="true" /> : null}
               </button>
             </td>;
           })}</tr>)}</tbody>
         </table>
-        <p className="gym-activity-legend"><AppIcon name="dumbbell" className="h-4 w-4" />Entrenamiento realizado</p>
+        <div className="gym-activity-legend">
+          <span className="gym-activity-legend-item"><AppIcon name="dumbbell" className="h-4 w-4" />Entrenamiento realizado</span>
+          {rest.size > 0 && <span className="gym-activity-legend-item"><span className="gym-activity-rest-dot" aria-hidden="true" />Descanso registrado</span>}
+        </div>
       </div>
       <div className="gym-activity-selection" aria-labelledby={selectedHeadingId}>
         <div aria-live="polite" aria-atomic="true">

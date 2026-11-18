@@ -75,7 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Drawer Overlay for Mobile */}
       {isOpenMobile && (
         <div
-          className="fixed inset-0 bg-black/40 z-40 lg:hidden backdrop-blur-xs transition-opacity"
+          className="fixed inset-0 bg-black/45 z-[70] lg:hidden backdrop-blur-xs transition-opacity"
           onClick={onCloseMobile}
         />
       )}
@@ -83,7 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <aside
         ref={drawerRef}
         aria-label="Navegación principal"
-        className={`fixed lg:sticky top-0 left-0 h-screen w-[232px] bg-[var(--sidebar)] border-r border-[var(--border)] flex flex-col p-4 z-50 transition-transform duration-200 ease-in-out shrink-0 shadow-[var(--chrome-shadow)] ${
+        className={`fixed lg:sticky top-0 left-0 h-screen w-[232px] bg-[var(--sidebar)] border-r border-[var(--border)] flex flex-col p-4 z-[75] lg:z-50 transition-transform duration-200 ease-in-out shrink-0 shadow-[var(--chrome-shadow)] ${
           isOpenMobile ? 'visible translate-x-0' : 'invisible -translate-x-full lg:visible lg:translate-x-0'
         }`}
       >
@@ -136,23 +136,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onCloseMobile();
                   }}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`group relative flex w-full items-center gap-3.5 rounded-xl px-3.5 py-2.5 text-left text-sm transition-all cursor-pointer ${
+                  className={`group relative flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-[var(--surface-muted)]/50 font-bold text-[var(--text)]'
-                      : 'font-medium text-[var(--text-soft)] hover:bg-[var(--surface-muted)]/40 hover:text-[var(--text)]'
+                      ? 'bg-[var(--blue-soft)] font-bold text-[var(--text)] ring-1 ring-inset ring-[var(--blue)]/25 shadow-2xs'
+                      : 'font-medium text-[var(--text-soft)] hover:bg-[var(--surface-muted)]/60 hover:text-[var(--text)]'
                   }`}
                 >
-                  {/* Subtle active left pill indicator */}
-                  {isActive && (
-                    <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-[var(--blue)]" />
-                  )}
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center">
-                  <AppIcon
-                    name={item.icon}
-                    className={`h-5 w-5 shrink-0 transition-colors ${
-                      isActive ? 'text-[#4F46E5] dark:text-indigo-400' : 'text-[var(--text-soft)] group-hover:text-[var(--text)]'
-                    }`}
-                  />
+                    <AppIcon
+                      name={item.icon}
+                      className={`h-[18px] w-[18px] shrink-0 transition-colors ${
+                        isActive ? 'text-[var(--blue)]' : 'text-[var(--text-soft)] group-hover:text-[var(--text)]'
+                      }`}
+                    />
                   </span>
                   <span className="truncate">{item.label}</span>
                 </button>
@@ -163,18 +159,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         <div className="pt-3 border-t border-[var(--border)] mt-2">
           <button
+            type="button"
             onClick={onToggleTheme}
-            className="flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition-all cursor-pointer shadow-2xs group"
+            aria-pressed={state.settings.darkMode}
+            className="flex min-h-11 w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition-all cursor-pointer shadow-2xs group"
             title={state.settings.darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           >
-            <div className="flex items-center gap-2">
-              <span className="flex h-5 w-5 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--text)] group-hover:bg-indigo-500/10 group-hover:text-indigo-500 transition-colors">
-                <AppIcon name={state.settings.darkMode ? 'sun' : 'moon'} className="h-3.5 w-3.5" />
+            <div className="flex items-center gap-2.5">
+              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--text)] group-hover:bg-[var(--blue-soft)] group-hover:text-[var(--blue)] transition-colors">
+                <AppIcon name={state.settings.darkMode ? 'moon' : 'sun'} className="h-3.5 w-3.5" />
               </span>
-              <span>Modo {state.settings.darkMode ? 'Oscuro' : 'Claro'}</span>
+              <span>Modo {state.settings.darkMode ? 'oscuro' : 'claro'}</span>
             </div>
-            <span className="text-[10px] font-bold text-[var(--text-faint)] uppercase px-1.5 py-0.5 rounded bg-[var(--surface-muted)]">
-              {state.settings.darkMode ? 'ON' : 'OFF'}
+            <span
+              aria-hidden="true"
+              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border p-0.5 transition-colors ${
+                state.settings.darkMode
+                  ? 'border-[var(--blue)] bg-[var(--blue)] justify-end'
+                  : 'border-[var(--border-strong)] bg-[var(--surface-muted)] justify-start'
+              }`}
+            >
+              <span className="h-3.5 w-3.5 rounded-full bg-white shadow-2xs transition-transform" />
             </span>
           </button>
         </div>

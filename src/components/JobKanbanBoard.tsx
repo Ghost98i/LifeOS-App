@@ -99,9 +99,10 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
             <button
               type="button"
               onClick={() => setSearchQuery('')}
+              aria-label="Limpiar búsqueda"
               className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-[var(--text-faint)] hover:text-[var(--text)]"
             >
-              ✕
+              <AppIcon name="x" className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
@@ -155,7 +156,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                       </div>
                       <p className="break-words text-xs font-medium text-[var(--text-soft)]">{app.puesto}</p>
                     </div>
-                    <button type="button" onClick={() => onDeleteApplication(app.id)} className="min-h-10 min-w-10 shrink-0 rounded-lg text-[var(--text-faint)] hover:bg-red-500/10 hover:text-red-500" aria-label={`Eliminar postulación de ${app.empresa}`} title="Eliminar postulación">✕</button>
+                    <button type="button" onClick={() => onDeleteApplication(app.id)} className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] hover:bg-red-500/10 hover:text-red-500" aria-label={`Eliminar postulación de ${app.empresa}`} title="Eliminar postulación"><AppIcon name="x" className="h-4 w-4" /></button>
                   </div>
 
                   {(app.reclutador || app.notas) && <div className="mt-2 space-y-1 text-xs text-[var(--text-soft)]">
@@ -163,7 +164,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                     {app.notas && <p className="break-words text-xs text-[var(--text-faint)]">{app.notas}</p>}
                   </div>}
                   {(app.nextAction || app.nextActionDate) && <div className={`mt-2.5 flex min-w-0 items-start justify-between gap-2 rounded-lg px-2 py-1.5 text-xs ${isFollowupDue ? 'border border-red-500/30 bg-red-500/15 text-red-600 dark:text-red-400' : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'}`}>
-                    <span className="min-w-0 break-words">⏰ {app.nextAction || 'Seguimiento'}</span>
+                    <span className="flex min-w-0 items-center gap-1.5 break-words"><AppIcon name="clock" className="h-3.5 w-3.5 shrink-0" /><span>{app.nextAction || 'Seguimiento'}</span></span>
                     {app.nextActionDate && <span className="shrink-0 text-xs font-bold tabular-nums">{fmtDate(app.nextActionDate)}</span>}
                   </div>}
 
@@ -271,11 +272,11 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                             e.stopPropagation();
                             onDeleteApplication(app.id);
                           }}
-                          className="min-h-9 min-w-9 rounded-md p-1 text-[var(--text-faint)] hover:bg-red-500/10 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+                          className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md p-1 text-[var(--text-faint)] hover:bg-red-500/10 hover:text-red-500 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                           aria-label={`Eliminar postulación de ${app.empresa}`}
                           title="Eliminar postulación"
                         >
-                          ✕
+                          <AppIcon name="x" className="h-3.5 w-3.5" />
                         </button>
                       </div>
 
@@ -297,15 +298,16 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                       {/* Next Action & Followup date */}
                       {(app.nextAction || app.nextActionDate) && (
                           <div
-                            className={`mt-2.5 flex items-center justify-between rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                            className={`mt-2.5 flex items-center justify-between gap-1.5 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
                               isFollowupDue
                                 ? 'bg-red-500/15 border border-red-500/30 text-red-600 dark:text-red-400'
                                 : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'
                             }`}
                             title="Seguimiento asociado a esta postulación"
                           >
-                            <span className="truncate flex-1">
-                              ⏰ {app.nextAction || 'Seguimiento'}
+                            <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                              <AppIcon name="clock" className="h-3.5 w-3.5 shrink-0" />
+                              <span className="truncate">{app.nextAction || 'Seguimiento'}</span>
                             </span>
                             {app.nextActionDate && (
                               <span className="tabular-nums text-xs font-bold shrink-0 ml-1">

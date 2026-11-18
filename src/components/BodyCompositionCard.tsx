@@ -77,11 +77,11 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = React.mem
   ].filter(Boolean) as string[];
 
   return (
-    <section data-gym-body-composition className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 shadow-xs space-y-3.5 transition-all">
+    <section data-gym-body-composition className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 shadow-[var(--card-shadow)] space-y-3.5 transition-all">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="flex min-w-0 flex-1 basis-full items-center gap-2.5 sm:basis-auto">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-500/10 text-teal-500 border border-teal-500/20">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue)]/20">
             <AppIcon name="scale" className="h-4.5 w-4.5" />
           </span>
           <div className="min-w-0">
@@ -118,11 +118,16 @@ export const BodyCompositionCard: React.FC<BodyCompositionCardProps> = React.mem
         </div>
 
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          {saved && <span className="text-xs font-bold text-emerald-500">✓ Guardado</span>}
+          {saved && (
+            <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+              <AppIcon name="check" className="h-3.5 w-3.5" />
+              Guardado
+            </span>
+          )}
           <button
             type="button"
             onClick={() => setShowForm((prev) => !prev)}
-            className="min-h-11 shrink-0 px-2 text-xs font-bold text-[var(--blue)] hover:underline cursor-pointer"
+            className="min-h-11 shrink-0 rounded-xl px-3 text-xs font-bold text-[var(--blue)] hover:bg-[var(--surface-muted)] cursor-pointer transition-colors"
           >
             {showForm ? 'Cerrar' : '+ Registrar medición'}
           </button>

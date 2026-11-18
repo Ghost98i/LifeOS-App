@@ -2515,29 +2515,28 @@ export default function App() {
               </div>
             </div>
           )}
-          {cloudSyncConfigured && !cloudUser && !dismissedAnywhereBanner && currentView !== 'gimnasio' && currentView !== 'config' && (
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-blue-500/25 bg-blue-500/10 p-3 sm:px-4 text-xs">
+          {cloudSyncConfigured && !cloudUser && !dismissedAnywhereBanner && currentView === 'dashboard' && (
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3.5 py-2.5 text-xs shadow-[var(--card-shadow-subtle)]">
               <div className="flex items-center gap-2.5 min-w-0">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 text-[var(--blue)]">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--blue-soft)] text-[var(--blue)]">
                   <AppIcon name="cloud" className="h-4 w-4" />
                 </span>
-                <div className="min-w-0">
-                  <p className="font-extrabold text-[var(--text)] truncate">Celestian LifeOS</p>
-                  <p className="text-[11px] text-[var(--text-soft)] truncate">Conectá Google para sincronizar con tu celular.</p>
-                </div>
+                <p className="min-w-0 truncate text-xs text-[var(--text-soft)]">
+                  <strong className="font-bold text-[var(--text)]">Sincronización en la nube:</strong> conectá Google para mantener tu celular al día.
+                </p>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
                   onClick={handleCloudSignIn}
-                  className="rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] px-3.5 py-1.5 text-xs font-bold text-white shadow-2xs transition-colors cursor-pointer"
+                  className="min-h-9 rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] px-3 py-1.5 text-xs font-bold text-white shadow-2xs transition-colors cursor-pointer"
                 >
-                  Conectar con Google
+                  Conectar
                 </button>
                 <button
                   type="button"
                   onClick={handleDismissAnywhereBanner}
-                  className="inline-flex items-center justify-center p-1 text-[var(--text-faint)] hover:text-[var(--text)] transition-colors cursor-pointer"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-faint)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] transition-colors cursor-pointer"
                   aria-label="Descartar aviso"
                   title="Descartar aviso"
                 >

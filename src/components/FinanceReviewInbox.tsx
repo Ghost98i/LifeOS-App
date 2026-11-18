@@ -79,17 +79,18 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
             <button
               type="button"
               onClick={() => onBulkReview(reviewInbox.items.map((it) => it.transaction.id))}
-              className="secondary-button py-1 px-2.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer"
+              className="secondary-button inline-flex items-center gap-1.5 py-1.5 px-2.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/10 cursor-pointer"
               title="Cerrar las advertencias; los movimientos ya están contabilizados"
             >
-              ✓ Marcar todos revisados ({totalItems})
+              <AppIcon name="check" className="h-3.5 w-3.5" />
+              <span>Marcar todos revisados ({totalItems})</span>
             </button>
           )}
 
           <button
             type="button"
             onClick={() => setIsExpanded((prev) => !prev)}
-            className="p-1 rounded text-[var(--text-faint)] hover:text-[var(--text)] cursor-pointer"
+            className="p-1.5 rounded-lg text-[var(--text-faint)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] cursor-pointer transition-colors"
             title={isExpanded ? 'Colapsar' : 'Expandir'}
           >
             <AppIcon name={isExpanded ? 'chevronUp' : 'chevronDown'} className="h-4 w-4" />
@@ -98,26 +99,38 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
       </div>
 
       {isExpanded && (
-        <div className="space-y-3 pt-1">
+        <div className="space-y-2.5 pt-1">
           {/* Attention Signals: Commitments (Section 6) */}
           {reviewInbox.attentionCommitments.map((att) => (
             <div
               key={att.commitment.id}
-              className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${
-                att.kind === 'overdue'
-                  ? 'bg-rose-500/10 border-rose-500/30 text-rose-800 dark:text-rose-200'
-                  : att.kind === 'compatible_movement'
-                  ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-800 dark:text-emerald-200'
-                  : 'bg-amber-500/10 border-amber-500/30 text-amber-800 dark:text-amber-200'
-              }`}
+              className="p-3.5 rounded-xl border border-[var(--finance-border)] bg-[var(--finance-surface-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
             >
               <div className="min-w-0 space-y-1">
-                <span className="block font-semibold text-sm break-words"><PrivateFinancialText>{att.commitment.name}</PrivateFinancialText></span>
-                <span className="block">{att.label}</span>
-                <PrivacyAmount as="span" className="tabular-nums font-bold">
-                  ({formatPlannedAmount(att.commitment.amount, att.commitment.currency)})
-                </PrivacyAmount>
-                {state.settings.privacyMode && !confirmedFinancialCurrency(att.commitment.currency) && <span>Moneda sin confirmar</span>}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-bold text-sm text-[var(--finance-text-primary)] break-words">
+                    <PrivateFinancialText>{att.commitment.name}</PrivateFinancialText>
+                  </span>
+                  <span
+                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold ${
+                      att.kind === 'overdue'
+                        ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                        : att.kind === 'compatible_movement'
+                        ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                    }`}
+                  >
+                    {att.label}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-[var(--finance-text-secondary)]">
+                  <PrivacyAmount as="span" className="tabular-nums font-bold text-sm text-[var(--finance-text-primary)]">
+                    {formatPlannedAmount(att.commitment.amount, att.commitment.currency)}
+                  </PrivacyAmount>
+                  {state.settings.privacyMode && !confirmedFinancialCurrency(att.commitment.currency) && (
+                    <span className="text-[11px] text-[var(--finance-text-muted)]">Moneda sin confirmar</span>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
@@ -125,7 +138,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                   <button
                     type="button"
                     onClick={() => onLinkCommitment(att.compatibleTxId!, att.commitment.id)}
-                    className="min-h-11 px-3 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                    className="min-h-10 px-3.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer transition-colors"
                   >
                     Vincular a movimiento
                   </button>
@@ -133,7 +146,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                   <button
                     type="button"
                     onClick={() => onPayCommitment(att.commitment)}
-                    className="min-h-11 px-3 rounded-lg text-xs font-semibold bg-[var(--card)] hover:bg-[var(--surface-muted)] text-[var(--text)] border border-[var(--border)] cursor-pointer"
+                    className="min-h-10 px-3.5 rounded-xl text-xs font-bold bg-[var(--finance-control)] hover:bg-[var(--finance-surface-hover)] text-[var(--finance-text-primary)] border border-[var(--finance-border)] shadow-2xs cursor-pointer transition-colors"
                   >
                     Registrar pago
                   </button>
@@ -191,10 +204,11 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                     <button
                       type="button"
                       onClick={() => onMarkReviewed(tx.id)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer transition-colors shadow-2xs"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer transition-colors shadow-2xs"
                       title="Cerrar la advertencia. Este movimiento ya está contabilizado y conservarlo no vuelve a cobrar ni pagar."
                     >
-                      ✓ Revisado
+                      <AppIcon name="check" className="h-3.5 w-3.5" />
+                      <span>Revisado</span>
                     </button>
 
                     <button

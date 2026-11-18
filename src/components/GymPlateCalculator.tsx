@@ -19,13 +19,13 @@ const BAR_OPTIONS = [
 ];
 
 const STANDARD_PLATES = [
-  { kg: 25, color: 'bg-rose-600 text-white border-rose-700', label: '25 kg' },
-  { kg: 20, color: 'bg-blue-600 text-white border-blue-700', label: '20 kg' },
-  { kg: 15, color: 'bg-amber-500 text-slate-950 border-amber-600', label: '15 kg' },
-  { kg: 10, color: 'bg-emerald-600 text-white border-emerald-700', label: '10 kg' },
-  { kg: 5, color: 'bg-slate-200 text-slate-900 dark:bg-slate-700 dark:text-white border-slate-400', label: '5 kg' },
-  { kg: 2.5, color: 'bg-slate-800 text-white border-slate-900', label: '2.5 kg' },
-  { kg: 1.25, color: 'bg-zinc-400 text-zinc-950 border-zinc-500', label: '1.25 kg' },
+  { kg: 25, color: 'bg-rose-600 text-white border-rose-700', heightClass: 'h-16 w-3.5', label: '25 kg' },
+  { kg: 20, color: 'bg-blue-600 text-white border-blue-700', heightClass: 'h-16 w-3', label: '20 kg' },
+  { kg: 15, color: 'bg-amber-500 text-slate-950 border-amber-600', heightClass: 'h-14 w-3', label: '15 kg' },
+  { kg: 10, color: 'bg-emerald-600 text-white border-emerald-700', heightClass: 'h-12 w-2.5', label: '10 kg' },
+  { kg: 5, color: 'bg-slate-200 text-slate-900 dark:bg-slate-600 dark:text-white border-slate-400', heightClass: 'h-10 w-2', label: '5 kg' },
+  { kg: 2.5, color: 'bg-slate-800 text-white border-slate-900', heightClass: 'h-8 w-2', label: '2.5 kg' },
+  { kg: 1.25, color: 'bg-zinc-400 text-zinc-950 border-zinc-500', heightClass: 'h-7 w-1.5', label: '1.25 kg' },
 ];
 
 export function calculatePlatesForWeight(totalKg: number, barKg: number): {
@@ -53,6 +53,41 @@ export function calculatePlatesForWeight(totalKg: number, barKg: number): {
   };
 }
 
+const BarbellSleeveDiagram: React.FC<{ platesKg: number[]; barWeight: number }> = ({ platesKg, barWeight }) => {
+  const renderedPlates = platesKg.slice(0, 10);
+  return (
+    <div
+      aria-hidden="true"
+      className="flex h-20 w-full items-center overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2"
+    >
+      {/* Shaft */}
+      <div className="h-2.5 w-8 shrink-0 rounded-l-full bg-slate-400 dark:bg-slate-500" />
+      {/* Collar */}
+      <div className="h-7 w-2.5 shrink-0 rounded-xs bg-slate-500 dark:bg-slate-400" />
+      {/* Sleeve + Stacked Plates */}
+      <div className="relative flex flex-1 items-center pl-1">
+        <div className="pointer-events-none absolute inset-x-0 h-3.5 rounded-r-full bg-slate-300 dark:bg-slate-600" />
+        <div className="relative z-10 flex items-center gap-0.5">
+          {renderedPlates.map((kg, index) => {
+            const spec = STANDARD_PLATES.find((p) => p.kg === kg) || STANDARD_PLATES[STANDARD_PLATES.length - 1];
+            return (
+              <span
+                key={`${kg}-${index}`}
+                className={`${spec.heightClass} shrink-0 rounded-xs border ${spec.color} shadow-2xs transition-all`}
+              />
+            );
+          })}
+          {platesKg.length === 0 && (
+            <span className="ml-3 rounded-md bg-[var(--card-subtle)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-faint)]">
+              {barWeight > 0 ? `Barra de ${barWeight} kg sin discos` : 'Sin carga'}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
   initialWeight = 60,
   initialBarWeight = 20,
@@ -71,6 +106,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
   if (!isOpen) return null;
 
   const result = calculatePlatesForWeight(totalWeight, barWeight);
+  const expandedAutoPlates = result.plates.flatMap((plate) => Array.from({ length: plate.count }, () => plate.kg));
 
   const handleAddPlateManual = (plateKg: number) => {
     const updated = [...manualPlatesPerSide, plateKg].sort((a, b) => b - a);
@@ -113,21 +149,21 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[var(--border)]">
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+        <div className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--border)]">
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue)]/20">
               <AppIcon name="dumbbell" className="h-4 w-4" />
             </span>
             <div>
               <h2 id="plate-calculator-title" className="text-sm font-bold text-[var(--text)]">Calculadora de Pesos Colocados</h2>
-              <p className="text-[11px] text-[var(--text-soft)]">Desglose de discos y barra</p>
+              <p className="text-xs text-[var(--text-soft)]">Desglose visual de discos y barra</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar calculadora"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer"
           >
             <AppIcon name="x" className="h-4 w-4" />
           </button>
@@ -136,13 +172,13 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
         {/* Content */}
         <div className="p-4 space-y-4 overflow-y-auto">
           {/* Tabs */}
-          <div className="flex rounded-xl bg-[var(--bg)] p-1 border border-[var(--border)]">
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-[var(--surface-muted)] p-1 border border-[var(--border)]">
             <button
               type="button"
               onClick={() => setActiveTab('calc')}
-              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              className={`min-h-10 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                 activeTab === 'calc'
-                  ? 'bg-[var(--card)] text-[var(--text)] shadow-xs border border-[var(--border)]'
+                  ? 'bg-[var(--card)] text-[var(--text)] shadow-2xs border border-[var(--border)]'
                   : 'text-[var(--text-soft)] hover:text-[var(--text)]'
               }`}
             >
@@ -151,9 +187,9 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('manual')}
-              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+              className={`min-h-10 px-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
                 activeTab === 'manual'
-                  ? 'bg-[var(--card)] text-[var(--text)] shadow-xs border border-[var(--border)]'
+                  ? 'bg-[var(--card)] text-[var(--text)] shadow-2xs border border-[var(--border)]'
                   : 'text-[var(--text-soft)] hover:text-[var(--text)]'
               }`}
             >
@@ -163,7 +199,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
 
           {/* Bar Selector */}
           <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-1">
+            <label className="block text-xs font-semibold text-[var(--text-soft)] mb-1.5">
               Barra utilizada
             </label>
             <select
@@ -176,7 +212,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
                   setTotalWeight(b + sideSum * 2);
                 }
               }}
-              className="w-full px-3 py-2 text-xs font-semibold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden cursor-pointer"
+              className="min-h-11 w-full px-3 text-xs font-semibold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden cursor-pointer"
             >
               {BAR_OPTIONS.map((opt) => (
                 <option key={opt.label} value={opt.weight}>
@@ -188,37 +224,37 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
 
           {/* Tab 1: Calculate for target weight */}
           {activeTab === 'calc' && (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] mb-1">
+            <div className="space-y-3.5">
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-[var(--text-soft)]">
                   Peso total objetivo (kg)
                 </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    step="0.5"
-                    min={barWeight}
-                    value={totalWeight}
-                    onChange={(e) => setTotalWeight(Math.max(0, Number(e.target.value)))}
-                    className="flex-1 px-3 py-2 text-base tabular-nums font-bold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden"
-                  />
-                  <div className="flex gap-1">
-                    {[+2.5, +5, +10, -5, -2.5].map((delta) => (
-                      <button
-                        key={delta}
-                        type="button"
-                        onClick={() => setTotalWeight((prev) => Math.max(barWeight, prev + delta))}
-                        className="px-2 py-2 text-xs tabular-nums font-bold rounded-lg border border-[var(--border)] bg-[var(--bg)] hover:bg-[var(--surface-muted)] text-[var(--text)] cursor-pointer"
-                      >
-                        {delta > 0 ? `+${delta}` : delta}
-                      </button>
-                    ))}
-                  </div>
+                <input
+                  type="number"
+                  step="0.5"
+                  min={barWeight}
+                  value={totalWeight}
+                  onChange={(e) => setTotalWeight(Math.max(0, Number(e.target.value)))}
+                  className="min-h-12 w-full px-3 text-xl tabular-nums font-extrabold text-center rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden"
+                />
+                <div className="grid grid-cols-5 gap-1.5">
+                  {[-5, -2.5, +2.5, +5, +10].map((delta) => (
+                    <button
+                      key={delta}
+                      type="button"
+                      onClick={() => setTotalWeight((prev) => Math.max(barWeight, prev + delta))}
+                      className="min-h-10 px-1 text-xs tabular-nums font-bold rounded-lg border border-[var(--border)] bg-[var(--card-subtle)] hover:bg-[var(--surface-muted)] text-[var(--text)] cursor-pointer transition-colors"
+                    >
+                      {delta > 0 ? `+${delta}` : delta}
+                    </button>
+                  ))}
                 </div>
               </div>
 
+              <BarbellSleeveDiagram platesKg={expandedAutoPlates} barWeight={barWeight} />
+
               {/* Breakdown Card */}
-              <div className="p-4 rounded-xl bg-[var(--bg)] border border-[var(--border)] space-y-3">
+              <div className="p-3.5 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-[var(--text-soft)]">Peso en discos (total):</span>
                   <span className="tabular-nums font-bold text-sm text-[var(--text)]">
@@ -234,8 +270,8 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
 
                 {/* Plates Visual List */}
                 {result.plates.length > 0 ? (
-                  <div className="space-y-1.5 pt-2">
-                    <span className="block text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
+                  <div className="space-y-1.5 pt-1">
+                    <span className="block text-[11px] font-semibold text-[var(--text-faint)]">
                       Discos por lado:
                     </span>
                     <div className="flex flex-wrap gap-1.5">
@@ -251,14 +287,15 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <p className="text-xs text-[var(--text-faint)] text-center py-2">
+                  <p className="text-xs text-[var(--text-faint)] text-center py-1.5">
                     Solo la barra ({barWeight} kg). No requiere discos adicionales.
                   </p>
                 )}
 
                 {result.remainder > 0 && (
-                  <p className="text-[11px] text-amber-500 font-medium">
-                    ⚠️ Restan {result.remainder} kg por lado (menor al disco de 1.25 kg).
+                  <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-semibold">
+                    <AppIcon name="bell" className="h-3.5 w-3.5 shrink-0" />
+                    <span>Restan {result.remainder} kg por lado (menor al disco de 1.25 kg).</span>
                   </p>
                 )}
               </div>
@@ -267,17 +304,17 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
 
           {/* Tab 2: Interactive Tapping (Pesos Colocados) */}
           {activeTab === 'manual' && (
-            <div className="space-y-4">
+            <div className="space-y-3.5">
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
+                  <span className="text-xs font-semibold text-[var(--text-soft)]">
                     Tocá para agregar discos por lado:
                   </span>
                   {manualPlatesPerSide.length > 0 && (
                     <button
                       type="button"
                       onClick={handleClearManual}
-                      className="text-[11px] text-rose-500 hover:underline cursor-pointer font-semibold"
+                      className="text-xs text-rose-500 hover:underline cursor-pointer font-semibold"
                     >
                       Limpiar
                     </button>
@@ -290,17 +327,19 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
                       key={plate.kg}
                       type="button"
                       onClick={() => handleAddPlateManual(plate.kg)}
-                      className={`py-2 px-1 rounded-xl text-xs tabular-nums font-bold border transition-transform active:scale-95 cursor-pointer shadow-xs flex flex-col items-center ${plate.color}`}
+                      className={`min-h-12 py-2 px-1 rounded-xl text-xs tabular-nums font-bold border transition-transform active:scale-95 cursor-pointer shadow-2xs flex flex-col items-center justify-center ${plate.color}`}
                     >
                       <span>+{plate.kg}</span>
-                      <span className="text-[9px] opacity-75">kg</span>
+                      <span className="text-[10px] opacity-80">kg</span>
                     </button>
                   ))}
                 </div>
               </div>
 
+              <BarbellSleeveDiagram platesKg={manualPlatesPerSide} barWeight={barWeight} />
+
               {/* Current Placed Plates */}
-              <div className="p-4 rounded-xl bg-[var(--bg)] border border-[var(--border)] space-y-2.5">
+              <div className="p-3.5 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-[var(--text)]">Discos colocados (por lado):</span>
                   <span className="tabular-nums font-bold text-xs text-[var(--blue)]">
@@ -309,7 +348,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
                 </div>
 
                 {manualPlatesPerSide.length === 0 ? (
-                  <p className="text-xs text-[var(--text-faint)] text-center py-2">
+                  <p className="text-xs text-[var(--text-faint)] text-center py-1.5">
                     Sin discos agregados. Tocá los botones de arriba para colocar discos.
                   </p>
                 ) : (
@@ -320,10 +359,10 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
                         type="button"
                         onClick={() => handleRemovePlateManual(idx)}
                         title="Tocar para quitar este disco"
-                        className="px-2 py-1 rounded-lg text-xs tabular-nums font-bold bg-[var(--card)] border border-[var(--border)] text-[var(--text)] hover:border-rose-500 hover:text-rose-500 cursor-pointer shadow-2xs group flex items-center gap-1"
+                        className="min-h-9 px-2.5 py-1 rounded-lg text-xs tabular-nums font-bold bg-[var(--card)] border border-[var(--border)] text-[var(--text)] hover:border-rose-500 hover:text-rose-500 cursor-pointer shadow-2xs group flex items-center gap-1.5"
                       >
                         <span>{kg} kg</span>
-                        <span className="text-[10px] text-[var(--text-faint)] group-hover:text-rose-500">✕</span>
+                        <AppIcon name="x" className="h-3 w-3 text-[var(--text-faint)] group-hover:text-rose-500" />
                       </button>
                     ))}
                   </div>
@@ -331,7 +370,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
 
                 <div className="flex items-center justify-between border-t border-[var(--border)] pt-2.5">
                   <span className="text-xs font-bold text-[var(--text-soft)]">Peso Total Resultante:</span>
-                  <span className="tabular-nums text-xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                  <span className="tabular-nums text-xl font-extrabold text-[var(--blue)]">
                     {totalWeight} kg
                   </span>
                 </div>
@@ -341,18 +380,18 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 p-4 border-t border-[var(--border)] bg-[var(--bg)]">
+        <div className="flex items-center justify-end gap-2 p-4 border-t border-[var(--border)] bg-[var(--card-subtle)]">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-xs font-bold rounded-xl border border-[var(--border)] text-[var(--text-soft)] hover:bg-[var(--surface-muted)] cursor-pointer"
+            className="min-h-11 px-4 text-xs font-bold rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)] hover:bg-[var(--surface-muted)] cursor-pointer"
           >
             Cancelar
           </button>
           <button
             type="button"
             onClick={handleApply}
-            className="px-5 py-2 text-xs font-bold rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-md cursor-pointer transition-all active:scale-[0.98]"
+            className="min-h-11 px-5 text-xs font-bold rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white shadow-xs cursor-pointer transition-all active:scale-[0.98]"
           >
             Aplicar {totalWeight} kg
           </button>

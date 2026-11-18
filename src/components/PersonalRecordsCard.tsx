@@ -18,17 +18,6 @@ export function estimate1RM(weight: number, reps: number): number {
   return calculate1RM(weight, reps);
 }
 
-const MUSCLE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
-  Pecho: { bg: 'bg-rose-500/10 dark:bg-rose-500/20', text: 'text-rose-600 dark:text-rose-400', border: 'border-rose-500/20' },
-  Espalda: { bg: 'bg-blue-500/10 dark:bg-blue-500/20', text: 'text-blue-600 dark:text-blue-400', border: 'border-blue-500/20' },
-  Piernas: { bg: 'bg-emerald-500/10 dark:bg-emerald-500/20', text: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-500/20' },
-  Hombros: { bg: 'bg-amber-500/10 dark:bg-amber-500/20', text: 'text-amber-600 dark:text-amber-400', border: 'border-amber-500/20' },
-  Brazos: { bg: 'bg-purple-500/10 dark:bg-purple-500/20', text: 'text-purple-600 dark:text-purple-400', border: 'border-purple-500/20' },
-  Core: { bg: 'bg-teal-500/10 dark:bg-teal-500/20', text: 'text-teal-600 dark:text-teal-400', border: 'border-teal-500/20' },
-  Cardio: { bg: 'bg-orange-500/10 dark:bg-orange-500/20', text: 'text-orange-600 dark:text-orange-400', border: 'border-orange-500/20' },
-  Otros: { bg: 'bg-slate-500/10 dark:bg-slate-500/20', text: 'text-slate-600 dark:text-slate-400', border: 'border-slate-500/20' },
-};
-
 export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = React.memo(({ state, onSelectExercise }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const progress = useMemo(
@@ -76,18 +65,18 @@ export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = React.mem
   const visiblePRs = isExpanded ? filteredPRs : prList.slice(0, 6);
 
   return (
-    <section className="surface overflow-hidden p-4 sm:p-6 space-y-4 shadow-xs transition-all">
+    <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] overflow-hidden p-4 sm:p-5 space-y-4 shadow-[var(--card-shadow)] transition-all">
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-500 border border-amber-500/20">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue)]/20">
             <AppIcon name="trophy" className="h-4 w-4" />
           </span>
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base font-bold text-[var(--text)]">Récords Personales (PRs)</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-sm font-bold text-[var(--text)]">Récords personales (PRs)</h2>
               {totalPRs > 0 && (
-                <span className="rounded-full bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400 tabular-nums">
+                <span className="rounded-full bg-[var(--surface-muted)] border border-[var(--border)] px-2 py-0.5 text-[11px] font-bold text-[var(--text-soft)] tabular-nums">
                   {totalPRs} {totalPRs === 1 ? 'ejercicio' : 'ejercicios'}
                 </span>
               )}
@@ -102,7 +91,7 @@ export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = React.mem
           <button
             type="button"
             onClick={() => setIsExpanded((prev) => !prev)}
-            className="text-xs sm:text-sm font-bold text-[var(--blue)] hover:underline cursor-pointer shrink-0"
+            className="min-h-10 rounded-xl px-2.5 text-xs font-bold text-[var(--blue)] hover:bg-[var(--surface-muted)] cursor-pointer shrink-0 transition-colors"
           >
             {isExpanded ? 'Contraer ↑' : `Ver todos (${totalPRs}) →`}
           </button>
@@ -183,7 +172,6 @@ export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = React.mem
           ) : (
             <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${isExpanded ? 'max-h-[440px] overflow-y-auto pr-1' : ''}`}>
               {visiblePRs.map((item, index) => {
-                const muscleStyle = MUSCLE_COLORS[item.muscle] || MUSCLE_COLORS.Otros;
                 const isTop3 = index < 3 && (!isExpanded || (selectedMuscle === 'Todos' && !search));
 
                 return (
@@ -191,18 +179,18 @@ export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = React.mem
                     type="button"
                     key={item.key}
                     onClick={() => onSelectExercise?.({ exerciseId: item.exerciseId, exerciseName: item.name })}
-                    className={`w-full text-left rounded-2xl border bg-[var(--card)] p-3.5 sm:p-4 space-y-2 transition ${
+                    className={`w-full text-left rounded-2xl border bg-[var(--card-subtle)] p-3.5 sm:p-4 space-y-2 transition ${
                       onSelectExercise
-                        ? 'cursor-pointer hover:border-[var(--blue)] hover:bg-[var(--surface-muted)]/40 shadow-2xs'
+                        ? 'cursor-pointer hover:border-[var(--blue)] hover:bg-[var(--card)] shadow-2xs'
                         : 'hover:border-[var(--border-hover)]'
                     } ${
-                      isTop3 ? 'border-indigo-500/35' : 'border-[var(--border)]'
+                      isTop3 ? 'border-[var(--blue)]/30' : 'border-[var(--border)]'
                     }`}
                     title={onSelectExercise ? `Ver ficha e historial de ${item.name}` : undefined}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span
-                        className={`rounded-md px-2 py-0.5 text-[10px] sm:text-[11px] font-bold border ${muscleStyle.bg} ${muscleStyle.text} ${muscleStyle.border}`}
+                        className="rounded-md px-2 py-0.5 text-[11px] font-semibold border border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)]"
                       >
                         {item.muscle}
                       </span>

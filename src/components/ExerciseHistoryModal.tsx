@@ -120,7 +120,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = React.m
 
   return (
     <div
-      className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4 bg-slate-950/75"
+      className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-xs"
       onClick={onClose}
     >
       <div
@@ -129,10 +129,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = React.m
         role="dialog"
         aria-modal="true"
         aria-labelledby="exercise-history-title"
-        style={{
-          backgroundImage: 'radial-gradient(circle at 14% 0%, rgba(99, 102, 241, 0.14), transparent 44%)',
-        }}
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-[var(--border)] ring-1 ring-inset ring-indigo-500/20 bg-[var(--card)] p-4 sm:p-6 shadow-2xl space-y-4 outline-none"
+        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6 shadow-2xl space-y-4 outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -162,7 +159,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = React.m
             type="button"
             onClick={onClose}
             aria-label="Cerrar modal"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)] hover:border-[var(--blue)] hover:text-[var(--blue)] transition cursor-pointer"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card-subtle)] text-[var(--text-soft)] hover:border-[var(--blue)] hover:text-[var(--blue)] transition cursor-pointer"
             title="Cerrar"
           >
             <AppIcon name="x" className="h-4 w-4" />
@@ -172,15 +169,15 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = React.m
         {/* 4 PR Metrics Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
           {/* Max Weight */}
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-2.5 text-center">
-            <span className="block text-[9px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-              Peso Máx.
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--card-subtle)] p-2.5 text-center">
+            <span className="block text-[11px] font-semibold text-[var(--text-faint)]">
+              Peso máx.
             </span>
             <strong className="block text-sm sm:text-base font-black text-[var(--text)] tabular-nums mt-0.5">
               {history.prs.maxWeight ? `${history.prs.maxWeight.value} kg` : '—'}
             </strong>
             {history.prs.maxWeight?.reps ? (
-              <span className="text-[10px] text-[var(--text-faint)]">
+              <span className="text-[11px] text-[var(--text-faint)]">
                 × {history.prs.maxWeight.reps} reps
               </span>
             ) : null}
@@ -188,43 +185,43 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = React.m
 
           {/* Max e1RM (LifeOS Signature Indigo) */}
           <div className="rounded-xl border border-[var(--blue)]/30 bg-[var(--blue-soft)] p-2.5 text-center">
-            <span className="block text-[9px] font-bold uppercase tracking-wider text-[var(--blue)]">
-              1RM Estimado
+            <span className="block text-[11px] font-semibold text-[var(--blue)]">
+              1RM estimado
             </span>
             <strong className="block text-sm sm:text-base font-black text-[var(--blue)] tabular-nums mt-0.5">
               {history.prs.maxE1RM ? `~${history.prs.maxE1RM.value} kg` : '—'}
             </strong>
             {history.prs.maxE1RM?.weight ? (
-              <span className="text-[10px] text-[var(--text-soft)]">
+              <span className="text-[11px] text-[var(--text-soft)]">
                 ({history.prs.maxE1RM.weight} kg × {history.prs.maxE1RM.reps})
               </span>
             ) : null}
           </div>
 
           {/* Max Reps */}
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-2.5 text-center">
-            <span className="block text-[9px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-              Máx. Reps
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--card-subtle)] p-2.5 text-center">
+            <span className="block text-[11px] font-semibold text-[var(--text-faint)]">
+              Máx. reps
             </span>
             <strong className="block text-sm sm:text-base font-black text-[var(--text)] tabular-nums mt-0.5">
               {history.prs.maxReps ? `${history.prs.maxReps.value} reps` : '—'}
             </strong>
             {history.prs.maxReps?.weight ? (
-              <span className="text-[10px] text-[var(--text-faint)]">
+              <span className="text-[11px] text-[var(--text-faint)]">
                 @ {history.prs.maxReps.weight} kg
               </span>
             ) : null}
           </div>
 
           {/* Max Volume */}
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-2.5 text-center">
-            <span className="block text-[9px] font-bold uppercase tracking-wider text-[var(--text-faint)]">
-              Volumen Máx.
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--card-subtle)] p-2.5 text-center">
+            <span className="block text-[11px] font-semibold text-[var(--text-faint)]">
+              Volumen máx.
             </span>
-            <strong className="block text-sm sm:text-base font-black text-emerald-600 dark:text-emerald-400 tabular-nums mt-0.5">
+            <strong className="block text-sm sm:text-base font-black text-[var(--text)] tabular-nums mt-0.5">
               {history.prs.maxVolume ? `${history.prs.maxVolume.value.toLocaleString('es-UY')} kg` : '—'}
             </strong>
-            <span className="text-[10px] text-[var(--text-faint)]">en 1 sesión</span>
+            <span className="text-[11px] text-[var(--text-faint)]">en 1 sesión</span>
           </div>
         </div>
 

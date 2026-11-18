@@ -411,6 +411,14 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
         <div className="gym-active-layout grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           {/* COCKPIT PRINCIPAL */}
           <main data-active-set-editor className="gym-cockpit-wrap min-w-0 lg:col-span-2">
+            {progress.total > 0 && (
+              <div className="gym-cockpit-progress" aria-hidden="true">
+                <div
+                  className="gym-cockpit-progress-fill"
+                  style={{ width: `${Math.min(100, Math.round((progress.completed / progress.total) * 100))}%` }}
+                />
+              </div>
+            )}
             {/* Aviso Contextual si el usuario navega a otro ejercicio mientras corre un descanso */}
             {!isRestingThisExercise && isTimerRunning && (
               <div className="gym-rest-origin-note flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[var(--blue-soft)] border border-[var(--blue)]/30 px-3.5 py-2.5 text-xs">
@@ -526,16 +534,16 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                 <div className="c-meta">
                   <h2 className="c-exercise-title">{exercise.name}</h2>
                   <div className="c-meta-sub">
-                    <span>{exercise.muscleGroup || 'General'}</span>
+                    <span className="c-meta-muscle">{exercise.muscleGroup || 'General'}</span>
                     {currentSet && (
                       <button
                         type="button"
                         onClick={() => onUpdateCurrentSet({ type: currentSet.type === 'warmup' ? 'normal' : 'warmup' })}
-                        className={`c-warmup-pill min-h-11 cursor-pointer ${currentSet.type === 'warmup' ? '' : 'opacity-60 bg-[var(--surface-muted)] text-[var(--text-soft)] border-[var(--border)]'}`}
+                        className={`c-warmup-pill min-h-11 cursor-pointer ${currentSet.type === 'warmup' ? 'is-warmup' : ''}`}
                         aria-label={`Tipo de serie: ${currentSet.type === 'warmup' ? 'aproximación; cambiar a efectiva' : 'efectiva; cambiar a aproximación'}`}
                         title={currentSet.type === 'warmup' ? 'Serie de aproximación · Clic para hacerla efectiva' : 'Serie efectiva · Clic para marcar como aproximación'}
                       >
-                        {currentSet.type === 'warmup' ? 'Aproximación' : 'Efectiva'}
+                        <span>{currentSet.type === 'warmup' ? 'Aproximación' : 'Efectiva'}</span>
                       </button>
                     )}
                   </div>
@@ -556,7 +564,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                       key={set.id || idx}
                       type="button"
                       onClick={() => onSelectSet(idx)}
-                      className={`c-set-pill min-h-11 ${isSelected ? 'is-active' : ''} ${isDone ? 'is-done' : ''}`}
+                      className={`c-set-pill min-h-11 ${isSelected ? 'is-active' : ''} ${isDone ? 'is-done' : ''} ${isWarmup ? 'is-warmup' : ''}`}
                       title={`Serie ${idx + 1}: ${set.weight} kg × ${set.reps} repeticiones`}
                       aria-label={`Serie ${idx + 1}: ${set.weight} kilogramos, ${set.reps} repeticiones${isDone ? ', realizada' : ', pendiente'}`}
                       aria-pressed={isSelected}

@@ -1040,19 +1040,15 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
       {/* Gym sections */}
       {!(activeWorkoutSession && activeTab === 'entrenar') && (
-      <nav aria-label="Secciones de Gimnasio" className="gym-section-nav flex min-w-0 gap-1 overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1 sm:grid sm:grid-cols-4 sm:overflow-visible">
+      <nav aria-label="Secciones de Gimnasio" className="gym-section-nav min-w-0">
         <button
           type="button"
           onClick={() => setActiveTab('entrenar')}
           aria-label={activeWorkoutSession ? 'Continuar entrenamiento' : undefined}
           aria-current={activeTab === 'entrenar' ? 'page' : undefined}
-          className={`flex min-h-11 min-w-[4.75rem] flex-1 items-center justify-center gap-1 rounded-lg px-1.5 text-[11px] font-bold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] sm:min-w-0 sm:gap-2 sm:px-3 sm:text-xs ${
-            activeTab === 'entrenar'
-              ? 'bg-[var(--card)] text-[var(--text)]'
-              : 'text-[var(--text-soft)] hover:text-[var(--text)]'
-          }`}
+          className="flex min-h-11 min-w-0 items-center justify-center cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)]"
         >
-          <AppIcon name="dumbbell" className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <AppIcon name="dumbbell" className="h-4 w-4" />
           <span className="truncate">{activeWorkoutSession ? 'Continuar' : 'Entrenar'}</span>
         </button>
 
@@ -1060,29 +1056,21 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
           type="button"
           onClick={() => setActiveTab('rutinas')}
           aria-current={activeTab === 'rutinas' ? 'page' : undefined}
-          className={`flex min-h-11 min-w-[4.75rem] flex-1 items-center justify-center gap-1 rounded-lg px-1.5 text-[11px] font-bold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] sm:min-w-0 sm:gap-2 sm:px-3 sm:text-xs ${
-            activeTab === 'rutinas'
-              ? 'bg-[var(--card)] text-[var(--text)]'
-              : 'text-[var(--text-soft)] hover:text-[var(--text)]'
-          }`}
+          className="flex min-h-11 min-w-0 items-center justify-center cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)]"
         >
-          <AppIcon name="list" className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          <span>Rutinas</span>
+          <AppIcon name="list" className="h-4 w-4" />
+          <span className="truncate">Rutinas</span>
         </button>
 
         <button
           type="button"
           onClick={() => setActiveTab('historial')}
           aria-current={activeTab === 'historial' ? 'page' : undefined}
-          className={`flex min-h-11 min-w-[4.75rem] flex-1 items-center justify-center gap-1 rounded-lg px-1.5 text-[11px] font-bold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] sm:min-w-0 sm:gap-2 sm:px-3 sm:text-xs ${
-            activeTab === 'historial'
-              ? 'bg-[var(--card)] text-[var(--text)]'
-              : 'text-[var(--text-soft)] hover:text-[var(--text)]'
-          }`}
+          className="flex min-h-11 min-w-0 items-center justify-center cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)]"
         >
-          <AppIcon name="history" className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <AppIcon name="history" className="h-4 w-4" />
           <span className="truncate">Historial</span>
-          <span className="hidden text-[10px] tabular-nums sm:inline-block">
+          <span className="gym-nav-count hidden sm:inline-flex">
             {performedSessionCount}
           </span>
         </button>
@@ -1091,13 +1079,9 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
           type="button"
           onClick={() => setActiveTab('progresion')}
           aria-current={activeTab === 'progresion' ? 'page' : undefined}
-          className={`flex min-h-11 min-w-[4.75rem] flex-1 items-center justify-center gap-1 rounded-lg px-1.5 text-[11px] font-bold transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] sm:min-w-0 sm:gap-2 sm:px-3 sm:text-xs ${
-            activeTab === 'progresion'
-              ? 'bg-[var(--card)] text-[var(--text)]'
-              : 'text-[var(--text-soft)] hover:text-[var(--text)]'
-          }`}
+          className="flex min-h-11 min-w-0 items-center justify-center cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)]"
         >
-          <AppIcon name="activity" className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <AppIcon name="activity" className="h-4 w-4" />
           <span className="truncate">Progreso</span>
         </button>
       </nav>
@@ -1358,9 +1342,9 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                   </div>
                 )}
 
-                <div className="gym-routine-list overflow-visible rounded-3xl bg-[var(--card)] shadow-sm ring-1 ring-inset ring-[var(--border)]">
+                <div className="gym-routine-list overflow-visible">
                   {state.gym.routineTemplates.length === 0 && !showTemplates && (
-                    <div className="px-5 py-6">
+                    <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] px-5 py-6">
                       <p className="text-sm font-semibold text-[var(--text)]">Todavía no hay rutinas guardadas.</p>
                       <p className="mt-1 max-w-xl text-sm text-[var(--text-soft)]">Creá un plan con ejercicios, series y cargas objetivo. Las sesiones que hagas después aparecen en Historial.</p>
                     </div>
@@ -1375,15 +1359,23 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                       && !ROUTINE_ICON_OPTIONS.some((option) => option.name === t.appearance?.icon)
                     );
                     return (
-                      <article key={t.id} data-editing={isEditing || undefined} className={`border-b border-[var(--border)] last:border-b-0 ${isSelected ? 'bg-[var(--blue-soft)]' : ''}`}>
-                        <div className="flex min-w-0 flex-wrap items-center gap-1.5 px-2 py-1.5 sm:flex-nowrap sm:gap-3 sm:px-4 sm:py-2">
+                      <article
+                        key={t.id}
+                        data-editing={isEditing || undefined}
+                        className={`overflow-visible rounded-2xl border bg-[var(--card)] shadow-[var(--card-shadow-subtle)] transition-colors ${
+                          isSelected
+                            ? 'border-[var(--blue)] ring-1 ring-inset ring-[var(--blue)]/25'
+                            : 'border-[var(--border)] hover:border-[var(--border-strong)]'
+                        }`}
+                      >
+                        <div className="flex min-w-0 flex-wrap items-center gap-1.5 p-2.5 sm:flex-nowrap sm:gap-3 sm:px-4 sm:py-3">
                           <button
                             type="button"
                             aria-pressed={isSelected}
                             aria-label={`${isEmpty ? 'Rutina sin ejercicios' : 'Seleccionar rutina'}: ${t.name}`}
                             disabled={isEmpty}
                             onClick={() => handleSelectRoutine(t.id)}
-                            className={`flex min-h-14 min-w-0 flex-1 basis-full items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] sm:basis-auto ${isEmpty ? 'cursor-not-allowed opacity-75' : 'hover:bg-[var(--surface-muted)]'} ${isSelected ? 'ring-1 ring-inset ring-[var(--blue)]' : ''}`}
+                            className={`flex min-h-14 min-w-0 flex-1 basis-full items-center gap-3 rounded-xl px-2 py-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] sm:basis-auto ${isEmpty ? 'cursor-not-allowed opacity-75' : 'hover:bg-[var(--surface-muted)]'} ${isSelected ? 'bg-[var(--blue-soft)]/60' : ''}`}
                           >
                             <RoutineIdentityMark exercises={t.exercises} name={t.name} appearance={t.appearance} compact />
                             <span className="min-w-0 flex-1">
@@ -1393,13 +1385,13 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                 {!isEmpty && (t.days?.length ? ` · ${t.days.map((day) => DAY_LABELS[day]).join(', ')}` : ' · Sin días asignados')}
                               </span>
                             </span>
-                            {isSelected && <span className="shrink-0 text-[11px] font-bold text-[var(--blue)]">Elegida</span>}
+                            {isSelected && <span className="shrink-0 rounded-full bg-[var(--blue-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--blue)]">Elegida</span>}
                           </button>
-                          <div className="ml-auto flex shrink-0 items-center gap-1">
+                          <div className="ml-auto flex shrink-0 items-center gap-1.5">
                             {!isEmpty && <button
                               type="button"
                               onClick={() => handleStartWorkout(t.id)}
-                              className="hidden min-h-11 items-center rounded-xl px-3 text-xs font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)] lg:inline-flex"
+                              className="inline-flex min-h-11 items-center rounded-xl bg-[var(--blue-soft)] px-3 text-xs font-bold text-[var(--blue)] transition-colors hover:bg-[var(--blue)] hover:text-white"
                             >
                               Iniciar
                             </button>}
@@ -1906,9 +1898,12 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
           )}
 
           {/* Secondary creation and maintenance actions stay out of the reading flow. */}
-          <details className="group border-y border-[var(--border)]">
-            <summary className="flex min-h-14 cursor-pointer list-none items-center justify-between gap-3 px-1 text-sm font-semibold text-[var(--text)]">
-              <span>Cargar una sesión pasada</span>
+          <details className="group rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 shadow-[var(--card-shadow-subtle)]">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-[var(--text)]">
+              <span className="flex items-center gap-2">
+                <AppIcon name="plus" className="h-4 w-4 text-[var(--blue)]" />
+                <span>Cargar una sesión pasada</span>
+              </span>
               <AppIcon name="chevronDown" className="h-4 w-4 text-[var(--text-soft)] transition-transform group-open:rotate-180" />
             </summary>
             <div className="flex flex-col gap-3 border-t border-[var(--border)] py-4 sm:flex-row sm:items-end sm:justify-between">
@@ -2025,9 +2020,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                         {month.sessionsCount} sesiones
                       </span>
                     </div>
-                    <span className="text-xs text-[var(--blue)] font-bold group-open:rotate-180 transition-transform">
-                      ▼
-                    </span>
+                    <AppIcon name="chevronDown" className="h-4 w-4 text-[var(--text-soft)] group-open:rotate-180 transition-transform" />
                   </summary>
 
                   <div className="p-4 pt-0 space-y-4 border-t border-[var(--border)] mt-2">
@@ -2118,25 +2111,26 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
       {/* TAB 4: PROGRESIÓN & SALUD */}
       {activeTab === 'progresion' && (
-        <div className="space-y-7 animate-in fade-in">
-          <section data-gym-progress-overview className="relative overflow-hidden rounded-3xl bg-[var(--card)] shadow-sm ring-1 ring-inset ring-[var(--border)]">
-            <span className="pointer-events-none absolute -right-10 -top-16 h-52 w-52 rounded-full bg-blue-500/[0.08] blur-2xl" />
-            <div className="relative grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+        <div className="space-y-6 animate-in fade-in">
+          <section data-gym-progress-overview className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-[var(--card-shadow)]">
+            <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
               <div>
                 <div className="flex items-center gap-2 text-[var(--blue)]">
-                  <AppIcon name="activity" className="h-4 w-4" />
-                  <p className="text-xs font-bold">Entrenamientos esta semana</p>
+                  <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[var(--blue-soft)] border border-[var(--blue)]/20">
+                    <AppIcon name="activity" className="h-4 w-4" />
+                  </span>
+                  <h2 className="text-sm font-bold text-[var(--text)]">Entrenamientos esta semana</h2>
                 </div>
-                <p className="mt-3 flex items-end gap-2 text-[var(--text)]">
-                  <span className="text-6xl font-black leading-none tracking-[-0.06em] tabular-nums sm:text-7xl">
+                <p className="mt-3 flex items-end gap-2.5 text-[var(--text)]">
+                  <span className="text-5xl font-black leading-none tracking-[-0.04em] tabular-nums sm:text-6xl">
                     {calendarOverview.weekCount}
                   </span>
-                  <span className="pb-1 text-base font-semibold leading-tight text-[var(--text-soft)]">
+                  <span className="pb-1 text-sm font-semibold leading-tight text-[var(--text-soft)]">
                     {calendarOverview.weekCount === 1 ? 'sesión' : 'sesiones'}<br />esta semana
                   </span>
                 </p>
               </div>
-              <dl className="grid grid-cols-2 gap-6 border-t border-[var(--border)] pt-5 lg:min-w-80 lg:border-l lg:border-t-0 lg:pl-7 lg:pt-0">
+              <dl className="grid grid-cols-2 gap-6 border-t border-[var(--border)] pt-4 lg:min-w-80 lg:border-l lg:border-t-0 lg:pl-7 lg:pt-0">
                 <div>
                   <dt className="text-xs font-medium text-[var(--text-faint)]">Frecuencia este mes</dt>
                   <dd className="mt-1 text-2xl font-black tabular-nums text-[var(--text)]">
@@ -2201,7 +2195,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
           {activeExerciseMetric ? (
             <section
               data-gym-exercise-progress
-              className="gym-progress-exercise rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 shadow-xs space-y-3.5"
+              className="gym-progress-exercise rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 shadow-[var(--card-shadow)] space-y-3.5"
             >
               {/* Header — same clean structure as Composición corporal */}
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -3129,7 +3123,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                               )}
                             </td>
                             <td className="py-1.5">
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1.5">
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -3137,10 +3131,10 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                       weight: Math.max(0, Math.round((setWeight - 2.5) * 10) / 10),
                                     })
                                   }
-                                  className="h-6 w-5 rounded bg-[var(--card)] hover:bg-[var(--border)] border border-[var(--border)] text-[var(--text)] font-bold text-xs flex items-center justify-center cursor-pointer shrink-0"
+                                  className="h-11 w-11 rounded-xl bg-[var(--card)] hover:bg-[var(--surface-muted)] border border-[var(--border)] text-[var(--text)] font-bold text-xs flex items-center justify-center cursor-pointer shrink-0"
                                   title="-2.5 kg"
                                 >
-                                  -
+                                  −
                                 </button>
                                 <input
                                   type="number"
@@ -3153,7 +3147,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                       weight: Number(e.target.value) || 0,
                                     })
                                   }
-                                  className="w-14 px-1 py-1 text-xs tabular-nums font-bold rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-center"
+                                  className="h-11 w-16 px-1.5 text-xs tabular-nums font-bold rounded-xl bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-center"
                                 />
                                 <button
                                   type="button"
@@ -3162,7 +3156,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                       weight: Math.round((setWeight + 2.5) * 10) / 10,
                                     })
                                   }
-                                  className="h-6 w-5 rounded bg-[var(--card)] hover:bg-[var(--border)] border border-[var(--border)] text-[var(--text)] font-bold text-xs flex items-center justify-center cursor-pointer shrink-0"
+                                  className="h-11 w-11 rounded-xl bg-[var(--card)] hover:bg-[var(--surface-muted)] border border-[var(--border)] text-[var(--text)] font-bold text-xs flex items-center justify-center cursor-pointer shrink-0"
                                   title="+2.5 kg"
                                 >
                                   +
@@ -3173,7 +3167,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                     onClick={() =>
                                       onOpenCalculator(exIdx, setIdx, setWeight, currentBarWeight)
                                     }
-                                    className="p-1 text-[10px] text-blue-600 hover:underline cursor-pointer"
+                                    className="h-11 w-11 rounded-xl border border-[var(--border)] bg-[var(--card)] flex items-center justify-center text-[var(--blue)] hover:bg-[var(--blue-soft)] cursor-pointer shrink-0"
                                     title="Calcular discos para esta serie"
                                   >
                                     <AppIcon name="dumbbell" className="h-4 w-4" />
@@ -3214,7 +3208,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                               )}
                             </td>
                             <td className="py-1.5">
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1.5">
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -3222,10 +3216,10 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                       reps: Math.max(1, Number(set.reps) - 1),
                                     })
                                   }
-                                  className="h-6 w-5 rounded bg-[var(--card)] hover:bg-[var(--border)] border border-[var(--border)] text-[var(--text)] font-bold text-xs flex items-center justify-center cursor-pointer shrink-0"
+                                  className="h-11 w-11 rounded-xl bg-[var(--card)] hover:bg-[var(--surface-muted)] border border-[var(--border)] text-[var(--text)] font-bold text-xs flex items-center justify-center cursor-pointer shrink-0"
                                   title="-1 rep"
                                 >
-                                  -
+                                  −
                                 </button>
                                 <input
                                   type="number"
@@ -3237,7 +3231,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                       reps: Number(e.target.value) || 0,
                                     })
                                   }
-                                  className="w-11 px-1 py-1 text-xs tabular-nums font-bold rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-center"
+                                  className="h-11 w-14 px-1.5 text-xs tabular-nums font-bold rounded-xl bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-center"
                                 />
                                 <button
                                   type="button"
@@ -3246,7 +3240,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                       reps: Number(set.reps) + 1,
                                     })
                                   }
-                                  className="h-6 w-5 rounded bg-[var(--card)] hover:bg-[var(--border)] border border-[var(--border)] text-[var(--text)] font-bold text-xs flex items-center justify-center cursor-pointer shrink-0"
+                                  className="h-11 w-11 rounded-xl bg-[var(--card)] hover:bg-[var(--surface-muted)] border border-[var(--border)] text-[var(--text)] font-bold text-xs flex items-center justify-center cursor-pointer shrink-0"
                                   title="+1 rep"
                                 >
                                   +
@@ -3259,22 +3253,24 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                 onClick={() =>
                                   onUpdateSet(exIdx, setIdx, { completed: !set.completed })
                                 }
-                                className={`w-6 h-6 rounded-lg border-2 inline-flex items-center justify-center text-xs font-bold transition-all cursor-pointer ${
+                                aria-label={set.completed ? 'Desmarcar serie' : 'Marcar serie como realizada'}
+                                className={`h-11 w-11 rounded-xl border inline-flex items-center justify-center text-xs font-bold transition-all cursor-pointer ${
                                   set.completed
                                     ? 'bg-[var(--blue)] border-[var(--blue)] text-white'
                                     : 'border-[var(--border)] bg-[var(--card)] text-transparent hover:border-[var(--blue)]'
                                 }`}
                               >
-                                ✓
+                                <AppIcon name="check" className="h-4 w-4" />
                               </button>
                             </td>
                             <td className="py-1.5 text-right">
                               <button
                                 type="button"
                                 onClick={() => onDeleteSet(exIdx, setIdx)}
-                                className="text-[var(--text-faint)] hover:text-rose-500 text-xs px-1 cursor-pointer"
+                                aria-label="Eliminar serie"
+                                className="h-11 w-11 rounded-xl inline-flex items-center justify-center text-[var(--text-faint)] hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer"
                               >
-                                ✕
+                                <AppIcon name="x" className="h-4 w-4" />
                               </button>
                             </td>
                           </tr>
@@ -3511,7 +3507,7 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps & { initiallyExpand
       data-gym-history-session={session.id}
       tabIndex={-1}
       style={{ scrollMarginTop: 96 }}
-      className="overflow-visible rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xs transition-all hover:border-[var(--border-strong)]"
+      className="overflow-visible rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-[var(--card-shadow-subtle)] transition-all hover:border-[var(--border-strong)]"
     >
       <div className="p-3.5 sm:p-5">
         <div className="flex items-start justify-between gap-3">
