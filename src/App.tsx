@@ -75,6 +75,7 @@ import {
 } from './lib/deviceTrust';
 import {
   detectDeletedEntityIds,
+  detectRestoredEntityIds,
   detectGymSessionConflicts,
   loadTombstones,
   saveTombstones,
@@ -850,13 +851,26 @@ export default function App() {
       return false;
     }
     const deletedIds = detectDeletedEntityIds(previous, draft);
-    if (deletedIds.length > 0 && cloudUserRef.current) {
+    const restoredIds = detectRestoredEntityIds(previous, draft);
+    if ((deletedIds.length > 0 || restoredIds.length > 0) && cloudUserRef.current) {
       const currentTombstones = tombstonesRef.current;
-      const deletionTime = Date.now();
-      for (const id of deletedIds) {
-        currentTombstones[id] = nextFinanceDeletionTimestamp(previous, id, deletionTime);
+      let tombstonesChanged = false;
+      if (deletedIds.length > 0) {
+        const deletionTime = Date.now();
+        for (const id of deletedIds) {
+          currentTombstones[id] = nextFinanceDeletionTimestamp(previous, id, deletionTime);
+        }
+        tombstonesChanged = true;
       }
-      saveTombstones(cloudUserRef.current.uid, currentTombstones);
+      for (const id of restoredIds) {
+        if (id in currentTombstones) {
+          delete currentTombstones[id];
+          tombstonesChanged = true;
+        }
+      }
+      if (tombstonesChanged) {
+        saveTombstones(cloudUserRef.current.uid, currentTombstones);
+      }
     }
     stateRef.current = draft;
     setStateObj(() => ({

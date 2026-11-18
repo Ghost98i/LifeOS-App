@@ -8,6 +8,7 @@ import {
   type UnifiedTask,
 } from './taskDependencies';
 import { isModuleEnabled } from './moduleVisibility';
+import { formatStudyDuration, getExamPreparationMetrics } from './studyFlows';
 
 export interface TaskScoreResult {
   score: number;
@@ -130,34 +131,112 @@ export function scoreTask(
 
 export function getSmartDailyRecommendations(
   state: LifeOSState,
-  limit = 3
+  limit = 3,
+  todayOverride?: string
 ): SmartPriorityCandidate[] {
-  const today = todayISO();
+  const today = todayOverride || todayISO();
   const todayContext = (state.dailyContext || []).find((c) => c.date === today) || null;
   const candidates: SmartPriorityCandidate[] = [];
   const unifiedTasks = getUnifiedTaskList(state);
   const taskMap = getUnifiedTaskMap(unifiedTasks);
 
-  // 1. Upcoming or Immediate Exams (within 7 days)
+  // 1. Upcoming Exams & Study Topics (proximity + real topic & study progress)
   if (isModuleEnabled(state, 'estudios')) {
+    const subjectsWithUpcomingExam = new Set<string>();
+
     (state.study?.exams || [])
       .filter((e) => e.status === 'pendiente' && e.date >= today)
       .forEach((e) => {
         const days = daysBetween(today, e.date);
-        if (days <= 7) {
+        if (days <= 14) {
+          if (e.subjectId) subjectsWithUpcomingExam.add(e.subjectId);
           const subject = (state.study?.subjects || []).find((s) => s.id === e.subjectId);
           const name = subject?.name || 'Materia';
-          const reason = days === 0 ? 'Examen hoy' : `Examen en ${days} día(s)`;
+          const prep = getExamPreparationMetrics(e, state, today);
+          const nextPendingTopic = prep.pendingTopics[0];
+          const examBaseLabel = e.title?.trim()
+            ? (subject ? `${e.title.trim()} (${name})` : e.title.trim())
+            : `examen de ${name}`;
+
+          const proximityReason =
+            days === 0 ? 'Examen hoy' : days === 1 ? 'Examen mañana' : `Examen en ${days} día(s)`;
+
+          const reasons: string[] = [proximityReason];
+          if (prep.totalTopics > 0) {
+            if (prep.pendingTopics.length > 0) {
+              reasons.push(`Temario: ${prep.completedTopics}/${prep.totalTopics} temas listos`);
+            } else {
+              reasons.push(`Temario cubierto (${prep.totalTopics}/${prep.totalTopics}) · repaso final`);
+            }
+          } else {
+            reasons.push('Impacto académico alto');
+          }
+
+          if (e.subjectId && prep.recentMinutes7d === 0 && days <= 7) {
+            reasons.push('Sin estudio registrado en 7 días');
+          } else if (prep.recentMinutes7d > 0) {
+            reasons.push(`${formatStudyDuration(prep.recentMinutes7d)} estudiados en 7 días`);
+          }
+
+          let score = days <= 7 ? 100 - days : 76 - (days - 8) * 2;
+          if (prep.pendingTopics.length >= 2 && days <= 5) {
+            score += 3;
+          } else if (days >= 4 && prep.totalTopics > 0 && prep.pendingTopics.length === 0 && prep.recentMinutes7d >= 90) {
+            score -= 4;
+          } else if (days > 7 && (prep.pendingTopics.length > 0 || prep.recentMinutes7d === 0)) {
+            score += 5;
+          }
+
+          if (days > 7 && prep.totalTopics > 0 && prep.pendingTopics.length === 0 && prep.recentMinutes7d >= 60) {
+            return;
+          }
+
+          const priorityText = nextPendingTopic
+            ? `Repasar para ${examBaseLabel}: ${nextPendingTopic.title}`
+            : `Repasar para ${examBaseLabel}`;
+
           candidates.push({
             id: `exam-${e.id}`,
-            text: `Repasar para examen de ${name}`,
-            score: 100 - days, // Sooner = higher score (93-100)
-            reason,
-            reasons: [reason, 'Impacto académico alto'],
+            text: priorityText,
+            score,
+            reason: reasons.join(' · '),
+            reasons,
             source: 'exam',
           });
         }
       });
+
+    // 1b. Materias con temas pendientes y sin examen próximo en 14 días (estudio continuo)
+    const sevenDaysAgoDate = new Date(`${today}T12:00:00`);
+    sevenDaysAgoDate.setDate(sevenDaysAgoDate.getDate() - 6);
+    const sevenDaysAgoIso = `${sevenDaysAgoDate.getFullYear()}-${String(sevenDaysAgoDate.getMonth() + 1).padStart(2, '0')}-${String(sevenDaysAgoDate.getDate()).padStart(2, '0')}`;
+
+    (state.study?.subjects || []).forEach((subject) => {
+      if (subjectsWithUpcomingExam.has(subject.id)) return;
+      const topics = subject.topics || [];
+      if (topics.length === 0) return;
+      const pending = topics.filter((t) => !t.done);
+      if (pending.length === 0) return;
+
+      const recentMins = (state.study?.studyLog || [])
+        .filter((l) => l.subjectId === subject.id && l.date >= sevenDaysAgoIso && l.date <= today)
+        .reduce((sum, l) => sum + Math.max(0, Number(l.minutes) || 0), 0);
+
+      const doneCount = topics.length - pending.length;
+      const topicReasons = [
+        `Temario: ${doneCount}/${topics.length} temas listos`,
+        recentMins === 0 ? 'Sin estudio en 7 días' : `${formatStudyDuration(recentMins)} esta semana`,
+      ];
+
+      candidates.push({
+        id: `subject-topic-${subject.id}`,
+        text: `Estudiar ${subject.name}: ${pending[0].title}`,
+        score: recentMins === 0 ? 67 : 59,
+        reason: topicReasons.join(' · '),
+        reasons: topicReasons,
+        source: 'exam',
+      });
+    });
   }
 
   // 2. Overdue or due today job follow-ups

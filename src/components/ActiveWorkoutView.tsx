@@ -2,7 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { ExerciseEquipment, GymActiveTimer, GymSession, GymSet, MuscleGroup } from '../types';
 import { EXERCISE_EQUIPMENT_OPTIONS, inferExerciseEquipment, inferMuscleGroup } from '../lib/gymMigration';
 import { getPerformedGymVolume } from '../lib/gymFlows';
-import type { ExerciseMetricTarget } from '../lib/gymMetrics';
+import {
+  getProgressiveOverloadSuggestion,
+  isProgressingOverPrevious,
+  type ExerciseGhostSet,
+  type ExerciseMetricTarget,
+} from '../lib/gymMetrics';
+import type { WakeLockStatus } from '../lib/wakeLock';
 import { AppIcon } from './AppIcon';
 import { playSound, playTimerCountdownTone } from '../lib/audio';
 import { showToast } from '../lib/toast';
@@ -30,7 +36,8 @@ export interface ActiveWorkoutViewProps {
   setIndex: number;
   previousSet?: PreviousSetReference | null;
   previousSessionBest?: string | null;
-  previousGhostSets?: Array<{ weight: number; reps: number }> | null;
+  previousGhostSets?: Array<{ weight: number; reps: number; type?: 'normal' | 'warmup' }> | null;
+  wakeLockStatus?: WakeLockStatus;
   completionMotion?: { setKey: string; nonce: number } | null;
   restTimer?: React.ReactNode;
   activeTimer?: GymActiveTimer | null;
@@ -107,6 +114,8 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
   setIndex,
   previousSet,
   previousSessionBest,
+  previousGhostSets,
+  wakeLockStatus,
   completionMotion,
   restTimer,
   activeTimer,
@@ -163,6 +172,31 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
   const visualEquipment = exercise?.equipment || (exercise?.barWeight && exercise.barWeight > 0 ? 'barra' : undefined);
   const barWeight = exercise?.barWeight ?? (equipment === 'barra' ? 20 : 0);
   const sessionTitle = session.weekLabel?.trim() || 'Entrenamiento activo';
+  const overloadSuggestion = useMemo(
+    () =>
+      getProgressiveOverloadSuggestion({
+        previousSet: previousSet
+          ? { setIndex: safeSetIndex, weight: previousSet.weight, reps: previousSet.reps }
+          : null,
+        previousGhostSets: previousGhostSets
+          ? (previousGhostSets.map((s, idx) => ({
+              setIndex: idx,
+              weight: s.weight,
+              reps: s.reps,
+              type: s.type,
+            })) as ExerciseGhostSet[])
+          : null,
+        equipment,
+        currentSetType: currentSet?.type,
+      }),
+    [previousSet, safeSetIndex, previousGhostSets, equipment, currentSet?.type]
+  );
+  const isProgressing = currentSet
+    ? isProgressingOverPrevious(
+        currentSet,
+        previousSet ? { setIndex: safeSetIndex, weight: previousSet.weight, reps: previousSet.reps } : null
+      )
+    : false;
 
   // Precision countdown clock derived directly from endsAt timestamp
   const isPaused = Boolean(activeTimer?.pausedAt);
@@ -332,7 +366,9 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
       {/* 1. Barra Superior Operativa */}
       <header className="gym-workout-topbar flex items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="gym-live-label"><span aria-hidden="true" /> Sesión activa</p>
+          <p className="gym-live-label" title={wakeLockStatus === 'active' ? 'La pantalla permanece activa mientras entrenás o descansás' : undefined}>
+            <span aria-hidden="true" /> Sesión activa{wakeLockStatus === 'active' ? ' · Pantalla activa' : ''}
+          </p>
           <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
             <h1 className="break-words text-lg font-bold tracking-tight text-[var(--text)] sm:text-xl">{sessionTitle}</h1>
             <span className="shrink-0 text-xs tabular-nums text-[var(--text-soft)]">
@@ -588,6 +624,9 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                         )}
                       </div>
                       <div className="c-set-pill-weight">{set.weight} kg <span aria-hidden="true">×</span> {set.reps}</div>
+                      {!isDone && !isWarmup && previousGhostSets?.[idx] && (
+                        <div className="c-set-pill-ghost">Ant: {previousGhostSets[idx].weight}×{previousGhostSets[idx].reps}</div>
+                      )}
                     </button>
                   );
                 })}
@@ -689,20 +728,51 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                         {plateDescription(equipment, Number(currentSet.weight) || 0, barWeight)}
                       </span>
                       {previousSet ? (
-                        <div className="c-prev-best-pill">
+                        <>
+                          <div className="c-prev-best-pill">
                           <span>
                             Última vez · serie {safeSetIndex + 1}: <strong>{previousSet.weight} kg × {previousSet.reps}</strong>
                             {previousSessionBest && <span className="c-previous-best">Mejor serie efectiva de esa sesión: {previousSessionBest}</span>}
                           </span>
-                          <button
-                            type="button"
-                            onClick={() => onUpdateCurrentSet({ weight: previousSet.weight, reps: previousSet.reps })}
-                            className="c-copy-link min-h-11"
-                            title="Copiar valores de la sesión anterior"
-                          >
-                            Copiar
-                          </button>
-                        </div>
+                            <span className="c-copy-link-wrap shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => onUpdateCurrentSet({ weight: previousSet.weight, reps: previousSet.reps })}
+                                className="c-copy-link min-h-11"
+                                title="Copiar valores de la sesión anterior"
+                              >
+                                Copiar
+                              </button>
+                            </span>
+                          </div>
+                          {overloadSuggestion && !currentSet.completed && (
+                            Number(currentSet.weight) === overloadSuggestion.weight && Number(currentSet.reps) === overloadSuggestion.reps ? (
+                              <div className="c-overload-pill is-applied">
+                                <span>
+                                  Meta progresiva activa: <strong>{overloadSuggestion.weight} kg × {overloadSuggestion.reps}</strong> ({overloadSuggestion.deltaLabel})
+                                </span>
+                              </div>
+                            ) : isProgressing ? (
+                              <div className="c-overload-pill is-applied">
+                                <span>Superando última marca en esta serie</span>
+                              </div>
+                            ) : (
+                              <div className="c-overload-pill">
+                                <span>
+                                  Sobrecarga sugerida: <strong>{overloadSuggestion.weight} kg × {overloadSuggestion.reps}</strong> ({overloadSuggestion.deltaLabel})
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => onUpdateCurrentSet({ weight: overloadSuggestion.weight, reps: overloadSuggestion.reps })}
+                                  className="c-copy-link min-h-11"
+                                  title={overloadSuggestion.reason}
+                                >
+                                  Progresar
+                                </button>
+                              </div>
+                            )
+                          )}
+                        </>
                       ) : (
                         <span className="text-xs text-[var(--text-soft)]">Sin referencia para esta serie.{previousSessionBest && <span className="c-previous-best">Mejor serie efectiva de esa sesión: {previousSessionBest}</span>}</span>
                       )}

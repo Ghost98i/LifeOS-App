@@ -52,6 +52,7 @@ import {
   confirmTransactionMatch,
   deleteAccount,
   deleteTransaction,
+  restoreDeletedTransaction,
   getTransactionLockReason,
   ignoreTransactionReview,
   isCommercialFinanceTransaction,
@@ -288,8 +289,29 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
 
   const handleDeleteTx = (id: string) => {
     try {
+      const existing = state.finance.transactions.find((tx) => tx.id === id);
+      const snapshot = existing ? structuredClone(existing) : null;
+      const commitmentSnapshot = existing?.commitmentId
+        ? structuredClone((state.finance.commitments || []).find((c) => c.id === existing.commitmentId) || null)
+        : null;
+      const expectedIncomeSnapshot = existing?.expectedIncomeId
+        ? structuredClone((state.finance.expectedIncomes || []).find((i) => i.id === existing.expectedIncomeId) || null)
+        : null;
       if (onUpdateState((draft) => deleteTransaction(draft, id)) === false) return;
-      showToast('Movimiento eliminado.', 'info');
+      showToast('Movimiento eliminado.', 'info', snapshot ? {
+        actionLabel: 'Deshacer',
+        onAction: () => {
+          try {
+            if (onUpdateState((draft) => {
+              restoreDeletedTransaction(draft, snapshot, { commitmentSnapshot, expectedIncomeSnapshot });
+            }) !== false) {
+              showToast('Movimiento restaurado.', 'success');
+            }
+          } catch (restoreErr) {
+            showToast(restoreErr instanceof Error ? restoreErr.message : 'No se pudo restaurar el movimiento.', 'error');
+          }
+        },
+      } : undefined);
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'No se puede eliminar este movimiento.', 'error');
     }
@@ -342,8 +364,20 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
 
   const handleDeleteDuplicate = (transaction: Transaction): boolean => {
     try {
+      const snapshot = structuredClone(transaction);
       if (onUpdateState(draft => deleteFinanceDuplicate(draft, transaction)) === false) return false;
-      showToast('Movimiento eliminado. Su efecto contable fue revertido.', 'info');
+      showToast('Movimiento eliminado. Su efecto contable fue revertido.', 'info', {
+        actionLabel: 'Deshacer',
+        onAction: () => {
+          try {
+            if (onUpdateState((draft) => restoreDeletedTransaction(draft, snapshot)) !== false) {
+              showToast('Movimiento restaurado.', 'success');
+            }
+          } catch (restoreErr) {
+            showToast(restoreErr instanceof Error ? restoreErr.message : 'No se pudo restaurar el movimiento.', 'error');
+          }
+        },
+      });
       return true;
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'No se pudo eliminar el movimiento.', 'error');
@@ -642,11 +676,26 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   };
 
   const handleDeleteCommitment = (id: string) => {
+    const existing = (state.finance?.commitments || []).find((c) => c.id === id);
+    const snapshot = existing ? structuredClone(existing) : null;
     if (onUpdateState((draft) => {
       if (!draft.finance?.commitments) return;
       draft.finance.commitments = draft.finance.commitments.filter((c) => c.id !== id);
     }) === false) return;
-    showToast('Compromiso eliminado.', 'info');
+    showToast('Compromiso eliminado.', 'info', snapshot ? {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (onUpdateState((draft) => {
+          if (!draft.finance) return;
+          if (!draft.finance.commitments) draft.finance.commitments = [];
+          if (!draft.finance.commitments.some((c) => c.id === snapshot.id)) {
+            draft.finance.commitments.push({ ...snapshot, updatedAt: new Date().toISOString() });
+          }
+        }) !== false) {
+          showToast('Compromiso restaurado.', 'success');
+        }
+      },
+    } : undefined);
   };
 
   // Payment Confirmation Operations
@@ -820,11 +869,26 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   };
 
   const handleDeleteExpectedIncome = (id: string) => {
+    const existing = (state.finance?.expectedIncomes || []).find((i) => i.id === id);
+    const snapshot = existing ? structuredClone(existing) : null;
     if (onUpdateState((draft) => {
       if (!draft.finance?.expectedIncomes) return;
       draft.finance.expectedIncomes = draft.finance.expectedIncomes.filter((i) => i.id !== id);
     }) === false) return;
-    showToast('Ingreso previsto eliminado.', 'info');
+    showToast('Ingreso previsto eliminado.', 'info', snapshot ? {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (onUpdateState((draft) => {
+          if (!draft.finance) return;
+          if (!draft.finance.expectedIncomes) draft.finance.expectedIncomes = [];
+          if (!draft.finance.expectedIncomes.some((i) => i.id === snapshot.id)) {
+            draft.finance.expectedIncomes.push({ ...snapshot, updatedAt: new Date().toISOString() });
+          }
+        }) !== false) {
+          showToast('Ingreso previsto restaurado.', 'success');
+        }
+      },
+    } : undefined);
   };
 
   const handleConfirmIncomeReal = (inc: ExpectedIncome) => {

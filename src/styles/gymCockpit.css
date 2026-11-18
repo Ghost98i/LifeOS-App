@@ -266,6 +266,21 @@
 .c-set-pill:is(.is-active, .is-done) .c-set-pill-top { color: var(--gym-visual-accent); font-weight: 700; }
 .c-check { color: var(--gym-visual-accent); flex-shrink: 0; }
 .c-set-pill-weight { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.c-set-pill-ghost { font-size: 10px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-faint); white-space: nowrap; }
+.c-overload-pill {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-soft);
+}
+.c-overload-pill strong { color: var(--gym-visual-accent); font-variant-numeric: tabular-nums; }
+.c-overload-pill.is-applied { color: var(--semantic-success); font-weight: 600; }
+.c-overload-pill.is-applied strong { color: var(--semantic-success); }
 
 /* Stage Card & Tactile Instrument Wells */
 .gym-page .c-stage-card {

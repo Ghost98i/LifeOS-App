@@ -229,6 +229,18 @@ export function detectDeletedEntityIds(previous: LifeOSState, next: LifeOSState)
   return deleted;
 }
 
+export function detectRestoredEntityIds(previous: LifeOSState, next: LifeOSState): string[] {
+  const prevIds = collectEntityIds(previous);
+  const nextIds = collectEntityIds(next);
+  const restored: string[] = [];
+  for (const id of nextIds) {
+    if (!prevIds.has(id)) {
+      restored.push(id);
+    }
+  }
+  return restored;
+}
+
 function stableEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') return false;

@@ -607,9 +607,17 @@ export interface Gym {
   _sync?: GymSyncMetadata;
 }
 
+export interface StudyTopic {
+  id: string;
+  title: string;
+  done: boolean;
+  updatedAt?: number;
+}
+
 export interface Subject {
   id: string;
   name: string;
+  topics?: StudyTopic[];
   updatedAt?: number;
   createdAt?: number;
 }
@@ -622,6 +630,7 @@ export interface Exam {
   time?: string | null;
   status: 'pendiente' | 'aprobado' | 'desaprobado';
   grade?: string | null;
+  topics?: StudyTopic[];
   updatedAt?: number;
   createdAt?: number;
 }

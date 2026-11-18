@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import type { JobApplication, JobApplicationType, LifeOSState, ViewType } from '../types';
 import { AppIcon, type AppIconName } from './AppIcon';
@@ -12,6 +12,13 @@ import { playSound } from '../lib/audio';
 import { getActiveCategories } from '../lib/financeCategories';
 import { isModuleEnabled } from '../lib/moduleVisibility';
 import { getJobStageLabel, isJobStatusForType, JOB_STAGES } from '../lib/jobApplications';
+import {
+  parseCaptureDrafts,
+  confirmCaptureDraft,
+  canConfirmDraft,
+  type CaptureDraft,
+} from '../lib/quickCaptureDrafts';
+import { LiveCapturePreview } from './LiveCapturePreview';
 
 export interface GlobalSearchModalProps {
   state: LifeOSState;
@@ -310,6 +317,105 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     return searchLifeOS(state, query);
   }, [state, query]);
 
+  // Live natural-language capture interpretation inside Command Palette
+  const livePaletteDrafts = useMemo<CaptureDraft[]>(() => {
+    const trimmed = query.trim();
+    if (!onUpdateState || trimmed.length < 3) return [];
+    return parseCaptureDrafts(trimmed, state);
+  }, [onUpdateState, query, state]);
+
+  const buildDirectCapturePaletteItem = useCallback((draft: CaptureDraft): PaletteItem | null => {
+    if (!onUpdateState) return null;
+    const validation = canConfirmDraft(state, draft);
+    if (!validation.valid) return null;
+    const privateMode = Boolean(state.settings.privacyMode);
+
+    let title = 'Registrar captura directa';
+    let subtitle = draft.rawText;
+    let iconName: AppIconName = 'squarePlus';
+    let badge = 'Directo';
+    let badgeTone: PaletteItem['badgeTone'] = 'blue';
+    let isSensitive = false;
+
+    if (draft.kind === 'finance' && draft.amount !== undefined) {
+      const formatted = privateMode ? '••••' : formatMoney(draft.amount, draft.currency || 'UYU');
+      const kindLabel = draft.type === 'ingreso' ? 'Registrar ingreso' : 'Registrar gasto';
+      const cat = draft.categoryMatched || draft.category || 'Otros';
+      const acc = draft.accountName ? maskFinancialText(draft.accountName, privateMode) : '';
+      title = `${kindLabel}: ${formatted} en ${cat}`;
+      subtitle = `${acc ? `Cuenta: ${acc} · ` : ''}${draft.dateLabel || 'Hoy'}`;
+      iconName = 'wallet';
+      badge = draft.type === 'ingreso' ? 'Ingreso' : 'Gasto';
+      badgeTone = draft.type === 'ingreso' ? 'green' : 'red';
+      isSensitive = true;
+    } else if (draft.kind === 'study') {
+      title = `Registrar estudio: ${draft.minutes} min en ${draft.subjectName || 'General'}`;
+      subtitle = draft.dateLabel || 'Hoy';
+      iconName = 'book';
+      badge = 'Estudio';
+      badgeTone = 'blue';
+    } else if (draft.kind === 'note') {
+      title = `Guardar nota: ${draft.title || draft.text.slice(0, 48)}`;
+      subtitle = draft.tags?.length ? `Etiquetas: #${draft.tags.join(' #')}` : 'Notas & Post-its';
+      iconName = 'note';
+      badge = 'Nota';
+      badgeTone = 'gray';
+    } else if (draft.kind === 'idea') {
+      title = `Guardar idea: ${draft.text.slice(0, 52)}`;
+      subtitle = 'Módulo IA & Proyectos';
+      iconName = 'lightbulb';
+      badge = 'Idea';
+      badgeTone = 'blue';
+    } else if (draft.kind === 'agenda') {
+      title = `Agendar: ${draft.activity}`;
+      subtitle = `${draft.dateLabel || 'Hoy'}${draft.time ? ` · ${draft.time}` : ''}`;
+      iconName = 'calendar';
+      badge = 'Agenda';
+      badgeTone = 'green';
+    } else if (draft.kind === 'task') {
+      title = `Crear tarea para hoy: ${draft.text}`;
+      subtitle = `Prioridad ${draft.priority}${draft.dueDateLabel ? ` · ${draft.dueDateLabel}` : ''}`;
+      iconName = 'check';
+      badge = 'Tarea';
+      badgeTone = 'blue';
+    } else {
+      return null;
+    }
+
+    return {
+      id: `direct-capture-${draft.id}`,
+      category: 'Captura Directa',
+      categoryOrder: 0,
+      title,
+      subtitle,
+      iconName,
+      badge,
+      badgeTone,
+      shortcutHint: '↵ Ejecutar',
+      isSensitive,
+      onSelect: () => {
+        try {
+          let feedback: { message: string; sound: 'success' | 'coins' | 'click' } = {
+            message: 'Elemento registrado.',
+            sound: 'success',
+          };
+          const saved = onUpdateState((s) => {
+            feedback = confirmCaptureDraft(s, draft);
+          });
+          if (saved === false) {
+            showToast('No se pudo guardar en este dispositivo.', 'error');
+            return;
+          }
+          playSound(feedback.sound);
+          showToast(feedback.message, 'success');
+          onClose();
+        } catch (err) {
+          showToast(err instanceof Error ? err.message : 'Error al registrar captura.', 'error');
+        }
+      },
+    };
+  }, [onUpdateState, state, onClose]);
+
   // Combine and filter all items
   const visibleItems = useMemo<PaletteItem[]>(() => {
     const q = query.trim().toLowerCase();
@@ -366,6 +472,22 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
       let all = [...matchedActions, ...matchedViews, ...mappedContent];
 
+      if (categoryFilter === 'all' && livePaletteDrafts.length === 1) {
+        const candidateDraft = livePaletteDrafts[0];
+        const isStructuredIntent =
+          candidateDraft.kind === 'finance' ||
+          candidateDraft.kind === 'study' ||
+          candidateDraft.kind === 'note' ||
+          candidateDraft.kind === 'idea' ||
+          candidateDraft.kind === 'agenda';
+        if (isStructuredIntent || all.length === 0) {
+          const directItem = buildDirectCapturePaletteItem(candidateDraft);
+          if (directItem) {
+            all = [directItem, ...all];
+          }
+        }
+      }
+
       if (categoryFilter === 'actions') all = all.filter((i) => i.category === 'Acciones Rápidas');
       else if (categoryFilter === 'views') all = all.filter((i) => i.category === 'Cambiar Vista');
       else if (categoryFilter === 'notes') all = all.filter((i) => i.category === 'Notas');
@@ -398,7 +520,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
               category: 'Notas Recientes',
               categoryOrder: 3,
               title: displayTitle,
-              subtitle: `${n.pinned ? '📌 ' : ''}${displaySub}`,
+              subtitle: `${n.pinned ? 'Fijada · ' : ''}${displaySub}`,
               iconName: 'note',
               badge: n.pinned ? 'Fijada' : undefined,
               badgeTone: n.pinned ? 'blue' : undefined,
@@ -433,7 +555,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     else if (categoryFilter === 'calendar') defaultItems = upcomingEvents;
 
     return defaultItems;
-  }, [query, quickActions, viewItems, contentResults, categoryFilter, state, onNavigate, onClose]);
+  }, [query, quickActions, viewItems, contentResults, livePaletteDrafts, buildDirectCapturePaletteItem, categoryFilter, state, onNavigate, onClose]);
 
   // Group visible items by category
   const groupedItems = useMemo(() => {
@@ -614,10 +736,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setQuery('')}
-                  className="p-1 rounded-md text-xs text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] transition-colors"
+                  className="inline-flex items-center justify-center p-1 rounded-md text-xs text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] transition-colors"
                   aria-label="Limpiar búsqueda"
                 >
-                  ✕
+                  <AppIcon name="x" className="h-3.5 w-3.5" />
                 </button>
               )}
               <kbd className="hidden sm:inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 font-mono text-[10px] font-bold text-[var(--text-faint)] shadow-2xs">
@@ -655,6 +777,12 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 </button>
               ))}
             </div>
+
+            {livePaletteDrafts.length === 1 && livePaletteDrafts[0].kind !== 'task' && livePaletteDrafts[0].kind !== 'inbox' && (
+              <div className="px-3.5 py-2 border-b border-[var(--border)] bg-[var(--bg)]/50">
+                <LiveCapturePreview drafts={livePaletteDrafts} state={state} enterHint="↵ Ejecutar" />
+              </div>
+            )}
 
             {/* List Results */}
             <div className="overflow-y-auto p-2 space-y-3 flex-1 overscroll-contain">
@@ -711,7 +839,11 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <span className={`text-xs sm:text-sm font-semibold truncate ${isSelected ? 'text-[var(--text)]' : 'text-[var(--text)]'}`}>
-                                  {item.title}
+                                  {renderHighlightedText(
+                                    item.title,
+                                    query,
+                                    Boolean(item.isSensitive && state.settings.privacyMode) || item.category === 'Captura Directa'
+                                  )}
                                 </span>
                                 {item.badge && (
                                   <span
@@ -791,7 +923,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                   className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--card)] text-xs text-[var(--text-soft)] hover:text-[var(--text)] transition-colors"
                   title="Volver (Esc)"
                 >
-                  ←
+                  <AppIcon name="chevronLeft" className="h-3.5 w-3.5" />
                 </button>
                 <div className="flex items-center gap-2">
                   <AppIcon name="wallet" className="h-4 w-4 text-[var(--blue)]" />
@@ -963,7 +1095,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                   className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--card)] text-xs text-[var(--text-soft)] hover:text-[var(--text)] transition-colors"
                   title="Volver (Esc)"
                 >
-                  ←
+                  <AppIcon name="chevronLeft" className="h-3.5 w-3.5" />
                 </button>
                 <div className="flex items-center gap-2">
                   <AppIcon name="briefcase" className="h-4 w-4 text-[var(--blue)]" />
@@ -1108,5 +1240,26 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     </div>
   );
 };
+
+function renderHighlightedText(text: string, rawQuery: string, skip: boolean): React.ReactNode {
+  const needle = rawQuery.trim();
+  if (skip || needle.length < 2) return text;
+  const lowerText = text.toLowerCase();
+  const lowerNeedle = needle.toLowerCase();
+  const idx = lowerText.indexOf(lowerNeedle);
+  if (idx === -1) return text;
+  const before = text.slice(0, idx);
+  const match = text.slice(idx, idx + needle.length);
+  const after = text.slice(idx + needle.length);
+  return (
+    <>
+      {before}
+      <mark className="bg-transparent font-extrabold text-[var(--blue)] underline decoration-[var(--blue)]/40 underline-offset-2">
+        {match}
+      </mark>
+      {after}
+    </>
+  );
+}
 
 export { GlobalSearchModal as CommandPalette };

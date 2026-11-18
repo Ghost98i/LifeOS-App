@@ -317,6 +317,14 @@ export function getAllAttentionCandidates(
           : subName;
         const timeSuffix = exam.time ? ` a las ${exam.time}` : '';
         const isTomorrow = days === 1;
+        const effectiveTopics = exam.topics && exam.topics.length > 0 ? exam.topics : subject?.topics || [];
+        const pendingTopics = effectiveTopics.filter((t) => !t.done);
+        const topicSuffix = effectiveTopics.length > 0
+          ? pendingTopics.length > 0
+            ? ` (${pendingTopics.length}/${effectiveTopics.length} temas pendientes)`
+            : ` (temario al día: ${effectiveTopics.length}/${effectiveTopics.length})`
+          : '';
+        const unpreparedBoost = effectiveTopics.length > 0 && pendingTopics.length / effectiveTopics.length >= 0.5 ? 5 : 0;
 
         candidates.push({
           id: `attention-exam-${exam.id}`,
@@ -325,11 +333,11 @@ export function getAllAttentionCandidates(
           module: 'estudios',
           title: isTomorrow ? 'Examen mañana' : 'Examen en 2 días',
           detail: isTomorrow
-            ? `${examLabel} está programado para mañana${timeSuffix}.`
-            : `${examLabel} está programado dentro de dos días${timeSuffix}.`,
+            ? `${examLabel} está programado para mañana${timeSuffix}${topicSuffix}.`
+            : `${examLabel} está programado dentro de dos días${timeSuffix}${topicSuffix}.`,
           actionLabel: 'Ver examen',
           urgency: isTomorrow ? 'urgent' : 'warning',
-          score: isTomorrow ? 85 : 70,
+          score: (isTomorrow ? 85 : 70) + unpreparedBoost,
           targetView: 'estudios',
           targetFocusId: `exam-${exam.id}`,
           sourceRecordId: exam.id,

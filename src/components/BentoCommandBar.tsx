@@ -13,8 +13,7 @@ import { showToast } from '../lib/toast';
 import { AppIcon } from './AppIcon';
 import { isModuleEnabled } from '../lib/moduleVisibility';
 import { DraftConfirmationTray } from './DraftConfirmationTray';
-import { PrivacyAmount } from './PrivacyAmount';
-import { fmtMoney, formatMoney } from '../lib/storage';
+import { LiveCapturePreview } from './LiveCapturePreview';
 
 interface BentoCommandBarProps {
   state: LifeOSState;
@@ -138,13 +137,27 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
   };
 
   const handleDiscardDraft = (draftId: string) => {
+    const removed = detectedDrafts.find((d) => d.id === draftId);
     setDetectedDrafts((prev) => prev.filter((d) => d.id !== draftId));
     playSound('click');
+    if (removed) {
+      showToast('Borrador descartado.', 'info', {
+        actionLabel: 'Deshacer',
+        onAction: () => setDetectedDrafts((prev) => (prev.some((d) => d.id === removed.id) ? prev : [...prev, removed])),
+      });
+    }
   };
 
   const handleDiscardAll = () => {
+    const snapshot = [...detectedDrafts];
     setDetectedDrafts([]);
     playSound('click');
+    if (snapshot.length > 0) {
+      showToast(`${snapshot.length} borradores descartados.`, 'info', {
+        actionLabel: 'Deshacer',
+        onAction: () => setDetectedDrafts((prev) => [...prev, ...snapshot]),
+      });
+    }
   };
 
   const handleUpdateDraft = (updated: CaptureDraft) => {
@@ -249,20 +262,7 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
           </div>
 
           {/* Smart Intent Match Live Preview Badge */}
-          {liveDrafts.length > 0 && (
-            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)] text-xs text-[var(--text-soft)] font-medium flex-wrap">
-              {liveDrafts.length === 1 ? (
-                <LiveDraftPreview draft={liveDrafts[0]} />
-              ) : (
-                <div className="flex items-center gap-1.5">
-                  <AppIcon name="sparkles" className="h-3.5 w-3.5 text-blue-500" />
-                  <span>
-                    Hay <strong className="text-[var(--text)]">{liveDrafts.length} borradores</strong> para revisar. Presioná <strong className="text-[var(--text)]">Enter</strong>.
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
+          {liveDrafts.length > 0 && <LiveCapturePreview drafts={liveDrafts} state={state} />}
 
           {/* Suggested Shortcut Chips (Recent actions) */}
           {!compactBar && (isModuleEnabled(state, 'finanzas') || isModuleEnabled(state, 'gimnasio') || isModuleEnabled(state, 'notas')) && (
@@ -350,122 +350,6 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
           onConvertToInbox={handleConvertToInbox}
         />
       )}
-    </div>
-  );
-};
-
-const LiveDraftPreview: React.FC<{ draft: CaptureDraft }> = ({ draft }) => {
-  if (draft.kind === 'finance') {
-    return (
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <AppIcon
-          name="wallet"
-          className={`h-3.5 w-3.5 ${draft.type === 'ingreso' ? 'text-emerald-500' : 'text-rose-500'}`}
-        />
-        <span>
-          Detectado como <strong className="text-[var(--text)]">{draft.type === 'ingreso' ? 'Ingreso' : 'Gasto'}</strong>
-          {draft.amount !== undefined && (
-            <>
-              {' '}de{' '}
-              <strong className="text-[var(--text)]">
-                <PrivacyAmount>{formatMoney(draft.amount, draft.currency || 'UYU')}</PrivacyAmount>
-              </strong>
-            </>
-          )}
-          {draft.categoryMatched && (
-            <>
-              {' '}en <strong className="text-[var(--text)]">{draft.categoryMatched}</strong>
-            </>
-          )}
-          {!draft.isModuleEnabled && (
-            <span className="text-amber-500 ml-1 font-semibold">(Módulo Finanzas desactivado)</span>
-          )}
-        </span>
-      </div>
-    );
-  }
-
-  if (draft.kind === 'study') {
-    return (
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <AppIcon name="book" className="h-3.5 w-3.5 text-indigo-500" />
-        <span>
-          Detectado como <strong className="text-[var(--text)]">Estudio</strong> ({draft.minutes} min) en{' '}
-          <strong className="text-[var(--text)]">{draft.subjectName}</strong>
-          {!draft.isModuleEnabled && (
-            <span className="text-amber-500 ml-1 font-semibold">(Módulo Estudios desactivado)</span>
-          )}
-        </span>
-      </div>
-    );
-  }
-
-  if (draft.kind === 'task') {
-    return (
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <AppIcon name="check" className="h-3.5 w-3.5 text-blue-500" />
-        <span>
-          Detectado como <strong className="text-[var(--text)]">Tarea</strong>: {draft.text} ({draft.priority})
-        </span>
-      </div>
-    );
-  }
-
-  if (draft.kind === 'note') {
-    return (
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <AppIcon name="note" className="h-3.5 w-3.5 text-amber-500" />
-        <span>
-          Detectado como <strong className="text-[var(--text)]">Nota rápida</strong>
-        </span>
-      </div>
-    );
-  }
-
-  if (draft.kind === 'idea') {
-    return (
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <AppIcon name="zap" className="h-3.5 w-3.5 text-purple-500" />
-        <span>
-          Detectado como <strong className="text-[var(--text)]">Idea</strong>
-        </span>
-      </div>
-    );
-  }
-
-  if (draft.kind === 'resale') {
-    return (
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <AppIcon name="repeat" className="h-3.5 w-3.5 text-cyan-500" />
-        <span>
-          Detectado como <strong className="text-[var(--text)]">Reventa</strong>: {draft.title}
-          {draft.price !== undefined && (
-            <>
-              {' '}(<PrivacyAmount>{fmtMoney(draft.price)}</PrivacyAmount>)
-            </>
-          )}
-        </span>
-      </div>
-    );
-  }
-
-  if (draft.kind === 'agenda') {
-    return (
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <AppIcon name="calendar" className="h-3.5 w-3.5 text-teal-500" />
-        <span>
-          Detectado como <strong className="text-[var(--text)]">Agenda</strong>: {draft.activity}
-        </span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      <AppIcon name="note" className="h-3.5 w-3.5 text-[var(--text-soft)]" />
-      <span>
-        Detectado para <strong className="text-[var(--text)]">Bandeja de Entrada</strong>
-      </span>
     </div>
   );
 };

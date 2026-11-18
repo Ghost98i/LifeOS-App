@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { FinancialCommitment, LifeOSState } from '../types';
 import { CashFlowProjectionResult } from '../lib/calculations';
 import { deriveCashflowProjection } from '../lib/financeCashflow';
+import { deriveMonthlySpendingPacing } from '../lib/financePacing';
 import { formatMoney } from '../lib/storage';
 import { calcIncomeMonth, calcSpentMonth } from '../lib/calculations';
 import { AppIcon } from './AppIcon';
@@ -57,6 +58,10 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
   const activeCurrency = currencies.includes(selectedCurrency) ? selectedCurrency : currencies[0];
   const monthIncome = calcIncomeMonth(state, 0, activeCurrency);
   const monthExpenses = calcSpentMonth(state, 0, activeCurrency);
+  const pacing = useMemo(
+    () => deriveMonthlySpendingPacing(state, activeCurrency),
+    [state, activeCurrency]
+  );
 
   // 3. Currency-specific summary
   const summary = windowProj.summariesByCurrency[activeCurrency] || {
@@ -463,6 +468,76 @@ export const FinanceHero: React.FC<FinanceHeroProps> = ({
           <span>{isOverdraft ? <>Faltan <PrivacyAmount as="strong">{formatCurr(Math.abs(availableAfterCommitments))}</PrivacyAmount> para los pagos pendientes del mes.</> : <>El saldo tras pagos pendientes está por debajo del colchón de <PrivacyAmount as="strong">{formatMoney(minCushionUYU, 'UYU')}</PrivacyAmount>.</>}</span>
           {onNavigateTab && <button type="button" onClick={() => onNavigateTab('proyeccion')} className="min-h-8 underline font-semibold cursor-pointer shrink-0">Ver en Futuro →</button>}
         </div>}
+        {!isEmptyState && hasFinancialActivity && (
+          <div
+            data-finance-pacing
+            className="grid grid-cols-1 gap-2.5 rounded-xl border border-[var(--finance-border)] bg-[var(--finance-surface-subtle)] p-3 sm:grid-cols-3 sm:gap-4"
+          >
+            <div className="min-w-0">
+              <span className="block text-[11px] font-semibold text-[var(--finance-text-muted)]">
+                {pacing.cushionAmount > 0 ? 'Margen libre real' : 'Margen disponible del mes'}
+              </span>
+              <PrivacyAmount
+                as="strong"
+                className={`mt-0.5 block text-sm sm:text-base font-extrabold tabular-nums ${
+                  (pacing.cushionAmount > 0 ? pacing.freeMarginAfterCushion : pacing.availableAfterCommitments) < 0
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : 'text-[var(--finance-text-primary)]'
+                }`}
+              >
+                {formatCurr(pacing.cushionAmount > 0 ? pacing.freeMarginAfterCushion : pacing.availableAfterCommitments)}
+              </PrivacyAmount>
+              <span className="block text-[11px] text-[var(--finance-text-secondary)]">
+                {pacing.cushionAmount > 0 ? 'Tras pagos del mes y colchón' : 'Tras pagos pendientes del mes'}
+              </span>
+            </div>
+
+            <div className="min-w-0 border-t border-[var(--finance-border)] pt-2 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4">
+              <span className="block text-[11px] font-semibold text-[var(--finance-text-muted)]">
+                Tope diario sugerido
+              </span>
+              <div className="mt-0.5 flex items-baseline gap-1">
+                <PrivacyAmount as="strong" className="text-sm sm:text-base font-extrabold tabular-nums text-[var(--finance-text-primary)]">
+                  {formatCurr(pacing.dailyAvailableMargin)}
+                </PrivacyAmount>
+                <span className="text-xs font-semibold text-[var(--finance-text-secondary)]">/ día</span>
+              </div>
+              <span className="block text-[11px] tabular-nums text-[var(--finance-text-secondary)]">
+                {pacing.remainingDays} {pacing.remainingDays === 1 ? 'día restante' : 'días restantes'} en el mes
+              </span>
+            </div>
+
+            <div className="min-w-0 border-t border-[var(--finance-border)] pt-2 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4">
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
+                <span className="text-[11px] font-semibold text-[var(--finance-text-muted)]">
+                  Ritmo de gasto diario
+                </span>
+                <span
+                  className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                    pacing.pacingTone === 'deficit'
+                      ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
+                      : pacing.pacingTone === 'tight'
+                      ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                      : pacing.pacingTone === 'watch'
+                      ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                      : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                  }`}
+                >
+                  {pacing.pacingLabel}
+                </span>
+              </div>
+              <div className="mt-0.5 flex items-baseline gap-1">
+                <PrivacyAmount as="strong" className="text-sm sm:text-base font-extrabold tabular-nums text-[var(--finance-text-primary)]">
+                  {formatCurr(pacing.variableDailySpendRate)}
+                </PrivacyAmount>
+                <span className="text-xs font-semibold text-[var(--finance-text-secondary)]">/ día</span>
+              </div>
+              <span className="block text-[11px] text-[var(--finance-text-secondary)]">
+                Gasto variable promedio ({pacing.elapsedDays} d)
+              </span>
+            </div>
+          </div>
+        )}
         <div className="flex flex-wrap items-start justify-between gap-x-1 gap-y-2 border-t border-[var(--finance-border)] pt-2">
           {renderCushionChip()}
           {(monthIncome !== 0 || monthExpenses !== 0) && <details className="min-w-0 text-xs">

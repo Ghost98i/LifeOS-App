@@ -55,11 +55,26 @@ export const PrioritiesWidget: React.FC<PrioritiesWidgetProps> = ({
   };
 
   const handleRemove = (id: string) => {
-    onUpdateState((draft) => {
+    const existing = (state.dailyPriorities || []).find((p) => p.id === id);
+    const snapshot = existing ? structuredClone(existing) : null;
+    const saved = onUpdateState((draft) => {
       if (!draft.dailyPriorities) return;
       draft.dailyPriorities = draft.dailyPriorities.filter((p) => p.id !== id);
     });
-    showToast('Prioridad eliminada.', 'info');
+    if (saved === false) return;
+    showToast('Prioridad eliminada.', 'info', snapshot ? {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (onUpdateState((draft) => {
+          if (!draft.dailyPriorities) draft.dailyPriorities = [];
+          if (!draft.dailyPriorities.some((p) => p.id === snapshot.id)) {
+            draft.dailyPriorities.push({ ...snapshot });
+          }
+        }) !== false) {
+          showToast('Prioridad restaurada.', 'success');
+        }
+      },
+    } : undefined);
   };
 
   const handleSmartSuggest = () => {

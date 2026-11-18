@@ -29,6 +29,7 @@ import {
   type CaptureDraft,
 } from '../lib/quickCaptureDrafts';
 import { DraftConfirmationTray } from './DraftConfirmationTray';
+import { LiveCapturePreview } from './LiveCapturePreview';
 import { PrivacyAmount } from './PrivacyAmount';
 
 interface MobileQuickCaptureProps {
@@ -108,6 +109,12 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
       defaultAccountId: manualAccountId || fallbackAccountId,
     });
   }, [financeInput, state.finance?.accounts, state.finance?.categories, date, manualAccountId, fallbackAccountId]);
+
+  const universalPreviewDrafts = useMemo(() => {
+    const trimmed = universalInput.trim();
+    if (trimmed.length < 2) return [];
+    return parseCaptureDrafts(trimmed, state);
+  }, [universalInput, state]);
 
   // Today's suggested workout
   const todayDayKey = dayKeyFromDate(new Date());
@@ -408,11 +415,26 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
   };
 
   const handleDiscardInbox = (id: string) => {
-    onUpdateState((draft) => {
+    const existing = (state.inbox || []).find((item) => item.id === id);
+    const snapshot = existing ? structuredClone(existing) : null;
+    const saved = onUpdateState((draft) => {
       deleteInboxItem(draft, id);
     });
+    if (saved === false) return;
     playSound('click');
-    showToast('Elemento descartado de la bandeja', 'info');
+    showToast('Elemento descartado de la bandeja', 'info', snapshot ? {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (onUpdateState((draft) => {
+          if (!draft.inbox) draft.inbox = [];
+          if (!draft.inbox.some((item) => item.id === snapshot.id)) {
+            draft.inbox.unshift({ ...snapshot });
+          }
+        }) !== false) {
+          showToast('Elemento restaurado en bandeja', 'success');
+        }
+      },
+    } : undefined);
   };
 
   const startDictation = () => {
@@ -581,9 +603,10 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                     setActiveTab('capture');
                     setKind('inbox');
                   }}
-                  className="rounded-lg bg-[var(--blue-soft)] border border-[var(--blue)]/30 px-2 py-1 text-[10px] font-bold text-[var(--blue)] cursor-pointer"
+                  className="inline-flex items-center gap-1 rounded-lg bg-[var(--blue-soft)] border border-[var(--blue)]/30 px-2 py-1 text-[10px] font-bold text-[var(--blue)] cursor-pointer"
                 >
-                  ＋ Nueva
+                  <AppIcon name="plus" className="h-3 w-3" />
+                  <span>Nueva</span>
                 </button>
               )}
             </div>
@@ -736,6 +759,10 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                 </div>
               </label>
 
+              {universalPreviewDrafts.length > 0 && (
+                <LiveCapturePreview drafts={universalPreviewDrafts} state={state} />
+              )}
+
               <div className="flex items-center justify-between pt-1">
                 <span className="text-[11px] text-[var(--text-faint)]">
                   Podés combinar varios registros con &quot;y&quot;.
@@ -838,10 +865,24 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                   }
                 }}
                 onDiscardDraft={(draftId) => {
+                  const removed = mobileDrafts.find((d) => d.id === draftId);
                   setMobileDrafts((prev) => prev.filter((d) => d.id !== draftId));
+                  if (removed) {
+                    showToast('Borrador descartado.', 'info', {
+                      actionLabel: 'Deshacer',
+                      onAction: () => setMobileDrafts((prev) => (prev.some((d) => d.id === removed.id) ? prev : [...prev, removed])),
+                    });
+                  }
                 }}
                 onDiscardAll={() => {
+                  const snapshot = [...mobileDrafts];
                   setMobileDrafts([]);
+                  if (snapshot.length > 0) {
+                    showToast(`${snapshot.length} borradores descartados.`, 'info', {
+                      actionLabel: 'Deshacer',
+                      onAction: () => setMobileDrafts((prev) => [...prev, ...snapshot]),
+                    });
+                  }
                 }}
                 onEnableModule={(draft) => {
                   onUpdateState((s) => {

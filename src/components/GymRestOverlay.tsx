@@ -3,6 +3,7 @@ import type { GymActiveTimer, LifeOSState } from '../types';
 import { playSound } from '../lib/audio';
 import { isModuleEnabled } from '../lib/moduleVisibility';
 import { applyGymRestTimerAdjustment, getGymSettings, toggleGymRestTimerPause } from '../lib/gymFlows';
+import { useScreenWakeLock } from '../hooks/useScreenWakeLock';
 
 interface GymRestOverlayProps {
   state: LifeOSState;
@@ -48,6 +49,8 @@ export const GymRestOverlay: React.FC<GymRestOverlayProps> = ({ state, onUpdateS
   }, [announcedEnd, left, onUpdateState, timer]);
 
   const progress = useMemo(() => timer ? Math.max(0, Math.min(100, (left / Math.max(1, timer.durationSeconds)) * 100)) : 0, [left, timer]);
+  const isWakeLockNeeded = Boolean(isModuleEnabled(state, 'gimnasio') && timer && left > 0 && !timer.pausedAt);
+  useScreenWakeLock(isWakeLockNeeded);
   if (!isModuleEnabled(state, 'gimnasio') || !timer || left <= 0) return null;
 
   const minutes = Math.floor(left / 60);

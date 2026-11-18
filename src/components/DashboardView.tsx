@@ -238,6 +238,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (item.signalKind === 'backup_urgent') {
       setBackupDismissed(true);
     }
+    showToast('Aviso ocultado de Hoy.', 'info', {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (item.signalKind === 'backup_urgent') {
+          setBackupDismissed(false);
+        }
+        onUpdateState((draft) => {
+          if (!draft.settings) return;
+          const prevRec = draft.settings.attentionDismissals?.[item.dismissKey];
+          const nextTimestamp = nextAttentionDismissalTimestamp(prevRec);
+          const nextDismissals = {
+            ...(draft.settings.attentionDismissals || {}),
+            [item.dismissKey]: { status: 'active' as const, updatedAt: nextTimestamp },
+          };
+          draft.settings.attentionDismissals = nextDismissals;
+          draft.settings.dismissedAttentionKeys = Object.entries(nextDismissals)
+            .filter(([_, rec]) => (rec as AttentionDismissalRecord)?.status === 'dismissed')
+            .map(([k]) => k)
+            .sort();
+        });
+      },
+    });
     showToast('Aviso descartado.', 'info');
   };
 

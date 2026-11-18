@@ -376,6 +376,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
     if ((note?.pinned || placed) && !window.confirm(placed
       ? `Eliminar esta nota${note?.pinned ? ' fijada' : ''} también retirará su colocación local en Gimnasio. ¿Continuar?`
       : 'Esta nota está fijada. ¿Querés eliminarla definitivamente?')) return;
+    const snapshot = note ? structuredClone(note) : null;
     const saved = saveNoteChange((draft) => {
       deleteNote(draft, id);
     });
@@ -386,7 +387,19 @@ export const NotasView: React.FC<NotasViewProps> = ({
       setPlacements(next);
     }
     setOpenNoteMenuId(null);
-    showToast('Nota eliminada', 'info');
+    showToast('Nota eliminada', 'info', snapshot ? {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (saveNoteChange((draft) => {
+          if (!draft.notes) draft.notes = { postits: [], shopping: [], links: [], possessions: [] };
+          if (!draft.notes.postits.some((item) => item.id === snapshot.id)) {
+            draft.notes.postits.unshift({ ...snapshot, updatedAt: new Date().toISOString() });
+          }
+        })) {
+          showToast('Nota restaurada', 'success');
+        }
+      },
+    } : undefined);
   };
 
   const handlePlaceInGym = (noteId: string) => {
@@ -430,9 +443,24 @@ export const NotasView: React.FC<NotasViewProps> = ({
   };
 
   const handleDeleteShop = (id: string) => {
-    saveToolChange((draft) => {
+    const existing = state.notes?.shopping.find((s) => s.id === id);
+    const snapshot = existing ? structuredClone(existing) : null;
+    const saved = saveToolChange((draft) => {
       if (!draft.notes?.shopping) return;
       draft.notes.shopping = draft.notes.shopping.filter((s) => s.id !== id);
+    });
+    if (!saved || !snapshot) return;
+    showToast('Ítem quitado de compras', 'info', {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        saveToolChange((draft) => {
+          if (!draft.notes) draft.notes = { postits: [], shopping: [], links: [], possessions: [] };
+          if (!draft.notes.shopping) draft.notes.shopping = [];
+          if (!draft.notes.shopping.some((s) => s.id === snapshot.id)) {
+            draft.notes.shopping.push(snapshot);
+          }
+        });
+      },
     });
   };
 
@@ -456,9 +484,24 @@ export const NotasView: React.FC<NotasViewProps> = ({
   };
 
   const handleDeleteLink = (id: string) => {
-    saveToolChange((draft) => {
+    const existing = state.notes?.links.find((l) => l.id === id);
+    const snapshot = existing ? structuredClone(existing) : null;
+    const saved = saveToolChange((draft) => {
       if (!draft.notes?.links) return;
       draft.notes.links = draft.notes.links.filter((l) => l.id !== id);
+    });
+    if (!saved || !snapshot) return;
+    showToast('Enlace eliminado', 'info', {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        saveToolChange((draft) => {
+          if (!draft.notes) draft.notes = { postits: [], shopping: [], links: [], possessions: [] };
+          if (!draft.notes.links) draft.notes.links = [];
+          if (!draft.notes.links.some((l) => l.id === snapshot.id)) {
+            draft.notes.links.push(snapshot);
+          }
+        });
+      },
     });
   };
 
@@ -639,25 +682,25 @@ export const NotasView: React.FC<NotasViewProps> = ({
               const getBadge = () => {
                 switch (g.linked) {
                   case 'weight': return '⚖️ Peso';
-                  case 'available': return '💰 Disponible';
-                  case 'net_worth': return '💎 Patrimonio';
-                  case 'gym_sessions': return '🏋️ Gimnasio';
-                  case 'study_hours': return '📚 Estudio';
-                  case 'resale_profit': return '🔁 Reventa';
-                  default: return '✋ Manual';
+                  case 'available': return 'Disponible';
+                  case 'net_worth': return 'Patrimonio';
+                  case 'gym_sessions': return 'Gimnasio';
+                  case 'study_hours': return 'Estudio';
+                  case 'resale_profit': return 'Reventa';
+                  default: return 'Manual';
                 }
               };
 
               return (
                 <div key={g.id} className={`bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 relative overflow-hidden space-y-3 ${isFinancial ? 'privacy-sensitive' : ''}`}>
-                  <div className="absolute top-0 left-0 w-1.5 h-full bg-purple-500" />
                   <div className="flex items-start justify-between">
                     <span className="font-bold text-sm text-[var(--text)]">{g.name}</span>
                     <button
+                      type="button"
                       aria-label={`Eliminar objetivo ${g.name}`} onClick={() => handleDeleteGoal(g.id)}
-                      className="text-xs text-[var(--text-faint)] hover:text-red-500 px-1"
+                      className="inline-flex items-center justify-center rounded-md p-1 text-xs text-[var(--text-faint)] hover:text-red-500 cursor-pointer"
                     >
-                      ✕
+                      <AppIcon name="x" className="h-3.5 w-3.5" />
                     </button>
                   </div>
 

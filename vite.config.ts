@@ -72,13 +72,17 @@ export default defineConfig(({ mode }) => {
       },
     },
     build: portable ? {} : {
+      chunkSizeWarningLimit: 900,
       rollupOptions: {
         output: {
           manualChunks(id) {
-            if (!id.includes('node_modules')) return undefined;
-            if (id.includes('/firebase/') || id.includes('/@firebase/')) return 'firebase-vendor';
-            if (id.includes('/recharts/') || id.includes('/d3-')) return 'charts-vendor';
-            if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) return 'react-vendor';
+            const norm = id.replace(/\\/g, '/');
+            if (!norm.includes('node_modules')) return undefined;
+            if (norm.includes('/@firebase/firestore') || norm.includes('/firebase/firestore')) return 'firebase-firestore-vendor';
+            if (norm.includes('/firebase/') || norm.includes('/@firebase/')) return 'firebase-auth-vendor';
+            if (norm.includes('/recharts/') || norm.includes('/d3-')) return 'charts-vendor';
+            if (norm.includes('/@lottiefiles/')) return 'motion-vendor';
+            if (norm.includes('/react/') || norm.includes('/react-dom/') || norm.includes('/scheduler/')) return 'react-vendor';
             return undefined;
           },
         },

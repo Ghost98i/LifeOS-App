@@ -9,11 +9,12 @@ export const ToastViewport: React.FC = () => {
   useEffect(() => {
     const receive = (event: Event) => {
       const toast = (event as CustomEvent<LifeOSToast>).detail;
+      const ttl = toast.durationMs ?? (toast.onAction ? 6500 : 3200);
       setToasts((current) => [
         ...current.filter((item) => item.message !== toast.message).slice(-2),
         toast,
       ]);
-      window.setTimeout(() => setToasts((current) => current.filter((item) => item.id !== toast.id)), 3200);
+      window.setTimeout(() => setToasts((current) => current.filter((item) => item.id !== toast.id)), ttl);
     };
     window.addEventListener(LIFEOS_TOAST_EVENT, receive);
     return () => window.removeEventListener(LIFEOS_TOAST_EVENT, receive);
@@ -52,17 +53,32 @@ export const ToastViewport: React.FC = () => {
             </span>
             <span className="leading-snug break-words"><PrivateFinancialText>{toast.message}</PrivateFinancialText></span>
           </div>
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              dismissToast(toast.id);
-            }}
-            className="inline-flex items-center justify-center shrink-0 -mr-1 -mt-1 p-1 text-xs opacity-60 hover:opacity-100 rounded-lg transition-opacity"
-            aria-label="Descartar aviso"
-          >
-            <AppIcon name="x" className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {toast.actionLabel && toast.onAction && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  dismissToast(toast.id);
+                  toast.onAction?.();
+                }}
+                className="inline-flex min-h-8 items-center justify-center rounded-lg border border-white/25 bg-white/15 px-2.5 py-1 text-xs font-bold text-white transition hover:bg-white/25 cursor-pointer"
+              >
+                {toast.actionLabel}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                dismissToast(toast.id);
+              }}
+              className="inline-flex items-center justify-center shrink-0 -mr-1 p-1 text-xs opacity-60 hover:opacity-100 rounded-lg transition-opacity"
+              aria-label="Descartar aviso"
+            >
+              <AppIcon name="x" className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       ))}
     </div>

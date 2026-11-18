@@ -1,5 +1,5 @@
-import { LifeOSState, Subject, StudyActiveSession, Exam, StudySessionPhase } from '../types';
-import { uid, todayISO } from './storage';
+import { LifeOSState, Subject, StudyActiveSession, Exam, StudySessionPhase, StudyTopic } from '../types';
+import { uid, todayISO, daysBetween } from './storage';
 
 /**
  * Formatea minutos de estudio en una duración legible en español (ej. "4 h 36 min", "45 min", "1 h").
@@ -726,15 +726,194 @@ export function categorizeExams(exams: Exam[], today = todayISO()): CategorizedE
 export function getSubjectStats(
   subjectId: string,
   state: LifeOSState
-): { examCount: number; pendingExamCount: number; studyMinutes: number } {
+): { examCount: number; pendingExamCount: number; studyMinutes: number; topicCount: number; completedTopicCount: number } {
   const exams = (state.study?.exams || []).filter((e) => e.subjectId === subjectId);
   const pendingExamCount = exams.filter((e) => e.status === 'pendiente').length;
   const studyMinutes = (state.study?.studyLog || [])
     .filter((l) => l.subjectId === subjectId)
     .reduce((sum, l) => sum + Number(l.minutes || 0), 0);
+  const subject = (state.study?.subjects || []).find((s) => s.id === subjectId);
+  const topics = subject?.topics || [];
+  const completedTopicCount = topics.filter((t) => t.done).length;
   return {
     examCount: exams.length,
     pendingExamCount,
     studyMinutes,
+    topicCount: topics.length,
+    completedTopicCount,
   };
 }
+
+function sanitizeTopicTitle(rawTitle: string): { valid: boolean; title?: string; error?: string } {
+  const trimmed = (rawTitle || '').trim();
+  if (!trimmed) return { valid: false, error: 'El nombre del tema no puede estar vacío.' };
+  if (trimmed.length > 120) return { valid: false, error: 'El tema no puede superar los 120 caracteres.' };
+  return { valid: true, title: trimmed };
+}
+
+export function addSubjectTopic(
+  draft: LifeOSState,
+  subjectId: string,
+  rawTitle: string,
+  now = Date.now()
+): { success: boolean; topic?: StudyTopic; error?: string } {
+  const subject = (draft.study?.subjects || []).find((s) => s.id === subjectId);
+  if (!subject) return { success: false, error: 'Materia no encontrada.' };
+  const check = sanitizeTopicTitle(rawTitle);
+  if (!check.valid || !check.title) return { success: false, error: check.error };
+  if (!subject.topics) subject.topics = [];
+  if (subject.topics.some((t) => t.title.toLowerCase() === check.title!.toLowerCase())) {
+    return { success: false, error: 'Ese tema ya existe en la materia.' };
+  }
+  const topic: StudyTopic = { id: uid(), title: check.title, done: false, updatedAt: now };
+  subject.topics.push(topic);
+  subject.updatedAt = now;
+  return { success: true, topic };
+}
+
+export function toggleSubjectTopic(
+  draft: LifeOSState,
+  subjectId: string,
+  topicId: string,
+  now = Date.now()
+): { success: boolean; done?: boolean } {
+  const subject = (draft.study?.subjects || []).find((s) => s.id === subjectId);
+  const topic = subject?.topics?.find((t) => t.id === topicId);
+  if (!subject || !topic) return { success: false };
+  topic.done = !topic.done;
+  topic.updatedAt = now;
+  subject.updatedAt = now;
+  return { success: true, done: topic.done };
+}
+
+export function deleteSubjectTopic(
+  draft: LifeOSState,
+  subjectId: string,
+  topicId: string,
+  now = Date.now()
+): { success: boolean; removed?: StudyTopic } {
+  const subject = (draft.study?.subjects || []).find((s) => s.id === subjectId);
+  if (!subject?.topics) return { success: false };
+  const removed = subject.topics.find((t) => t.id === topicId);
+  if (!removed) return { success: false };
+  subject.topics = subject.topics.filter((t) => t.id !== topicId);
+  subject.updatedAt = now;
+  return { success: true, removed };
+}
+
+export function addExamTopic(
+  draft: LifeOSState,
+  examId: string,
+  rawTitle: string,
+  now = Date.now()
+): { success: boolean; topic?: StudyTopic; error?: string } {
+  const exam = (draft.study?.exams || []).find((e) => e.id === examId);
+  if (!exam) return { success: false, error: 'Evaluación no encontrada.' };
+  const check = sanitizeTopicTitle(rawTitle);
+  if (!check.valid || !check.title) return { success: false, error: check.error };
+  if (!exam.topics) exam.topics = [];
+  if (exam.topics.some((t) => t.title.toLowerCase() === check.title!.toLowerCase())) {
+    return { success: false, error: 'Ese tema ya está incluido en la evaluación.' };
+  }
+  const topic: StudyTopic = { id: uid(), title: check.title, done: false, updatedAt: now };
+  exam.topics.push(topic);
+  exam.updatedAt = now;
+  return { success: true, topic };
+}
+
+export function toggleExamTopic(
+  draft: LifeOSState,
+  examId: string,
+  topicId: string,
+  now = Date.now()
+): { success: boolean; done?: boolean } {
+  const exam = (draft.study?.exams || []).find((e) => e.id === examId);
+  const topic = exam?.topics?.find((t) => t.id === topicId);
+  if (!exam || !topic) return { success: false };
+  topic.done = !topic.done;
+  topic.updatedAt = now;
+  exam.updatedAt = now;
+  return { success: true, done: topic.done };
+}
+
+export function deleteExamTopic(
+  draft: LifeOSState,
+  examId: string,
+  topicId: string,
+  now = Date.now()
+): { success: boolean; removed?: StudyTopic } {
+  const exam = (draft.study?.exams || []).find((e) => e.id === examId);
+  if (!exam?.topics) return { success: false };
+  const removed = exam.topics.find((t) => t.id !== undefined && t.id === topicId);
+  if (!removed) return { success: false };
+  exam.topics = exam.topics.filter((t) => t.id !== topicId);
+  exam.updatedAt = now;
+  return { success: true, removed };
+}
+
+export interface ExamPreparationMetrics {
+  daysUntil: number;
+  totalTopics: number;
+  completedTopics: number;
+  pendingTopics: StudyTopic[];
+  progressPct: number | null;
+  recentMinutes7d: number;
+  totalSubjectMinutes: number;
+  readiness: 'ready' | 'on_track' | 'needs_attention' | 'critical';
+}
+
+function shiftStudyIso(iso: string, deltaDays: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d + deltaDays, 12);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Evalúa la cercanía y el progreso real de preparación de una evaluación:
+ * combina sus temas propios (o los de su materia si el examen no definió subtemas)
+ * y los minutos reales estudiados en los últimos 7 días.
+ */
+export function getExamPreparationMetrics(
+  exam: Exam,
+  state: LifeOSState,
+  today = todayISO()
+): ExamPreparationMetrics {
+  const daysUntil = exam.date >= today ? daysBetween(today, exam.date) : -daysBetween(exam.date, today);
+  const subject = exam.subjectId ? (state.study?.subjects || []).find((s) => s.id === exam.subjectId) : null;
+  const effectiveTopics = exam.topics && exam.topics.length > 0 ? exam.topics : subject?.topics || [];
+
+  const totalTopics = effectiveTopics.length;
+  const completedTopics = effectiveTopics.filter((t) => t.done).length;
+  const pendingTopics = effectiveTopics.filter((t) => !t.done);
+  const progressPct = totalTopics > 0 ? Math.round((completedTopics / totalTopics) * 100) : null;
+
+  const sevenDaysAgo = shiftStudyIso(today, -6);
+  const logs = exam.subjectId
+    ? (state.study?.studyLog || []).filter((l) => l.subjectId === exam.subjectId)
+    : [];
+  const totalSubjectMinutes = logs.reduce((acc, l) => acc + Math.max(0, Number(l.minutes) || 0), 0);
+  const recentMinutes7d = logs
+    .filter((l) => l.date >= sevenDaysAgo && l.date <= today)
+    .reduce((acc, l) => acc + Math.max(0, Number(l.minutes) || 0), 0);
+
+  let readiness: ExamPreparationMetrics['readiness'] = 'on_track';
+  if (progressPct === 100 && (recentMinutes7d >= 30 || !exam.subjectId)) {
+    readiness = 'ready';
+  } else if (daysUntil >= 0 && daysUntil <= 2 && ((progressPct !== null && progressPct < 70) || (exam.subjectId && recentMinutes7d < 30))) {
+    readiness = 'critical';
+  } else if (daysUntil >= 0 && daysUntil <= 5 && ((progressPct !== null && progressPct < 50) || (exam.subjectId && recentMinutes7d === 0))) {
+    readiness = 'needs_attention';
+  }
+
+  return {
+    daysUntil,
+    totalTopics,
+    completedTopics,
+    pendingTopics,
+    progressPct,
+    recentMinutes7d,
+    totalSubjectMinutes,
+    readiness,
+  };
+}
+

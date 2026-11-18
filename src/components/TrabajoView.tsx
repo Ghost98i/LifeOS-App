@@ -6,6 +6,7 @@ import { JobKanbanBoard } from './JobKanbanBoard';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 import { ContextualHelp } from './ContextualHelp';
+import { showToast } from '../lib/toast';
 import {
   filterJobApplications,
   getJobApplicationType,
@@ -151,8 +152,25 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState }
   };
 
   const handleDeleteApplication = (id: string) => {
-    onUpdateState((draft) => {
+    const existing = (state.jobs?.applications || []).find((candidate) => candidate.id === id);
+    const snapshot = existing ? structuredClone(existing) : null;
+    const saved = onUpdateState((draft) => {
       if (draft.jobs) draft.jobs.applications = (draft.jobs.applications || []).filter((application) => application.id !== id);
+    });
+    if (saved === false || !snapshot) return;
+    showToast(`Postulación en "${snapshot.empresa}" eliminada.`, 'info', {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (onUpdateState((draft) => {
+          if (!draft.jobs) draft.jobs = { opportunities: [], applications: [] };
+          if (!draft.jobs.applications) draft.jobs.applications = [];
+          if (!draft.jobs.applications.some((item) => item.id === snapshot.id)) {
+            draft.jobs.applications.unshift({ ...snapshot });
+          }
+        }) !== false) {
+          showToast('Postulación restaurada.', 'success');
+        }
+      },
     });
   };
 

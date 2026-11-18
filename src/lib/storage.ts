@@ -1064,8 +1064,40 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
     study: {
       ...def.study,
       ...(candidate.study || {}),
-      subjects: Array.isArray(candidate.study?.subjects) ? candidate.study.subjects : [],
-      exams: Array.isArray(candidate.study?.exams) ? candidate.study.exams : [],
+      subjects: Array.isArray(candidate.study?.subjects)
+        ? candidate.study.subjects.map((sub: any) => ({
+            ...sub,
+            ...(Array.isArray(sub?.topics)
+              ? {
+                  topics: sub.topics
+                    .filter((t: any) => t && typeof t.title === 'string' && t.title.trim())
+                    .map((t: any) => ({
+                      id: typeof t.id === 'string' && t.id ? t.id : uid(),
+                      title: t.title.trim(),
+                      done: Boolean(t.done),
+                      ...(typeof t.updatedAt === 'number' ? { updatedAt: t.updatedAt } : {}),
+                    })),
+                }
+              : {}),
+          }))
+        : [],
+      exams: Array.isArray(candidate.study?.exams)
+        ? candidate.study.exams.map((ex: any) => ({
+            ...ex,
+            ...(Array.isArray(ex?.topics)
+              ? {
+                  topics: ex.topics
+                    .filter((t: any) => t && typeof t.title === 'string' && t.title.trim())
+                    .map((t: any) => ({
+                      id: typeof t.id === 'string' && t.id ? t.id : uid(),
+                      title: t.title.trim(),
+                      done: Boolean(t.done),
+                      ...(typeof t.updatedAt === 'number' ? { updatedAt: t.updatedAt } : {}),
+                    })),
+                }
+              : {}),
+          }))
+        : [],
       studyLog: Array.isArray(candidate.study?.studyLog) ? candidate.study.studyLog : [],
       activeSession: candidate.study?.activeSession || null,
     },

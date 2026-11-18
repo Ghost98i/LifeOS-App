@@ -1240,3 +1240,94 @@ export function nowTimeHHmm(date = new Date()): string {
   const m = String(date.getMinutes()).padStart(2, '0');
   return `${h}:${m}`;
 }
+
+export interface ProgressiveOverloadSuggestion {
+  weight: number;
+  reps: number;
+  kind: 'add_reps' | 'add_weight';
+  deltaLabel: string;
+  reason: string;
+}
+
+/**
+ * Sugiere una meta realista de sobrecarga progresiva para una serie efectiva a partir de la
+ * ejecución equivalente en la última sesión completada (doble progresión: primero consolidar
+ * repeticiones y, al alcanzar el techo del rango, subir el escalón mínimo según equipamiento).
+ */
+export interface GhostSetReference {
+  weight: number;
+  reps: number;
+  type?: GymSetType;
+  setIndex?: number;
+}
+
+export function getProgressiveOverloadSuggestion(params: {
+  previousSet?: GhostSetReference | null;
+  previousGhostSets?: GhostSetReference[] | null;
+  equipment?: ExerciseEquipment;
+  currentSetType?: GymSetType;
+}): ProgressiveOverloadSuggestion | null {
+  const { previousSet, previousGhostSets, equipment = 'barra', currentSetType = 'normal' } = params;
+  if (currentSetType === 'warmup' || !previousSet) return null;
+
+  const prevWeight = Number(previousSet.weight) || 0;
+  const prevReps = Math.round(Number(previousSet.reps) || 0);
+  if (prevReps <= 0 && prevWeight <= 0) return null;
+
+  // En peso corporal sin lastre (0 kg), la progresión natural es +1 repetición
+  if (equipment === 'corporal' && prevWeight <= 0) {
+    return {
+      weight: 0,
+      reps: Math.max(1, prevReps + 1),
+      kind: 'add_reps',
+      deltaLabel: '+1 rep',
+      reason: 'Peso corporal: sumar 1 repetición controlada',
+    };
+  }
+
+  const effectiveGhostSets = (previousGhostSets || []).filter((s) => s.type !== 'warmup' && (s.weight > 0 || s.reps > 0));
+  const repCeiling = equipment === 'barra' && prevWeight >= 40 ? 10 : 12;
+  const allSetsHitCeiling = effectiveGhostSets.length > 0
+    ? effectiveGhostSets.every((s) => (Number(s.reps) || 0) >= repCeiling)
+    : prevReps >= repCeiling;
+
+  const stepKg = equipment === 'mancuerna'
+    ? (prevWeight < 10 ? 1 : 2)
+    : 2.5;
+
+  if (prevWeight > 0 && prevReps >= repCeiling && allSetsHitCeiling) {
+    const nextWeight = Math.round((prevWeight + stepKg) * 100) / 100;
+    const resetReps = Math.max(6, prevReps - 2);
+    return {
+      weight: nextWeight,
+      reps: resetReps,
+      kind: 'add_weight',
+      deltaLabel: `+${stepKg} kg`,
+      reason: `Rango completo en la última sesión: subir ${stepKg} kg`,
+    };
+  }
+
+  return {
+    weight: prevWeight,
+    reps: Math.max(1, prevReps + 1),
+    kind: 'add_reps',
+    deltaLabel: '+1 rep',
+    reason: 'Consolidar carga sumando 1 repetición sobre la última vez',
+  };
+}
+
+export function isProgressingOverPrevious(
+  current: { weight: number; reps: number; type?: GymSetType },
+  previousSet?: GhostSetReference | null
+): boolean {
+  if (!previousSet || current.type === 'warmup') return false;
+  const cw = Number(current.weight) || 0;
+  const cr = Number(current.reps) || 0;
+  const pw = Number(previousSet.weight) || 0;
+  const pr = Number(previousSet.reps) || 0;
+  if (pw <= 0 && pr <= 0) return false;
+  if (cw > pw && cr >= Math.max(1, pr - 2)) return true;
+  if (cw === pw && cr > pr) return true;
+  return cw * cr > pw * pr && cw >= pw;
+}
+

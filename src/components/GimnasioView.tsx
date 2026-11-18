@@ -15,6 +15,7 @@ import { GymRestTimerBar } from './GymRestTimerBar';
 import { GymActivityCalendar } from './GymActivityCalendar';
 import { GymWorkoutLauncher } from './GymWorkoutLauncher';
 import { useGymLauncher } from '../hooks/useGymLauncher';
+import { useScreenWakeLock } from '../hooks/useScreenWakeLock';
 import { GymNoteSurface } from './GymNoteSurface';
 import { GYM_NOTE_PLACEMENTS_ENABLED } from '../lib/notePlacements';
 import { ActiveWorkoutView } from './ActiveWorkoutView';
@@ -642,18 +643,60 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   };
 
   const handleDeleteSet = (sessionId: string, exerciseIndex: number, setIndex: number) => {
-    onUpdateState((draft) => {
+    const existingSession = state.gym.sessions.find((x) => x.id === sessionId);
+    const existingExercise = existingSession?.exercises[exerciseIndex];
+    const existingSet = existingExercise?.sets[setIndex];
+    const snapshotSet = existingSet ? structuredClone(existingSet) : null;
+    const exerciseId = existingExercise?.id;
+    const saved = onUpdateState((draft) => {
       const s = draft.gym.sessions.find((x) => x.id === sessionId);
       const ex = s?.exercises[exerciseIndex];
       deleteGymSessionSet(draft.gym, sessionId, { exerciseId: ex?.id, exerciseIndex }, setIndex);
     });
+    if (!saved || !snapshotSet) return;
+    showToast('Serie eliminada.', 'info', {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        onUpdateState((draft) => {
+          const s = draft.gym.sessions.find((x) => x.id === sessionId);
+          const ex = exerciseId
+            ? s?.exercises.find((candidate) => candidate.id === exerciseId) || s?.exercises[exerciseIndex]
+            : s?.exercises[exerciseIndex];
+          if (!ex) return;
+          if (!ex.sets.some((item) => item.id === snapshotSet.id)) {
+            const insertAt = Math.min(Math.max(0, setIndex), ex.sets.length);
+            ex.sets.splice(insertAt, 0, { ...snapshotSet, updatedAt: Date.now() });
+            ex.updatedAt = Date.now();
+            if (s) s.updatedAt = Date.now();
+          }
+        });
+      },
+    });
   };
 
   const handleDeleteExercise = (sessionId: string, exerciseIndex: number) => {
-    onUpdateState((draft) => {
+    const existingSession = state.gym.sessions.find((x) => x.id === sessionId);
+    const existingExercise = existingSession?.exercises[exerciseIndex];
+    const snapshotEx = existingExercise ? structuredClone(existingExercise) : null;
+    const saved = onUpdateState((draft) => {
       const s = draft.gym.sessions.find((x) => x.id === sessionId);
       const ex = s?.exercises[exerciseIndex];
       deleteGymSessionExercise(draft.gym, sessionId, { exerciseId: ex?.id, exerciseIndex });
+    });
+    if (!saved || !snapshotEx) return;
+    showToast(`Ejercicio "${snapshotEx.name}" quitado.`, 'info', {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        onUpdateState((draft) => {
+          const s = draft.gym.sessions.find((x) => x.id === sessionId);
+          if (!s) return;
+          if (!s.exercises.some((item) => item.id && item.id === snapshotEx.id)) {
+            const insertAt = Math.min(Math.max(0, exerciseIndex), s.exercises.length);
+            s.exercises.splice(insertAt, 0, { ...snapshotEx, updatedAt: Date.now() });
+            s.updatedAt = Date.now();
+          }
+        });
+      },
     });
   };
 
@@ -697,12 +740,24 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   const handleDeleteTemplate = (id: string) => {
     const template = state.gym.routineTemplates.find((candidate) => candidate.id === id);
     if (!template || !window.confirm(`¿Eliminar la plantilla "${template.name}"? El historial no se eliminará.`)) return;
+    const snapshot = structuredClone(template);
     const saved = onUpdateState((draft) => {
       deleteGymTemplate(draft.gym, id);
     });
     if (!saved) return;
     if (editingTemplateId === id) setEditingTemplateId(null);
-    showToast('Plantilla eliminada.', 'info');
+    showToast('Plantilla eliminada.', 'info', {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (onUpdateState((draft) => {
+          if (!draft.gym.routineTemplates.some((t) => t.id === snapshot.id)) {
+            draft.gym.routineTemplates.push({ ...snapshot, updatedAt: Date.now() });
+          }
+        })) {
+          showToast(`Plantilla "${snapshot.name}" restaurada.`, 'success');
+        }
+      },
+    });
   };
 
   const handleDuplicateTemplate = (id: string) => {
@@ -1002,6 +1057,10 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
       : null,
     [activeWorkoutSession, liveCurrentEx, state.gym.sessions]
   );
+  const keepGymScreenAwake = Boolean(
+    activeWorkoutSession || (state.gym.activeTimer && !state.gym.activeTimer.pausedAt)
+  );
+  const wakeLockStatus = useScreenWakeLock(keepGymScreenAwake);
 
   const handleLiveAdjustWeight = (delta: number) => {
     if (!activeWorkoutSession || !liveCurrentSet) return;
@@ -1145,6 +1204,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
               previousSet={livePreviousSet}
               previousSessionBest={livePreviousSessionBest}
               previousGhostSets={liveGhost?.sets || null}
+              wakeLockStatus={wakeLockStatus}
               completionMotion={setCompletionMotion}
               exerciseSuggestions={COMMON_EXERCISE_SUGGESTIONS}
               activeTimer={state.gym.activeTimer}

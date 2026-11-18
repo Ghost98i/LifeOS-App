@@ -515,6 +515,63 @@ export function deleteTransaction(state: LifeOSState, transactionId: string): vo
   }
 }
 
+export function restoreDeletedTransaction(
+  state: LifeOSState,
+  snapshot: Transaction,
+  related?: {
+    commitmentSnapshot?: FinancialCommitment | null;
+    expectedIncomeSnapshot?: ExpectedIncome | null;
+  }
+): void {
+  if (state.finance.transactions.some((item) => item.id === snapshot.id)) return;
+  const accountIds = affectedAccountIds([snapshot.accountId]);
+  assertAccountsCanMaterialize(state, accountIds);
+  const restored: Transaction = {
+    ...structuredClone(snapshot),
+    revisionOrder: createFinanceRevisionOrderAfter(snapshot.revisionOrder),
+  };
+  state.finance.transactions.push(restored);
+  materializeAccounts(state, accountIds);
+
+  if (restored.agreementId) {
+    syncAgreementStatusOnLedgerChange(state, restored.agreementId);
+  }
+  if (restored.expectedIncomeId) {
+    const income = (state.finance.expectedIncomes || []).find((item) => item.id === restored.expectedIncomeId);
+    if (income) {
+      if (related?.expectedIncomeSnapshot) {
+        Object.assign(income, structuredClone(related.expectedIncomeSnapshot), {
+          updatedAt: new Date().toISOString(),
+        });
+      } else {
+        const currentIds = income.settledTxIds || [];
+        if (!currentIds.includes(restored.id)) {
+          income.settledTxIds = [...currentIds, restored.id];
+        }
+        income.lastSettledTxId = restored.id;
+        income.updatedAt = new Date().toISOString();
+      }
+    }
+  }
+  if (restored.commitmentId) {
+    const commitment = (state.finance.commitments || []).find((item) => item.id === restored.commitmentId);
+    if (commitment) {
+      if (related?.commitmentSnapshot) {
+        Object.assign(commitment, structuredClone(related.commitmentSnapshot), {
+          updatedAt: new Date().toISOString(),
+        });
+      } else {
+        const currentIds = commitment.settledTxIds || [];
+        if (!currentIds.includes(restored.id)) {
+          commitment.settledTxIds = [...currentIds, restored.id];
+        }
+        commitment.lastSettledTxId = restored.id;
+        commitment.updatedAt = new Date().toISOString();
+      }
+    }
+  }
+}
+
 function removeTransaction(state: LifeOSState, transaction: Transaction): void {
   const accountIds = affectedAccountIds([transaction.accountId]);
   assertAccountsCanMaterialize(state, accountIds);

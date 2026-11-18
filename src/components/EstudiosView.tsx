@@ -38,6 +38,13 @@ import {
   getExamDisplayName,
   categorizeExams,
   getSubjectStats,
+  addSubjectTopic,
+  toggleSubjectTopic,
+  deleteSubjectTopic,
+  addExamTopic,
+  toggleExamTopic,
+  deleteExamTopic,
+  getExamPreparationMetrics,
   type PomodoroSessionConfig,
 } from '../lib/studyFlows';
 import { focusTargetElement } from '../lib/navigationFocus';
@@ -103,6 +110,12 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
   const [examInputStatus, setExamInputStatus] = useState<Exam['status']>('pendiente');
   const [examInputGrade, setExamInputGrade] = useState('');
   const [examInputError, setExamInputError] = useState<string | null>(null);
+
+  // Temarios por materia y por evaluación
+  const [expandedSubjectTopicsId, setExpandedSubjectTopicsId] = useState<string | null>(null);
+  const [newSubjectTopicTitle, setNewSubjectTopicTitle] = useState('');
+  const [expandedExamTopicsId, setExpandedExamTopicsId] = useState<string | null>(null);
+  const [newExamTopicTitle, setNewExamTopicTitle] = useState('');
 
   useEffect(() => {
     if (!editingLog && !subjectModalOpen && !examModalOpen) return;
@@ -196,6 +209,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
     setSubjectError(null);
     const sub = subjects.find((s) => s.id === id);
     if (!window.confirm(`¿Eliminar la materia "${sub?.name || 'seleccionada'}"?`)) return;
+    const removedSubject = sub ? structuredClone(sub) : null;
 
     const saved = saveStudyChange((draft) => {
       if (!draft.study) draft.study = { subjects: [], exams: [], studyLog: [] };
@@ -207,7 +221,65 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
     if (selectedSubjectFilter === id) {
       setSelectedSubjectFilter(null);
     }
-    showToast('Materia eliminada.', 'info');
+    showToast('Materia eliminada.', 'info', removedSubject ? {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        const restored = saveStudyChange((draft) => {
+          if (!draft.study) draft.study = { subjects: [], exams: [], studyLog: [] };
+          if (!draft.study.subjects.some((s) => s.id === removedSubject.id)) {
+            draft.study.subjects.push({ ...removedSubject, updatedAt: Date.now() });
+          }
+        });
+        if (restored) showToast(`Materia "${removedSubject.name}" restaurada.`, 'success');
+      },
+    } : undefined);
+  };
+
+  const handleAddSubjectTopic = (subjectId: string, e: React.FormEvent) => {
+    e.preventDefault();
+    let errorMsg: string | undefined;
+    const saved = saveStudyChange((draft) => {
+      const res = addSubjectTopic(draft, subjectId, newSubjectTopicTitle);
+      if (!res.success) {
+        errorMsg = res.error;
+        throw new Error(res.error || 'No se pudo agregar el tema.');
+      }
+    });
+    if (!saved) {
+      if (errorMsg) showToast(errorMsg, 'info');
+      return;
+    }
+    setNewSubjectTopicTitle('');
+  };
+
+  const handleToggleSubjectTopic = (subjectId: string, topicId: string) => {
+    saveStudyChange((draft) => {
+      toggleSubjectTopic(draft, subjectId, topicId);
+    });
+  };
+
+  const handleDeleteSubjectTopic = (subjectId: string, topicId: string) => {
+    const subject = subjects.find((s) => s.id === subjectId);
+    const removedTopic = subject?.topics?.find((t) => t.id === topicId);
+    const snapshot = removedTopic ? structuredClone(removedTopic) : null;
+    const saved = saveStudyChange((draft) => {
+      deleteSubjectTopic(draft, subjectId, topicId);
+    });
+    if (!saved || !snapshot) return;
+    showToast('Tema eliminado.', 'info', {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        saveStudyChange((draft) => {
+          const target = (draft.study?.subjects || []).find((s) => s.id === subjectId);
+          if (!target) return;
+          if (!target.topics) target.topics = [];
+          if (!target.topics.some((t) => t.id === snapshot.id)) {
+            target.topics.push({ ...snapshot, updatedAt: Date.now() });
+            target.updatedAt = Date.now();
+          }
+        });
+      },
+    });
   };
 
   // ---------------------------------------------------------------------------
@@ -280,12 +352,121 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
   };
 
   const handleDeleteExam = (id: string) => {
+    const existing = exams.find((ex) => ex.id === id);
     if (!window.confirm('¿Eliminar este examen?')) return;
+    const removedExam = existing ? structuredClone(existing) : null;
     const saved = saveStudyChange((draft) => {
       deleteExam(draft, id);
     });
     if (!saved) return;
-    showToast('Evaluación eliminada.', 'info');
+    showToast('Evaluación eliminada.', 'info', removedExam ? {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        const restored = saveStudyChange((draft) => {
+          if (!draft.study) draft.study = { subjects: [], exams: [], studyLog: [] };
+          if (!draft.study.exams.some((ex) => ex.id === removedExam.id)) {
+            draft.study.exams.push({ ...removedExam, updatedAt: Date.now() });
+          }
+        });
+        if (restored) showToast('Evaluación restaurada.', 'success');
+      },
+    } : undefined);
+  };
+
+  const handleAddExamTopic = (examId: string, e: React.FormEvent) => {
+    e.preventDefault();
+    let errorMsg: string | undefined;
+    const saved = saveStudyChange((draft) => {
+      const res = addExamTopic(draft, examId, newExamTopicTitle);
+      if (!res.success) {
+        errorMsg = res.error;
+        throw new Error(res.error || 'No se pudo agregar el tema.');
+      }
+    });
+    if (!saved) {
+      if (errorMsg) showToast(errorMsg, 'info');
+      return;
+    }
+    setNewExamTopicTitle('');
+  };
+
+  const handleToggleExamTopic = (examId: string, topicId: string) => {
+    saveStudyChange((draft) => {
+      toggleExamTopic(draft, examId, topicId);
+    });
+  };
+
+  const handleDeleteExamTopic = (examId: string, topicId: string) => {
+    const exam = exams.find((ex) => ex.id === examId);
+    const removedTopic = exam?.topics?.find((t) => t.id === topicId);
+    const snapshot = removedTopic ? structuredClone(removedTopic) : null;
+    const saved = saveStudyChange((draft) => {
+      deleteExamTopic(draft, examId, topicId);
+    });
+    if (!saved || !snapshot) return;
+    showToast('Tema eliminado.', 'info', {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        saveStudyChange((draft) => {
+          const target = (draft.study?.exams || []).find((ex) => ex.id === examId);
+          if (!target) return;
+          if (!target.topics) target.topics = [];
+          if (!target.topics.some((t) => t.id === snapshot.id)) {
+            target.topics.push({ ...snapshot, updatedAt: Date.now() });
+            target.updatedAt = Date.now();
+          }
+        });
+      },
+    });
+  };
+
+  const getExamPriorityText = (examItem: Exam): string => {
+    const meta = getExamDisplayName(examItem, subjects);
+    const prep = getExamPreparationMetrics(examItem, state, todayISO());
+    const nextTopic = prep.pendingTopics[0];
+    return nextTopic
+      ? `Repasar para ${meta.fullLabel}: ${nextTopic.title}`
+      : `Repasar para ${meta.fullLabel}`;
+  };
+
+  const isExamPrioritizedToday = (examItem: Exam): boolean => {
+    const today = todayISO();
+    const meta = getExamDisplayName(examItem, subjects);
+    const todayPrios = (state.dailyPriorities || []).filter((p) => p.date === today && !p.done);
+    const targetNeedle = meta.subjectName
+      ? meta.subjectName.toLowerCase()
+      : meta.title.toLowerCase();
+    return todayPrios.some((p) => p.text.toLowerCase().includes(targetNeedle));
+  };
+
+  const handlePrioritizeExamToday = (examItem: Exam) => {
+    const today = todayISO();
+    const currentToday = (state.dailyPriorities || []).filter((p) => p.date === today);
+    if (currentToday.length >= 5) {
+      showToast('Ya tenés 5 prioridades cargadas en Hoy.', 'info');
+      return;
+    }
+    const text = getExamPriorityText(examItem);
+    const createdId = uid();
+    const saved = saveStudyChange((draft) => {
+      if (!draft.dailyPriorities) draft.dailyPriorities = [];
+      draft.dailyPriorities.push({
+        id: createdId,
+        text,
+        done: false,
+        date: today,
+      });
+    });
+    if (!saved) return;
+    playSound('click');
+    showToast('Sumado a las prioridades de Hoy.', 'success', {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        saveStudyChange((draft) => {
+          draft.dailyPriorities = (draft.dailyPriorities || []).filter((p) => p.id !== createdId);
+        });
+      },
+    });
   };
 
   // ---------------------------------------------------------------------------
@@ -356,11 +537,26 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
   };
 
   const handleDeleteStudy = (id: string) => {
+    const existing = studyLogs.find((l) => l.id === id);
     if (!window.confirm('¿Eliminar este registro de estudio?')) return;
+    const removedLog = existing ? structuredClone(existing) : null;
     const saved = onUpdateState((draft) => {
       deleteStudyLog(draft, id);
     });
-    if (saved) showToast('Registro eliminado.', 'info');
+    if (saved) {
+      showToast('Registro eliminado.', 'info', removedLog ? {
+        actionLabel: 'Deshacer',
+        onAction: () => {
+          const restored = onUpdateState((draft) => {
+            if (!draft.study) draft.study = { studyLog: [], subjects: [], exams: [] };
+            if (!draft.study.studyLog.some((l) => l.id === removedLog.id)) {
+              draft.study.studyLog.push({ ...removedLog, updatedAt: Date.now() });
+            }
+          });
+          if (restored) showToast('Registro de estudio restaurado.', 'success');
+        },
+      } : undefined);
+    }
   };
 
   // ---------------------------------------------------------------------------
@@ -541,12 +737,20 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-3 min-w-0">
             <h3 className="text-sm font-medium text-[var(--text-soft)]">Próximas evaluaciones</h3>
-            {workspace.upcoming.length ? workspace.upcoming.slice(0, 3).map((exam) => <div key={exam.id} className="flex items-center justify-between gap-3">
+            {workspace.upcoming.length ? workspace.upcoming.slice(0, 3).map((exam) => {
+              const prep = getExamPreparationMetrics(exam, state, todayISO());
+              const proxLabel = prep.daysUntil === 0 ? 'Hoy' : prep.daysUntil === 1 ? 'Mañana' : `En ${prep.daysUntil} d`;
+              return <div key={exam.id} className="flex items-center justify-between gap-3">
               <button type="button" onClick={() => openEditExamModal(exam)} className="min-w-0 py-2 text-left text-sm text-[var(--text)]">
-                <span className="block font-semibold break-words">{getExamDisplayName(exam, subjects).fullLabel}</span><span className="text-xs text-[var(--text-soft)]">{fmtDate(exam.date)}{exam.time ? ' · ' + exam.time : ''}</span>
+                <span className="block font-semibold break-words">{getExamDisplayName(exam, subjects).fullLabel}</span>
+                <span className="text-xs text-[var(--text-soft)]">
+                  {fmtDate(exam.date)}{exam.time ? ' · ' + exam.time : ''} · {proxLabel}
+                  {prep.totalTopics > 0 ? ` · ${prep.completedTopics}/${prep.totalTopics} temas` : ''}
+                </span>
               </button>
               {!state.study.activeSession && <button type="button" onClick={() => handleStartSession(25, exam.subjectId)} className="shrink-0 min-h-11 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold text-[var(--text)]">Estudiar 25 min</button>}
-            </div>) : <p className="text-sm text-[var(--text-soft)]">Sin evaluaciones próximas en esta selección.</p>}
+            </div>;
+            }) : <p className="text-sm text-[var(--text-soft)]">Sin evaluaciones próximas en esta selección.</p>}
             {workspace.pendingResults.length > 0 && <button type="button" onClick={() => { setExamTab('pending_results'); document.getElementById('exam-view-filter')?.focus(); }} className="min-h-11 text-sm text-[var(--text-soft)] underline">{workspace.pendingResults.length} sin resultado · revisar</button>}
             {agendaVisible && workspace.tasks.length > 0 && <div className="border-t border-[var(--border)] pt-3 space-y-2"><h3 className="text-sm font-medium text-[var(--text-soft)]">Pendientes de Agenda</h3>{workspace.tasks.slice(0, 3).map((task) => <p key={task.id} className="text-sm text-[var(--text)] break-words">{task.text}<span className="block text-xs text-[var(--text-soft)]">{fmtDate(task.dueDate || task.date)}</span></p>)}{agendaVisible && onOpenAgenda && <button type="button" onClick={onOpenAgenda} className="min-h-11 text-sm underline text-[var(--text-soft)]">Abrir Agenda</button>}</div>}
           </div>
@@ -756,54 +960,134 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
               subjects.map((s) => {
                 const stats = getSubjectStats(s.id, state);
                 const isSelected = selectedSubjectFilter === s.id;
+                const topicsOpen = expandedSubjectTopicsId === s.id;
+                const subjectTopics = s.topics || [];
                 return (
                   <div
                     key={s.id}
-                    className={`py-3 flex items-center justify-between text-xs gap-3 rounded-xl px-2.5 transition-colors ${
+                    className={`py-3 text-xs rounded-xl px-2.5 transition-colors space-y-2.5 ${
                       isSelected
                         ? 'bg-[var(--blue-soft)] ring-1 ring-inset ring-[var(--blue)]/35'
                         : 'hover:bg-[var(--surface-muted)]/50'
                     }`}
                   >
-                    <button
-                      type="button"
-                      onClick={() => setSelectedSubjectFilter(isSelected ? null : s.id)}
-                      className="min-w-0 flex-1 text-left cursor-pointer group"
-                      title={isSelected ? 'Quitar filtro' : `Filtrar evaluaciones de ${s.name}`}
-                    >
-                      <span className="font-bold text-sm text-[var(--text)] group-hover:text-[var(--blue)] truncate block">
-                        {s.name}
-                      </span>
-                      <span className="text-[11px] text-[var(--text-soft)] block mt-0.5">
-                        {stats.examCount} {stats.examCount === 1 ? 'evaluación' : 'evaluaciones'} · {formatStudyDuration(stats.studyMinutes)} de estudio
-                        {stats.pendingExamCount > 0 && (
-                          <span className="ml-1 text-amber-600 dark:text-amber-400 font-medium">
-                            ({stats.pendingExamCount} pend.)
-                          </span>
-                        )}
-                      </span>
-                    </button>
+                    <div className="flex items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedSubjectFilter(isSelected ? null : s.id)}
+                        className="min-w-0 flex-1 text-left cursor-pointer group"
+                        title={isSelected ? 'Quitar filtro' : `Filtrar evaluaciones de ${s.name}`}
+                      >
+                        <span className="font-bold text-sm text-[var(--text)] group-hover:text-[var(--blue)] truncate block">
+                          {s.name}
+                        </span>
+                        <span className="text-[11px] text-[var(--text-soft)] block mt-0.5">
+                          {stats.examCount} {stats.examCount === 1 ? 'evaluación' : 'evaluaciones'} · {formatStudyDuration(stats.studyMinutes)} de estudio
+                          {stats.topicCount > 0 && (
+                            <span className="tabular-nums"> · {stats.completedTopicCount}/{stats.topicCount} temas</span>
+                          )}
+                          {stats.pendingExamCount > 0 && (
+                            <span className="ml-1 text-amber-600 dark:text-amber-400 font-medium">
+                              ({stats.pendingExamCount} pend.)
+                            </span>
+                          )}
+                        </span>
+                      </button>
 
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => openEditSubjectModal(s)}
-                        className="p-1.5 rounded-lg text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--bg-elevated)] transition cursor-pointer"
-                        title="Renombrar materia"
-                        aria-label={`Renombrar ${s.name}`}
-                      >
-                        <AppIcon name="edit" className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteSubject(s.id)}
-                        className="p-1.5 rounded-lg text-[var(--text-soft)] hover:text-red-500 hover:bg-red-500/10 transition cursor-pointer"
-                        title="Eliminar materia"
-                        aria-label={`Eliminar materia ${s.name}`}
-                      >
-                        <AppIcon name="trash" className="h-3.5 w-3.5" />
-                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExpandedSubjectTopicsId(topicsOpen ? null : s.id);
+                            setNewSubjectTopicTitle('');
+                          }}
+                          aria-expanded={topicsOpen}
+                          className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition cursor-pointer ${
+                            topicsOpen
+                              ? 'border-[var(--blue)]/40 bg-[var(--blue-soft)] text-[var(--blue)]'
+                              : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:text-[var(--text)]'
+                          }`}
+                          title="Temario de la materia"
+                        >
+                          Temas{stats.topicCount > 0 ? ` (${stats.completedTopicCount}/${stats.topicCount})` : ''}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openEditSubjectModal(s)}
+                          className="p-1.5 rounded-lg text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--bg-elevated)] transition cursor-pointer"
+                          title="Renombrar materia"
+                          aria-label={`Renombrar ${s.name}`}
+                        >
+                          <AppIcon name="edit" className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteSubject(s.id)}
+                          className="p-1.5 rounded-lg text-[var(--text-soft)] hover:text-red-500 hover:bg-red-500/10 transition cursor-pointer"
+                          title="Eliminar materia"
+                          aria-label={`Eliminar materia ${s.name}`}
+                        >
+                          <AppIcon name="trash" className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
                     </div>
+
+                    {topicsOpen && (
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-2.5 space-y-2">
+                        {subjectTopics.length > 0 ? (
+                          <ul className="space-y-1">
+                            {subjectTopics.map((topic) => (
+                              <li key={topic.id} className="flex items-center justify-between gap-2 py-1 px-1.5 rounded-lg hover:bg-[var(--surface-muted)]/60">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleSubjectTopic(s.id, topic.id)}
+                                  className="flex items-center gap-2 min-w-0 flex-1 text-left cursor-pointer"
+                                >
+                                  <span className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition ${
+                                    topic.done
+                                      ? 'border-teal-500 bg-teal-500 text-white'
+                                      : 'border-[var(--border)] bg-[var(--bg-elevated)]'
+                                  }`}>
+                                    {topic.done && <AppIcon name="check" className="h-3 w-3" />}
+                                  </span>
+                                  <span className={`text-xs break-words ${topic.done ? 'line-through text-[var(--text-faint)]' : 'text-[var(--text)]'}`}>
+                                    {topic.title}
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteSubjectTopic(s.id, topic.id)}
+                                  className="p-1 rounded text-[var(--text-faint)] hover:text-red-500 cursor-pointer"
+                                  aria-label={`Quitar tema ${topic.title}`}
+                                >
+                                  <AppIcon name="x" className="h-3 w-3" />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-[11px] text-[var(--text-faint)]">
+                            Agregá unidades o temas para conectar tu avance real con las prioridades de Hoy.
+                          </p>
+                        )}
+                        <form onSubmit={(ev) => handleAddSubjectTopic(s.id, ev)} className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={newSubjectTopicTitle}
+                            onChange={(ev) => setNewSubjectTopicTitle(ev.target.value)}
+                            placeholder="Ej. Grafos y árboles..."
+                            aria-label={`Nuevo tema para ${s.name}`}
+                            className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs text-[var(--text)] outline-hidden focus:border-[var(--blue)]"
+                          />
+                          <button
+                            type="submit"
+                            className="shrink-0 rounded-lg bg-[var(--blue)] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[var(--blue-hover)] transition cursor-pointer"
+                          >
+                            Sumar
+                          </button>
+                        </form>
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -871,78 +1155,219 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
             ) : (
               displayedExams.map((e) => {
                 const meta = getExamDisplayName(e, subjects);
-                const isOverduePending = e.status === 'pendiente' && e.date < todayISO();
+                const today = todayISO();
+                const isOverduePending = e.status === 'pendiente' && e.date < today;
+                const isUpcomingPending = e.status === 'pendiente' && e.date >= today;
+                const prep = getExamPreparationMetrics(e, state, today);
+                const examTopicsOpen = expandedExamTopicsId === e.id;
+                const ownTopics = e.topics || [];
+                const alreadyInToday = isUpcomingPending && isExamPrioritizedToday(e);
+                const proximityLabel =
+                  prep.daysUntil === 0
+                    ? 'Hoy'
+                    : prep.daysUntil === 1
+                    ? 'Mañana'
+                    : `En ${prep.daysUntil} días`;
                 return (
                   <div
                     key={e.id}
                     id={`exam-${e.id}`}
-                    className="py-3 flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-2 rounded-xl px-2 transition-all hover:bg-[var(--surface-muted)]/50"
+                    className="py-3 text-xs rounded-xl px-2 transition-all hover:bg-[var(--surface-muted)]/50 space-y-2"
                   >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => openEditExamModal(e)}
+                            title={`Editar ${meta.title}`}
+                            className="text-left font-bold text-sm text-[var(--text)] hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors line-clamp-2 leading-snug break-words cursor-pointer"
+                          >
+                            {meta.title}
+                          </button>
+                          {meta.subjectName && (
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[var(--surface-muted)] text-[var(--text-soft)]">
+                              {meta.subjectName}
+                            </span>
+                          )}
+                          {isUpcomingPending && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md tabular-nums ${
+                              prep.daysUntil <= 2
+                                ? 'bg-rose-500/15 text-rose-600 dark:text-rose-300'
+                                : prep.daysUntil <= 7
+                                ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                                : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'
+                            }`}>
+                              {proximityLabel}
+                            </span>
+                          )}
+                          {isOverduePending && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300">
+                              Pendiente de nota
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-soft)] mt-0.5">
+                          <span className="tabular-nums">
+                            {fmtDate(e.date)}{e.time ? ` · ${e.time}` : ''}
+                          </span>
+                          {e.grade && (
+                            <span
+                              data-testid={`exam-grade-${e.id}`}
+                              className="inline-flex items-center gap-1 font-medium text-[var(--text)] px-1.5 py-0.5 rounded-md bg-[var(--surface-muted)] border border-[var(--border)]/60 text-[11px]"
+                            >
+                              <span className="text-[var(--text-soft)]">Nota:</span>{' '}
+                              <span className="font-bold tabular-nums">{e.grade}</span>
+                            </span>
+                          )}
+                          {isUpcomingPending && (prep.totalTopics > 0 || prep.recentMinutes7d > 0) && (
+                            <span className="tabular-nums">
+                              {prep.totalTopics > 0 ? `Temas: ${prep.completedTopics}/${prep.totalTopics} (${prep.progressPct}%)` : ''}
+                              {prep.totalTopics > 0 && prep.recentMinutes7d > 0 ? ' · ' : ''}
+                              {prep.recentMinutes7d > 0 ? `7d: ${formatStudyDuration(prep.recentMinutes7d)}` : ''}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                        {isUpcomingPending && (
+                          <button
+                            type="button"
+                            disabled={alreadyInToday}
+                            onClick={() => handlePrioritizeExamToday(e)}
+                            className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition ${
+                              alreadyInToday
+                                ? 'border-teal-500/30 bg-teal-500/10 text-teal-700 dark:text-teal-300 cursor-default'
+                                : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--blue)]/40 cursor-pointer'
+                            }`}
+                            title={alreadyInToday ? 'Ya figura en tus prioridades de Hoy' : 'Enviar como prioridad del día a Hoy'}
+                          >
+                            {alreadyInToday ? 'En Hoy' : 'Priorizar hoy'}
+                          </button>
+                        )}
+                        {e.status === 'pendiente' && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExpandedExamTopicsId(examTopicsOpen ? null : e.id);
+                              setNewExamTopicTitle('');
+                            }}
+                            aria-expanded={examTopicsOpen}
+                            className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition cursor-pointer ${
+                              examTopicsOpen
+                                ? 'border-[var(--blue)]/40 bg-[var(--blue-soft)] text-[var(--blue)]'
+                                : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:text-[var(--text)]'
+                            }`}
+                            title="Temas de la evaluación"
+                          >
+                            Temas{ownTopics.length > 0 ? ` (${ownTopics.filter((t) => t.done).length}/${ownTopics.length})` : ''}
+                          </button>
+                        )}
+                        <select
+                          value={e.status}
+                          onChange={(ev) => handleSetExamStatus(e.id, ev.target.value as any)}
+                          aria-label={`Estado de ${meta.title}`}
+                          className={`px-2.5 py-1 text-xs rounded-lg border font-semibold outline-hidden cursor-pointer ${
+                            e.status === 'aprobado'
+                              ? 'bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/20'
+                              : e.status === 'desaprobado'
+                              ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+                              : 'bg-[var(--bg-elevated)] text-[var(--text-soft)] border-[var(--border)]'
+                          }`}
+                        >
+                          <option value="pendiente">Pendiente</option>
+                          <option value="aprobado">Aprobado</option>
+                          <option value="desaprobado">Desaprobado</option>
+                        </select>
+
                         <button
                           type="button"
-                          onClick={() => openEditExamModal(e)}
-                          title={`Editar ${meta.title}`}
-                          className="text-left font-bold text-sm text-[var(--text)] hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors line-clamp-2 leading-snug break-words cursor-pointer"
+                          onClick={() => handleDeleteExam(e.id)}
+                          className="p-1.5 rounded-lg text-[var(--text-soft)] hover:text-red-500 hover:bg-red-500/10 transition cursor-pointer"
+                          title="Eliminar examen"
+                          aria-label={`Eliminar evaluación ${meta.title}`}
                         >
-                          {meta.title}
+                          <AppIcon name="trash" className="h-3.5 w-3.5" />
                         </button>
-                        {meta.subjectName && (
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[var(--surface-muted)] text-[var(--text-soft)]">
-                            {meta.subjectName}
-                          </span>
-                        )}
-                        {isOverduePending && (
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300">
-                            Pendiente de nota
-                          </span>
-                        )}
                       </div>
-                      <div className="flex items-center gap-2 text-[11px] text-[var(--text-soft)] mt-0.5">
-                        <span className="tabular-nums">
-                          {fmtDate(e.date)}{e.time ? ` · ${e.time}` : ''}
-                        </span>
-                        {e.grade && (
-                          <span
-                            data-testid={`exam-grade-${e.id}`}
-                            className="inline-flex items-center gap-1 font-medium text-[var(--text)] px-1.5 py-0.5 rounded-md bg-[var(--surface-muted)] border border-[var(--border)]/60 text-[11px]"
+                    </div>
+
+                    {isUpcomingPending && prep.progressPct !== null && (
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-muted)]" aria-hidden="true">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            prep.progressPct === 100
+                              ? 'bg-teal-500'
+                              : prep.readiness === 'critical'
+                              ? 'bg-rose-500'
+                              : prep.readiness === 'needs_attention'
+                              ? 'bg-amber-500'
+                              : 'bg-[var(--blue)]'
+                          }`}
+                          style={{ width: `${Math.max(4, prep.progressPct)}%` }}
+                        />
+                      </div>
+                    )}
+
+                    {examTopicsOpen && (
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-2.5 space-y-2">
+                        {ownTopics.length > 0 ? (
+                          <ul className="space-y-1">
+                            {ownTopics.map((topic) => (
+                              <li key={topic.id} className="flex items-center justify-between gap-2 py-1 px-1.5 rounded-lg hover:bg-[var(--surface-muted)]/60">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleExamTopic(e.id, topic.id)}
+                                  className="flex items-center gap-2 min-w-0 flex-1 text-left cursor-pointer"
+                                >
+                                  <span className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition ${
+                                    topic.done
+                                      ? 'border-teal-500 bg-teal-500 text-white'
+                                      : 'border-[var(--border)] bg-[var(--bg-elevated)]'
+                                  }`}>
+                                    {topic.done && <AppIcon name="check" className="h-3 w-3" />}
+                                  </span>
+                                  <span className={`text-xs break-words ${topic.done ? 'line-through text-[var(--text-faint)]' : 'text-[var(--text)]'}`}>
+                                    {topic.title}
+                                  </span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteExamTopic(e.id, topic.id)}
+                                  className="p-1 rounded text-[var(--text-faint)] hover:text-red-500 cursor-pointer"
+                                  aria-label={`Quitar tema ${topic.title}`}
+                                >
+                                  <AppIcon name="x" className="h-3 w-3" />
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-[11px] text-[var(--text-faint)]">
+                            {prep.totalTopics > 0
+                              ? `Usando los ${prep.totalTopics} temas de ${meta.subjectName || 'la materia'}. Sumá temas propios si querés acotar este examen.`
+                              : 'Sumá los temas que entran en esta evaluación para medir tu preparación y guiar tus prioridades en Hoy.'}
+                          </p>
+                        )}
+                        <form onSubmit={(ev) => handleAddExamTopic(e.id, ev)} className="flex items-center gap-1.5">
+                          <input
+                            type="text"
+                            value={newExamTopicTitle}
+                            onChange={(ev) => setNewExamTopicTitle(ev.target.value)}
+                            placeholder="Ej. Unidad 3: Programación dinámica..."
+                            aria-label={`Nuevo tema para ${meta.title}`}
+                            className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs text-[var(--text)] outline-hidden focus:border-[var(--blue)]"
+                          />
+                          <button
+                            type="submit"
+                            className="shrink-0 rounded-lg bg-[var(--blue)] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[var(--blue-hover)] transition cursor-pointer"
                           >
-                            <span className="text-[var(--text-soft)]">Nota:</span>{' '}
-                            <span className="font-bold tabular-nums">{e.grade}</span>
-                          </span>
-                        )}
+                            Sumar
+                          </button>
+                        </form>
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                      <select
-                        value={e.status}
-                        onChange={(ev) => handleSetExamStatus(e.id, ev.target.value as any)}
-                        aria-label={`Estado de ${meta.title}`}
-                        className={`px-2.5 py-1 text-xs rounded-lg border font-semibold outline-hidden cursor-pointer ${
-                          e.status === 'aprobado'
-                            ? 'bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/20'
-                            : e.status === 'desaprobado'
-                            ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
-                            : 'bg-[var(--bg-elevated)] text-[var(--text-soft)] border-[var(--border)]'
-                        }`}
-                      >
-                        <option value="pendiente">Pendiente</option>
-                        <option value="aprobado">Aprobado</option>
-                        <option value="desaprobado">Desaprobado</option>
-                      </select>
-
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteExam(e.id)}
-                        className="p-1.5 rounded-lg text-[var(--text-soft)] hover:text-red-500 hover:bg-red-500/10 transition cursor-pointer"
-                        title="Eliminar examen"
-                        aria-label={`Eliminar evaluación ${meta.title}`}
-                      >
-                        <AppIcon name="trash" className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                    )}
                   </div>
                 );
               })
