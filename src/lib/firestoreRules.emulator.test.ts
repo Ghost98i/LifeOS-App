@@ -11,8 +11,8 @@
  * 7. Invalid/malformed CryptoEnvelope is rejected.
  * 8. Plaintext revisions are rejected on encrypted/mixed modules.
  * 9. Legacy /lifeos/state rejects new writes once E2EE is active.
- * 10. Plaintext legacy revisions can be purged ONLY when account is encrypted.
- * 11. Encrypted revisions CANNOT be purged.
+ * 10. El propietario puede eliminar revisiones legacy para borrar su cuenta.
+ * 11. El propietario puede eliminar revisiones cifradas y módulos al borrar su cuenta.
  * 12. keyEnvelope bound to a different userId is rejected (AAD binding).
  * 13. Malformed/invalid keyEnvelope is rejected.
  * 14. Invalid capability is rejected.
@@ -28,7 +28,7 @@ import {
   assertSucceeds,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, getDoc, getDocFromServer, setDoc, deleteDoc, writeBatch, runTransaction, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, getDocFromServer, setDoc, deleteDoc, writeBatch, runTransaction, serverTimestamp, type Firestore } from 'firebase/firestore';
 import { addSandboxItem, emptySandboxInventory } from './commercialInventorySandbox';
 import { confirmSandboxPurchaseWithPayment } from './commercialImmediateSandbox';
 import { confirmSandboxMoneyEvent, type SandboxMoneySession } from './commercialMoneySandbox';
@@ -37,7 +37,7 @@ import { reconcileCommercialSets } from './commercialReconcile';
 import { addRemoteResaleVersion, loadResaleConflict, saveResaleConflict, type ResaleConflictRecord } from './resaleConflictRecovery';
 import { applySyncModule, mergeSyncModuleWithConflicts, syncModuleData } from './syncModel';
 import { defaultState, loadStoredState, readStoredCommercial, saveStoredState } from './storage';
-import { classifyTransactionalRevisions } from './cloudSync';
+import { classifyTransactionalRevisions, deleteCloudAccountData } from './cloudSync';
 
 const PROJECT_ID = 'demo-lifeos';
 const COMMERCIAL_CAPABILITY = { enabled: true, commercialProtocolVersion: 1, minimumSyncProtocolVersion: 3 } as const;
@@ -427,29 +427,30 @@ test('Rules Runtime: 9. /lifeos/state no admite nuevas escrituras tras activar E
   );
 });
 
-test('Rules Runtime: 10. Plaintext revision legacy puede purgarse SOLO en cuenta encrypted', async () => {
-  // Pre-cargar revision plaintext
+test('Rules Runtime: 10. Revisiones legacy: bloqueadas sin marcador ni capability encrypted; permitidas en purga E2EE o con marcador deletion', async () => {
+  // Pre-cargar dos revisiones plaintext
   await testEnv.withSecurityRulesDisabled(async (adminContext) => {
     const adminDb = adminContext.firestore();
-    await setDoc(doc(adminDb, 'users', 'alice', 'lifeosRevisions', 'rev-plain-old'), {
-      schemaVersion: 2,
-      syncProtocolVersion: 1,
-      isEncrypted: false,
-      module: 'gym',
-      data: { routines: [] },
-      revision: 'rev-plain-old',
-      deviceId: 'dev-old',
-      clientUpdatedAt: 1000,
-    });
+    for (const revision of ['rev-plain-old', 'rev-plain-later']) {
+      await setDoc(doc(adminDb, 'users', 'alice', 'lifeosRevisions', revision), {
+        schemaVersion: 2,
+        syncProtocolVersion: 1,
+        isEncrypted: false,
+        module: 'gym',
+        data: { routines: [] },
+        revision,
+        deviceId: 'dev-old',
+        clientUpdatedAt: 1000,
+      });
+    }
   });
 
   const alice = testEnv.authenticatedContext('alice').firestore();
-  const revRef = doc(alice, 'users', 'alice', 'lifeosRevisions', 'rev-plain-old');
 
-  // Sin capability encrypted -> DELETE RECHAZADO
-  await assertFails(deleteDoc(revRef));
+  // Sin capability 'encrypted' ni marcador deletion -> DELETE RECHAZADO
+  await assertFails(deleteDoc(doc(alice, 'users', 'alice', 'lifeosRevisions', 'rev-plain-old')));
 
-  // Activar capability 'encrypted'
+  // Activar capability 'encrypted' -> purga E2EE de revisiones plaintext PERMITIDA sin marcador deletion
   await testEnv.withSecurityRulesDisabled(async (adminContext) => {
     const adminDb = adminContext.firestore();
     await setDoc(doc(adminDb, 'users', 'alice', 'lifeosAccount', 'capability'), {
@@ -461,11 +462,10 @@ test('Rules Runtime: 10. Plaintext revision legacy puede purgarse SOLO en cuenta
     });
   });
 
-  // Con capability 'encrypted' -> DELETE PERMITIDO
-  await assertSucceeds(deleteDoc(revRef));
+  await assertSucceeds(deleteDoc(doc(alice, 'users', 'alice', 'lifeosRevisions', 'rev-plain-later')));
 });
 
-test('Rules Runtime: 11. Encrypted revision NO puede purgarse (integridad de historial)', async () => {
+test('Rules Runtime: 11. Revisiones cifradas no se pueden borrar sin marcador deletion; sí con marcador deletion', async () => {
   await testEnv.withSecurityRulesDisabled(async (adminContext) => {
     const adminDb = adminContext.firestore();
     await setDoc(doc(adminDb, 'users', 'alice', 'lifeosAccount', 'capability'), {
@@ -490,8 +490,127 @@ test('Rules Runtime: 11. Encrypted revision NO puede purgarse (integridad de his
   const alice = testEnv.authenticatedContext('alice').firestore();
   const revRef = doc(alice, 'users', 'alice', 'lifeosRevisions', 'rev-gym-enc');
 
-  // Delete de revisión cifrada legítima -> RECHAZADO SIEMPRE
+  // Sin marcador deletion -> RECHAZADO
   await assertFails(deleteDoc(revRef));
+
+  // Crear marcador deletion -> DELETE PERMITIDO
+  await assertSucceeds(setDoc(doc(alice, 'users', 'alice', 'lifeosAccount', 'deletion'), {
+    requestedAt: new Date().toISOString(),
+    deviceId: 'dev-1',
+  }));
+  await assertSucceeds(deleteDoc(revRef));
+});
+
+test('Rules Runtime: 11b. Flujo de eliminación con marcador: bloquea deletes sin marcador, bloquea escrituras durante borrado y permite purga completa (incl. /lifeos/state)', async () => {
+  await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+    const adminDb = adminContext.firestore();
+    await setDoc(doc(adminDb, 'users', 'alice', 'lifeos', 'state'), {
+      schemaVersion: 2,
+      state: { profile: { name: 'Legacy Alice' } },
+      deviceId: 'dev-legacy',
+      updatedAt: serverTimestamp(),
+    });
+    await setDoc(doc(adminDb, 'users', 'alice', 'lifeosModules', 'notes'), {
+      schemaVersion: 2,
+      syncProtocolVersion: 1,
+      isEncrypted: false,
+      module: 'notes',
+      data: { postits: [] },
+      revision: 'notes-r1',
+      parentRevision: null,
+      deviceId: 'dev-1',
+      clientUpdatedAt: 1000,
+    });
+    await setDoc(doc(adminDb, 'users', 'alice', 'lifeosRevisions', 'notes-r1'), {
+      schemaVersion: 2,
+      syncProtocolVersion: 1,
+      isEncrypted: false,
+      module: 'notes',
+      data: { postits: [] },
+      revision: 'notes-r1',
+      parentRevision: null,
+      deviceId: 'dev-1',
+      clientUpdatedAt: 1000,
+    });
+    await setDoc(doc(adminDb, 'users', 'alice', 'lifeosAccount', 'capability'), {
+      version: 1,
+      minimumSyncProtocolVersion: 1,
+      encryptionState: 'plaintext',
+      updatedAt: new Date().toISOString(),
+    });
+  });
+
+  const alice = testEnv.authenticatedContext('alice').firestore();
+  const bob = testEnv.authenticatedContext('bob').firestore();
+
+  // 1. Sin marcador deletion, ningún delete sobre módulos, cuenta ni estado legacy plaintext está permitido.
+  await assertFails(deleteDoc(doc(alice, 'users', 'alice', 'lifeosModules', 'notes')));
+  await assertFails(deleteDoc(doc(alice, 'users', 'alice', 'lifeosAccount', 'capability')));
+  await assertFails(deleteDoc(doc(alice, 'users', 'alice', 'lifeos', 'state')));
+
+  // 2. Marcador deletion inválido o de otro usuario es rechazado.
+  await assertFails(setDoc(doc(bob, 'users', 'alice', 'lifeosAccount', 'deletion'), {
+    requestedAt: new Date().toISOString(),
+  }));
+  await assertFails(setDoc(doc(alice, 'users', 'alice', 'lifeosAccount', 'deletion'), {
+    requestedAt: new Date().toISOString(),
+    extraField: 'nope',
+  }));
+
+  // 3. Crear marcador deletion válido.
+  const markerRef = doc(alice, 'users', 'alice', 'lifeosAccount', 'deletion');
+  await assertSucceeds(setDoc(markerRef, {
+    requestedAt: new Date().toISOString(),
+    deviceId: 'dev-1',
+  }));
+
+  // 4. Mientras existe el marcador deletion, las escrituras normales en módulos, revisiones y estado legacy quedan bloqueadas.
+  await assertFails(setDoc(doc(alice, 'users', 'alice', 'lifeosModules', 'profile'), {
+    schemaVersion: 2,
+    syncProtocolVersion: 1,
+    isEncrypted: false,
+    module: 'profile',
+    data: { name: 'Resurrection' },
+    revision: 'profile-r1',
+    parentRevision: null,
+    deviceId: 'dev-1',
+    clientUpdatedAt: Date.now(),
+  }));
+  await assertFails(setDoc(doc(alice, 'users', 'alice', 'lifeosRevisions', 'profile-r1'), {
+    schemaVersion: 2,
+    syncProtocolVersion: 1,
+    isEncrypted: false,
+    module: 'profile',
+    data: { name: 'Resurrection' },
+    revision: 'profile-r1',
+    parentRevision: null,
+    deviceId: 'dev-1',
+    clientUpdatedAt: Date.now(),
+  }));
+  await assertFails(setDoc(doc(alice, 'users', 'alice', 'lifeos', 'state'), {
+    schemaVersion: 2,
+    state: { profile: { name: 'Legacy Resurrection' } },
+    deviceId: 'dev-1',
+    updatedAt: serverTimestamp(),
+  }));
+
+  // 5. Otro usuario sigue sin poder borrar datos ajenos aun con marcador activo.
+  await assertFails(deleteDoc(doc(bob, 'users', 'alice', 'lifeosModules', 'notes')));
+  await assertFails(deleteDoc(doc(bob, 'users', 'alice', 'lifeos', 'state')));
+
+  // 6. deleteCloudAccountData borra legacy state, módulos, revisiones, cuenta y al final el propio marcador.
+  const result = await deleteCloudAccountData('alice', alice as unknown as Firestore);
+  assert.equal(result.legacyStateDeleted, true);
+  assert.equal(result.collections.lifeosModules, 1);
+  assert.equal(result.collections.lifeosRevisions, 1);
+  assert.equal(result.collections.lifeosAccount, 1);
+  assert.equal(result.deleted, 4);
+
+  assert.equal((await getDoc(doc(alice, 'users', 'alice', 'lifeos', 'state'))).exists(), false);
+  assert.equal((await getDoc(doc(alice, 'users', 'alice', 'lifeosModules', 'notes'))).exists(), false);
+  assert.equal((await getDoc(doc(alice, 'users', 'alice', 'lifeosRevisions', 'notes-r1'))).exists(), false);
+  assert.equal((await getDoc(doc(alice, 'users', 'alice', 'lifeosAccount', 'capability'))).exists(), false);
+  assert.equal((await getDoc(markerRef)).exists(), false);
 });
 
 test('Rules Runtime: 12. keyEnvelope vinculado a otro usuario es rechazado (AAD mismatch)', async () => {

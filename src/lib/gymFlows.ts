@@ -538,6 +538,104 @@ export function isExerciseCompleted(exercise: Exercise): boolean {
   return exercise.sets.every((s) => s.completed === true);
 }
 
+/**
+ * Finds the next exercise in the session that still has pending sets,
+ * searching forward first and then wrapping around from index 0.
+ * Returns -1 when no other exercise has pending sets.
+ */
+export function findNextPendingExerciseIndex(
+  session: GymSession | null | undefined,
+  currentExerciseIndex: number
+): number {
+  const exercises = session?.exercises;
+  if (!Array.isArray(exercises) || exercises.length <= 1) return -1;
+  const total = exercises.length;
+  const start = Math.max(0, Math.min(currentExerciseIndex, total - 1));
+  for (let offset = 1; offset < total; offset++) {
+    const candidateIndex = (start + offset) % total;
+    const candidate = exercises[candidateIndex];
+    if (
+      candidate
+      && Array.isArray(candidate.sets)
+      && candidate.sets.length > 0
+      && !isExerciseCompleted(candidate)
+    ) {
+      return candidateIndex;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Finds the next incomplete set within the same exercise,
+ * searching forward first and then wrapping around from index 0.
+ */
+export function findNextPendingSetIndex(
+  exercise: Exercise | null | undefined,
+  currentSetIndex: number
+): number {
+  const sets = exercise?.sets;
+  if (!Array.isArray(sets) || sets.length === 0) return -1;
+  const total = sets.length;
+  const start = Math.max(0, Math.min(currentSetIndex, total - 1));
+  for (let offset = 1; offset < total; offset++) {
+    const candidateIndex = (start + offset) % total;
+    if (sets[candidateIndex] && sets[candidateIndex].completed !== true) {
+      return candidateIndex;
+    }
+  }
+  return -1;
+}
+
+export function areAllSessionSetsCompleted(session: GymSession | null | undefined): boolean {
+  const exercises = session?.exercises;
+  if (!Array.isArray(exercises) || exercises.length === 0) return false;
+  const totalSets = exercises.reduce((sum, ex) => sum + (ex.sets?.length || 0), 0);
+  if (totalSets === 0) return false;
+  return exercises.every((ex) => (ex.sets || []).every((set) => set.completed === true));
+}
+
+/**
+ * Determines the next active cockpit position after completing a set.
+ * Never finishes or closes the session automatically: if the current exercise
+ * is done, jumps circularly to the next pending exercise (immediately when no
+ * rest timer started, or leaves navigation to the exercise rest timer).
+ */
+export function resolveNextWorkoutPositionAfterSetCompletion(
+  session: GymSession | null | undefined,
+  exerciseIndex: number,
+  setIndex: number,
+  hasStartedRestTimer: boolean
+): { exerciseIndex: number; setIndex: number; allCompleted: boolean } | null {
+  if (!session || !Array.isArray(session.exercises) || session.exercises.length === 0) return null;
+  const safeExIdx = Math.max(0, Math.min(exerciseIndex, session.exercises.length - 1));
+  const currentExercise = session.exercises[safeExIdx];
+  const nextPendingSetIdx = findNextPendingSetIndex(currentExercise, setIndex);
+  if (nextPendingSetIdx >= 0) {
+    return { exerciseIndex: safeExIdx, setIndex: nextPendingSetIdx, allCompleted: false };
+  }
+
+  const nextPendingExIdx = findNextPendingExerciseIndex(session, safeExIdx);
+  if (nextPendingExIdx >= 0) {
+    if (hasStartedRestTimer) {
+      return { exerciseIndex: safeExIdx, setIndex, allCompleted: false };
+    }
+    const targetExercise = session.exercises[nextPendingExIdx];
+    const firstIncomplete = targetExercise?.sets?.findIndex((s) => s.completed !== true) ?? -1;
+    return {
+      exerciseIndex: nextPendingExIdx,
+      setIndex: firstIncomplete >= 0 ? firstIncomplete : 0,
+      allCompleted: false,
+    };
+  }
+
+  return {
+    exerciseIndex: safeExIdx,
+    setIndex,
+    allCompleted: areAllSessionSetsCompleted(session),
+  };
+}
+
 export function resolveNextRestTimer(
   gym: Gym,
   sessionId: string,
@@ -562,13 +660,13 @@ export function resolveNextRestTimer(
   const exerciseIndex = found.index;
 
   if (exerciseDone) {
-    // Si todos los ejercicios de la sesión ya están completados, no requiere timer de descanso
-    const hasRemainingIncomplete = session.exercises.some((ex, idx) => idx !== exerciseIndex && !isExerciseCompleted(ex));
-    if (!hasRemainingIncomplete) {
+    // Buscar el siguiente ejercicio pendiente de forma circular (adelante y luego desde el inicio).
+    // Si todos los ejercicios ya están completados, no requiere timer de descanso y la sesión sigue abierta.
+    const targetExerciseIndex = findNextPendingExerciseIndex(session, exerciseIndex);
+    if (targetExerciseIndex < 0) {
       return null;
     }
     const durationSeconds = settings.restBetweenExercisesSeconds;
-    const targetExerciseIndex = exerciseIndex + 1 < session.exercises.length ? exerciseIndex + 1 : undefined;
     return {
       endsAt: now + durationSeconds * 1000,
       durationSeconds,

@@ -1425,7 +1425,7 @@ button:active {
 
 @media (min-width: 640px) {
   .today-observatory-panel {
-    width: clamp(23rem, 48%, 32rem);
+    width: clamp(23rem, 44%, 34rem);
     max-width: 100%;
     padding: 1rem 2.5rem 1.1rem 2rem;
   }
@@ -1456,14 +1456,14 @@ button:active {
 
 @media (min-width: 1024px) {
   .today-observatory-panel {
-    width: clamp(25rem, 42%, 34rem);
+    width: clamp(19rem, 44%, 40rem);
   }
 }
 
 @media (max-width: 639px) {
   .today-observatory-panel {
-    width: min(82%, 19rem);
-    padding: 0.75rem 1.75rem 0.85rem 1.2rem;
+    width: 100%;
+    padding: 0.9rem 1.75rem 0.95rem 1.2rem;
   }
 
   .today-observatory-panel::after {
@@ -1536,15 +1536,17 @@ button:active {
 }
 
 .today-hero-action {
-  border: 1px solid rgb(255 255 255 / 0.18);
-  background: rgb(12 19 32 / 0.54);
+  border: 1px solid rgb(255 255 255 / 0.16);
+  background: rgb(7 12 22 / 0.66);
   color: rgb(248 250 252 / 0.94);
-  box-shadow: 0 2px 8px -2px rgb(0 0 0 / 0.32);
+  box-shadow: 0 6px 18px -10px rgb(0 0 0 / 0.65);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
 }
 
 .today-hero-action:hover {
   border-color: rgb(255 255 255 / 0.30);
-  background: rgb(12 19 32 / 0.72);
+  background: rgb(7 12 22 / 0.82);
   color: #ffffff;
 }
 

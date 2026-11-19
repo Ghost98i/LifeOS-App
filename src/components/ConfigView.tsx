@@ -59,6 +59,8 @@ interface ConfigViewProps {
   lastSyncedAt?: string | null;
   onCloudSignIn?: () => void;
   onCloudSignOut?: () => void;
+  onDeleteCloudAccount?: () => Promise<void>;
+  onDeleteLocalData?: () => void;
   onForceSync?: () => void;
   initialTab?: ConfigTab;
 }
@@ -79,6 +81,8 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   lastSyncedAt = null,
   onCloudSignIn,
   onCloudSignOut,
+  onDeleteCloudAccount,
+  onDeleteLocalData,
   onForceSync,
   initialTab = 'cuenta',
 }) => {
@@ -590,6 +594,8 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               storageUserId={effectiveUserId}
               cloudConnected={Boolean(cloudUser)}
               onForceSync={onForceSync}
+              onDeleteCloudAccount={onDeleteCloudAccount}
+              onDeleteLocalData={onDeleteLocalData}
             />
           </div>
         </div>
@@ -1345,6 +1351,10 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               <div className="border-t border-[var(--border)] pt-3 space-y-1.5">
                 <h4 className="font-bold text-[var(--text)]">Política de privacidad y términos y condiciones</h4>
                 <p>Esta descripción refleja el funcionamiento técnico actual de la aplicación. Celestian es una herramienta de productividad personal diseñada con principios de soberanía de datos del usuario.</p>
+                <p>Qué datos se guardan, cómo se sincronizan con Firebase y cómo eliminarlos:</p>
+                <a href="/privacidad.html" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-8 items-center text-xs font-semibold text-[var(--blue)] underline underline-offset-2 hover:text-[var(--blue-hover)]">
+                  Ver política de privacidad completa (nueva pestaña)
+                </a>
               </div>
 
               <div className="border-t border-[var(--border)] pt-3 space-y-1">

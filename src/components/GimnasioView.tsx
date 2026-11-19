@@ -72,6 +72,7 @@ import {
   deleteGymTemplateExercise,
   deleteGymTemplate,
   discardGymSession,
+  findNextPendingExerciseIndex,
   finishGymSession,
   getActiveGymSession,
   getPerformedGymVolume,
@@ -84,6 +85,7 @@ import {
   requestGymSessionDeletion,
   applyGymRestTimerAdjustment,
   resolveNextRestTimer,
+  resolveNextWorkoutPositionAfterSetCompletion,
   startGymSession,
   toggleGymRestTimerPause,
   updateGymTemplate,
@@ -229,10 +231,11 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     if (timer.kind === 'exercise') {
       const activeSession = getActiveGymSession(state.gym);
       if (activeSession) {
+        const originIdx = typeof timer.exerciseIndex === 'number' ? timer.exerciseIndex : liveExIdx;
         const nextIdx = typeof timer.targetExerciseIndex === 'number'
           ? timer.targetExerciseIndex
-          : (typeof timer.exerciseIndex === 'number' ? timer.exerciseIndex + 1 : liveExIdx + 1);
-        if (nextIdx < activeSession.exercises.length) {
+          : findNextPendingExerciseIndex(activeSession, originIdx);
+        if (nextIdx >= 0 && nextIdx < activeSession.exercises.length) {
           const nextEx = activeSession.exercises[nextIdx];
           const firstIncomplete = nextEx?.sets?.findIndex((s) => !s.completed) ?? -1;
           setLiveExIdx(nextIdx);
@@ -609,9 +612,12 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     sessionId: string,
     exerciseIndex: number,
     setIndex: number,
-    updates: Partial<GymSet>
+    updates: Partial<GymSet>,
+    onCommitted?: (detail: { startedTimer: GymActiveTimer | null; session: GymSession | null }) => void
   ) => {
     let completedSetKey: string | null = null;
+    let startedTimer: GymActiveTimer | null = null;
+    let updatedSessionSnapshot: GymSession | null = null;
     const saved = onUpdateState((draft) => {
       const s = draft.gym.sessions.find((x) => x.id === sessionId);
       const ex = s?.exercises[exerciseIndex];
@@ -629,8 +635,10 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
         );
         if (nextTimer) {
           draft.gym.activeTimer = nextTimer;
+          startedTimer = nextTimer;
         }
       }
+      updatedSessionSnapshot = s ? structuredClone(s) : null;
     });
     if (saved && completedSetKey) {
       playSound('success');
@@ -638,6 +646,9 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
         setKey: completedSetKey as string,
         nonce: (current?.nonce || 0) + 1,
       }));
+    }
+    if (saved && onCommitted) {
+      onCommitted({ startedTimer, session: updatedSessionSnapshot });
     }
     return saved;
   };
@@ -1076,16 +1087,39 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     handleUpdateSet(activeWorkoutSession.id, liveSafeExIdx, liveSafeSetIdx, { reps: nextR });
   };
 
+  const advancePositionAfterSetCompletion = (
+    exerciseIndex: number,
+    setIndex: number,
+    detail: { startedTimer: GymActiveTimer | null; session: GymSession | null }
+  ) => {
+    const nextPos = resolveNextWorkoutPositionAfterSetCompletion(
+      detail.session,
+      exerciseIndex,
+      setIndex,
+      Boolean(detail.startedTimer)
+    );
+    if (!nextPos) return;
+    if (nextPos.exerciseIndex !== exerciseIndex) {
+      setLiveExIdx(nextPos.exerciseIndex);
+    }
+    if (nextPos.setIndex !== setIndex || nextPos.exerciseIndex !== exerciseIndex) {
+      setLiveSetIdx(nextPos.setIndex);
+    }
+  };
+
   const handleLiveCompleteCurrentSet = () => {
     if (!activeWorkoutSession || !liveCurrentSet) return;
     const nextCompleted = !liveCurrentSet.completed;
-    const saved = handleUpdateSet(activeWorkoutSession.id, liveSafeExIdx, liveSafeSetIdx, { completed: nextCompleted });
-    if (!saved) return;
-
-    // If completing, auto-advance to next incomplete set in this exercise
-    if (nextCompleted && liveSets.length > liveSafeSetIdx + 1) {
-      setLiveSetIdx(liveSafeSetIdx + 1);
-    }
+    handleUpdateSet(
+      activeWorkoutSession.id,
+      liveSafeExIdx,
+      liveSafeSetIdx,
+      { completed: nextCompleted },
+      (detail) => {
+        if (!nextCompleted) return;
+        advancePositionAfterSetCompletion(liveSafeExIdx, liveSafeSetIdx, detail);
+      }
+    );
   };
 
   return (
@@ -1239,7 +1273,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                         ? activeWorkoutSession.exercises[
                             typeof state.gym.activeTimer.targetExerciseIndex === 'number'
                               ? state.gym.activeTimer.targetExerciseIndex
-                              : liveSafeExIdx + 1
+                              : findNextPendingExerciseIndex(activeWorkoutSession, liveSafeExIdx)
                           ]?.name || null
                         : null
                     }
@@ -1259,10 +1293,16 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                 if (!activeWorkoutSession || !liveCurrentEx?.sets[sIdx]) return;
                 const targetSet = liveCurrentEx.sets[sIdx];
                 const nextCompleted = !targetSet.completed;
-                handleUpdateSet(activeWorkoutSession.id, liveSafeExIdx, sIdx, { completed: nextCompleted });
-                if (nextCompleted && liveSets.length > sIdx + 1 && sIdx === liveSafeSetIdx) {
-                  setLiveSetIdx(sIdx + 1);
-                }
+                handleUpdateSet(
+                  activeWorkoutSession.id,
+                  liveSafeExIdx,
+                  sIdx,
+                  { completed: nextCompleted },
+                  (detail) => {
+                    if (!nextCompleted || sIdx !== liveSafeSetIdx) return;
+                    advancePositionAfterSetCompletion(liveSafeExIdx, sIdx, detail);
+                  }
+                );
               }}
               onUpdateSetByIndex={(sIdx, updates) =>
                 handleUpdateSet(activeWorkoutSession.id, liveSafeExIdx, sIdx, updates)

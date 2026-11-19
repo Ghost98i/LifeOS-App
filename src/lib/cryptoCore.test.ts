@@ -489,7 +489,7 @@ test('Seguridad & Hosting — Validación estática de CSP y Permissions-Policy 
   const effectiveHeaders = (resource: string) => Object.fromEntries(rules
     .filter(rule => new RegExp(rule.regex).test(new URL(resource, 'https://local.invalid').pathname))
     .flatMap(rule => rule.headers.map(header => [header.key.toLowerCase(), header.value])));
-  const documents = ['/', '/index.html', '/creditos.html', '/manifest.webmanifest',
+  const documents = ['/', '/index.html', '/creditos.html', '/privacidad.html', '/eliminar-cuenta.html', '/manifest.webmanifest',
     '/agenda', '/trabajo', '/reventa', '/finanzas', '/config', '/config/recuperacion',
     '/finanzas?mes=2026-10', '/ruta-profunda/inexistente'];
   for (const resource of documents) {
@@ -519,7 +519,7 @@ test('Seguridad & Hosting — Validación estática de CSP y Permissions-Policy 
     }
   }
   for (const resource of ['/agenda', '/trabajo', '/reventa', '/finanzas', '/config', '/config/recuperacion', '/ruta-profunda/inexistente']) {
-    const rewrite = content.hosting.rewrites.find((rule: { regex: string }) => new RegExp(rule.regex).test(resource));
+    const rewrite = content.hosting.rewrites.find((rule: { regex?: string }) => typeof rule.regex === 'string' && new RegExp(rule.regex).test(resource));
     assert.equal(rewrite?.destination, '/index.html', `${resource}: conserva la entrada SPA`);
   }
   for (const resource of ['/sw.js', '/registerSW.js']) {
@@ -534,6 +534,21 @@ test('Seguridad & Hosting — Validación estática de CSP y Permissions-Policy 
   for (const resource of ['/swXjs', '/sw.js.map', '/nested/sw.js', '/registerSW.js.map', '/assets-like/app.js']) {
     assert.equal(effectiveHeaders(resource)['cache-control'], 'no-cache, no-store, must-revalidate', resource);
   }
+  // Digital Asset Links: debe desplegarse (sin ignore de dotfiles), servirse como JSON
+  // y quedar fuera del precache/navigation fallback del service worker.
+  const ignored = content.hosting.ignore as string[];
+  assert.ok(!ignored.some(pattern => pattern === '**/.*'), 'el ignore no puede excluir .well-known del deploy');
+  assert.equal(content.hosting.appAssociation, 'NONE', 'Firebase no debe generar un assetlinks.json vacío');
+  const assetLinksRewrite = content.hosting.rewrites.find((rule: { source?: string }) => rule.source === '/.well-known/assetlinks.json');
+  assert.equal(assetLinksRewrite?.destination, '/.well-known/assetlinks.json');
+  const assetLinksHeaders = effectiveHeaders('/.well-known/assetlinks.json');
+  assert.equal(assetLinksHeaders['content-type'], 'application/json; charset=utf-8');
+  assert.equal(assetLinksHeaders['cache-control'], 'no-cache, no-store, must-revalidate');
+  const assetLinks = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'public/.well-known/assetlinks.json'), 'utf8'));
+  assert.equal(assetLinks[0].relation[0], 'delegate_permission/common.handle_all_urls');
+  assert.equal(assetLinks[0].target.namespace, 'android_app');
+  assert.ok(Array.isArray(assetLinks[0].target.sha256_cert_fingerprints));
+  assert.ok(fs.existsSync(path.resolve(process.cwd(), 'public/privacidad.html')), 'la política de privacidad debe publicarse');
 });
 
 // ---------------------------------------------------------------------------

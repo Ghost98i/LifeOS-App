@@ -499,9 +499,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <AlpineDayCycleBackdrop forcePeriod={dayPeriod} compact />
         <div className="relative lg:static z-10 flex w-full flex-col items-start justify-between lg:justify-end gap-2.5 sm:gap-3">
           {!dayClosed ? (
-            <button type="button" onClick={() => onNavigate('checkout')} aria-label="Cerrar el día" className="today-hero-action inline-flex min-h-11 min-w-11 shrink-0 self-end items-center justify-center gap-1.5 rounded-[10px] px-2.5 text-[12px] font-medium tracking-[-0.01em] transition sm:px-3 lg:absolute lg:right-6 lg:top-4"><AppIcon name="moon" className="h-3.5 w-3.5 opacity-85" /><span className="hidden sm:inline">Cerrar el día</span></button>
+            <button type="button" onClick={() => onNavigate('checkout')} aria-label="Cerrar el día" className="today-hero-action inline-flex min-h-11 min-w-11 shrink-0 self-end items-center justify-center gap-1.5 rounded-full px-3 text-[12px] font-medium tracking-[-0.01em] transition sm:px-3.5 lg:absolute lg:right-4 lg:top-4"><AppIcon name="moon" className="h-3.5 w-3.5 opacity-85" /><span className="hidden sm:inline">Cerrar el día</span></button>
           ) : (
-            <span className="today-hero-closed inline-flex shrink-0 self-end items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-[12px] font-medium tracking-[-0.01em] sm:px-3 sm:py-1.5 lg:absolute lg:right-6 lg:top-4"><AppIcon name="check" className="h-3.5 w-3.5" />Día cerrado</span>
+            <span className="today-hero-closed inline-flex shrink-0 self-end items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium tracking-[-0.01em] sm:px-3.5 sm:py-1.5 lg:absolute lg:right-4 lg:top-4"><AppIcon name="check" className="h-3.5 w-3.5" />Día cerrado</span>
           )}
           <section className="today-observatory-panel" aria-label="Momento actual en Celestian">
             <svg className="today-observatory-shape" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true" focusable="false">
@@ -543,7 +543,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
       </header>
 
-      <div className="hidden sm:block">
+      <div className="block">
         <BentoCommandBar
           state={state}
           onUpdateState={onUpdateState}
@@ -820,7 +820,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 export const DashboardSkeleton: React.FC = () => (
   <div role="status" aria-busy="true" aria-label="Cargando vista" className="mx-auto w-full space-y-4 sm:space-y-5 animate-pulse">
     <div className="today-hero-size rounded-[22px] sm:rounded-[26px] border border-[var(--border)] bg-[var(--hero-bg)]" />
-    <div className="h-12 rounded-2xl border border-[var(--border)] bg-[var(--card)] hidden sm:block" />
+    <div className="h-12 rounded-2xl border border-[var(--border)] bg-[var(--card)]" />
     <div className="grid grid-cols-1 items-start gap-3 sm:gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:grid-rows-[auto_1fr]">
       <div className="h-[180px] rounded-2xl border border-[var(--border)] bg-[var(--card)] lg:col-start-2 lg:row-start-1" />
       <div className="h-[480px] rounded-2xl border border-[var(--border)] bg-[var(--card)] lg:col-start-1 lg:row-start-1 lg:row-span-2" />

@@ -1,8 +1,12 @@
 {
   "hosting": {
     "public": "dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
-    "rewrites": [{ "regex": ".*", "destination": "/index.html" }],
+    "ignore": ["firebase.json", "**/node_modules/**"],
+    "appAssociation": "NONE",
+    "rewrites": [
+      { "source": "/.well-known/assetlinks.json", "destination": "/.well-known/assetlinks.json" },
+      { "regex": ".*", "destination": "/index.html" }
+    ],
     "headers": [
       {
         "regex": ".*",
@@ -16,6 +20,12 @@
             "key": "Content-Security-Policy",
             "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; script-src-elem 'self' https://apis.google.com/js/api.js https://apis.google.com/_/scs/abc-static/_/js/; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://api.open-meteo.com https://geocoding-api.open-meteo.com; img-src 'self' data: https://lh3.googleusercontent.com; font-src 'self'; frame-src https://*.firebaseapp.com https://accounts.google.com; object-src 'none'; base-uri 'self';"
           }
+        ]
+      },
+      {
+        "regex": "^[/\\\\]\\.well-known[/\\\\]assetlinks\\.json$",
+        "headers": [
+          { "key": "Content-Type", "value": "application/json; charset=utf-8" }
         ]
       },
       {

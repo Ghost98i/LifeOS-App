@@ -535,3 +535,122 @@ test('Cockpit 11: Navegación por teclado, conservación del foco y semántica d
     assert.match(control, /class="[^"]*(?:h-11|min-h-11|h-12|min-h-12|min-h-14)[^"]*"/);
   }
 });
+
+test('Cockpit 12: Saltear ejercicio 3 y completar el 4 muestra anticipación hacia el 3 pendiente y distingue completados vs pendientes en la lista', () => {
+  const session: GymSession = {
+    id: 'free-order-cockpit',
+    date: '2026-11-19',
+    weekLabel: 'Torso-Pierna',
+    status: 'active',
+    startedAt: '18:00',
+    exercises: [
+      { id: 'e1', name: 'Press banca', muscleGroup: 'Pecho', sets: [{ id: 's1', weight: 80, reps: 8, completed: true }] },
+      { id: 'e2', name: 'Remo con barra', muscleGroup: 'Espalda', sets: [{ id: 's2', weight: 70, reps: 10, completed: true }] },
+      { id: 'e3', name: 'Prensa de piernas', muscleGroup: 'Piernas', sets: [{ id: 's3', weight: 160, reps: 12, completed: false }] },
+      { id: 'e4', name: 'Curl bíceps', muscleGroup: 'Brazos', sets: [{ id: 's4', weight: 15, reps: 12, completed: true }] },
+    ],
+  };
+
+  const activeTimer = {
+    endsAt: Date.now() + 120000,
+    durationSeconds: 120,
+    kind: 'exercise' as const,
+    exerciseIndex: 3,
+    targetExerciseIndex: 2,
+    setId: 's4',
+  };
+
+  const html = renderToStaticMarkup(
+    React.createElement(ActiveWorkoutView, {
+      session,
+      exerciseIndex: 3,
+      setIndex: 0,
+      activeTimer,
+      exerciseSuggestions: [],
+      onSelectExercise: noop,
+      onSelectSet: noop,
+      onAdjustWeight: noop,
+      onAdjustReps: noop,
+      onUpdateCurrentSet: noop,
+      onToggleCurrentSet: noop,
+      onAddSet: noop,
+      onDeleteSet: noop,
+      onAddExercise: noop,
+      onDeleteExercise: noop,
+      onUpdateEquipment: noop,
+      onUpdateBarWeight: noop,
+      onPropagateExercise: noop,
+      onOpenCalculator: noop,
+      onOpenHistory: noop,
+      onOpenHistoryTab: noop,
+      onOpenProgressTab: noop,
+      onFinish: noop,
+      onDeleteSession: noop,
+      onSaveAsTemplate: noop,
+      onEditSessionDate: noop,
+      onEditSessionWeek: noop,
+    })
+  );
+
+  // Rest card points circularly to exercise 3 (Prensa de piernas) and never offers auto-finish CTA
+  assert.match(html, /Siguiente ejercicio: Prensa de piernas/);
+  assert.match(html, /Pasar al siguiente ejercicio →/);
+  assert.doesNotMatch(html, /Finalizar sesión →/);
+  assert.doesNotMatch(html, /data-workout-all-completed/);
+
+  // Summary highlights pending exercise and exercise list distinguishes completed vs pending
+  assert.match(html, /Después: Prensa de piernas/);
+  assert.match(html, /Lista de ejercicios \(3\/4 completados\)/);
+  assert.match(html, /data-exercise-status="completed"/);
+  assert.match(html, /data-exercise-status="pending"/);
+  assert.match(html, /Listo/);
+  assert.match(html, /Pendiente/);
+});
+
+test('Cockpit 13: Al completar el 100% de las series la sesión sigue abierta con controles para agregar series/ejercicios y botón destacado de Finalizar entrenamiento', () => {
+  const session = createMockSession();
+  for (const ex of session.exercises) {
+    for (const s of ex.sets) {
+      s.completed = true;
+    }
+  }
+
+  const html = renderToStaticMarkup(
+    React.createElement(ActiveWorkoutView, {
+      session,
+      exerciseIndex: 1,
+      setIndex: 1,
+      activeTimer: null,
+      exerciseSuggestions: [],
+      onSelectExercise: noop,
+      onSelectSet: noop,
+      onAdjustWeight: noop,
+      onAdjustReps: noop,
+      onUpdateCurrentSet: noop,
+      onToggleCurrentSet: noop,
+      onAddSet: noop,
+      onDeleteSet: noop,
+      onAddExercise: noop,
+      onDeleteExercise: noop,
+      onUpdateEquipment: noop,
+      onUpdateBarWeight: noop,
+      onPropagateExercise: noop,
+      onOpenCalculator: noop,
+      onOpenHistory: noop,
+      onOpenHistoryTab: noop,
+      onOpenProgressTab: noop,
+      onFinish: noop,
+      onDeleteSession: noop,
+      onSaveAsTemplate: noop,
+      onEditSessionDate: noop,
+      onEditSessionWeek: noop,
+    })
+  );
+
+  assert.match(html, /data-workout-all-completed/);
+  assert.match(html, /Todas las series completadas \(5\/5\)/);
+  assert.match(html, /Finalizar entrenamiento/);
+  // Controls to add extra sets and exercises remain available
+  assert.match(html, /aria-label="Agregar serie"/);
+  assert.match(html, /Agregar ejercicio a la sesión/);
+});

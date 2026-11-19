@@ -33,7 +33,6 @@ test('Rules financieras: estado servidor, concurrencia, rutas alternativas y lí
       await assertFails(setDoc(ref, { ...initial, parentRevision: '999999999999999999', revision: 'future-counter', clientUpdatedAt: Date.now() + 99999999 }));
       await assertFails(setDoc(ref, { ...initial, parentRevision: null, revision: 'recreate' }));
       await assertFails(setDoc(ref, { ...initial, parentRevision: 'r0', revision: 'old-snapshot' }));
-      await assertFails(deleteDoc(ref));
       assert.equal((await getDoc(ref)).data()!.revision, 'r3');
     });
     await context.test('dos escritores desde el mismo padre: solo uno confirma; la revisión de archivo tampoco se filtra del lote rechazado', async () => {
@@ -58,6 +57,7 @@ test('Rules financieras: estado servidor, concurrencia, rutas alternativas y lí
       await assertFails(setDoc(doc(db, 'users', uid, 'finance', 'state'), { finance: { transactions: [] } }));
       await assertFails(setDoc(doc(db, 'users', uid, 'lifeosModules', 'finance', 'nested', 'state'), { data: initial.data }));
       await assertFails(setDoc(doc(environment.authenticatedContext('other-user').firestore(), 'users', uid, 'lifeosModules', 'finance'), current));
+      await assertFails(deleteDoc(ref));
       // A standalone archive append is allowed, but does not publish a head.
       await assertSucceeds(setDoc(doc(db, 'users', uid, 'lifeosRevisions', 'archive-only'), { ...initial, revision: 'archive-only' }));
       await assertFails(setDoc(doc(db, 'users', uid, 'lifeosRevisions', 'archive-only'), { ...initial, revision: 'archive-only', data: current.data }));

@@ -29,8 +29,12 @@ import {
   readLegacyCloudState,
   CloudRevisionConflict,
   CloudProtocolConflict,
+  CloudSyncSuspendedError,
   ResaleRevisionConflict,
   ResaleProtocolConflict,
+  deleteCloudAccountData,
+  isCloudSyncSuspended,
+  resumeCloudSync,
   saveCloudBaselineData,
   saveCloudBaselines,
   saveCloudRevisions,
@@ -38,6 +42,7 @@ import {
   signInToCloud,
   signOutFromCloud,
   subscribeCloudModules,
+  suspendCloudSync,
   writeCloudModulesGuarded,
   type CloudSyncStatus,
   type CloudUser,
@@ -94,7 +99,6 @@ import { MobileQuickCapture, type CaptureKind } from './components/MobileQuickCa
 import { MobileNav } from './components/MobileNav';
 import { ToastViewport } from './components/ToastViewport';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
-import { UnlockDeviceModal } from './components/UnlockDeviceModal';
 import { GymRestOverlay } from './components/GymRestOverlay';
 import { StudyActiveOverlay } from './components/StudyActiveOverlay';
 import { showToast } from './lib/toast';
@@ -121,6 +125,7 @@ const CheckoutModal = lazy(() => import('./components/CheckoutModal').then(modul
 const GlobalSearchModal = lazy(() => import('./components/GlobalSearchModal').then(module => ({ default: module.GlobalSearchModal })));
 const CloudConflictModal = lazy(() => import('./components/CloudConflictModal').then(module => ({ default: module.CloudConflictModal })));
 const OnboardingView = lazy(() => import('./components/OnboardingView').then(module => ({ default: module.OnboardingView })));
+const UnlockDeviceModal = lazy(() => import('./components/UnlockDeviceModal').then(module => ({ default: module.UnlockDeviceModal })));
 
 const dialogLoading = (label: string) => <div role="status" className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-4 text-sm"><span className="rounded-2xl bg-[var(--card)] p-5 text-[var(--text)]">{label}</span></div>;
 
@@ -274,6 +279,7 @@ export default function App() {
   const cloudUserRef = useRef<CloudUser | null>(null);
   const cloudSessionEpochRef = useRef(0);
   const storageUserIdRef = useRef<string | null>(null);
+  const lastDeletedUserIdRef = useRef<string | null>(null);
   const revisionsRef = useRef<SyncRevisionMap>({});
   const baselinesRef = useRef<SyncBaselineMap>({});
   const baselineDataRef = useRef<Partial<Record<SyncModuleKey, unknown>>>({});
@@ -474,6 +480,12 @@ export default function App() {
   };
 
   const flushCloudSave = () => {
+    if (isCloudSyncSuspended()) {
+      queuedModulesRef.current.clear();
+      queuedStateRef.current = null;
+      syncTimerRef.current = null;
+      return;
+    }
     const user = cloudUserRef.current;
     const currentState = stateRef.current;
     const modules = [...queuedModulesRef.current];
@@ -597,7 +609,7 @@ export default function App() {
                 importBackupTimeoutRef.current = null;
               }
             }
-            if (!isCurrentSession()) return;
+            if (!isCurrentSession() || err instanceof CloudSyncSuspendedError || isCloudSyncSuspended()) return;
             if (err instanceof CloudRevisionConflict) {
               traceFinanceSync('publish-stale', { writes: res.writes });
               res.writes.forEach((write) => {
@@ -721,7 +733,7 @@ export default function App() {
           });
       })
       .catch((err) => {
-        if (!isCurrentSession()) return;
+        if (!isCurrentSession() || err instanceof CloudSyncSuspendedError || isCloudSyncSuspended()) return;
         console.error('[CloudSync] Guarded write failed:', err);
         setSyncErrorMessage(err instanceof Error ? err.message : String(err || ''));
         if (err instanceof ResaleProtocolConflict && modules.includes('resale')) {
@@ -776,6 +788,7 @@ export default function App() {
   };
 
   const queueCloudSave = (nextState: LifeOSState, modules: SyncModuleKey[]) => {
+    if (isCloudSyncSuspended()) return;
     const user = cloudUserRef.current;
     if (!cloudSyncConfigured || !user || modules.length === 0 || storageUserIdRef.current !== user.uid) return;
     if (nextState.resale.commercial?.business && modules.some(module => module === 'resale' || module === 'finance')) {
@@ -1613,6 +1626,56 @@ export default function App() {
     } catch {
       setSyncStatus('error');
     }
+  };
+
+  const handleDeleteCloudAccount = async (): Promise<void> => {
+    const userId = cloudUserRef.current?.uid ?? storageUserIdRef.current;
+    if (!userId) {
+      throw new Error('No hay una cuenta de Google conectada en este dispositivo.');
+    }
+    // Stop every autosave before touching Firestore: a late flush must never
+    // recreate the documents we are about to delete.
+    suspendCloudSync();
+    if (syncTimerRef.current !== null) {
+      window.clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = null;
+    }
+    if (retryTimeoutRef.current !== null) {
+      window.clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+    queuedModulesRef.current.clear();
+    queuedStateRef.current = null;
+    try {
+      await deleteCloudAccountData(userId);
+      // Remember the deleted uid before signOutFromCloud() resets storageUserIdRef to null,
+      // so handleDeleteLocalData can still wipe every scoped key and IndexedDB Device Trust.
+      lastDeletedUserIdRef.current = userId;
+      // Preserve a single unscoped local copy (if the user chooses to keep local data),
+      // remove all scoped keys for userId, and mark LAST_USER_KEY as __deleted__:${userId}
+      // so a future re-login starts clean without resurrecting deleted cloud data.
+      const { preserveLocalStateAfterCloudDeletion } = await import('./lib/accountDeletion');
+      const { preservedLocally } = await preserveLocalStateAfterCloudDeletion(userId, stateRef.current);
+      if (!preservedLocally) {
+        showToast('La cuenta en la nube fue eliminada, pero no se pudo guardar una copia local en este navegador. Exportá un backup si querés conservar tus datos.', 'error');
+      }
+      await signOutFromCloud();
+    } catch (error) {
+      resumeCloudSync();
+      throw error;
+    }
+    resumeCloudSync();
+  };
+
+  const handleDeleteLocalData = () => {
+    const userId = storageUserIdRef.current ?? lastDeletedUserIdRef.current;
+    lastDeletedUserIdRef.current = null;
+    void import('./lib/accountDeletion').then(({ wipeLocalStateAfterDeletion }) => {
+      const fresh = wipeLocalStateAfterDeletion(userId);
+      stateRef.current = fresh;
+      setStateObj({ state: fresh, storageBackend: 'localStorage' });
+      setSyncStatus(cloudSyncConfigured ? 'signed-out' : 'unavailable');
+    });
   };
 
   const handleExportResaleConflict = () => {
@@ -2713,6 +2776,8 @@ export default function App() {
                   lastSyncedAt={lastSyncedAt}
                   onCloudSignIn={handleCloudSignIn}
                   onCloudSignOut={handleCloudSignOut}
+                  onDeleteCloudAccount={handleDeleteCloudAccount}
+                  onDeleteLocalData={handleDeleteLocalData}
                   onForceSync={handleForceSync}
                 />
               )}
@@ -2969,13 +3034,17 @@ export default function App() {
         currentView={currentView}
         isCoexisting={isGymOverlayActive}
       />
-      <UnlockDeviceModal
-        isOpen={isCryptoUnlockOpen}
-        onClose={() => setIsCryptoUnlockOpen(false)}
-        userId={cloudUser?.uid || storageUserId || ''}
-        onUnlocked={handleCryptoUnlocked}
-        showToast={showToast}
-      />
+      {isCryptoUnlockOpen && (
+        <Suspense fallback={dialogLoading('Preparando desbloqueo…')}>
+          <UnlockDeviceModal
+            isOpen={isCryptoUnlockOpen}
+            onClose={() => setIsCryptoUnlockOpen(false)}
+            userId={cloudUser?.uid || storageUserId || ''}
+            onUnlocked={handleCryptoUnlocked}
+            showToast={showToast}
+          />
+        </Suspense>
+      )}
       {!__LIFEOS_PORTABLE__ && <PwaUpdatePrompt />}
     </div>
     </PrivacyProvider>

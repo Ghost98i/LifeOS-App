@@ -17,6 +17,7 @@ import {
 } from 'firebase/auth';
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocFromServer,
@@ -28,6 +29,7 @@ import {
   persistentMultipleTabManager,
   runTransaction,
   serverTimestamp,
+  setDoc,
   writeBatch,
   terminate,
   type Firestore,
@@ -182,6 +184,9 @@ export async function persistGymHistoryChunks(
   prefix: string = 'gym_history_chunk'
 ): Promise<void> {
   for (let i = 0; i < chunks.length; i++) {
+    if (isCloudSyncSuspended()) {
+      return;
+    }
     const chunkSessions = chunks[i];
     const chunkDocId = `${prefix}_${i}`;
     const chunkContent = { [propName]: chunkSessions };
@@ -202,6 +207,10 @@ export async function persistGymHistoryChunks(
       sessionKey
     );
 
+    if (isCloudSyncSuspended()) {
+      return;
+    }
+
     const chunkPayload = {
       schemaVersion: CURRENT_SCHEMA_VERSION,
       syncProtocolVersion: isEncrypted ? CURRENT_SYNC_PROTOCOL_VERSION : 1,
@@ -215,14 +224,16 @@ export async function persistGymHistoryChunks(
     };
 
     try {
+      if (isCloudSyncSuspended()) {
+        return;
+      }
       if (chunkWriterForTesting) {
         await chunkWriterForTesting(chunkDocId, chunkPayload);
       } else {
-        const { setDoc } = await import('firebase/firestore');
         await setDoc(doc(modulesCollection(userId, db), chunkDocId), chunkPayload);
       }
 
-      if (typeof localStorage !== 'undefined') {
+      if (!isCloudSyncSuspended() && typeof localStorage !== 'undefined') {
         localStorage.setItem(storageKey, chunkHash);
       }
     } catch (err) {
@@ -662,6 +673,196 @@ export async function signOutFromCloud(): Promise<void> {
   await signOut(auth);
 }
 
+/**
+ * Account deletion switch. While suspended, no queued or scheduled write may
+ * reach Firestore, so a deletion cannot be undone by a late autosave.
+ */
+let cloudSyncSuspended = false;
+
+export class CloudSyncSuspendedError extends Error {
+  constructor() {
+    super('La sincronización en la nube está suspendida.');
+  }
+}
+
+export function isCloudSyncSuspended(): boolean {
+  return cloudSyncSuspended;
+}
+
+export function suspendCloudSync(): void {
+  cloudSyncSuspended = true;
+}
+
+export function resumeCloudSync(): void {
+  cloudSyncSuspended = false;
+}
+
+export const DELETED_USER_MARKER_PREFIX = '__deleted__:';
+
+export function markDeletedCloudUserId(userId: string): void {
+  try {
+    localStorage.setItem(LAST_USER_KEY, `${DELETED_USER_MARKER_PREFIX}${userId}`);
+  } catch {
+    // Storage may be unavailable (private mode).
+  }
+}
+
+export const CLOUD_ACCOUNT_COLLECTIONS = ['lifeosModules', 'lifeosRevisions', 'lifeosAccount'] as const;
+export type CloudAccountCollection = typeof CLOUD_ACCOUNT_COLLECTIONS[number];
+
+const ACCOUNT_DELETE_BATCH_SIZE = 400;
+
+export interface DeleteCloudAccountResult {
+  deleted: number;
+  legacyStateDeleted: boolean;
+  collections: Record<CloudAccountCollection, number>;
+}
+
+export interface DeleteCloudAccountOps {
+  createMarker: (userId: string, payload: { requestedAt: string; deviceId: string }) => Promise<void>;
+  deleteMarker: (userId: string) => Promise<void>;
+  hasLegacyState: (userId: string) => Promise<boolean>;
+  deleteLegacyState: (userId: string) => Promise<void>;
+  listCollectionDocIds: (userId: string, name: CloudAccountCollection) => Promise<string[]>;
+  deleteCollectionBatch: (userId: string, name: CloudAccountCollection, docIds: string[]) => Promise<void>;
+}
+
+/**
+ * Deletes every document owned by `userId`:
+ * 1. Creates `users/{userId}/lifeosAccount/deletion` first to block concurrent
+ *    writes in Firestore Security Rules and authorize deletions.
+ * 2. Deletes the legacy monolithic doc `users/{userId}/lifeos/state` if present.
+ * 3. Deletes `lifeosModules`, `lifeosRevisions`, and `lifeosAccount` (leaving
+ *    the `deletion` marker for last) in batches of 400.
+ * 4. Runs a second verification pass while the marker is still active, then
+ *    removes the `deletion` marker itself.
+ */
+export async function deleteCloudAccountData(
+  userId: string,
+  database?: Firestore,
+  customOps?: DeleteCloudAccountOps
+): Promise<DeleteCloudAccountResult> {
+  const result: DeleteCloudAccountResult = {
+    deleted: 0,
+    legacyStateDeleted: false,
+    collections: { lifeosModules: 0, lifeosRevisions: 0, lifeosAccount: 0 },
+  };
+  let deviceId = 'unknown';
+  try {
+    if (typeof localStorage !== 'undefined') {
+      deviceId = getOrCreateDeviceId();
+    }
+  } catch {
+    // Ignore storage errors in private mode or test environments
+  }
+
+  const ops: DeleteCloudAccountOps = customOps ?? (() => {
+    const db = database ?? services().db;
+    const deletionMarkerRef = doc(db, 'users', userId, 'lifeosAccount', 'deletion');
+    const legacyStateRef = doc(db, 'users', userId, 'lifeos', 'state');
+    return {
+      createMarker: async (_uid, payload) => {
+        await setDoc(deletionMarkerRef, payload);
+      },
+      deleteMarker: async () => {
+        await deleteDoc(deletionMarkerRef);
+      },
+      hasLegacyState: async () => {
+        const snap = await getDocFromServer(legacyStateRef);
+        return snap.exists();
+      },
+      deleteLegacyState: async () => {
+        await deleteDoc(legacyStateRef);
+      },
+      listCollectionDocIds: async (uid, name) => {
+        const snapshot = await getDocsFromServer(collection(db, 'users', uid, name));
+        return snapshot.docs.map((entry) => entry.id);
+      },
+      deleteCollectionBatch: async (uid, name, docIds) => {
+        const batch = writeBatch(db);
+        for (const id of docIds) {
+          batch.delete(doc(db, 'users', uid, name, id));
+        }
+        await batch.commit();
+      },
+    };
+  })();
+
+  await ops.createMarker(userId, {
+    requestedAt: new Date().toISOString(),
+    deviceId,
+  });
+
+  const runDeletePass = async () => {
+    if (await ops.hasLegacyState(userId)) {
+      await ops.deleteLegacyState(userId);
+      result.legacyStateDeleted = true;
+      result.deleted += 1;
+    }
+    for (const name of CLOUD_ACCOUNT_COLLECTIONS) {
+      const docIds = (await ops.listCollectionDocIds(userId, name))
+        .filter((id) => !(name === 'lifeosAccount' && id === 'deletion'));
+      for (let index = 0; index < docIds.length; index += ACCOUNT_DELETE_BATCH_SIZE) {
+        const slice = docIds.slice(index, index + ACCOUNT_DELETE_BATCH_SIZE);
+        await ops.deleteCollectionBatch(userId, name, slice);
+        result.collections[name] += slice.length;
+        result.deleted += slice.length;
+      }
+    }
+  };
+
+  await runDeletePass();
+  // Second verification pass while the deletion marker still blocks concurrent writes.
+  await runDeletePass();
+
+  await ops.deleteMarker(userId);
+  return result;
+}
+
+/** Removes all local sync bookkeeping and per-account caches associated with a deleted account. */
+export function clearCloudAccountLocalState(userId: string): void {
+  const keys = [
+    `${REVISION_KEY}:${userId}`,
+    `${BASELINE_KEY}:${userId}`,
+    `${BASELINE_DATA_KEY}:${userId}`,
+    `${SNAPSHOT_PREFIX}local:${userId}`,
+    `${SNAPSHOT_PREFIX}remote:${userId}`,
+    `${SNAPSHOT_PREFIX}base:${userId}`,
+    `${PAIRED_USER_KEY}:${userId}`,
+    `lifeos-cloud-tombstones-v2:${userId}`,
+    `lifeos-rotation-pending-v1:${userId}`,
+    `lifeos-resale-conflict-v1:${userId}`,
+    `celestea-note-placements-v1:${encodeURIComponent(userId)}`,
+    LAST_USER_KEY,
+  ];
+  for (const key of keys) {
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      // Storage may be unavailable (private mode); nothing else to clean.
+    }
+  }
+  const gymChunkPrefixes = [
+    `lifeos_gym_chunk_hash_${userId}_`,
+    `lifeos_gym_weight_chunk_hash_${userId}_`,
+    `lifeos_gym_measurements_chunk_hash_${userId}_`,
+  ];
+  try {
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && gymChunkPrefixes.some((prefix) => key.startsWith(prefix))) {
+        keysToRemove.push(key);
+      }
+    }
+    for (const key of keysToRemove) {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    // Storage may be unavailable (private mode); nothing else to clean.
+  }
+}
+
 function modulesCollection(userId: string, database?: Firestore) {
   return collection(database ?? services().db, 'users', userId, 'lifeosModules');
 }
@@ -855,6 +1056,7 @@ export async function writeCloudModulesAsync(
   const moduleChunks = chunkSyncModulesForTransaction(modules, 5);
   const completion = (async () => {
     for (const chunk of moduleChunks) {
+      if (isCloudSyncSuspended()) throw new CloudSyncSuspendedError();
       const batch = writeBatch(db);
       for (const module of chunk) {
         const entry = payloadByModule.get(module);
@@ -862,6 +1064,7 @@ export async function writeCloudModulesAsync(
         batch.set(doc(modulesCollection(userId), module), entry.payload);
         batch.set(doc(revisionsCollection(userId), entry.revision), entry.payload);
       }
+      if (isCloudSyncSuspended()) throw new CloudSyncSuspendedError();
       await batch.commit();
     }
   })();
@@ -936,6 +1139,7 @@ export function writeCloudModules(
   const moduleChunks = chunkSyncModulesForTransaction(modules, 5);
   const completion = (async () => {
     for (const chunk of moduleChunks) {
+      if (isCloudSyncSuspended()) throw new CloudSyncSuspendedError();
       const batch = writeBatch(db);
       for (const module of chunk) {
         const entry = payloadByModule.get(module);
@@ -943,6 +1147,7 @@ export function writeCloudModules(
         batch.set(doc(modulesCollection(userId), module), entry.payload);
         batch.set(doc(revisionsCollection(userId), entry.revision), entry.payload);
       }
+      if (isCloudSyncSuspended()) throw new CloudSyncSuspendedError();
       await batch.commit();
     }
   })();
@@ -1030,6 +1235,9 @@ async function writeCloudModulesGuardedInternal(
   incompatibleModules?: SyncModuleKey[];
   completion: Promise<void>;
 }> {
+  if (isCloudSyncSuspended()) {
+    throw new CloudSyncSuspendedError();
+  }
   const isCommercialPilot = commercialWriteContext?.mode === 'pilot';
   const isCommercialPublication = commercialWriteContext !== undefined;
   if (isCommercialPublication) {
@@ -1200,12 +1408,21 @@ async function writeCloudModulesGuardedInternal(
         ? new ResaleRevisionConflict(diverged) : new CloudRevisionConflict(diverged);
     };
     const runChunkTransaction = (group: typeof payloads) => {
+      if (isCloudSyncSuspended()) {
+        return Promise.reject(new CloudSyncSuspendedError());
+      }
       const runner = transactionRunnerForTesting || runTransaction;
       return runner(db, async (transaction) => {
+        if (isCloudSyncSuspended()) {
+          throw new CloudSyncSuspendedError();
+        }
         // Read all documents in the chunk before scheduling writes; the group commits or none does.
         const snapshots = await Promise.all(group.map(({ module }) =>
           transaction.get(doc(modulesCollection(userId, db), module))));
         validateGroupSnapshots(group, snapshots);
+        if (isCloudSyncSuspended()) {
+          throw new CloudSyncSuspendedError();
+        }
         for (const { module, revision, payload } of group) {
           transaction.set(doc(modulesCollection(userId, db), module), payload);
           transaction.set(doc(revisionsCollection(userId, db), revision), payload);
@@ -1219,6 +1436,9 @@ async function writeCloudModulesGuardedInternal(
     }));
 
     const executeAll = async () => {
+      if (isCloudSyncSuspended()) {
+        throw new CloudSyncSuspendedError();
+      }
       if (payloadChunks.length <= 1) {
         await runChunkTransaction(payloadChunks[0] ?? []);
       } else {
@@ -1226,6 +1446,9 @@ async function writeCloudModulesGuardedInternal(
           getDoc(doc(modulesCollection(userId, db), module))));
         validateGroupSnapshots(payloads, preSnapshots);
         for (const chunk of payloadChunks) {
+          if (isCloudSyncSuspended()) {
+            throw new CloudSyncSuspendedError();
+          }
           await runChunkTransaction(chunk);
         }
       }
@@ -1234,21 +1457,21 @@ async function writeCloudModulesGuardedInternal(
     const completion = (async () => {
       try {
         await executeAll();
-        if (gymHistoryChunksToPersist.length > 0) {
+        if (gymHistoryChunksToPersist.length > 0 && !isCloudSyncSuspended()) {
           try {
             await persistGymHistoryChunks(userId, gymHistoryChunksToPersist, db, sessionKey, deviceId, clientUpdatedAt, 'sessions', 'gym_history_chunk');
           } catch (chunkErr) {
             console.error('Error persistiendo chunks históricos de gimnasio tras commit exitoso de gym:', chunkErr);
           }
         }
-        if (gymWeightChunksToPersist.length > 0) {
+        if (gymWeightChunksToPersist.length > 0 && !isCloudSyncSuspended()) {
           try {
             await persistGymHistoryChunks(userId, gymWeightChunksToPersist, db, sessionKey, deviceId, clientUpdatedAt, 'weight', 'gym_weight_chunk');
           } catch (chunkErr) {
             console.error('Error persistiendo chunks de peso tras commit exitoso de gym:', chunkErr);
           }
         }
-        if (gymMeasurementChunksToPersist.length > 0) {
+        if (gymMeasurementChunksToPersist.length > 0 && !isCloudSyncSuspended()) {
           try {
             await persistGymHistoryChunks(userId, gymMeasurementChunksToPersist, db, sessionKey, deviceId, clientUpdatedAt, 'measurements', 'gym_measurements_chunk');
           } catch (chunkErr) {
@@ -1256,6 +1479,9 @@ async function writeCloudModulesGuardedInternal(
           }
         }
       } catch (err) {
+        if (err instanceof CloudSyncSuspendedError || isCloudSyncSuspended()) {
+          throw err;
+        }
         if (isPermissionDenied(err) && !modules.includes('resale') && !modules.includes('finance')) {
           for (const entry of payloads) {
             try {
@@ -1445,6 +1671,9 @@ export async function writeCloudModulesGuarded(
   try {
     return await attemptWrite(baseRevisions);
   } catch (err) {
+    if (err instanceof CloudSyncSuspendedError || isCloudSyncSuspended()) {
+      throw err;
+    }
     if (isPermissionDenied(err) && !modules.includes('resale') && !modules.includes('finance')) {
       const healedRevisions: SyncRevisionMap = { ...baseRevisions };
       try {

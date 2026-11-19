@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type { LifeOSState } from '../types';
 import { AppIcon } from './AppIcon';
 import { ContextualHelp } from './ContextualHelp';
 import { UnlockDeviceModal } from './UnlockDeviceModal';
+import { useDialogFocus } from '../hooks/useDialogFocus';
 import { showToast } from '../lib/toast';
 import { SYNC_MODULES } from '../lib/syncModel';
 import {
@@ -43,6 +44,8 @@ interface PrivacySecuritySectionProps {
   storageUserId: string | null;
   cloudConnected: boolean;
   onForceSync?: () => void;
+  onDeleteCloudAccount?: () => Promise<void>;
+  onDeleteLocalData?: () => void;
 }
 
 export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
@@ -50,6 +53,8 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
   storageUserId,
   cloudConnected,
   onForceSync,
+  onDeleteCloudAccount,
+  onDeleteLocalData,
 }) => {
   const [capability, setCapability] = useState<AccountSyncCapability | null>(null);
   const [isLoadingCap, setIsLoadingCap] = useState(false);
@@ -98,6 +103,14 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
   // Plaintext Inventory & Purge State (Stage E)
   const [plaintextInventory, setPlaintextInventory] = useState<CloudPlaintextInventory | null>(null);
   const [isPurging, setIsPurging] = useState<boolean>(false);
+
+  // Account & cloud data deletion
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState('');
+  const [deleteStage, setDeleteStage] = useState<'confirm' | 'local'>('confirm');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteDialogRef = useRef<HTMLDivElement | null>(null);
 
   // Rotation Pending Verification State (Stage E fail-safe)
   const [pendingRotation, setPendingRotation] = useState<RotationPendingState | null>(() =>
@@ -364,6 +377,48 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
     setIsEnrolled(false);
     showToast('Dispositivo desvinculado. La sesión fue bloqueada en este navegador.');
     if (onForceSync) onForceSync();
+  };
+
+  const openDeleteModal = () => {
+    setDeleteConfirmation('');
+    setDeleteError(null);
+    setDeleteStage('confirm');
+    setIsDeleteOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    if (isDeleting) return;
+    setIsDeleteOpen(false);
+    setDeleteConfirmation('');
+    setDeleteError(null);
+    setDeleteStage('confirm');
+  };
+
+  useDialogFocus(isDeleteOpen, deleteDialogRef, closeDeleteModal);
+
+  const handleDeleteAccount = async () => {
+    if (!onDeleteCloudAccount || deleteConfirmation.trim().toUpperCase() !== 'ELIMINAR') return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await onDeleteCloudAccount();
+      setDeleteStage('local');
+      showToast('Cuenta y datos en la nube eliminados.', 'success');
+    } catch (error) {
+      setDeleteError(error instanceof Error
+        ? error.message
+        : 'No se pudo eliminar la cuenta en la nube. Revisá tu conexión e intentá de nuevo.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteLocal = () => {
+    onDeleteLocalData?.();
+    setIsDeleteOpen(false);
+    setDeleteConfirmation('');
+    setDeleteStage('confirm');
+    showToast('Datos locales eliminados de este dispositivo.', 'success');
   };
 
   return (
@@ -658,6 +713,40 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
           </div>
         </div>
       </details>
+
+      {/* Account & cloud data deletion */}
+      <div className="border-t border-[var(--border)] pt-4 space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="max-w-xl space-y-1">
+            <p className="text-xs font-bold text-[var(--text)]">Eliminar cuenta y datos en la nube</p>
+            <p className="text-[11px] leading-relaxed text-[var(--text-soft)]">
+              Borra de forma permanente los módulos, el historial de revisiones y la envoltura de claves asociados a tu cuenta de Google. La sincronización se detiene primero para que ningún guardado pendiente vuelva a crear esos documentos.
+            </p>
+            <a
+              href="/eliminar-cuenta.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex text-[11px] font-semibold text-[var(--blue)] hover:underline"
+            >
+              Instrucciones públicas, incluso si desinstalaste la app →
+            </a>
+          </div>
+          <button
+            type="button"
+            onClick={openDeleteModal}
+            disabled={!cloudConnected || !onDeleteCloudAccount}
+            title={!cloudConnected ? 'Conectá tu cuenta de Google primero' : 'Eliminar la cuenta y los datos en la nube'}
+            className={`flex shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold shadow-2xs transition-all ${
+              cloudConnected && onDeleteCloudAccount
+                ? 'cursor-pointer border border-rose-500/30 bg-rose-500/10 text-rose-600 hover:bg-rose-500/20 dark:text-rose-400'
+                : 'cursor-not-allowed border border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-faint)]'
+            }`}
+          >
+            <AppIcon name="trash" className="h-4 w-4" />
+            <span>Eliminar cuenta y datos en la nube</span>
+          </button>
+        </div>
+      </div>
 
       {/* Wizard Modal: 4 Steps */}
       {wizardStep > 0 && (
@@ -1132,6 +1221,95 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                 Descargar archivo
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {isDeleteOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div ref={deleteDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Eliminar cuenta y datos" className="w-full max-w-lg space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6 shadow-2xl">
+            {deleteStage === 'confirm' ? (
+              <>
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-rose-500/10 p-2.5 text-rose-500">
+                    <AppIcon name="trash" className="h-6 w-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-base font-bold text-[var(--text)]">Eliminar cuenta y datos en la nube</h3>
+                    <p className="text-xs leading-relaxed text-[var(--text-soft)]">
+                      Esta acción es permanente y no se puede deshacer. Se eliminarán de Firestore todos los módulos, las revisiones y las claves asociadas a tu cuenta de Google. Después cerraremos tu sesión.
+                    </p>
+                  </div>
+                </div>
+                <ul className="list-inside list-disc space-y-1 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3 text-[11px] text-[var(--text-soft)]">
+                  <li>Módulos sincronizados y su historial de revisiones.</li>
+                  <li>Envoltura de claves de cifrado de extremo a extremo.</li>
+                  <li>Metadatos de sincronización de esta cuenta.</li>
+                </ul>
+                <div className="space-y-1.5">
+                  <label htmlFor="delete-account-confirmation" className="text-xs font-semibold text-[var(--text)]">
+                    Escribí <strong>ELIMINAR</strong> para confirmar
+                  </label>
+                  <input
+                    id="delete-account-confirmation"
+                    type="text"
+                    value={deleteConfirmation}
+                    onChange={(event) => setDeleteConfirmation(event.target.value)}
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] p-2.5 text-sm font-semibold uppercase tracking-widest text-[var(--text)] outline-hidden focus:border-rose-500"
+                  />
+                </div>
+                {deleteError && <p className="text-xs font-semibold text-rose-500">{deleteError}</p>}
+                <div className="flex flex-col-reverse justify-end gap-2 border-t border-[var(--border)] pt-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={closeDeleteModal}
+                    disabled={isDeleting}
+                    className="cursor-pointer rounded-xl border border-[var(--border)] px-4 py-2 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isDeleting || deleteConfirmation.trim().toUpperCase() !== 'ELIMINAR'}
+                    onClick={() => { void handleDeleteAccount(); }}
+                    className="cursor-pointer rounded-xl bg-rose-600 px-5 py-2 text-xs font-bold text-white shadow-2xs hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isDeleting ? 'Eliminando…' : 'Eliminar definitivamente'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-start gap-3">
+                  <div className="rounded-xl bg-emerald-500/10 p-2.5 text-emerald-500">
+                    <AppIcon name="check" className="h-6 w-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-base font-bold text-[var(--text)]">Cuenta y datos en la nube eliminados</h3>
+                    <p className="text-xs leading-relaxed text-[var(--text-soft)]">
+                      Tu sesión de Google se cerró. Los datos que quedan en este dispositivo son solo locales y ya no están vinculados a la nube. ¿Querés eliminarlos también?
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-col-reverse justify-end gap-2 border-t border-[var(--border)] pt-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={closeDeleteModal}
+                    className="cursor-pointer rounded-xl border border-[var(--border)] px-4 py-2 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)]"
+                  >
+                    Conservar datos locales
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteLocal}
+                    className="cursor-pointer rounded-xl bg-rose-600 px-5 py-2 text-xs font-bold text-white shadow-2xs hover:bg-rose-700"
+                  >
+                    Eliminar también los datos locales
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

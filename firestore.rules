@@ -1,9 +1,52 @@
 rules_version = '2';
 
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: systemCapabilities/{capabilityId}
+//   - Only 'commercial' is readable by authenticated users; writes are server-only.
+//
+// Collection: users/{userId}/lifeosAccount/{documentId}
+//   - capability: { version: int, minimumSyncProtocolVersion: int, encryptionState: 'plaintext'|'mixed'|'encrypted', encryptedModules?: list, updatedAt: string }
+//   - keyEnvelope: WrappedKeyEnvelope (strict AAD bound to userId)
+//   - deletion: { requestedAt: string (1..64 chars), deviceId?: string (<=128 chars) }
+//     Temporary marker created by the owner during account deletion to block concurrent
+//     writes and authorize permanent removal of account documents.
+//
+// Collection: users/{userId}/lifeos/state
+//   - Legacy monolithic v1 state document: { schemaVersion: int, state: map, deviceId: string, updatedAt }
+//
+// Collection: users/{userId}/lifeosModules/{module}
+//   - Module heads (15 modules + gym chunks): strict schema, E2EE no-downgrade, CAS parentRevision on finance/resale.
+//
+// Collection: users/{userId}/lifeosRevisions/{revisionId}
+//   - Append-only revision archive for conflict recovery; deletions require deletion marker or E2EE plaintext purge.
+//
+// ===============================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
     function isOwner(userId) {
-      return request.auth != null && request.auth.uid == userId;
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasDeletionMarker(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId)/lifeosAccount/deletion);
+    }
+
+    function isValidDeletionMarker(data) {
+      return data is map
+        && data.keys().hasOnly(['requestedAt', 'deviceId'])
+        && data.keys().hasAll(['requestedAt'])
+        && data.requestedAt is string
+        && data.requestedAt.size() > 0
+        && data.requestedAt.size() <= 64
+        && (!('deviceId' in data) || (data.deviceId is string && data.deviceId.size() <= 128));
     }
 
     function validModule(module) {
@@ -240,11 +283,12 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
-    // Account Sync Capability & Cloud Wrapped Key Envelope
+    // Account Sync Capability, Cloud Wrapped Key Envelope & Deletion Marker
     match /users/{userId}/lifeosAccount/{documentId} {
       allow read: if isOwner(userId);
       allow create, update: if isOwner(userId) && (
         (documentId == 'capability'
+          && !hasDeletionMarker(userId)
           && request.resource.data.keys().hasOnly([
             'version', 'minimumSyncProtocolVersion', 'encryptionState', 'encryptedModules', 'updatedAt'
           ])
@@ -255,18 +299,25 @@ service cloud.firestore {
           && request.resource.data.updatedAt is string)
         ||
         (documentId == 'keyEnvelope'
+          && !hasDeletionMarker(userId)
           && isValidWrappedKeyEnvelope(request.resource.data, userId))
+        ||
+        (documentId == 'deletion'
+          && isValidDeletionMarker(request.resource.data))
       );
-      allow delete: if false;
+      // Account deletion requires an explicit deletion marker created by the owner.
+      // Deleting the marker itself is permitted last because exists() checks pre-delete state.
+      allow delete: if isOwner(userId) && hasDeletionMarker(userId);
     }
 
     // Lectura temporal para migrar instalaciones que usaban el documento único v1.
     // Una vez activado E2EE (mixed o encrypted), no se permiten escrituras al estado global v1.
-    // Purga permitida únicamente cuando la cuenta ha culminado la migración E2EE ('encrypted').
+    // Purga permitida cuando la cuenta culminó E2EE ('encrypted') o durante eliminación explícita de cuenta.
     match /users/{userId}/lifeos/{documentId} {
       allow read: if isOwner(userId) && documentId == 'state';
       allow create, update: if isOwner(userId)
         && documentId == 'state'
+        && !hasDeletionMarker(userId)
         && legacyWritesPermitted(userId)
         && request.resource.data.keys().hasOnly(['schemaVersion', 'state', 'deviceId', 'updatedAt'])
         && request.resource.data.schemaVersion is int
@@ -274,14 +325,15 @@ service cloud.firestore {
         && request.resource.data.deviceId is string;
       allow delete: if isOwner(userId)
         && documentId == 'state'
-        && hasCapability(userId)
-        && getCapability(userId).encryptionState == 'encrypted';
+        && (hasDeletionMarker(userId)
+          || (hasCapability(userId) && getCapability(userId).encryptionState == 'encrypted'));
     }
 
     match /users/{userId}/lifeosModules/{module} {
       allow list: if isOwner(userId);
       allow get: if isOwner(userId) && validModule(module);
       allow create: if isOwner(userId)
+        && !hasDeletionMarker(userId)
         && validModule(module)
         && validSyncPayload(userId, module)
         && (module != 'resale' || (validResaleProtocolWrite() && validResaleCommercialWrite()))
@@ -295,6 +347,7 @@ service cloud.firestore {
           && request.resource.data.parentRevision == null
         ));
       allow update: if isOwner(userId)
+        && !hasDeletionMarker(userId)
         && validModule(module)
         && validSyncPayload(userId, module)
         && (module != 'resale' || (validResaleProtocolWrite() && preservesResaleProtocol()
@@ -315,26 +368,30 @@ service cloud.firestore {
           && resource.data.revision is string
           && request.resource.data.parentRevision == resource.data.revision
         ));
-      allow delete: if false;
+      allow delete: if isOwner(userId) && hasDeletionMarker(userId);
     }
 
     match /users/{userId}/lifeosRevisions/{revisionId} {
       allow read: if isOwner(userId);
       allow create: if isOwner(userId)
+        && !hasDeletionMarker(userId)
         && validModule(request.resource.data.module)
         && validSyncPayload(userId, request.resource.data.module)
         && (request.resource.data.module != 'resale' || (validResaleProtocolWrite() && validResaleCommercialWrite()))
         && (request.resource.data.module != 'finance' || validFinanceCommercialWrite(userId))
         && request.resource.data.revision == revisionId;
       allow update: if isOwner(userId)
+        && !hasDeletionMarker(userId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt']);
-      // Permite purga de revisiones heredadas en texto plano únicamente cuando la cuenta está 'encrypted'
-      // y la revisión existente no estaba cifrada (evita purgar revisiones cifradas legítimas)
-      allow delete: if isOwner(userId)
-        && hasCapability(userId)
-        && ('encryptionState' in getCapability(userId))
-        && getCapability(userId).encryptionState == 'encrypted'
-        && (!('isEncrypted' in resource.data) || resource.data.isEncrypted != true || !('syncProtocolVersion' in resource.data) || resource.data.syncProtocolVersion < 2);
+      // El propietario puede eliminar revisiones durante la eliminación explícita
+      // de cuenta (marcador deletion) o al purgar revisiones legacy en texto plano
+      // tras completar la migración E2EE.
+      allow delete: if isOwner(userId) && (
+        hasDeletionMarker(userId)
+        || (hasCapability(userId)
+          && getCapability(userId).encryptionState == 'encrypted'
+          && (!('isEncrypted' in resource.data) || resource.data.isEncrypted != true))
+      );
     }
   }
 }

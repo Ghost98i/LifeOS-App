@@ -3,13 +3,16 @@ import test from 'node:test';
 import { defaultState } from './storage';
 import {
   applyGymRestTimerAdjustment,
+  areAllSessionSetsCompleted,
   completeGymRestTimer,
   deleteGymSession,
+  findNextPendingExerciseIndex,
   finishGymSession,
   getEffectiveExerciseRestSeconds,
   getGymSettings,
   isExerciseCompleted,
   resolveNextRestTimer,
+  resolveNextWorkoutPositionAfterSetCompletion,
   skipGymRestTimer,
   setGymRestTimerRemaining,
   updateGymSessionSet,
@@ -250,25 +253,121 @@ test('Gym 3.1: siguiente ejercicio automático sólo ocurre en descanso de ejerc
   assert.equal(exRes.nextExerciseIndex, 1);
 });
 
-test('Gym 3.1: último ejercicio no intenta navegar a uno inexistente y no finaliza la sesión automáticamente', () => {
+test('Gym 3.1: completar el último ejercicio con ejercicios anteriores pendientes salta circularmente al pendiente sin finalizar la sesión', () => {
   const { gym, session } = createTestGym();
   const now = 5000000;
 
-  // Complete only set of the LAST exercise (exercise index 1: ex-squat)
+  // Complete only set of the LAST exercise (exercise index 1: ex-squat) while index 0 (ex-bench) is still pending
   updateGymSessionSet(gym, session.id, 'ex-squat', 0, { completed: true });
 
   const timer = resolveNextRestTimer(gym, session.id, 'ex-squat', 0, now);
   assert.ok(timer !== null);
   assert.equal(timer.kind, 'exercise');
   assert.equal(timer.exerciseIndex, 1);
-  // There is no exercise after index 1
-  assert.equal(timer.targetExerciseIndex, undefined);
+  // Circular free-order navigation wraps to pending exercise 0 (ex-bench)
+  assert.equal(timer.targetExerciseIndex, 0);
 
   gym.activeTimer = timer;
   const finishRes = completeGymRestTimer(gym, timer);
-  assert.equal(finishRes.autoAdvanced, false);
-  assert.equal(finishRes.nextExerciseIndex, undefined);
-  assert.equal(session.status, 'active'); // Did NOT automatically close session
+  assert.equal(finishRes.autoAdvanced, true);
+  assert.equal(finishRes.nextExerciseIndex, 0);
+  assert.equal(session.status, 'active'); // Never automatically closes session
+});
+
+test('Regresión orden libre (a): rutina de 4 ejercicios, saltear el 3 y completar el 4 salta al 3 sin finalizar la sesión', () => {
+  const gym: Gym = {
+    weight: [],
+    measurements: [],
+    sessions: [],
+    routineTemplates: [],
+    restDays: [],
+    activeTimer: null,
+    settings: {
+      restBetweenSetsSeconds: 90,
+      restBetweenExercisesSeconds: 150,
+      autoTimerEnabled: true,
+    },
+  };
+
+  const session: GymSession = {
+    id: 'free-order-session',
+    date: '2026-11-19',
+    status: 'active',
+    exercises: [
+      { id: 'ex-1', name: 'Press banca', timerEnabled: true, sets: [{ id: 's1', weight: 80, reps: 8, completed: true }] },
+      { id: 'ex-2', name: 'Remo con barra', timerEnabled: true, sets: [{ id: 's2', weight: 70, reps: 10, completed: true }] },
+      { id: 'ex-3', name: 'Prensa de piernas', timerEnabled: true, sets: [{ id: 's3a', weight: 160, reps: 12, completed: false }, { id: 's3b', weight: 160, reps: 12, completed: false }] },
+      { id: 'ex-4', name: 'Curl bíceps', timerEnabled: true, sets: [{ id: 's4a', weight: 15, reps: 12, completed: true }, { id: 's4b', weight: 15, reps: 12, completed: false }] },
+    ],
+  };
+  gym.sessions.push(session);
+
+  // User completes last set of exercise 4 (index 3) while exercise 3 (index 2) was skipped
+  updateGymSessionSet(gym, session.id, 'ex-4', 1, { completed: true });
+
+  assert.equal(session.status, 'active');
+  assert.equal(findNextPendingExerciseIndex(session, 3), 2);
+  assert.equal(areAllSessionSetsCompleted(session), false);
+
+  // With rest timer enabled: timer targets exercise 3 (index 2), and finishing rest jumps to index 2
+  const timer = resolveNextRestTimer(gym, session.id, 'ex-4', 1, 10000);
+  assert.ok(timer !== null);
+  assert.equal(timer.kind, 'exercise');
+  assert.equal(timer.targetExerciseIndex, 2);
+  gym.activeTimer = timer;
+  const completedRest = completeGymRestTimer(gym, timer);
+  assert.equal(completedRest.autoAdvanced, true);
+  assert.equal(completedRest.nextExerciseIndex, 2);
+  assert.equal(session.status, 'active');
+
+  // With rest timer disabled: immediate jump to exercise 3 (index 2), set 0
+  const immediatePos = resolveNextWorkoutPositionAfterSetCompletion(session, 3, 1, false);
+  assert.deepEqual(immediatePos, { exerciseIndex: 2, setIndex: 0, allCompleted: false });
+  assert.equal(session.status, 'active');
+});
+
+test('Regresión orden libre (b): completar el 100% de todas las series mantiene la sesión abierta hasta el cierre manual', () => {
+  const gym: Gym = {
+    weight: [],
+    measurements: [],
+    sessions: [],
+    routineTemplates: [],
+    restDays: [],
+    activeTimer: null,
+    settings: {
+      restBetweenSetsSeconds: 90,
+      restBetweenExercisesSeconds: 150,
+      autoTimerEnabled: true,
+    },
+  };
+
+  const session: GymSession = {
+    id: 'all-done-session',
+    date: '2026-11-19',
+    status: 'active',
+    exercises: [
+      { id: 'ex-1', name: 'Press banca', timerEnabled: true, sets: [{ id: 's1', weight: 80, reps: 8, completed: true }] },
+      { id: 'ex-2', name: 'Remo con barra', timerEnabled: true, sets: [{ id: 's2', weight: 70, reps: 10, completed: false }] },
+    ],
+  };
+  gym.sessions.push(session);
+
+  updateGymSessionSet(gym, session.id, 'ex-2', 0, { completed: true });
+
+  assert.equal(areAllSessionSetsCompleted(session), true);
+  assert.equal(findNextPendingExerciseIndex(session, 1), -1);
+  assert.equal(resolveNextRestTimer(gym, session.id, 'ex-2', 0, 20000), null);
+  assert.deepEqual(
+    resolveNextWorkoutPositionAfterSetCompletion(session, 1, 0, false),
+    { exerciseIndex: 1, setIndex: 0, allCompleted: true }
+  );
+  // Session MUST remain active until explicit manual finishGymSession call
+  assert.equal(session.status, 'active');
+  assert.equal(session.finishedAt ?? null, null);
+
+  const manualFinish = finishGymSession(gym, session.id, { finishedAt: '19:30' });
+  assert.equal(manualFinish.status, 'completed');
+  assert.equal(session.status, 'completed');
 });
 
 test('Gym 3.1: finalizar o descartar sesión limpia el timer activo', () => {

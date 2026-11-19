@@ -1,7 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { ExerciseEquipment, GymActiveTimer, GymSession, GymSet, MuscleGroup } from '../types';
 import { EXERCISE_EQUIPMENT_OPTIONS, inferExerciseEquipment, inferMuscleGroup } from '../lib/gymMigration';
-import { getPerformedGymVolume } from '../lib/gymFlows';
+import {
+  areAllSessionSetsCompleted,
+  findNextPendingExerciseIndex,
+  getPerformedGymVolume,
+  isExerciseCompleted,
+} from '../lib/gymFlows';
 import {
   getProgressiveOverloadSuggestion,
   isProgressingOverPrevious,
@@ -165,7 +170,10 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
   const safeSetIndex = Math.max(0, Math.min(setIndex, Math.max(0, sets.length - 1)));
   const currentSet = sets[safeSetIndex];
   const progress = setProgress(session);
-  const nextExercise = session.exercises[safeExerciseIndex + 1];
+  const allSetsCompleted = areAllSessionSetsCompleted(session);
+  const nextPendingExerciseIndex = findNextPendingExerciseIndex(session, safeExerciseIndex);
+  const nextPendingExercise = nextPendingExerciseIndex >= 0 ? session.exercises[nextPendingExerciseIndex] : undefined;
+  const completedExercisesCount = session.exercises.filter((item) => isExerciseCompleted(item)).length;
   const equipment = exercise
     ? exercise.equipment || (exercise.barWeight && exercise.barWeight > 0 ? 'barra' : 'mancuerna')
     : 'mancuerna';
@@ -304,8 +312,8 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
   if (activeTimer?.kind === 'exercise') {
     const targetExIdx = typeof activeTimer.targetExerciseIndex === 'number'
       ? activeTimer.targetExerciseIndex
-      : restingExerciseIndex + 1;
-    if (targetExIdx < session.exercises.length) {
+      : findNextPendingExerciseIndex(session, restingExerciseIndex);
+    if (targetExIdx >= 0 && targetExIdx < session.exercises.length) {
       const nextEx = session.exercises[targetExIdx];
       const nextSetIdx = nextEx.sets?.findIndex((s) => !s.completed) ?? 0;
       const nextSet = nextEx.sets?.[nextSetIdx >= 0 ? nextSetIdx : 0];
@@ -313,8 +321,8 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
       nextEffortTitle = `Siguiente ejercicio: ${nextEx.name}${nextSet ? ` · Serie ${nextSetIdx + 1} de ${nextEx.sets.length}` : ''}`;
       nextEffortButtonText = 'Pasar al siguiente ejercicio →';
     } else {
-      nextEffortTitle = '¡Último ejercicio completado! Sesión lista para finalizar';
-      nextEffortButtonText = 'Finalizar sesión →';
+      nextEffortTitle = 'Todas las series completadas · Podés sumar más o finalizar manualmente';
+      nextEffortButtonText = 'Cerrar descanso →';
     }
   } else {
     // kind === 'set'
@@ -324,15 +332,19 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
       nextEffortTarget = `${pendingSet.weight} kg × ${pendingSet.reps} reps`;
       nextEffortTitle = `Serie ${pendingSetIdx + 1} de ${restingExercise.sets.length} · ${restingExercise.name}`;
       nextEffortButtonText = `Comenzar Serie ${pendingSetIdx + 1} Ahora →`;
-    } else if (restingExerciseIndex < session.exercises.length - 1) {
-      const nextEx = session.exercises[restingExerciseIndex + 1];
-      const nextSet = nextEx?.sets?.[0];
-      nextEffortTarget = nextSet ? `${nextSet.weight} kg × ${nextSet.reps} reps` : '';
-      nextEffortTitle = `Siguiente ejercicio: ${nextEx.name}`;
-      nextEffortButtonText = 'Pasar al siguiente ejercicio →';
     } else {
-      nextEffortTitle = 'Todas las series de la sesión han sido completadas';
-      nextEffortButtonText = 'Finalizar sesión →';
+      const pendingExIdx = findNextPendingExerciseIndex(session, restingExerciseIndex);
+      if (pendingExIdx >= 0) {
+        const nextEx = session.exercises[pendingExIdx];
+        const nextSetIdx = nextEx?.sets?.findIndex((s) => !s.completed) ?? 0;
+        const nextSet = nextEx?.sets?.[nextSetIdx >= 0 ? nextSetIdx : 0];
+        nextEffortTarget = nextSet ? `${nextSet.weight} kg × ${nextSet.reps} reps` : '';
+        nextEffortTitle = `Siguiente ejercicio: ${nextEx.name}`;
+        nextEffortButtonText = 'Pasar al siguiente ejercicio →';
+      } else {
+        nextEffortTitle = 'Todas las series completadas · Podés sumar más o finalizar manualmente';
+        nextEffortButtonText = 'Cerrar descanso →';
+      }
     }
   }
 
@@ -346,12 +358,9 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
 
   const handleSkipOrAdvance = () => {
     setIsReviewingPreviousSet(false);
-    if (nextEffortButtonText.includes('Finalizar sesión')) {
-      onFinish();
-    } else {
-      if (onSkipRestTimer) onSkipRestTimer();
-      else if (onCompleteRestTimer) onCompleteRestTimer();
-    }
+    // Finalizar la sesión solo ocurre por acción explícita del usuario en "Finalizar entrenamiento".
+    if (onSkipRestTimer) onSkipRestTimer();
+    else if (onCompleteRestTimer) onCompleteRestTimer();
   };
 
   const handleReviewCompletedSet = () => {
@@ -453,6 +462,35 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                   className="gym-cockpit-progress-fill"
                   style={{ width: `${Math.min(100, Math.round((progress.completed / progress.total) * 100))}%` }}
                 />
+              </div>
+            )}
+            {allSetsCompleted && (
+              <div
+                data-workout-all-completed
+                role="status"
+                className="flex flex-col gap-3 rounded-2xl border border-emerald-500/35 bg-emerald-500/10 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-300">
+                    <AppIcon name="checkCircle" className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-emerald-800 dark:text-emerald-200">
+                      Todas las series completadas ({progress.completed}/{progress.total})
+                    </p>
+                    <p className="text-xs text-[var(--text-soft)]">
+                      La sesión sigue abierta: podés agregar series o ejercicios extra, o cerrar cuando quieras.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={onFinish}
+                  className="inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xs transition-colors hover:bg-emerald-500"
+                >
+                  <AppIcon name="checkCircle" className="h-4 w-4" />
+                  <span>Finalizar entrenamiento</span>
+                </button>
               </div>
             )}
             {/* Aviso Contextual si el usuario navega a otro ejercicio mientras corre un descanso */}
@@ -1018,42 +1056,83 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                   <h3 className="text-sm font-bold text-[var(--text)]">Resumen de la sesión</h3>
                   <p className="text-xs text-[var(--text-soft)]">{progress.completed} de {progress.total} series realizadas</p>
                 </div>
-                {nextExercise && (
+                {nextPendingExercise ? (
                   <button
                     type="button"
-                    onClick={() => selectExercise(safeExerciseIndex + 1)}
+                    onClick={() => selectExercise(nextPendingExerciseIndex)}
                     className="min-h-11 rounded-xl px-3 text-xs font-semibold text-[var(--blue)] hover:bg-[var(--blue-soft)]"
                   >
-                    Siguiente
+                    Siguiente pendiente
                   </button>
-                )}
+                ) : allSetsCompleted ? (
+                  <button
+                    type="button"
+                    onClick={onFinish}
+                    className="min-h-11 rounded-xl bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-500"
+                  >
+                    Finalizar
+                  </button>
+                ) : null}
               </div>
 
-              {nextExercise && <p className="gym-session-next-exercise text-xs text-[var(--text-soft)]">Después: {nextExercise.name}</p>}
+              {nextPendingExercise && (
+                <p className="gym-session-next-exercise text-xs text-[var(--text-soft)]">
+                  Después: {nextPendingExercise.name}
+                </p>
+              )}
 
               <details className="group mt-3 border-t border-[var(--border)] pt-3">
                 <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between text-sm font-semibold text-[var(--text)]">
-                  <span>Lista de ejercicios ({session.exercises.length})</span>
+                  <span>Lista de ejercicios ({completedExercisesCount}/{session.exercises.length} completados)</span>
                   <AppIcon name="chevronDown" className="h-4 w-4 transition-transform group-open:rotate-180" />
                 </summary>
                 <div className="mt-1 max-h-64 space-y-1 overflow-y-auto">
                   {session.exercises.map((item, index) => {
                     const done = item.sets?.filter((set) => set.completed).length || 0;
                     const total = item.sets?.length || 0;
+                    const isDoneExercise = total > 0 && isExerciseCompleted(item);
+                    const isCurrent = index === safeExerciseIndex;
                     return (
                       <button
                         key={item.id || `${item.name}-outline-${index}`}
                         type="button"
                         onClick={() => selectExercise(index)}
-                        aria-current={index === safeExerciseIndex ? 'step' : undefined}
-                        className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-xl px-3 text-left text-sm transition-colors ${
-                          index === safeExerciseIndex
+                        aria-current={isCurrent ? 'step' : undefined}
+                        aria-label={`${index + 1}. ${item.name}, ${done} de ${total} series, ${isDoneExercise ? 'completado' : 'pendiente'}`}
+                        data-exercise-status={isDoneExercise ? 'completed' : 'pending'}
+                        className={`flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3 text-left text-sm transition-colors ${
+                          isCurrent
                             ? 'bg-[var(--blue-soft)] font-semibold text-[var(--blue)]'
-                            : 'text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]'
+                            : isDoneExercise
+                              ? 'text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300'
+                              : 'text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]'
                         }`}
                       >
-                        <span className="min-w-0 break-words">{index + 1}. {item.name}</span>
-                        <span className="shrink-0 tabular-nums">{done}/{total}</span>
+                        <span className="flex min-w-0 items-center gap-2">
+                          {isDoneExercise ? (
+                            <AppIcon name="checkCircle" className="h-4 w-4 shrink-0 text-emerald-500" />
+                          ) : (
+                            <span
+                              aria-hidden="true"
+                              className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                                done > 0 ? 'bg-amber-400' : 'border border-[var(--border-strong)] bg-transparent'
+                              }`}
+                            />
+                          )}
+                          <span className="min-w-0 break-words">{index + 1}. {item.name}</span>
+                        </span>
+                        <span className="flex shrink-0 items-center gap-1.5">
+                          <span
+                            className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
+                              isDoneExercise
+                                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
+                            }`}
+                          >
+                            {isDoneExercise ? 'Listo' : 'Pendiente'}
+                          </span>
+                          <span className="tabular-nums text-xs">{done}/{total}</span>
+                        </span>
                       </button>
                     );
                   })}

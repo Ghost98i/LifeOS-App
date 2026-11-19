@@ -27,16 +27,18 @@ export default defineConfig(({ mode }) => {
             disable: portable,
             registerType: 'prompt',
             injectRegister: false,
-            includeAssets: ['lifeos-icon-16.png', 'lifeos-icon-32.png', 'lifeos-icon-180.png', 'lifeos-icon-192.png', 'lifeos-icon-512.png'],
+            includeAssets: ['lifeos-icon-16.png', 'lifeos-icon-32.png', 'lifeos-icon-180.png', 'lifeos-icon-192.png', 'lifeos-icon-512.png', 'icon-512-maskable.png'],
             manifest: {
               id: '/',
               name: 'Celestian LifeOS',
-              short_name: 'Celestian',
+              short_name: 'LifeOS',
               description: 'Organización personal con datos locales y sincronización opcional.',
               lang: 'es',
-              theme_color: '#08111f',
-              background_color: '#08111f',
+              dir: 'ltr',
+              theme_color: '#07090E',
+              background_color: '#07090E',
               display: 'standalone',
+              orientation: 'portrait',
               start_url: '/',
               scope: '/',
               shortcuts: [
@@ -46,18 +48,38 @@ export default defineConfig(({ mode }) => {
               icons: [
                 { src: '/lifeos-icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
                 { src: '/lifeos-icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
-                { src: '/lifeos-icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+                { src: '/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
               ],
             },
             workbox: {
-              // Keep the actual interface available offline, including local fonts,
-              // the five Cervino scenes and the existing gym/completion artwork.
+              // Keep the actual interface available offline, including local fonts
+              // and the existing gym/completion artwork. The five Cervino panoramas
+              // are large photographic scenes: they stay out of the install-time
+              // precache and are cached on demand by the runtime rule below.
               globPatterns: ['**/*.{js,css,html,wasm,woff2,png,webp,svg,lottie,json}'],
+              // Digital Asset Links must never be served from a stale precache or
+              // swallowed by the SPA navigation fallback.
+              globIgnores: ['**/.well-known/**', '**/cervino-panorama-*.webp'],
+              navigateFallbackDenylist: [/^\/\.well-known\//],
               maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
               navigateFallback: '/index.html',
               cleanupOutdatedCaches: true,
               clientsClaim: false,
               skipWaiting: false,
+              runtimeCaching: [
+                {
+                  urlPattern: /\/assets\/cervino-panorama-[\w-]+\.webp$/,
+                  handler: 'CacheFirst',
+                  options: {
+                    cacheName: 'lifeos-hero-scenes-v1',
+                    expiration: {
+                      maxEntries: 8,
+                      maxAgeSeconds: 60 * 60 * 24 * 60,
+                    },
+                    cacheableResponse: { statuses: [0, 200] },
+                  },
+                },
+              ],
             },
           }),
       ...(portable ? [viteSingleFile()] : []),
