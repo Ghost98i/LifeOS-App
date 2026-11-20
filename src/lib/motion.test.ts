@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { routineScheduledFor, todayItems } from './calculations';
@@ -61,29 +62,62 @@ test('Agenda completion and Hoy read the same taskLog entry without duplicating 
   assert.equal(shouldPlayCompletionMotion(true, false), false);
 });
 
-test('the rejected violet microcheck remains byte-identical in the reviewed motion library', async () => {
-  const bytes = await readFile(new URL('../../public/motion/lifeos-micro-check-fast-violet.json', import.meta.url));
+test('the original LifeOS violet micro-check Lottie assets are LF-normalized and hash-verified', async () => {
+  const [normalBytes, fastBytes] = await Promise.all([
+    readFile(new URL('../../public/motion/lifeos-micro-check-violet.json', import.meta.url)),
+    readFile(new URL('../../public/motion/lifeos-micro-check-fast-violet.json', import.meta.url)),
+  ]);
+
+  assert.equal(normalBytes.includes(0x0d), false, 'lifeos-micro-check-violet.json must use LF line endings');
+  assert.equal(fastBytes.includes(0x0d), false, 'lifeos-micro-check-fast-violet.json must use LF line endings');
+
+  assert.equal(
+    createHash('sha256').update(normalBytes).digest('hex'),
+    'be037d6e734e650ba762884cde3072d514f7241f85b5b1809694b5ae7d4ed85f',
+  );
+  assert.equal(
+    createHash('sha256').update(fastBytes).digest('hex'),
+    'd008c1ed4e7f00865d3ac41cfb375871d9bc952f2abe4be23a4351eb12196940',
+  );
+
+  for (const bytes of [normalBytes, fastBytes]) {
+    const animation = JSON.parse(bytes.toString('utf8')) as {
+      w: number;
+      h: number;
+      fr: number;
+      ip: number;
+      op: number;
+      assets?: Array<{ p?: string }>;
+    };
+    assert.deepEqual([animation.w, animation.h], [240, 240]);
+    assert.ok((animation.op - animation.ip) / animation.fr > 0 && (animation.op - animation.ip) / animation.fr <= 1);
+    assert.equal(animation.assets?.some((asset) => Boolean(asset.p)), false);
+  }
+});
+
+test('the original LifeOS Gym workout success Lottie JSON replaces the unlicensed .lottie archive', async () => {
+  const legacyUrl = new URL('../../public/motion/gym-workout-success.lottie', import.meta.url);
+  assert.equal(existsSync(legacyUrl), false, 'legacy unlicensed gym-workout-success.lottie must be removed');
+
+  const bytes = await readFile(new URL('../../public/motion/gym-workout-success.json', import.meta.url));
+  assert.equal(bytes.includes(0x0d), false, 'gym-workout-success.json must use LF line endings');
+  assert.equal(
+    createHash('sha256').update(bytes).digest('hex'),
+    'b56d6fe37fa8d25c30d84ba25bd1697053f49e45271c820f35b23f52f3df6dd3',
+  );
+
   const animation = JSON.parse(bytes.toString('utf8')) as {
     w: number;
     h: number;
     fr: number;
     ip: number;
     op: number;
-    markers?: Array<{ cm?: string }>;
+    nm?: string;
     assets?: Array<{ p?: string }>;
   };
-
-  assert.equal(createHash('sha256').update(bytes).digest('hex'), '9de6e28c2ca99eee1ca24906ac0e319b9e83c638f591f804b4777f37afb13fa9');
+  assert.equal(animation.nm, 'lifeos-gym-workout-success');
   assert.deepEqual([animation.w, animation.h], [240, 240]);
-  assert.equal((animation.op - animation.ip) / animation.fr, 1);
-  assert.equal(animation.markers?.[0]?.cm, 'default:morph-select:0.5');
   assert.equal(animation.assets?.some((asset) => Boolean(asset.p)), false);
-});
-
-test('the Gym success asset is the user-selected original without the previous BG layer', async () => {
-  const bytes = await readFile(new URL('../../public/motion/gym-workout-success.lottie', import.meta.url));
-  assert.equal(createHash('sha256').update(bytes).digest('hex'), '850d75b857c16f23549cd59fdd1e1f8dd7700f2895e4deeee7a98aaace72b9da');
-  assert.equal(bytes.subarray(0, 2).toString('ascii'), 'PK');
 });
 
 test('the approved PR trophy and streak flame assets remain byte-for-byte intact', async () => {

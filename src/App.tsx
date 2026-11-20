@@ -2537,10 +2537,10 @@ export default function App() {
   );
 
   const mainBottomPadding = (isGymOverlayActive && isStudyOverlayActive)
-    ? 'pb-72 sm:pb-44 lg:pb-32'
+    ? 'pb-72 sm:pb-44 md:pb-32'
     : (isGymOverlayActive || isStudyOverlayActive)
-    ? 'pb-52 sm:pb-36 lg:pb-32'
-    : 'pb-28 sm:pb-28';
+    ? 'pb-52 sm:pb-36 md:pb-32'
+    : 'pb-28 md:pb-10';
 
   return (
     <PrivacyProvider active={Boolean(state.settings.privacyMode)}>
@@ -2574,7 +2574,7 @@ export default function App() {
           onCloudSignOut={handleCloudSignOut}
         />
 
-        <main className={`mx-auto w-full flex-1 space-y-5 sm:space-y-6 p-3.5 sm:p-5 lg:p-8 ${mainBottomPadding} max-w-[1440px]`}>
+        <main className={`mx-auto w-full flex-1 space-y-5 sm:space-y-6 px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-7 ${mainBottomPadding} max-w-[1360px]`}>
           {resaleWriteBlockedRef.current && (
             <div role="alert" className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-[var(--text)]">
               <strong>Mi negocio: sincronización detenida.</strong> Los cambios siguen en este dispositivo y aún no se sincronizaron. Requieren revisión antes de volver a subirlos.

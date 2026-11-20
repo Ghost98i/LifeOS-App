@@ -104,7 +104,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   })();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-[var(--border)] bg-[var(--nav-mobile)] shadow-[0_-12px_32px_-26px_rgba(15,23,42,.45)] backdrop-blur-xl lg:hidden">
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-[var(--border)] bg-[var(--nav-mobile)] shadow-[0_-12px_32px_-26px_rgba(15,23,42,.45)] backdrop-blur-xl md:hidden">
       {/* Micro-bar: Sync status LED & Privacy quick toggle */}
       <div className="flex items-center justify-between px-3.5 py-1 border-b border-[var(--border)]/35 text-[10px]">
         {cloudConfigured && !cloudUser && onCloudSignIn ? (
@@ -129,13 +129,13 @@ export const MobileNav: React.FC<MobileNavProps> = ({
             onClick={onTogglePrivacy}
             className={`flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold transition-all ${
               privacyMode
-                ? 'bg-violet-500/15 text-violet-600 dark:text-violet-300 border border-violet-500/30'
+                ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30'
                 : 'text-[var(--text-faint)] hover:text-[var(--text)]'
             }`}
-            title="Alternar Stream Guard"
+            title="Alternar Privacidad"
           >
             <AppIcon name={privacyMode ? 'eyeOff' : 'eye'} className="h-3 w-3" />
-            <span>{privacyMode ? 'Privacidad activa' : 'Stream Guard'}</span>
+            <span>{privacyMode ? 'Privacidad activa' : 'Privacidad'}</span>
           </button>
         )}
       </div>
@@ -173,7 +173,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
         <button
           type="button"
           onClick={onOpenCapture}
-          className="relative mx-2 -mt-4 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white shadow-md active:scale-95 transition-all cursor-pointer border border-white/15"
+          className="relative mx-2 -mt-4 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white shadow-md active:scale-95 transition-all cursor-pointer border border-white/15"
           aria-label="Captura rápida"
         >
           <AppIcon name="squarePlus" className="h-6 w-6 text-white" />

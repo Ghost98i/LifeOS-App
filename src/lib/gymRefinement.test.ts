@@ -48,10 +48,11 @@ for (const [label, effectiveCompleted, expectedCount, expectedVolume] of [
 }
 
 test('ambiguous movement words never identify unrelated equipment', () => {
-  for (const name of ['Bicicleta abdominal', 'Cinta elástica', 'Extensión de tríceps en polea alta', 'Sentadilla búlgara', 'Fondos entre bancos', 'Press de hombros sentado']) {
+  for (const name of ['Bicicleta abdominal', 'Cinta elástica', 'Sentadilla búlgara', 'Fondos entre bancos', 'Press de hombros sentado']) {
     assert.equal(resolveExerciseGymIcon(name), 'gym-fallback', name);
   }
-  assert.equal(resolveExerciseGymIcon('Extensión de tríceps en polea alta', 'polea'), 'gym-cable-machine');
+  assert.equal(resolveExerciseGymIcon('Extensión de tríceps en polea alta'), 'gym-tricep-pushdown');
+  assert.equal(resolveExerciseGymIcon('Extensión de tríceps en polea alta', 'polea'), 'gym-tricep-pushdown');
   assert.equal(resolveExerciseGymIcon('Remo sentado con mancuerna', 'mancuerna'), 'gym-dumbbell');
   assert.equal(resolveExerciseGymIcon('Press banca', 'corporal'), 'gym-fallback');
 });

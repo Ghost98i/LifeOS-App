@@ -1,42 +1,20 @@
 # LifeOS local motion assets
 
-These files are loaded locally and only while the corresponding confirmed event
-is visible. They must not be republished as a standalone animation collection.
+These files are loaded locally and only while the corresponding confirmed event is visible.
 
-## Assets kept from the approved Gym implementation
+## First-party original LifeOS Lottie JSON assets (100% original — updated 2026-11-19)
 
-- `gym-pr-trophy.lottie` — “Trophy”, attributed in the prior project record to
-  Mahendra Bhunwal: https://lottiefiles.com/free-animation/trophy-yEGPe40FVr
-- `gym-streak-fire.lottie` — “Fire Streak Orange”, attributed in the prior
-  project record to Dhawal Patel:
-  https://lottiefiles.com/free-animation/fire-streak-orange-HEj0rht12V
+Authored directly for Celestian LifeOS with minimalist dark/indigo (`#6366F1` / `#818CF8`) geometry, LF line endings, and zero external dependencies:
 
-Their bytes and behavior were intentionally left unchanged in Motion 2.0.
+- `lifeos-micro-check-violet.json` — SHA-256 `be037d6e734e650ba762884cde3072d514f7241f85b5b1809694b5ae7d4ed85f`
+- `lifeos-micro-check-fast-violet.json` — SHA-256 `d008c1ed4e7f00865d3ac41cfb375871d9bc952f2abe4be23a4351eb12196940`
+- `gym-workout-success.json` — SHA-256 `b56d6fe37fa8d25c30d84ba25bd1697053f49e45271c820f35b23f52f3df6dd3` (replaces the removed unlicensed `gym-workout-success.lottie`)
 
-## Motion 2.0 sources selected by the user
+## LottieFiles community assets (Lottie Simple License)
 
-The original files remain in
-`artifacts/motion-review/LifeOS_Motion_44_Fuentes_Originales.zip`.
+- `gym-pr-trophy.lottie` — “Trophy” by Mahendra Bhunwal: https://lottiefiles.com/free-animation/trophy-yEGPe40FVr (Lottie Simple License)
+- `gym-streak-fire.lottie` — “Fire Streak Orange” by Dhawal Patel: https://lottiefiles.com/free-animation/fire-streak-orange-HEj0rht12V (Lottie Simple License)
 
-- `gym-workout-success.lottie` is an exact copy of
-  `fuentes/Success Check.lottie` (SHA-256
-  `850d75b857c16f23549cd59fdd1e1f8dd7700f2895e4deeee7a98aaace72b9da`).
-- `lifeos-micro-check-violet.json` is an exact copy of
-  `fuentes/check violeta.json` (SHA-256
-  `74fc1650f15b6eb34ab128c2906854c26a469698e56bf02e31eece2838be4b47`).
-- `lifeos-micro-check-fast-violet.json` is an exact copy of
-  `fuentes/check violeta rápido.json` (SHA-256
-  `9de6e28c2ca99eee1ca24906ac0e319b9e83c638f591f804b4777f37afb13fa9`).
-  Hoy uses the fast variant after a confirmed save: its check was visibly
-  stronger at 48 px in the 1920 px QA capture. The runtime replaces its final
-  ring with the persisted static check at animation completion. The original
-  normal variant remains for comparison.
+## Task completion check assets
 
-The supplied package does not establish a reliable author, source URL, license,
-commercial-use grant, or attribution requirement for these files. Those
-details are pending legal/provenance review before publication. Do not describe
-them as commercially licensed based only on their availability for download.
-
-The prior LottieFiles attribution/license records for trophy and flame should
-also be rechecked as part of that audit; no commercial-use conclusion is made
-here.
+- `lifeos-task-pending.svg`, `lifeos-task-completed.svg`, `lifeos-task-completion.json` — verified by `src/lib/motion.test.ts`.

@@ -197,12 +197,12 @@ export const Topbar: React.FC<TopbarProps> = ({
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2 ml-auto">
         {/* Quick Action Split-Button */}
         <div ref={quickMenuContainerRef} className="relative hidden sm:flex items-center">
-          <div className="inline-flex h-9 items-stretch overflow-hidden rounded-xl bg-[var(--blue)] shadow-xs">
+          <div className="inline-flex h-9 items-stretch overflow-hidden rounded-xl bg-indigo-600 dark:bg-indigo-500 shadow-xs">
             <button
               type="button"
               onClick={onOpenCapture}
               title={(state.inbox || []).length > 0 ? `Capturar / Bandeja (${(state.inbox || []).length} pendientes)` : "Capturar (C)"}
-              className="flex h-full items-center gap-1.5 px-3 text-xs font-bold text-white transition-colors hover:bg-[var(--blue-hover)] active:bg-black/15 cursor-pointer"
+              className="flex h-full items-center gap-1.5 px-3 text-xs font-bold text-white transition-colors hover:bg-indigo-700 dark:hover:bg-indigo-400 active:bg-black/15 cursor-pointer"
             >
               <AppIcon name="squarePlus" className="h-4 w-4 text-white" />
               <span>Capturar</span>
@@ -225,7 +225,7 @@ export const Topbar: React.FC<TopbarProps> = ({
                   className={`flex h-full w-8 items-center justify-center text-white transition-colors cursor-pointer ${
                     showQuickMenu
                       ? 'bg-black/20'
-                      : 'hover:bg-[var(--blue-hover)] active:bg-black/15'
+                      : 'hover:bg-indigo-700 dark:hover:bg-indigo-400 active:bg-black/15'
                   }`}
                   aria-label="Más acciones rápidas"
                   aria-expanded={showQuickMenu}
@@ -319,21 +319,21 @@ export const Topbar: React.FC<TopbarProps> = ({
             <AppIcon name="search" className="h-4 w-4"/>
           </button>
 
-          {/* Stream Guard Button */}
+          {/* Privacy Mode Button */}
           <button
             type="button"
             onClick={onTogglePrivacy}
-            title={state.settings.privacyMode ? "Stream Guard activo (Shift + P) - Clic para mostrar saldos" : "Activar Stream Guard (Shift + P) - Clic para ocultar montos"}
+            title={state.settings.privacyMode ? "Privacidad activa (Shift + P) - Clic para mostrar saldos" : "Activar Privacidad (Shift + P) - Clic para ocultar montos"}
             className={`hidden sm:flex h-8 w-8 xl:w-auto xl:px-2.5 items-center justify-center gap-1.5 rounded-[10px] text-xs font-semibold transition-all cursor-pointer ${
               state.settings.privacyMode
-                ? 'bg-violet-500/15 text-violet-600 dark:text-violet-300 ring-1 ring-inset ring-violet-500/35'
+                ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 ring-1 ring-inset ring-indigo-500/35'
                 : 'text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)]'
             }`}
-            aria-label={state.settings.privacyMode ? "Desactivar Stream Guard" : "Activar Stream Guard"}
+            aria-label={state.settings.privacyMode ? "Desactivar Privacidad" : "Activar Privacidad"}
           >
             <AppIcon name={state.settings.privacyMode ? 'eyeOff' : 'eye'} className="h-4 w-4" />
             <span className="hidden xl:inline">
-              {state.settings.privacyMode ? 'Stream Guard' : 'Privacidad'}
+              Privacidad
             </span>
           </button>
 

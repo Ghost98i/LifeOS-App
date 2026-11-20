@@ -36,8 +36,12 @@ Aunque no se cambiaron, se contrastaron las referencias pendientes más cercanas
 
 La [Lottie Simple License oficial](https://lottiefiles.com/page/license) permite usos comerciales y modificaciones, manteniendo sus términos en la distribución; la atribución es opcional, aunque recomendada. Esa comprobación no se usa para licenciar por extensión archivos cuyo origen no consta.
 
-## Dictamen y tratamiento
+## Dictamen y tratamiento (Actualizado el 19 de noviembre de 2026 — NO-GO levantado)
 
-La investigación de licencias se realizó, pero **no se puede cerrar la certificación del catálogo SVG ni de los dos recursos de movimiento sin procedencia**. Hay evidencia adicional para el banco y para las dos fichas de animaciones indicadas, con los límites anteriores.
+La auditoría inicial del 2 de noviembre de 2026 mantuvo un **NO-GO** mientras los SVG de `public/gym-icons/v1/` y las animaciones `lifeos-micro-check-violet.json` / `gym-workout-success.lottie` carecían de licencia verificable.
 
-La revisión visual local puede continuar conservando los recursos existentes. **NO-GO para dar por resueltos los derechos de publicación de los recursos pendientes.** No se publicaron, eliminaron, reemplazaron ni deshabilitaron archivos en esta intervención. La aprobación visual y la habilitación de derechos son dictámenes distintos.
+El **19 de noviembre de 2026 (Etapa B)** se reemplazó de raíz todo el material pendiente por recursos **100 % originales de Celestian LifeOS**:
+
+1. **Catálogo SVG de Gimnasio (`public/gym-icons/v1/`):** los 34 SVG previos (incluyendo los 22 auditados inicialmente, `adjustable-bench.svg` y `pull-ups.svg`) fueron reemplazados por **39 íconos SVG propios** de equipamiento mecánico/industrial (`viewBox="0 0 64 64"`, cero siluetas humanas, sin metadatos ni textos de terceros), registrados con `licenseStatus: 'first-party-original'` en `src/lib/gymIconRegistry.ts`.
+2. **Animaciones Lottie observadas (`public/motion/`):** se reemplazaron `lifeos-micro-check-violet.json`, `lifeos-micro-check-fast-violet.json` y `gym-workout-success.lottie` (eliminado y sustituido por `gym-workout-success.json`) por animaciones JSON propias con finales de línea LF y hashes verificados en `src/lib/motion.test.ts`.
+3. **Resolución:** **GO** para la distribución del catálogo SVG de Gimnasio y las animaciones propias reemplazadas. Queda únicamente como verificación separada de interfaz general la cobertura de licencia SVG de Icons8 en `src/assets/icons/icons8/` (y `public/motion/lifeos-task-*`), ajena a los recursos de Gimnasio ya sustituidos.

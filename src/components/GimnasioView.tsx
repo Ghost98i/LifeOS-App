@@ -154,7 +154,7 @@ const RoutineIdentityMark: React.FC<{
       aria-hidden="true"
       className={`gym-routine-mark relative shrink-0 overflow-hidden rounded-2xl bg-gradient-to-br ${identity.surface} ring-1 ring-inset ring-[var(--border)] ${compact ? 'h-12 w-12' : 'h-14 w-14 sm:h-16 sm:w-16'}`}
     >
-      <GymIcon icon={identity.icon} decorative className="absolute inset-0 h-full w-full p-2" />
+      <GymIcon icon={identity.icon} decorative className="absolute inset-0 h-full w-full p-1" />
     </div>
   );
 });
@@ -1646,7 +1646,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                         })}
                                         className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-600 ring-2 ring-indigo-500 dark:text-indigo-300"
                                       >
-                                        <GymIcon icon={identity.icon} decorative className="h-6 w-6" />
+                                        <GymIcon icon={identity.icon} decorative className="h-8 w-8" />
                                       </button>
                                     )}
                                     {ROUTINE_ICON_OPTIONS.map((opt) => {
@@ -1669,7 +1669,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                               : 'bg-[var(--surface-muted)] text-[var(--text-soft)] hover:bg-[var(--border)] hover:text-[var(--text)]'
                                           }`}
                                         >
-                                          <GymIcon icon={opt.icon} decorative className="h-6 w-6" />
+                                          <GymIcon icon={opt.icon} decorative className="h-8 w-8" />
                                         </button>
                                       );
                                     })}
@@ -1796,7 +1796,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                                       : 'bg-[var(--card)] text-[var(--text-soft)] hover:bg-[var(--border)] hover:text-[var(--text)]'
                                                   }`}
                                                 >
-                                                  <GymIcon icon={opt.id} decorative className="h-5 w-5" />
+                                                  <GymIcon icon={opt.id} decorative className="h-7 w-7" />
                                                 </button>
                                               );
                                             })}
@@ -2630,7 +2630,7 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
                       : 'bg-[var(--card)] text-[var(--text-soft)] hover:bg-[var(--border)] hover:text-[var(--text)]'
                   }`}
                 >
-                  <GymIcon icon={opt.id} decorative className="h-5 w-5" />
+                  <GymIcon icon={opt.id} decorative className="h-7 w-7" />
                 </button>
               );
             })}

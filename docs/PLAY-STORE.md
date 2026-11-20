@@ -1,6 +1,6 @@
 # Publicar Celestian LifeOS en Google Play (TWA)
 
-Estado de esta preparación: **18 de noviembre de 2026**.
+Estado de esta preparación: **19 de noviembre de 2026**.
 
 LifeOS ya es una PWA instalable y funcional. Empaquetarla como TWA (Trusted Web Activity) es
 técnicamente posible y no requiere reescribir la app: la APK/AAB es un contenedor que abre el sitio
@@ -25,11 +25,8 @@ evidencia de licencias**.
 
 ## 2. Bloqueantes reales antes de subir a Play
 
-1. **Licencias de recursos.** El propio repositorio mantiene un NO-GO de distribución en
-   `docs/releases/gym-stable-release-2026-11.md` y `public/gym-icons/v1/README.md`: no hay
-   evidencia de licencia para 22 SVG del gimnasio ni para dos animaciones Lottie. Play puede
-   retirar la app por reclamos de terceros. Hace falta el comprobante de licencia/permiso o
-   reemplazar esos archivos.
+1. **Licencias de recursos de Gimnasio y Lotties (RESUELTO — NO-GO levantado el 19/11/2026).**
+   Todos los SVG de equipamiento en `public/gym-icons/v1/` (39 archivos en estilo industrial/mecánico, sin figuras humanas) y las animaciones `lifeos-micro-check-violet.json`, `lifeos-micro-check-fast-violet.json` y `gym-workout-success.json` (eliminado el `.lottie` previo sin licencia) son ahora obras **100 % originales de Celestian LifeOS**. Verificá únicamente antes de publicar que la suscripción de Icons8 cubra los SVG generales de interfaz en `src/assets/icons/icons8/` (y los 3 archivos de check de tareas en `public/motion/lifeos-task-*`) o reemplazalos por íconos MIT/propios.
 2. **Correo de contacto en la política.** `public/privacidad.html` y `public/eliminar-cuenta.html`
    contienen `TU_CORREO_DE_CONTACTO`. Play exige una vía de contacto real. Reemplazalo antes de
    publicar.
@@ -128,7 +125,7 @@ No declares analítica ni publicidad: la app no las usa.
 
 ## 7. Orden recomendado
 
-1. Resolver licencias de recursos (bloqueante legal).
+1. ~~Resolver licencias de recursos de Gimnasio y Lotties~~ (**completado en Etapa B**; verificar cobertura de suscripción Icons8 para `AppIcon.tsx` si aplica).
 2. Completar el correo de contacto real y verificar el flujo de eliminación de cuenta.
 3. Elegir `package_name`, generar keystore y subir el primer AAB a prueba interna.
 4. Completar `assetlinks.json` con la huella de Play App Signing y verificar.

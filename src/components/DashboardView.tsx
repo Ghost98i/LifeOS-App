@@ -1,65 +1,53 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
-import type { LifeOSState, ViewType, AttentionDismissalRecord } from '../types';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowRight,
+  Bell,
+  CalendarDays,
+  Check,
+  Clock,
+  Moon,
+  Plus,
+  Shield,
+  X,
+} from 'lucide-react';
+import type { AttentionDismissalRecord, LifeOSState, ViewType } from '../types';
 import type { TodayItem } from '../lib/calculations';
 import type { TodayAgendaEntry } from '../lib/todayOverview';
 import { playSound } from '../lib/audio';
-import { PersonalContextCard } from './PersonalContextCard';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
-import { AppIcon } from './AppIcon';
-import { BentoCommandBar } from './BentoCommandBar';
 import { AlpineDayCycleBackdrop } from './visual/AlpineDayCycleBackdrop';
 import { getDayCyclePeriod, getLocalGreeting } from '../lib/alpineDayCycle';
-import { fmtDate, todayISO, uid } from '../lib/storage';
+import { dayKeyFromDate, fmtDate, todayISO, uid } from '../lib/storage';
 import { getTodayAgendaEntries, getPastPendingExtras, getFutureScheduledExtras } from '../lib/todayOverview';
 import { showToast } from '../lib/toast';
-import { formatRelativeTime, getActivityTimeline } from '../lib/activityTimeline';
-import type { ActivityTimelineItem } from '../lib/activityTimeline';
 import { isModuleEnabled } from '../lib/moduleVisibility';
 import { TodayAgendaSection } from './TodayAgendaSection';
-import { PrioritiesWidget } from './PrioritiesWidget';
-import { loadTodayCustomization } from '../lib/viewCustomization';
-import { getTodayAttentionItems, getDismissedAttentionItems, nextAttentionDismissalTimestamp, type AttentionItem } from '../lib/todayAttention';
+import {
+  getTodayAttentionItems,
+  getDismissedAttentionItems,
+  getTomorrowDateString,
+  nextAttentionDismissalTimestamp,
+  type AttentionItem,
+} from '../lib/todayAttention';
 import { DismissedAttentionModal } from './DismissedAttentionModal';
-
-// The material and outline are painted directly on one normalized SVG contour.
-const OBSERVATORY_PANEL_PATH = [
-  'M 0.065 0 H 0.8',
-  'C 0.855 0 0.885 0.025 0.902 0.105',
-  'C 0.936 0.265 0.965 0.6 0.995 0.88',
-  'C 1.004 0.964 0.984 1 0.94 1',
-  'H 0.065 C 0.029 1 0 0.96 0 0.91',
-  'V 0.09 C 0 0.04 0.029 0 0.065 0 Z',
-].join(' ');
-
-const activityModuleToView: Record<string, ViewType> = {
-  finance: 'finanzas',
-  gym: 'gimnasio',
-  study: 'estudios',
-  resale: 'reventa',
-  task: 'agenda',
-  inbox: 'notas',
-  note: 'notas',
-  jobs: 'trabajo',
-};
-
-const activityModuleLabel: Record<ActivityTimelineItem['module'], string> = {
-  finance: 'Finanzas',
-  gym: 'Gimnasio',
-  study: 'Estudios',
-  task: 'Tarea',
-  resale: 'Reventa',
-  inbox: 'Bandeja',
-  checkout: 'Cierre del día',
-  note: 'Nota',
-  jobs: 'Trabajo',
-};
-
-const formatActivityWhen = (timestamp: string): string => {
-  const relative = formatRelativeTime(timestamp);
-  if (timestamp.length <= 10 || Number.isNaN(Date.parse(timestamp))) return relative;
-  const time = new Date(timestamp).toLocaleTimeString('es-UY', { hour: '2-digit', minute: '2-digit' });
-  return relative.includes(time) ? relative : `${relative} · ${time}`;
-};
+import { DailyStatusModal } from './DailyStatusModal';
+import { RecentActivityModal } from './RecentActivityModal';
+import { TodaySpotlightCard } from './TodaySpotlightCard';
+import { TodayRadarSection } from './TodayRadarSection';
+import { SurfaceCard } from './ui/SurfacePrimitives';
+import {
+  getSevenDayStatusSparkline,
+  getTodayPulse,
+  getTodayRadarMilestones,
+  loadSkippedTodayKeys,
+  partitionTodayAgenda,
+  resolveTodaySpotlight,
+  toggleSkippedTodayKey,
+  type TodayRadarMilestone,
+} from '../lib/todayControlCenter';
+import { contextForDate } from '../lib/contextInsights';
+import { startGymSession } from '../lib/gymFlows';
+import { startStudySession } from '../lib/studyFlows';
 
 interface DashboardViewProps {
   state: LifeOSState;
@@ -74,6 +62,14 @@ interface DashboardViewProps {
   onNavigateToRecord?: (view: ViewType, options?: { tab?: string; focusId?: string; date?: string }) => void;
   initialFocusId?: string | null;
   focusNonce?: number;
+  /** Optional clock override for deterministic testing. */
+  nowOverride?: Date;
+  /** Optional initial state for the daily status modal (for testing). */
+  initialStatusModalOpen?: boolean;
+  /** Optional initial state for the recent activity modal (for testing). */
+  initialActivityModalOpen?: boolean;
+  /** Optional initial skipped entry keys (for deterministic testing). */
+  initialSkippedKeys?: string[];
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -81,35 +77,54 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onUpdateState,
   onNavigate,
   onExportJSON,
-  onOpenSearch,
   onOpenCapture,
-  onOpenQuickNote: _onOpenQuickNote,
   onOpenNote,
-  onQuickAction,
   onNavigateToRecord,
   initialFocusId,
   focusNonce,
+  nowOverride,
+  initialStatusModalOpen = false,
+  initialActivityModalOpen = false,
+  initialSkippedKeys,
 }) => {
-  const observatoryId = useId();
+  const todayIso = todayISO();
   const [backupDismissed, setBackupDismissed] = useState(false);
-  const [now, setNow] = useState(() => new Date());
+  const [liveNow, setLiveNow] = useState(() => nowOverride ?? new Date());
   const [completionMotion, setCompletionMotion] = useState<{ taskId: string; nonce: number } | null>(null);
+  const [showDismissedModal, setShowDismissedModal] = useState(false);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(initialStatusModalOpen);
+  const [isActivityModalOpen, setIsActivityModalOpen] = useState(initialActivityModalOpen);
+  const [skippedKeys, setSkippedKeys] = useState<string[]>(
+    () => initialSkippedKeys ?? loadSkippedTodayKeys(todayIso)
+  );
+
+  const now = nowOverride ?? liveNow;
+  const skippedKeySet = useMemo(() => new Set(skippedKeys), [skippedKeys]);
+
+  // Reload skipped keys if calendar date rolls over
+  useEffect(() => {
+    if (initialSkippedKeys) return;
+    setSkippedKeys(loadSkippedTodayKeys(todayIso));
+  }, [todayIso, initialSkippedKeys]);
 
   useEffect(() => {
+    if (nowOverride) return;
     let timer: number | undefined;
     const scheduleNextMinute = () => {
       const delay = 60_000 - (Date.now() % 60_000);
       timer = window.setTimeout(() => {
-        setNow(new Date());
+        setLiveNow(new Date());
         scheduleNextMinute();
       }, delay);
     };
     const refreshClock = () => {
       if (timer !== undefined) window.clearTimeout(timer);
-      setNow(new Date());
+      setLiveNow(new Date());
       scheduleNextMinute();
     };
-    const handleVisibility = () => { if (document.visibilityState === 'visible') refreshClock(); };
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') refreshClock();
+    };
     scheduleNextMinute();
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('focus', refreshClock);
@@ -118,7 +133,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('focus', refreshClock);
     };
-  }, []);
+  }, [nowOverride]);
 
   useEffect(() => {
     if (!completionMotion) return;
@@ -126,7 +141,6 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return () => window.clearTimeout(timeout);
   }, [completionMotion]);
 
-  const todayIso = todayISO();
   const dayPeriod = getDayCyclePeriod(now);
   const formattedTime = now.toLocaleTimeString('es-UY', {
     hour: '2-digit',
@@ -139,72 +153,88 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const fullMonth = now.toLocaleDateString('es-UY', { month: 'long' }).toLocaleLowerCase('es-UY');
   const formattedFullDate = `${capitalizedWeekday} ${now.getDate()} de ${fullMonth}`;
 
+  // Daily status summary + inline 7-day sparkline
+  const todayContext = useMemo(() => contextForDate(state, todayIso), [state, todayIso]);
+  const hasAnyTodayStatus =
+    todayContext.sleepHours != null || todayContext.energy != null || todayContext.mood != null;
+  const compactStatusText = useMemo(() => {
+    const sleepPart =
+      todayContext.sleepHours != null ? `${todayContext.sleepHours.toLocaleString('es-UY')} h` : '—';
+    const energyPart = todayContext.energy != null ? `${todayContext.energy}/5` : '—';
+    const moodPart = todayContext.mood != null ? `${todayContext.mood}/5` : '—';
+    return `${sleepPart} · ${energyPart} · ${moodPart}`;
+  }, [todayContext]);
+  const sparkline = useMemo(() => getSevenDayStatusSparkline(state, todayIso), [state, todayIso]);
+
+  // Core agenda, spotlight, radar and daily record projections
   const agendaEntries = useMemo(() => getTodayAgendaEntries(state, todayIso), [state, todayIso]);
-  const pastPendingExtras = useMemo(
-    () => getPastPendingExtras(state, todayIso),
+  const agendaPartition = useMemo(
+    () => partitionTodayAgenda(state, agendaEntries, now, todayIso, skippedKeySet),
+    [state, agendaEntries, now, todayIso, skippedKeySet]
+  );
+  const spotlight = useMemo(
+    () => resolveTodaySpotlight(state, agendaEntries, now, todayIso, skippedKeySet),
+    [state, agendaEntries, now, todayIso, skippedKeySet]
+  );
+  const radarMilestones = useMemo(
+    () => getTodayRadarMilestones(state, todayIso),
     [state, todayIso]
   );
-  const futureScheduledExtras = useMemo(
-    () => getFutureScheduledExtras(state, todayIso),
-    [state, todayIso]
+  const todayPulse = useMemo(
+    () => getTodayPulse(state, agendaEntries, todayIso, now),
+    [state, agendaEntries, todayIso, now]
   );
-  // A deep link may target a completed historical task, outside today's lists.
+
+  const enabledRadarModules = useMemo(() => {
+    const list: Array<{ view: ViewType; label: string }> = [];
+    if (isModuleEnabled(state, 'estudios')) list.push({ view: 'estudios', label: 'Estudios' });
+    if (isModuleEnabled(state, 'trabajo')) list.push({ view: 'trabajo', label: 'Trabajo' });
+    if (isModuleEnabled(state, 'finanzas')) list.push({ view: 'finanzas', label: 'Finanzas' });
+    return list;
+  }, [state]);
+
+  const pastPendingExtras = useMemo(() => getPastPendingExtras(state, todayIso), [state, todayIso]);
+  const futureScheduledExtras = useMemo(() => getFutureScheduledExtras(state, todayIso), [state, todayIso]);
+
   const selectedExtra = useMemo(() => {
     if (!initialFocusId?.startsWith('today-extra-')) return undefined;
     const id = initialFocusId.slice('today-extra-'.length);
-    if (agendaEntries.some(entry => entry.source === 'extra' && entry.id === id) || pastPendingExtras.some(task => task.id === id) || futureScheduledExtras.some(task => task.id === id)) return undefined;
-    return state.todayExtras.find(task => task.id === id);
+    if (
+      agendaEntries.some((entry) => entry.source === 'extra' && entry.id === id) ||
+      pastPendingExtras.some((task) => task.id === id) ||
+      futureScheduledExtras.some((task) => task.id === id)
+    ) {
+      return undefined;
+    }
+    return state.todayExtras.find((task) => task.id === id);
   }, [initialFocusId, state.todayExtras, agendaEntries, pastPendingExtras, futureScheduledExtras]);
-  const recentActivity = useMemo(
-    () => getActivityTimeline(state, Number.MAX_SAFE_INTEGER, { hideAmounts: true, privacyMode: state.settings.privacyMode })
-        .filter((activity) => {
-          const view = activityModuleToView[activity.module];
-          return !view || isModuleEnabled(state, view);
-        })
-        .slice(0, 5),
-    [state]
-  );
-  const activityStripRef = useRef<HTMLDivElement>(null);
-  const [activityEdges, setActivityEdges] = useState({ left: false, right: false });
 
-  useEffect(() => {
-    const strip = activityStripRef.current;
-    if (!strip) return;
-    const updateEdges = () => {
-      const left = strip.scrollLeft > 1;
-      const right = strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1;
-      setActivityEdges((previous) => previous.left === left && previous.right === right ? previous : { left, right });
-    };
-    updateEdges();
-    strip.addEventListener('scroll', updateEdges, { passive: true });
-    window.addEventListener('resize', updateEdges);
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateEdges);
-    observer?.observe(strip);
-    strip.querySelectorAll<HTMLElement>('.today-activity-item').forEach((child) => observer?.observe(child));
-    return () => {
-      strip.removeEventListener('scroll', updateEdges);
-      window.removeEventListener('resize', updateEdges);
-      observer?.disconnect();
-    };
-  }, [recentActivity]);
-
-  const scrollActivity = (direction: -1 | 1) => {
-    const strip = activityStripRef.current;
-    if (!strip) return;
-    strip.scrollBy({ left: direction * Math.max(240, strip.clientWidth * 0.75), behavior: 'smooth' });
-  };
-
-  const [showDismissedModal, setShowDismissedModal] = useState(false);
-
-  const attentionItems = useMemo(
-    () => getTodayAttentionItems(state, { todayIso, backupDismissed, now }),
-    [state, todayIso, backupDismissed, now]
-  );
+  // At most 1 consolidated discreet administrative notice (excluding items already in Radar)
+  const topAdminNotice = useMemo(() => {
+    const filtered = getTodayAttentionItems(state, { todayIso, backupDismissed, now }).filter(
+      (item) =>
+        item.signalKind !== 'financial_commitment_due' &&
+        item.signalKind !== 'financial_agreement_due' &&
+        item.signalKind !== 'exam_upcoming' &&
+        item.signalKind !== 'job_deadline_upcoming'
+    );
+    return filtered[0] ?? null;
+  }, [state, todayIso, backupDismissed, now]);
 
   const dismissedAttentionItems = useMemo(
     () => getDismissedAttentionItems(state, { todayIso, backupDismissed, now }),
     [state, todayIso, backupDismissed, now]
   );
+
+  const dayClosed = Boolean(state.checkoutLog?.[todayIso]?.closedAt);
+
+  // Handlers
+  const handleToggleSkipToday = (entry: TodayAgendaEntry) => {
+    const wasSkipped = skippedKeySet.has(entry.key);
+    const next = toggleSkippedTodayKey(todayIso, entry.key, skippedKeys);
+    setSkippedKeys(next);
+    showToast(wasSkipped ? 'Bloque restaurado para hoy.' : 'Bloque omitido por hoy.', 'info');
+  };
 
   const handleAttentionAction = (item: AttentionItem) => {
     if (onNavigateToRecord) {
@@ -218,32 +248,50 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
   };
 
-  const handleDismissAttention = (item: AttentionItem) => {
-    if (onUpdateState((draft) => {
-      if (!draft.settings) {
-        draft.settings = { darkMode: false, hiddenTabs: [], onboardingCompleted: false, dismissedAttentionKeys: [], attentionDismissals: {} };
-      }
-      const prevRec = draft.settings.attentionDismissals?.[item.dismissKey];
-      const nextTimestamp = nextAttentionDismissalTimestamp(prevRec);
-      const nextDismissals = {
-        ...(draft.settings.attentionDismissals || {}),
-        [item.dismissKey]: { status: 'dismissed' as const, updatedAt: nextTimestamp },
-      };
-      draft.settings.attentionDismissals = nextDismissals;
-      draft.settings.dismissedAttentionKeys = Object.entries(nextDismissals)
-        .filter(([_, rec]) => (rec as AttentionDismissalRecord)?.status === 'dismissed')
-        .map(([k]) => k)
-        .sort();
-    }) === false) return;
-    if (item.signalKind === 'backup_urgent') {
-      setBackupDismissed(true);
+  const handleOpenRadarMilestone = (item: TodayRadarMilestone) => {
+    if (onNavigateToRecord) {
+      onNavigateToRecord(item.targetView, {
+        tab: item.targetTab,
+        focusId: item.targetFocusId,
+        date: item.date,
+      });
+    } else {
+      onNavigate(item.targetView);
     }
+  };
+
+  const handleDismissAttention = (item: AttentionItem) => {
+    if (
+      onUpdateState((draft) => {
+        if (!draft.settings) {
+          draft.settings = {
+            darkMode: false,
+            hiddenTabs: [],
+            onboardingCompleted: false,
+            dismissedAttentionKeys: [],
+            attentionDismissals: {},
+          };
+        }
+        const prevRec = draft.settings.attentionDismissals?.[item.dismissKey];
+        const nextTimestamp = nextAttentionDismissalTimestamp(prevRec);
+        const nextDismissals = {
+          ...(draft.settings.attentionDismissals || {}),
+          [item.dismissKey]: { status: 'dismissed' as const, updatedAt: nextTimestamp },
+        };
+        draft.settings.attentionDismissals = nextDismissals;
+        draft.settings.dismissedAttentionKeys = Object.entries(nextDismissals)
+          .filter(([, rec]) => (rec as AttentionDismissalRecord)?.status === 'dismissed')
+          .map(([k]) => k)
+          .sort();
+      }) === false
+    ) {
+      return;
+    }
+    if (item.signalKind === 'backup_urgent') setBackupDismissed(true);
     showToast('Aviso ocultado de Hoy.', 'info', {
       actionLabel: 'Deshacer',
       onAction: () => {
-        if (item.signalKind === 'backup_urgent') {
-          setBackupDismissed(false);
-        }
+        if (item.signalKind === 'backup_urgent') setBackupDismissed(false);
         onUpdateState((draft) => {
           if (!draft.settings) return;
           const prevRec = draft.settings.attentionDismissals?.[item.dismissKey];
@@ -254,88 +302,99 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           };
           draft.settings.attentionDismissals = nextDismissals;
           draft.settings.dismissedAttentionKeys = Object.entries(nextDismissals)
-            .filter(([_, rec]) => (rec as AttentionDismissalRecord)?.status === 'dismissed')
+            .filter(([, rec]) => (rec as AttentionDismissalRecord)?.status === 'dismissed')
             .map(([k]) => k)
             .sort();
         });
       },
     });
-    showToast('Aviso descartado.', 'info');
   };
 
   const handleRestoreAttentionItem = (item: AttentionItem) => {
-    if (onUpdateState((draft) => {
-      if (!draft.settings) return;
-      const prevRec = draft.settings.attentionDismissals?.[item.dismissKey];
-      const nextTimestamp = nextAttentionDismissalTimestamp(prevRec);
-      const nextDismissals = {
-        ...(draft.settings.attentionDismissals || {}),
-        [item.dismissKey]: { status: 'active' as const, updatedAt: nextTimestamp },
-      };
-      draft.settings.attentionDismissals = nextDismissals;
-      draft.settings.dismissedAttentionKeys = Object.entries(nextDismissals)
-        .filter(([_, rec]) => (rec as AttentionDismissalRecord)?.status === 'dismissed')
-        .map(([k]) => k)
-        .sort();
-    }) === false) return;
-    if (item.signalKind === 'backup_urgent') {
-      setBackupDismissed(false);
+    if (
+      onUpdateState((draft) => {
+        if (!draft.settings) return;
+        const prevRec = draft.settings.attentionDismissals?.[item.dismissKey];
+        const nextTimestamp = nextAttentionDismissalTimestamp(prevRec);
+        const nextDismissals = {
+          ...(draft.settings.attentionDismissals || {}),
+          [item.dismissKey]: { status: 'active' as const, updatedAt: nextTimestamp },
+        };
+        draft.settings.attentionDismissals = nextDismissals;
+        draft.settings.dismissedAttentionKeys = Object.entries(nextDismissals)
+          .filter(([, rec]) => (rec as AttentionDismissalRecord)?.status === 'dismissed')
+          .map(([k]) => k)
+          .sort();
+      }) === false
+    ) {
+      return;
     }
+    if (item.signalKind === 'backup_urgent') setBackupDismissed(false);
     showToast('Aviso restaurado.', 'success');
   };
 
   const handleRestoreAllDismissed = () => {
-    const now = Date.now();
-    if (onUpdateState((draft) => {
-      if (!draft.settings) return;
-      const nextDismissals = { ...(draft.settings.attentionDismissals || {}) };
-      for (const item of dismissedAttentionItems) {
-        const prevRec = draft.settings.attentionDismissals?.[item.dismissKey];
-        const nextTimestamp = nextAttentionDismissalTimestamp(prevRec, now);
-        nextDismissals[item.dismissKey] = { status: 'active' as const, updatedAt: nextTimestamp };
-      }
-      draft.settings.attentionDismissals = nextDismissals;
-      draft.settings.dismissedAttentionKeys = Object.entries(nextDismissals)
-        .filter(([_, rec]) => (rec as AttentionDismissalRecord)?.status === 'dismissed')
-        .map(([k]) => k)
-        .sort();
-    }) === false) return;
+    const ts = Date.now();
+    if (
+      onUpdateState((draft) => {
+        if (!draft.settings) return;
+        const nextDismissals = { ...(draft.settings.attentionDismissals || {}) };
+        for (const item of dismissedAttentionItems) {
+          const prevRec = draft.settings.attentionDismissals?.[item.dismissKey];
+          const nextTimestamp = nextAttentionDismissalTimestamp(prevRec, ts);
+          nextDismissals[item.dismissKey] = { status: 'active' as const, updatedAt: nextTimestamp };
+        }
+        draft.settings.attentionDismissals = nextDismissals;
+        draft.settings.dismissedAttentionKeys = Object.entries(nextDismissals)
+          .filter(([, rec]) => (rec as AttentionDismissalRecord)?.status === 'dismissed')
+          .map(([k]) => k)
+          .sort();
+      }) === false
+    ) {
+      return;
+    }
     setBackupDismissed(false);
     showToast('Todos los avisos fueron restaurados.', 'success');
   };
-  const isPrioritiesVisible = useMemo(() => {
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const direct = window.localStorage.getItem('visibleWidgets');
-        if (direct) {
-          const parsed = JSON.parse(direct);
-          if (typeof parsed?.priorities === 'boolean') return parsed.priorities;
-          if (typeof parsed?.focus === 'boolean') return parsed.focus;
-        }
+
+  const handleStartGymFromSpotlight = (templateId?: string) => {
+    const saved = onUpdateState((draft) => {
+      startGymSession(draft.gym, {
+        templateId,
+        date: todayIso,
+        startedAt: formattedTime,
+        sessionId: uid(),
+      });
+    });
+    if (!saved) return;
+    playSound('click');
+    showToast('Entrenamiento iniciado.', 'success');
+    onNavigate('gimnasio');
+  };
+
+  const handleStartStudyFromSpotlight = (subjectId?: string | null, subjectName?: string | null) => {
+    const saved = onUpdateState((draft) => {
+      if (!draft.study) return;
+      if (!draft.study.activeSession) {
+        draft.study.activeSession = startStudySession(25, subjectId ?? null, subjectName ?? null);
       }
-    } catch {}
-
-    try {
-      const custom = loadTodayCustomization();
-      if (custom?.visibleWidgets) {
-        if (typeof custom.visibleWidgets.priorities === 'boolean') {
-          return custom.visibleWidgets.priorities;
-        }
-        if (typeof custom.visibleWidgets.focus === 'boolean') {
-          return custom.visibleWidgets.focus;
-        }
-      }
-    } catch {}
-
-    return true;
-  }, []);
-
-  const dayClosed = Boolean(state.checkoutLog?.[todayIso]?.closedAt);
+    });
+    if (!saved) return;
+    playSound('click');
+    showToast('Bloque de estudio iniciado (25 min).', 'success');
+    onNavigate('estudios');
+  };
 
   const handleToggleItem = (item: TodayItem, entryKey?: string): boolean => {
     if (!item.done && item.isBlocked && item.blockingTaskNames?.length) {
       const blockers = item.blockingTaskNames.map((name) => `• ${name}`).join('\n');
-      if (!window.confirm(`Esta tarea depende de requisitos aún no completados:\n\n${blockers}\n\n¿Deseas marcarla como completada de todos modos?`)) return false;
+      if (
+        !window.confirm(
+          `Esta tarea depende de requisitos aún no completados:\n\n${blockers}\n\n¿Deseas marcarla como completada de todos modos?`
+        )
+      ) {
+        return false;
+      }
     }
 
     const nextCompleted = !item.done;
@@ -376,7 +435,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       if (entryKey) {
         setCompletionMotion((prev) => ({ taskId: entryKey, nonce: (prev?.nonce || 0) + 1 }));
       }
-      if (item.unblocksCount) showToast(`Actividad completada. Desbloqueaste ${item.unblocksCount} tarea(s).`, 'success');
+      if (item.unblocksCount) {
+        showToast(`Actividad completada. Desbloqueaste ${item.unblocksCount} tarea(s).`, 'success');
+      }
     }
     return true;
   };
@@ -387,7 +448,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       let applied = false;
       const saved = onUpdateState((draft) => {
         const target = (draft.dailyPriorities || []).find((priority) => priority.id === entry.priorityId);
-        if (target) { target.done = nextCompleted; applied = true; }
+        if (target) {
+          target.done = nextCompleted;
+          applied = true;
+        }
       });
       if (saved && applied && nextCompleted) {
         playSound('success');
@@ -398,22 +462,87 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (entry.todayItem) handleToggleItem(entry.todayItem, entry.key);
   };
 
-  const handleToggleFocus = (entry: TodayAgendaEntry) => {
-    if (onUpdateState((draft) => {
-      if (!draft.dailyPriorities) draft.dailyPriorities = [];
-      if (entry.priorityId) {
-        draft.dailyPriorities = draft.dailyPriorities.filter((priority) => priority.id !== entry.priorityId);
-        return;
+  const handleMoveEntryToTomorrow = (entry: TodayAgendaEntry) => {
+    const tomorrowIso = getTomorrowDateString(todayIso);
+    if (entry.source === 'extra') {
+      const saved = onUpdateState((draft) => {
+        const extra = (draft.todayExtras || []).find((item) => item.id === entry.id);
+        if (extra) extra.date = tomorrowIso;
+      });
+      if (saved) showToast('Movida para mañana.', 'info');
+      return;
+    }
+    if (entry.source === 'priority' && entry.priorityId) {
+      const saved = onUpdateState((draft) => {
+        const priority = (draft.dailyPriorities || []).find((item) => item.id === entry.priorityId);
+        if (priority) priority.date = tomorrowIso;
+      });
+      if (saved) showToast('Movida para mañana.', 'info');
+    }
+  };
+
+  const handleRemoveEntryFromToday = (entry: TodayAgendaEntry) => {
+    if (entry.source === 'extra') {
+      const snapshot = state.todayExtras.find((item) => item.id === entry.id);
+      const saved = onUpdateState((draft) => {
+        draft.todayExtras = (draft.todayExtras || []).filter((item) => item.id !== entry.id);
+      });
+      if (saved && snapshot) {
+        showToast('Quitada de hoy.', 'info', {
+          actionLabel: 'Deshacer',
+          onAction: () => {
+            onUpdateState((draft) => {
+              if (!draft.todayExtras.some((item) => item.id === snapshot.id)) {
+                draft.todayExtras.push(snapshot);
+              }
+            });
+          },
+        });
       }
-      const todayPriorities = draft.dailyPriorities.filter((priority) => priority.date === todayIso);
-      if (todayPriorities.length >= 3) {
-        showToast('Ya tenés tres prioridades para hoy.', 'info');
-        return;
+      return;
+    }
+
+    if (entry.source === 'priority' && entry.priorityId) {
+      const snapshot = state.dailyPriorities.find((item) => item.id === entry.priorityId);
+      const saved = onUpdateState((draft) => {
+        draft.dailyPriorities = (draft.dailyPriorities || []).filter((item) => item.id !== entry.priorityId);
+      });
+      if (saved && snapshot) {
+        showToast('Quitada de hoy.', 'info', {
+          actionLabel: 'Deshacer',
+          onAction: () => {
+            onUpdateState((draft) => {
+              if (!draft.dailyPriorities.some((item) => item.id === snapshot.id)) {
+                draft.dailyPriorities.push(snapshot);
+              }
+            });
+          },
+        });
       }
-      const usedRanks = todayPriorities.map((priority) => priority.rank || 0);
-      const rank = [1, 2, 3].find((candidate) => !usedRanks.includes(candidate)) || todayPriorities.length + 1;
-      draft.dailyPriorities.push({ id: uid(), date: todayIso, text: entry.label, done: entry.done, rank });
-    }) === false) return;
+      return;
+    }
+
+    if (entry.source === 'agenda') {
+      const dayKey = dayKeyFromDate(new Date(`${todayIso}T12:00:00`));
+      const snapshot = (state.agenda?.[dayKey] || []).find((item) => item.id === entry.id);
+      const saved = onUpdateState((draft) => {
+        if (!draft.agenda?.[dayKey]) return;
+        draft.agenda[dayKey] = draft.agenda[dayKey].filter((item) => item.id !== entry.id);
+      });
+      if (saved && snapshot) {
+        showToast('Bloque quitado de hoy.', 'info', {
+          actionLabel: 'Deshacer',
+          onAction: () => {
+            onUpdateState((draft) => {
+              if (!draft.agenda[dayKey]) draft.agenda[dayKey] = [];
+              if (!draft.agenda[dayKey].some((item) => item.id === snapshot.id)) {
+                draft.agenda[dayKey].push(snapshot);
+              }
+            });
+          },
+        });
+      }
+    }
   };
 
   const handleToggleExtraDirect = (extraId: string) => {
@@ -434,28 +563,28 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const handleRescheduleExtra = (extraId: string, newDate: string) => {
     const saved = onUpdateState((draft) => {
       const extra = (draft.todayExtras || []).find((x) => x.id === extraId);
-      if (extra) {
-        extra.date = newDate;
-      }
+      if (extra) extra.date = newDate;
     });
     if (saved) {
-      showToast(newDate === todayIso ? 'Tarea programada para hoy.' : `Tarea reprogramada para el ${fmtDate(newDate)}.`, 'info');
+      showToast(
+        newDate === todayIso ? 'Tarea programada para hoy.' : `Tarea reprogramada para el ${fmtDate(newDate)}.`,
+        'info'
+      );
     }
   };
 
   const isMovingAllPastRef = useRef(false);
-
   const handleMoveAllPastToToday = () => {
-    if (isMovingAllPastRef.current) return;
-    if (!pastPendingExtras.length) return;
+    if (isMovingAllPastRef.current || !pastPendingExtras.length) return;
     const count = pastPendingExtras.length;
     let confirmed = false;
     try {
-      confirmed = typeof window !== 'undefined' && typeof window.confirm === 'function'
-        ? window.confirm(
-            `¿Mover ${count === 1 ? 'la tarea pendiente anterior' : `las ${count} tareas pendientes anteriores`} a la agenda de hoy?\n\nLas fechas límite (si las tienen) no se modificarán.`
-          )
-        : true;
+      confirmed =
+        typeof window !== 'undefined' && typeof window.confirm === 'function'
+          ? window.confirm(
+              `¿Mover ${count === 1 ? 'la tarea pendiente anterior' : `las ${count} tareas pendientes anteriores`} a la agenda de hoy?\n\nLas fechas límite (si las tienen) no se modificarán.`
+            )
+          : true;
     } catch {
       confirmed = true;
     }
@@ -480,257 +609,247 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
   };
 
-  const handleActivityNavigate = (activity: ActivityTimelineItem) => {
-    if (activity.module === 'note' && activity.recordId && onOpenNote) onOpenNote(activity.recordId);
-    else onNavigate(activityModuleToView[activity.module] || 'dashboard');
-  };
   const openAgendaDestination = () => {
     if (isModuleEnabled(state, 'agenda')) onNavigate('agenda');
     else if (isModuleEnabled(state, 'calendario')) onNavigate('calendario');
   };
-  const agendaOpenLabel = isModuleEnabled(state, 'agenda') ? 'Abrir Agenda' : isModuleEnabled(state, 'calendario') ? 'Abrir Calendario' : null;
+  const agendaOpenLabel = isModuleEnabled(state, 'agenda')
+    ? 'Abrir Agenda'
+    : isModuleEnabled(state, 'calendario')
+      ? 'Abrir Calendario'
+      : null;
+
+  const renderAdminNoticeIcon = (kind: AttentionItem['signalKind']) => {
+    const cls = 'h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500';
+    if (kind === 'backup_urgent') return <Shield className={cls} strokeWidth={1.75} aria-hidden="true" />;
+    if (kind === 'task_overdue') return <Clock className={cls} strokeWidth={1.75} aria-hidden="true" />;
+    if (kind === 'agenda_event_soon' || kind === 'agenda_event_tomorrow') {
+      return <CalendarDays className={cls} strokeWidth={1.75} aria-hidden="true" />;
+    }
+    return <Bell className={cls} strokeWidth={1.75} aria-hidden="true" />;
+  };
 
   return (
-    <div className="today-shell relative mx-auto flex w-full flex-col gap-3 sm:gap-4">
+    <div className="today-shell relative mx-auto flex w-full flex-col gap-5 sm:gap-6">
+      {/* 1. Hero alpino integrado con degradado lateral + mini sparkline de Estado */}
       <header
         data-hero-period={dayPeriod}
-        className="today-hero today-hero-size relative isolate flex overflow-hidden rounded-[22px] border border-[var(--border)] bg-[var(--hero-bg)] p-3 sm:rounded-[26px] sm:px-6 sm:py-4 lg:py-3.5"
+        className="today-hero relative isolate min-h-[144px] overflow-hidden rounded-2xl border border-slate-900/10 bg-[var(--hero-bg)] px-4 py-4 sm:px-6 sm:py-5 dark:border-white/[0.08]"
       >
         <AlpineDayCycleBackdrop forcePeriod={dayPeriod} compact />
-        <div className="relative lg:static z-10 flex w-full flex-col items-start justify-between lg:justify-end gap-2.5 sm:gap-3">
-          {!dayClosed ? (
-            <button type="button" onClick={() => onNavigate('checkout')} aria-label="Cerrar el día" className="today-hero-action inline-flex min-h-11 min-w-11 shrink-0 self-end items-center justify-center gap-1.5 rounded-full px-3 text-[12px] font-medium tracking-[-0.01em] transition sm:px-3.5 lg:absolute lg:right-4 lg:top-4"><AppIcon name="moon" className="h-3.5 w-3.5 opacity-85" /><span className="hidden sm:inline">Cerrar el día</span></button>
-          ) : (
-            <span className="today-hero-closed inline-flex shrink-0 self-end items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium tracking-[-0.01em] sm:px-3.5 sm:py-1.5 lg:absolute lg:right-4 lg:top-4"><AppIcon name="check" className="h-3.5 w-3.5" />Día cerrado</span>
-          )}
-          <section className="today-observatory-panel" aria-label="Momento actual en Celestian">
-            <svg className="today-observatory-shape" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-              <defs>
-                <linearGradient id={`${observatoryId}-material`} x1="0" y1="0" x2="1" y2="0.6" gradientUnits="objectBoundingBox">
-                  <stop offset="0" stopColor="var(--observatory-ink)" />
-                  <stop offset="0.62" stopColor="var(--observatory-smoke)" />
-                  <stop offset="1" stopColor="var(--observatory-edge)" />
-                </linearGradient>
-                <radialGradient id={`${observatoryId}-light`} cx="0.08" cy="0" r="1" gradientTransform="scale(1 0.85)" gradientUnits="objectBoundingBox">
-                  <stop offset="0" stopColor="#657cb8" stopOpacity="0.16" />
-                  <stop offset="0.7" stopColor="#657cb8" stopOpacity="0" />
-                </radialGradient>
-                <linearGradient id={`${observatoryId}-rim`} x1="0" y1="0" x2="1" y2="1" gradientUnits="objectBoundingBox">
-                  <stop offset="0" stopColor="#b3c7ef" stopOpacity="0.34" />
-                  <stop offset="0.65" stopColor="#b3c7ef" stopOpacity="0.23" />
-                  <stop offset="1" stopColor="#b3c7ef" stopOpacity="0.15" />
-                </linearGradient>
-              </defs>
-              <path d={OBSERVATORY_PANEL_PATH} fill={`url(#${observatoryId}-material)`} />
-              <path d={OBSERVATORY_PANEL_PATH} fill={`url(#${observatoryId}-light)`} />
-              <path d={OBSERVATORY_PANEL_PATH} fill="none" stroke={`url(#${observatoryId}-rim)`} strokeWidth="1" vectorEffect="non-scaling-stroke" />
-            </svg>
-            <div className="today-observatory-kicker">
-              <AppIcon name="sparkles" className="h-3.5 w-3.5 shrink-0" />
-              <span>Celestian LifeOS · Hoy</span>
+
+        {/* Smooth left-to-right gradient + subtle bottom scrim over the alpine photo (no floating dark box) */}
+        <div
+          aria-hidden="true"
+          data-hero-gradient="true"
+          className="pointer-events-none absolute inset-0 z-[1]"
+          style={{
+            background:
+              'linear-gradient(90deg, rgba(9,12,20,0.88) 0%, rgba(9,12,20,0.52) 52%, rgba(9,12,20,0.12) 100%), linear-gradient(to top, rgba(9,12,20,0.64) 0%, rgba(9,12,20,0.14) 48%, transparent 100%)',
+          }}
+        />
+
+        <div className="relative z-10 flex flex-col gap-3.5">
+          {/* Row 1: Time/Date on left + compact Cerrar el día on top-right (aligned even at 389px) */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-medium text-white/85">
+              <time dateTime={`${localDateIso}T${formattedTime}`} className="font-semibold tabular-nums text-white">
+                {formattedTime}
+              </time>
+              <span aria-hidden="true" className="text-white/50">·</span>
+              <time dateTime={localDateIso} className="truncate">
+                {formattedFullDate}
+              </time>
             </div>
-            <time className="today-observatory-clock" dateTime={`${localDateIso}T${formattedTime}`}>
-              {formattedTime}
-            </time>
-            <time className="today-observatory-date" dateTime={localDateIso}>
-              {formattedFullDate}
-            </time>
-            <div className="today-observatory-divider" aria-hidden="true" />
-            <h1 className="today-observatory-greeting">
-              {getLocalGreeting(now, state.profile?.name || state.settings?.userName || '')}
-            </h1>
-          </section>
+
+            {!dayClosed ? (
+              <button
+                type="button"
+                onClick={() => onNavigate('checkout')}
+                aria-label="Cerrar el día"
+                className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/20 bg-slate-950/50 px-3 py-1 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/70 cursor-pointer"
+              >
+                <Moon className="h-3.5 w-3.5 text-white/80" strokeWidth={1.75} aria-hidden="true" />
+                <span>Cerrar el día</span>
+              </button>
+            ) : (
+              <span className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/15 bg-slate-950/45 px-3 py-1 text-xs font-medium text-white/90 backdrop-blur-md">
+                <Check className="h-3.5 w-3.5 text-white/80" strokeWidth={1.75} aria-hidden="true" />
+                <span>Día cerrado</span>
+              </span>
+            )}
+          </div>
+
+          {/* Row 2: Greeting directly over the gradient */}
+          <h1 className="text-xl font-bold tracking-[-0.025em] text-white sm:text-2xl">
+            {getLocalGreeting(now, state.profile?.name || '')}
+          </h1>
+
+          {/* Row 3: Daily Status — single button if empty, or single compact pill + 56×20 inline sparkline */}
+          <div className="flex items-center">
+            {!hasAnyTodayStatus ? (
+              <button
+                type="button"
+                onClick={() => setIsStatusModalOpen(true)}
+                aria-label="Registrar estado de hoy y ver evolución de 7 días"
+                className="inline-flex min-h-8 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/20 bg-slate-950/55 px-3.5 py-1.5 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/75 cursor-pointer"
+              >
+                <Plus className="h-3.5 w-3.5 text-white/80" strokeWidth={1.75} aria-hidden="true" />
+                <span>Registrar estado de hoy</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsStatusModalOpen(true)}
+                aria-label={`Estado de hoy: ${compactStatusText}. Abrir editor y evolución de 7 días`}
+                className="inline-flex min-h-9 items-center gap-3 rounded-full border border-white/20 bg-slate-950/55 px-3.5 py-1.5 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/75 cursor-pointer"
+              >
+                <span className="tabular-nums tracking-[-0.01em] text-white/95">
+                  {compactStatusText}
+                </span>
+                {sparkline.hasAnySeries && (
+                  <svg
+                    width="56"
+                    height="20"
+                    viewBox="0 0 56 20"
+                    fill="none"
+                    aria-hidden="true"
+                    data-status-sparkline="true"
+                    className="shrink-0 overflow-visible"
+                  >
+                    {sparkline.sleepPath && (
+                      <path
+                        d={sparkline.sleepPath}
+                        stroke="rgba(125,211,252,0.9)"
+                        strokeWidth={1.6}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    )}
+                    {sparkline.energyPath && (
+                      <path
+                        d={sparkline.energyPath}
+                        stroke="rgba(165,180,252,0.95)"
+                        strokeWidth={1.6}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    )}
+                    {sparkline.moodPath && (
+                      <path
+                        d={sparkline.moodPath}
+                        stroke="rgba(255,255,255,0.9)"
+                        strokeWidth={1.6}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    )}
+                  </svg>
+                )}
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
-      <div className="block">
-        <BentoCommandBar
-          state={state}
-          onUpdateState={onUpdateState}
+      {/* 2. Tarjeta protagonista: solo cuando hay bloque activo, próximo o cierre (cero duplicación en estado vacío) */}
+      {spotlight.mode !== 'free' && (
+        <TodaySpotlightCard
+          spotlight={spotlight}
+          onStartGym={handleStartGymFromSpotlight}
+          onStartStudy={handleStartStudyFromSpotlight}
+          onToggleEntry={handleToggleAgendaEntry}
+          onOpenCheckout={() => onNavigate('checkout')}
           onNavigate={onNavigate}
-          onOpenSearch={onOpenSearch}
-          onOpenCapture={onOpenCapture}
-          onQuickAction={onQuickAction}
-          compactBar
         />
-      </div>
+      )}
 
-      {attentionItems.length > 0 && (
-        <section
-          className="today-attention rounded-2xl border border-[var(--border)] px-3.5 py-2 space-y-2"
+      {/* 3. Máximo 1 tira administrativa discreta de una sola línea */}
+      {topAdminNotice && (
+        <SurfaceCard
+          as="section"
           aria-labelledby="today-attention-title"
+          className="px-4 py-2.5"
         >
           <h2 id="today-attention-title" className="sr-only">
             Atención ahora
           </h2>
-          {attentionItems.map((item, idx) => {
-            if (item.signalKind === 'backup_urgent') {
-              return (
-                <div
-                  key={item.id}
-                  className={`today-attention-row ${idx > 0 ? 'pt-2 border-t border-[var(--border)]/60' : ''}`}
-                >
-                  <span className={`today-attention-icon flex h-6 w-6 items-center justify-center rounded-md ${item.urgency === 'info' ? 'bg-[var(--surface-muted)] text-[var(--text-soft)]' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`}>
-                    <AppIcon name="shield" className="h-3.5 w-3.5" />
-                  </span>
-                  <div className="today-attention-copy min-w-0">
-                    <strong className="text-[13px] font-semibold text-[var(--text)]">
-                      {item.title}
-                    </strong>
-                    <span className="text-xs leading-snug text-[var(--text-soft)]">
-                      {item.detail}
-                    </span>
-                  </div>
+
+          {topAdminNotice.signalKind === 'weekly_review_due' ? (
+            <WeeklyReviewCard
+              state={state}
+              onUpdateState={onUpdateState}
+              onNavigate={onNavigate}
+              borderLess={true}
+            />
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-2 sm:flex-nowrap">
+              <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                {renderAdminNoticeIcon(topAdminNotice.signalKind)}
+                <p className="min-w-0 text-xs text-slate-600 dark:text-slate-300">
+                  <strong className="font-semibold text-slate-900 dark:text-slate-100">
+                    {topAdminNotice.title}:
+                  </strong>{' '}
+                  <span>{topAdminNotice.detail}</span>
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {topAdminNotice.signalKind === 'backup_urgent' ? (
                   <button
                     type="button"
                     onClick={onExportJSON}
-                    className="today-attention-action inline-flex min-h-8 sm:min-h-9 items-center rounded-lg px-2 text-xs font-semibold text-[var(--blue)] hover:underline cursor-pointer"
+                    className="whitespace-nowrap rounded-lg px-2 py-1 text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400 cursor-pointer"
                   >
                     Descargar copia
                   </button>
+                ) : (
                   <button
                     type="button"
-                    onClick={() => handleDismissAttention(item)}
-                    className="today-attention-dismiss flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center text-[var(--text-soft)] hover:text-rose-500 rounded-lg hover:bg-rose-500/10 transition cursor-pointer"
-                    aria-label="Descartar aviso de copia de seguridad"
-                    title="Descartar aviso"
+                    onClick={() => handleAttentionAction(topAdminNotice)}
+                    className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1 text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400 cursor-pointer"
                   >
-                    <AppIcon name="x" className="h-3.5 w-3.5" />
+                    <span>{topAdminNotice.actionLabel}</span>
+                    <ArrowRight className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
                   </button>
-                </div>
-              );
-            }
-
-            if (item.signalKind === 'weekly_review_due') {
-              return (
-                <div
-                  key={item.id}
-                  className={idx > 0 ? 'pt-2 border-t border-[var(--border)]/60' : ''}
-                >
-                  <WeeklyReviewCard
-                    state={state}
-                    onUpdateState={onUpdateState}
-                    onNavigate={onNavigate}
-                    borderLess={true}
-                  />
-                </div>
-              );
-            }
-
-            const iconName = (() => {
-              switch (item.signalKind) {
-                case 'financial_commitment_due':
-                case 'financial_agreement_due':
-                  return 'wallet';
-                case 'task_overdue':
-                  return 'clock';
-                case 'exam_upcoming':
-                  return 'book';
-                case 'job_deadline_upcoming':
-                  return 'briefcase';
-                case 'agenda_event_soon':
-                case 'agenda_event_tomorrow':
-                  return 'calendarDays';
-                default:
-                  return 'bell';
-              }
-            })();
-
-            const badgeStyle = (() => {
-              switch (item.urgency) {
-                case 'critical':
-                  return 'bg-rose-500/10 text-rose-600 dark:text-rose-400';
-                case 'urgent':
-                  return 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
-                case 'warning':
-                  return 'bg-amber-500/10 text-amber-600 dark:text-amber-400';
-                default:
-                  return 'bg-blue-500/10 text-blue-600 dark:text-blue-400';
-              }
-            })();
-
-            return (
-              <div
-                key={item.id}
-                className={`today-attention-row ${idx > 0 ? 'pt-2 border-t border-[var(--border)]/60' : ''}`}
-              >
-                <span
-                  className={`today-attention-icon flex h-6 w-6 items-center justify-center rounded-md ${badgeStyle}`}
-                >
-                  <AppIcon name={iconName} className="h-3.5 w-3.5" />
-                </span>
-                <div className="today-attention-copy min-w-0">
-                  <strong className="text-[13px] font-semibold text-[var(--text)]">
-                    {item.title}
-                  </strong>
-                  <span className="text-xs leading-snug text-[var(--text-soft)]">
-                    {item.detail}
-                  </span>
-                </div>
+                )}
                 <button
                   type="button"
-                  onClick={() => handleAttentionAction(item)}
-                  className="today-attention-action inline-flex min-h-8 sm:min-h-9 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-[var(--blue)] hover:underline cursor-pointer"
-                >
-                  <span>{item.actionLabel}</span>
-                  <AppIcon name="arrowRight" className="h-3 w-3" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDismissAttention(item)}
-                  className="today-attention-dismiss flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center text-[var(--text-soft)] hover:text-rose-500 rounded-lg hover:bg-rose-500/10 transition cursor-pointer"
-                  aria-label={`Descartar aviso: ${item.title}`}
+                  onClick={() => handleDismissAttention(topAdminNotice)}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 cursor-pointer"
+                  aria-label={`Descartar aviso: ${topAdminNotice.title}`}
                   title="Descartar aviso"
                 >
-                  <AppIcon name="x" className="h-3.5 w-3.5" />
+                  <X className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
                 </button>
               </div>
-            );
-          })}
-          {dismissedAttentionItems.length > 0 && (
-            <div className="flex items-center justify-end pt-1 border-t border-[var(--border)]/45 text-[11px]">
-              <button
-                type="button"
-                onClick={() => setShowDismissedModal(true)}
-                className="inline-flex min-h-7 sm:min-h-8 items-center gap-1 text-[var(--text-soft)] hover:text-[var(--text)] transition underline cursor-pointer"
-                aria-label={`Ver ${dismissedAttentionItems.length} aviso(s) descartado(s)`}
-              >
-                <span>{dismissedAttentionItems.length === 1 ? '1 aviso descartado' : `${dismissedAttentionItems.length} avisos descartados`}</span>
-              </button>
             </div>
           )}
-        </section>
+        </SurfaceCard>
       )}
 
-      {/* 2 & 3. Bento principal: Agenda de hoy (7/12 izq) + Prioridades y Estado (5/12 der) en desktop */}
-      <div
-        className={`grid grid-cols-1 items-start gap-3 sm:gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] ${
-          isPrioritiesVisible ? 'lg:grid-rows-[auto_1fr]' : ''
-        }`}
-      >
-        {/* Prioridades del día (Smart Priorities) */}
-        {isPrioritiesVisible && (
-          <PrioritiesWidget
-            state={state}
-            onUpdateState={onUpdateState}
-            className="lg:col-start-2 lg:row-start-1"
-          />
-        )}
-
-        {/* Agenda de hoy */}
+      {/* 4. Grilla principal de 2 columnas simétricas (items-stretch) */}
+      <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(300px,1fr)] lg:gap-6">
         <TodayAgendaSection
           entries={agendaEntries}
+          timedBlocks={agendaPartition.timedBlocks}
+          untimedTasks={agendaPartition.untimedTasks}
+          microHabits={agendaPartition.microHabits}
           pastPendingTasks={pastPendingExtras}
           futureScheduledTasks={futureScheduledExtras}
           selectedExtra={selectedExtra}
           onToggle={handleToggleAgendaEntry}
-          onToggleFocus={handleToggleFocus}
           onOpenAgenda={openAgendaDestination}
+          onOpenCapture={onOpenCapture}
           onOpenEntry={(entry) => {
             if (entry.source === 'extra' && onNavigateToRecord) {
               onNavigateToRecord('agenda', { date: todayIso, focusId: `agenda-task-extra-${entry.id}-${todayIso}` });
-            } else onNavigate(entry.navigationTarget || 'agenda');
+            } else {
+              onNavigate(entry.navigationTarget || 'agenda');
+            }
           }}
+          onToggleSkipToday={handleToggleSkipToday}
+          onMoveToTomorrow={handleMoveEntryToTomorrow}
+          onRemoveFromToday={handleRemoveEntryFromToday}
           onToggleExtra={handleToggleExtraDirect}
           onRescheduleExtra={handleRescheduleExtra}
           onMoveAllPastToToday={handleMoveAllPastToToday}
@@ -739,72 +858,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           openLabel={agendaOpenLabel}
           completionMotion={completionMotion}
           todayIso={todayIso}
-          className={`lg:col-start-1 lg:row-start-1 ${isPrioritiesVisible ? 'lg:row-span-2' : ''}`}
         />
 
-        {/* Estado (Contexto personal) */}
-        <PersonalContextCard
-          state={state}
-          onUpdateState={onUpdateState}
+        <TodayRadarSection
+          milestones={radarMilestones}
+          pulse={todayPulse}
+          enabledRadarModules={enabledRadarModules}
+          onOpenMilestone={handleOpenRadarMilestone}
           onNavigate={onNavigate}
-          className={`lg:col-start-2 ${isPrioritiesVisible ? 'lg:row-start-2' : 'lg:row-start-1'}`}
+          onOpenActivity={() => setIsActivityModalOpen(true)}
         />
       </div>
 
-      {/* 4. Actividad reciente */}
-      {recentActivity.length > 0 && (
-        <section className="today-activity-surface rounded-2xl border border-[var(--border)] p-3.5 sm:px-5 sm:py-3" aria-labelledby="recent-activity-title">
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="today-section-icon"><AppIcon name="activity" className="h-3.5 w-3.5" /></span>
-                <h2 id="recent-activity-title" className="text-base font-bold text-[var(--text)]">Actividad reciente</h2>
-              </div>
-              {(activityEdges.left || activityEdges.right) && (
-                <div className="hidden items-center gap-1 sm:flex" aria-label="Desplazar actividad reciente">
-                  <button type="button" onClick={() => scrollActivity(-1)} disabled={!activityEdges.left} className="today-carousel-control" aria-label="Actividades anteriores"><AppIcon name="chevronLeft" className="h-4 w-4" /></button>
-                  <button type="button" onClick={() => scrollActivity(1)} disabled={!activityEdges.right} className="today-carousel-control" aria-label="Actividades siguientes"><AppIcon name="chevronRight" className="h-4 w-4" /></button>
-                </div>
-              )}
-            </div>
+      {/* Modal bajo demanda: Estado diario + Evolución 7 días */}
+      <DailyStatusModal
+        open={isStatusModalOpen}
+        onClose={() => setIsStatusModalOpen(false)}
+        state={state}
+        onUpdateState={onUpdateState}
+        onNavigate={onNavigate}
+      />
 
-            <div
-              ref={activityStripRef}
-              className="today-activity-items flex gap-2 overflow-x-auto overscroll-x-contain"
-              role="region"
-              aria-label="Actividad reciente, desplazamiento horizontal"
-              tabIndex={activityEdges.left || activityEdges.right ? 0 : -1}
-              onKeyDown={(event) => {
-                if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-                  event.preventDefault();
-                  scrollActivity(event.key === 'ArrowLeft' ? -1 : 1);
-                }
-              }}
-            >
-              {recentActivity.map((activity) => (
-                <button
-                  key={activity.id}
-                  type="button"
-                  onClick={() => handleActivityNavigate(activity)}
-                  aria-label={`${activity.module === 'note' ? 'Abrir nota' : `Abrir módulo ${activityModuleToView[activity.module] || 'Hoy'}`}: ${activity.title}. ${formatRelativeTime(activity.timestamp)}`}
-                  className="today-activity-item group flex items-start gap-2.5 rounded-xl border border-[var(--border)]/60 bg-[var(--card)]/80 px-3 py-2.5 text-left transition hover:bg-[var(--surface-muted)] cursor-pointer"
-                >
-                  <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--blue)]">
-                    <AppIcon name={activity.iconName} className="h-3.5 w-3.5" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex flex-wrap items-baseline justify-between gap-x-2">
-                      <span className="text-[11px] font-semibold text-[var(--text-soft)]">{activity.badgeText === 'Gym' ? 'Gimnasio' : activity.badgeText || activityModuleLabel[activity.module]}</span>
-                      <time dateTime={activity.timestamp} className="text-[11px] text-[var(--text-soft)]">{formatActivityWhen(activity.timestamp)}</time>
-                    </span>
-                    <span className="block text-sm font-medium leading-snug text-[var(--text)] break-words group-hover:text-[var(--blue)]">{activity.title}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
+      {/* Modal bajo demanda: Actividad reciente */}
+      <RecentActivityModal
+        open={isActivityModalOpen}
+        onClose={() => setIsActivityModalOpen(false)}
+        state={state}
+        onNavigate={onNavigate}
+        onOpenNote={onOpenNote}
+      />
 
       <DismissedAttentionModal
         open={showDismissedModal}
@@ -818,14 +900,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 };
 
 export const DashboardSkeleton: React.FC = () => (
-  <div role="status" aria-busy="true" aria-label="Cargando vista" className="mx-auto w-full space-y-4 sm:space-y-5 animate-pulse">
-    <div className="today-hero-size rounded-[22px] sm:rounded-[26px] border border-[var(--border)] bg-[var(--hero-bg)]" />
-    <div className="h-12 rounded-2xl border border-[var(--border)] bg-[var(--card)]" />
-    <div className="grid grid-cols-1 items-start gap-3 sm:gap-4 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:grid-rows-[auto_1fr]">
-      <div className="h-[180px] rounded-2xl border border-[var(--border)] bg-[var(--card)] lg:col-start-2 lg:row-start-1" />
-      <div className="h-[480px] rounded-2xl border border-[var(--border)] bg-[var(--card)] lg:col-start-1 lg:row-start-1 lg:row-span-2" />
-      <div className="h-[284px] rounded-2xl border border-[var(--border)] bg-[var(--card)] lg:col-start-2 lg:row-start-2" />
+  <div role="status" aria-busy="true" aria-label="Cargando vista" className="mx-auto w-full space-y-5 animate-pulse">
+    <div className="h-[144px] rounded-2xl bg-[var(--hero-bg)]" />
+    <div className="h-[108px] rounded-2xl border border-slate-200/80 bg-white dark:border-white/[0.07] dark:bg-[#0D111A]" />
+    <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(300px,1fr)] lg:gap-6">
+      <div className="h-[340px] rounded-2xl border border-slate-200/80 bg-white dark:border-white/[0.07] dark:bg-[#0D111A]" />
+      <div className="space-y-5">
+        <div className="h-[180px] rounded-2xl border border-slate-200/80 bg-white dark:border-white/[0.07] dark:bg-[#0D111A]" />
+        <div className="h-[180px] rounded-2xl border border-slate-200/80 bg-white dark:border-white/[0.07] dark:bg-[#0D111A]" />
+      </div>
     </div>
-    <div className="h-14 rounded-2xl border border-[var(--border)] bg-[var(--card)]" />
   </div>
 );

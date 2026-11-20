@@ -14,9 +14,12 @@ export type GymIconName =
   | 'gym-curls'
   | 'gym-deadlift'
   | 'gym-dumbbell'
+  | 'gym-ez-bar'
+  | 'gym-hack-squat'
   | 'gym-hamstrings'
   | 'gym-incline-bench-press'
   | 'gym-lat-pulldown'
+  | 'gym-leg-extension'
   | 'gym-leg-press'
   | 'gym-pec-deck'
   | 'gym-plank'
@@ -25,6 +28,7 @@ export type GymIconName =
   | 'gym-pushups'
   | 'gym-rest'
   | 'gym-scale'
+  | 'gym-seated-leg-curl'
   | 'gym-seated-row'
   | 'gym-shoulder-press'
   | 'gym-squat-rack'
@@ -32,6 +36,7 @@ export type GymIconName =
   | 'gym-timer'
   | 'gym-torso'
   | 'gym-treadmill'
+  | 'gym-tricep-pushdown'
   | 'gym-triceps'
   | 'gym-water'
   | 'gym-weightlifting'
@@ -45,7 +50,7 @@ export interface GymIconDefinition {
   family: GymIconFamily;
   src: string | null;
   suggestedUses: readonly string[];
-  licenseStatus: 'pending' | 'pending-attribution';
+  licenseStatus: 'first-party-original';
 }
 
 const GYM_ICON_BASE = `${import.meta.env?.BASE_URL || '/'}gym-icons/v1/`;
@@ -56,7 +61,7 @@ const icon = (
   family: GymIconFamily,
   fileName: string | null,
   suggestedUses: readonly string[],
-  licenseStatus: GymIconDefinition['licenseStatus'] = 'pending'
+  licenseStatus: GymIconDefinition['licenseStatus'] = 'first-party-original'
 ): GymIconDefinition => ({
   id,
   label,
@@ -72,32 +77,37 @@ export const GYM_ICON_DEFINITIONS: readonly GymIconDefinition[] = [
   icon('gym-lat-pulldown', 'Jalón al pecho', 'exercise', 'lat-pulldown.svg', ['Jalón al pecho', 'Polea alta', 'Espalda']),
   icon('gym-seated-row', 'Remo sentado', 'exercise', 'seated-row.svg', ['Remo en polea baja']),
   icon('gym-pec-deck', 'Pec deck', 'exercise', 'pec-deck.svg', ['Pec deck', 'Mariposa en máquina']),
-  icon('gym-leg-press', 'Prensa de piernas', 'exercise', 'leg-press.svg', ['Prensa de piernas', 'Piernas', 'Cuádriceps']),
+  icon('gym-leg-press', 'Prensa de piernas', 'exercise', 'leg-press.svg', ['Prensa de piernas', 'Piernas']),
+  icon('gym-hack-squat', 'Sentadilla hack', 'exercise', 'hack-squat.svg', ['Sentadilla hack', 'Hack squat']),
+  icon('gym-leg-extension', 'Extensión de cuádriceps', 'exercise', 'leg-extension.svg', ['Extensión de cuádriceps', 'Sillón de cuádriceps', 'Cuádriceps']),
   icon('gym-shoulder-press', 'Press de hombros', 'exercise', 'shoulder-press.svg', ['Press de hombros sentado', 'Hombros']),
   icon('gym-pull-ups', 'Dominadas', 'exercise', 'pull-ups.svg', ['Dominadas', 'Calistenia']),
   icon('gym-power-tower', 'Fondos / paralelas', 'exercise', 'power-tower.svg', ['Fondos', 'Paralelas']),
   icon('gym-deadlift', 'Peso muerto', 'exercise', 'deadlift.svg', ['Peso muerto', 'Peso muerto rumano', 'Cadena posterior']),
   icon('gym-curls', 'Curl con mancuernas', 'exercise', 'curls.svg', ['Curl martillo', 'Curl concentrado', 'Curl con mancuernas']),
-  icon('gym-biceps', 'Bíceps', 'exercise', 'biceps.svg', ['Curl predicador', 'Banco Scott', 'Bíceps']),
-  icon('gym-triceps', 'Tríceps', 'exercise', 'triceps.svg', ['Press francés', 'Fondos de tríceps', 'Tríceps']),
-  icon('gym-pushups', 'Flexiones', 'exercise', 'pushups.svg', ['Flexiones de brazos', 'Lagartijas', 'Push-ups']),
-  icon('gym-plank', 'Plancha', 'exercise', 'plank.svg', ['Plancha abdominal', 'Plancha isométrica', 'Core']),
-  icon('gym-abs', 'Abdominales', 'exercise', 'abs.svg', ['Crunch abdominal', 'Elevación de piernas', 'Abdomen']),
-  icon('gym-stretching', 'Estiramiento', 'exercise', 'stretching.svg', ['Estiramiento', 'Elongación', 'Movilidad']),
-  icon('gym-weightlifting', 'Halterofilia', 'exercise', 'weightlifting.svg', ['Arranque', 'Envión', 'Full body']),
-  icon('gym-torso', 'Torso', 'routine', 'torso.svg', ['Torso', 'Tren superior', 'Press de pecho en máquina']),
-  icon('gym-hamstrings', 'Isquiotibiales', 'exercise', 'hamstrings.svg', ['Curl femoral', 'Isquiotibiales']),
-  icon('gym-calves', 'Gemelos', 'exercise', 'calves.svg', ['Elevación de talones', 'Gemelos', 'Pantorrillas']),
-  icon('gym-dumbbell', 'Mancuerna', 'equipment', 'dumbbell.svg', ['Curls', 'Elevaciones', 'Presses con mancuernas', 'Brazos']),
-  icon('gym-barbell', 'Barra', 'equipment', 'barbell.svg', ['Remo con barra', 'Curls con barra', 'Press militar']),
-  icon('gym-cable-machine', 'Polea', 'equipment', 'cable-machine.svg', ['Tríceps en polea', 'Curls en polea', 'Cruces']),
-  icon('gym-squat-rack', 'Rack', 'equipment', 'squat-rack.svg', ['Sentadilla', 'Rack', 'Movimientos con barra']),
-  icon('gym-adjustable-bench', 'Banco ajustable', 'equipment', 'adjustable-bench.svg', ['Ejercicios con banco'], 'pending-attribution'),
+  icon('gym-biceps', 'Banco Scott / Bíceps', 'exercise', 'biceps.svg', ['Curl predicador', 'Banco Scott', 'Bíceps']),
+  icon('gym-triceps', 'Press francés / Tríceps', 'exercise', 'triceps.svg', ['Press francés', 'Fondos de tríceps', 'Tríceps']),
+  icon('gym-tricep-pushdown', 'Tríceps en polea / cuerda', 'exercise', 'tricep-pushdown.svg', ['Extensión de tríceps en polea', 'Tríceps con cuerda', 'Pushdown']),
+  icon('gym-pushups', 'Paralelas de flexiones', 'exercise', 'pushups.svg', ['Flexiones de brazos', 'Lagartijas', 'Push-ups']),
+  icon('gym-plank', 'Colchoneta isométrica', 'exercise', 'plank.svg', ['Plancha abdominal', 'Plancha isométrica', 'Core']),
+  icon('gym-abs', 'Banco / rueda abdominal', 'exercise', 'abs.svg', ['Crunch abdominal', 'Rueda abdominal', 'Abdomen']),
+  icon('gym-stretching', 'Rodillo de movilidad', 'exercise', 'stretching.svg', ['Estiramiento', 'Elongación', 'Movilidad']),
+  icon('gym-weightlifting', 'Plataforma olímpica', 'exercise', 'weightlifting.svg', ['Arranque', 'Envión', 'Full body']),
+  icon('gym-torso', 'Press de pecho en máquina', 'routine', 'torso.svg', ['Torso', 'Tren superior', 'Press de pecho en máquina']),
+  icon('gym-hamstrings', 'Curl femoral acostado', 'exercise', 'hamstrings.svg', ['Curl femoral acostado', 'Camilla femoral', 'Isquiotibiales']),
+  icon('gym-seated-leg-curl', 'Curl femoral sentado', 'exercise', 'seated-leg-curl.svg', ['Curl femoral sentado', 'Sillón femoral']),
+  icon('gym-calves', 'Máquina de gemelos', 'exercise', 'calves.svg', ['Elevación de talones', 'Gemelos', 'Pantorrillas']),
+  icon('gym-dumbbell', 'Mancuerna hexagonal', 'equipment', 'dumbbell.svg', ['Curls', 'Elevaciones', 'Presses con mancuernas', 'Brazos']),
+  icon('gym-barbell', 'Barra olímpica', 'equipment', 'barbell.svg', ['Remo con barra', 'Curls con barra', 'Press militar']),
+  icon('gym-ez-bar', 'Barra EZ / W', 'equipment', 'ez-bar.svg', ['Curl con barra EZ', 'Barra Z', 'Barra W']),
+  icon('gym-cable-machine', 'Polea doble', 'equipment', 'cable-machine.svg', ['Cruces en polea', 'Curls en polea', 'Polea']),
+  icon('gym-squat-rack', 'Rack de sentadillas', 'equipment', 'squat-rack.svg', ['Sentadilla', 'Rack', 'Movimientos con barra']),
+  icon('gym-adjustable-bench', 'Banco ajustable', 'equipment', 'adjustable-bench.svg', ['Ejercicios con banco', 'Banco plano / inclinado']),
   icon('gym-bike', 'Bicicleta', 'equipment', 'bike.svg', ['Bicicleta', 'Cardio']),
   icon('gym-treadmill', 'Caminadora', 'equipment', 'treadmill.svg', ['Caminata', 'Carrera', 'Cardio']),
   icon('gym-yoga-mat', 'Colchoneta', 'equipment', 'yoga-mat.svg', ['Core', 'Movilidad', 'Trabajo de suelo']),
   icon('gym-timer', 'Temporizador', 'context', 'timer.svg', ['Descansos', 'Intervalos']),
-  icon('gym-water', 'Agua', 'context', 'water.svg', ['Hidratación']),
+  icon('gym-water', 'Botella / Shaker', 'context', 'water.svg', ['Hidratación']),
   icon('gym-rest', 'Descanso', 'context', 'rest.svg', ['Día de descanso', 'Recuperación']),
   icon('gym-scale', 'Balanza', 'context', 'scale.svg', ['Peso corporal', 'Progresión']),
   icon('gym-workout-calendar', 'Agenda de entrenamiento', 'context', 'workout-calendar.svg', ['Planificación', 'Rutinas']),
@@ -133,32 +143,38 @@ export const GYM_EXERCISE_ICON_OPTIONS: ReadonlyArray<{
 }> = [
   { id: 'gym-bench-press', label: 'Press banca' },
   { id: 'gym-incline-bench-press', label: 'Press inclinado' },
-  { id: 'gym-pec-deck', label: 'Pec deck / Aperturas' },
-  { id: 'gym-torso', label: 'Torso / Pecho' },
-  { id: 'gym-lat-pulldown', label: 'Jalón / Espalda' },
-  { id: 'gym-seated-row', label: 'Remo sentado' },
-  { id: 'gym-pull-ups', label: 'Dominadas' },
+  { id: 'gym-adjustable-bench', label: 'Banco ajustable' },
+  { id: 'gym-pec-deck', label: 'Pec deck / Mariposa' },
+  { id: 'gym-torso', label: 'Press pecho en máquina' },
+  { id: 'gym-lat-pulldown', label: 'Jalón / Polea alta' },
+  { id: 'gym-seated-row', label: 'Remo en polea baja' },
+  { id: 'gym-pull-ups', label: 'Barra de dominadas' },
   { id: 'gym-deadlift', label: 'Peso muerto' },
-  { id: 'gym-leg-press', label: 'Prensa / Piernas' },
-  { id: 'gym-squat-rack', label: 'Sentadilla / Rack' },
-  { id: 'gym-hamstrings', label: 'Femorales / Isquios' },
-  { id: 'gym-calves', label: 'Gemelos' },
-  { id: 'gym-shoulder-press', label: 'Hombros' },
-  { id: 'gym-biceps', label: 'Brazos / Bíceps' },
+  { id: 'gym-leg-press', label: 'Prensa de piernas' },
+  { id: 'gym-hack-squat', label: 'Sentadilla hack' },
+  { id: 'gym-squat-rack', label: 'Rack de sentadillas' },
+  { id: 'gym-leg-extension', label: 'Extensión de cuádriceps' },
+  { id: 'gym-hamstrings', label: 'Curl femoral acostado' },
+  { id: 'gym-seated-leg-curl', label: 'Curl femoral sentado' },
+  { id: 'gym-calves', label: 'Máquina de gemelos' },
+  { id: 'gym-shoulder-press', label: 'Press de hombros' },
+  { id: 'gym-biceps', label: 'Banco Scott / Bíceps' },
   { id: 'gym-curls', label: 'Curl con mancuernas' },
-  { id: 'gym-triceps', label: 'Tríceps' },
+  { id: 'gym-tricep-pushdown', label: 'Tríceps en polea / cuerda' },
+  { id: 'gym-triceps', label: 'Press francés / Tríceps' },
   { id: 'gym-power-tower', label: 'Fondos / Paralelas' },
-  { id: 'gym-pushups', label: 'Flexiones' },
-  { id: 'gym-abs', label: 'Abdomen' },
+  { id: 'gym-pushups', label: 'Paralelas de flexiones' },
+  { id: 'gym-abs', label: 'Banco / rueda abdominal' },
   { id: 'gym-plank', label: 'Plancha / Core' },
   { id: 'gym-yoga-mat', label: 'Colchoneta' },
-  { id: 'gym-dumbbell', label: 'Mancuernas' },
-  { id: 'gym-barbell', label: 'Barra' },
-  { id: 'gym-cable-machine', label: 'Polea' },
-  { id: 'gym-weightlifting', label: 'Full body' },
+  { id: 'gym-dumbbell', label: 'Mancuerna hexagonal' },
+  { id: 'gym-barbell', label: 'Barra olímpica' },
+  { id: 'gym-ez-bar', label: 'Barra EZ / W' },
+  { id: 'gym-cable-machine', label: 'Polea doble' },
+  { id: 'gym-weightlifting', label: 'Plataforma olímpica' },
   { id: 'gym-bike', label: 'Bicicleta / Cardio' },
   { id: 'gym-treadmill', label: 'Caminadora' },
-  { id: 'gym-stretching', label: 'Estiramiento' },
+  { id: 'gym-stretching', label: 'Rodillo de movilidad' },
 ] as const;
 
 export function isGymIconName(value: unknown): value is GymIconName {
@@ -239,19 +255,31 @@ export function resolveExerciseGymIcon(
     return 'gym-torso';
   }
   if (
-    /^(?:prensas?(?: de piernas?)?|leg[ -]?press|hack(?: squat)?|sentadilla hack|piernas?|legs?|leg[ -]?days?|cuadriceps|quads?)(?: inclinada| horizontal| 45)?$/.test(normalized)
+    /^(?:hack(?: squat)?|sentadilla hack|prensa hack)(?: inclinada| 45)?$/.test(normalized)
+    && (!equipment || equipment === 'maquina' || equipment === 'barra')
+  ) {
+    return 'gym-hack-squat';
+  }
+  if (
+    /^(?:prensas?(?: de piernas?)?|leg[ -]?press|piernas?|legs?|leg[ -]?days?|cuadriceps|quads?)(?: inclinada| horizontal| 45)?$/.test(normalized)
     && (!equipment || equipment === 'maquina' || equipment === 'barra')
   ) {
     return 'gym-leg-press';
   }
   if (
-    /^(?:extension(?:es)? de cuadriceps(?: en maquina)?|sillon de cuadriceps|leg extensions?)$/.test(normalized)
+    /^(?:extension(?:es)? de cuadriceps(?: en maquina)?|sillon de cuadriceps|leg extensions?|quad extensions?)$/.test(normalized)
     && (!equipment || equipment === 'maquina' || equipment === 'mancuerna')
   ) {
-    return 'gym-leg-press';
+    return 'gym-leg-extension';
   }
   if (
-    /^(?:curls? femoral(?:es)?(?: acostado| sentado| de pie)?|femorales?|isquios?|isquiotibiales?(?: en maquina)?|camilla femoral|sillon femoral|nordic curls?|curls? nordicos?|leg curls?|seated leg curls?|lying leg curls?|hamstrings?)$/.test(normalized)
+    /^(?:curls? femoral(?:es)? sentado|sillon femoral|seated leg curls?|femoral sentado)$/.test(normalized)
+    && (!equipment || equipment === 'maquina')
+  ) {
+    return 'gym-seated-leg-curl';
+  }
+  if (
+    /^(?:curls? femoral(?:es)?(?: acostado| de pie)?|femorales?|isquios?|isquiotibiales?(?: en maquina)?|camilla femoral|nordic curls?|curls? nordicos?|leg curls?|lying leg curls?|hamstrings?)$/.test(normalized)
     && (!equipment || equipment === 'maquina' || equipment === 'mancuerna' || equipment === 'corporal')
   ) {
     return 'gym-hamstrings';
@@ -275,6 +303,12 @@ export function resolveExerciseGymIcon(
     return 'gym-weightlifting';
   }
   if (
+    /^(?:curls? (?:con )?barra (?:ez|z|w)|barra (?:ez|z|w)|ez[ -]?bar(?: curls?)?)$/.test(normalized)
+    && (!equipment || equipment === 'barra')
+  ) {
+    return 'gym-ez-bar';
+  }
+  if (
     /^(?:curls?|martillos?|curls? (?:martillos?|concentrados?|alternos?|inclinados?|spider|zottman)|hammers?|hammer curls?|concentration curls?|dumbbell curls?|bicep curls?|curls? (?:de biceps )?con mancuernas?)(?: sentado| de pie)?$/.test(normalized)
     && (!equipment || equipment === 'mancuerna')
   ) {
@@ -287,10 +321,22 @@ export function resolveExerciseGymIcon(
     return 'gym-biceps';
   }
   if (
+    /^(?:extension(?:es)? de triceps(?: en polea(?: alta)?| con cuerda| con soga| con barra)?|triceps? en polea(?: alta)?|triceps? con cuerda|triceps? con soga|jalon(?:es)? de triceps|pushdowns?(?: de triceps)?|tricep(?:s)? pushdowns?|rope pushdowns?|cable triceps?(?: extensions?)?)$/.test(normalized)
+    && (!equipment || equipment === 'polea')
+  ) {
+    return 'gym-tricep-pushdown';
+  }
+  if (
     /^(?:press frances|rompecraneos|skull[ -]?crushers?|patadas? de triceps|kickbacks?(?: de triceps)?|extension(?:es)? de triceps (?:trasnuca|sobre cabeza|acostado)|overhead triceps?(?: extensions?)?|fondos? de triceps|triceps?)$/.test(normalized)
     && (!equipment || equipment === 'barra' || equipment === 'mancuerna' || equipment === 'corporal')
   ) {
     return 'gym-triceps';
+  }
+  if (
+    /^(?:banco ajustable|banco plano|banco inclinado|adjustable bench)$/.test(normalized)
+    && (!equipment || equipment === 'mancuerna' || equipment === 'barra' || equipment === 'corporal')
+  ) {
+    return 'gym-adjustable-bench';
   }
   if (/^press (?:militar|de hombros)(?: sentado)?(?: en maquina| con barra)?$/.test(normalized)) {
     if (equipment === 'barra' || (!equipment && /militar|con barra/.test(normalized))) return 'gym-barbell';

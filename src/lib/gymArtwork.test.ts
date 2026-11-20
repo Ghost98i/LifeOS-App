@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { resolveGymArtworkKind } from '../components/visual/GymExerciseArtwork';
 import { getRoutineIdentity } from './gymAppearance';
 import { GYM_ICON_DEFINITIONS, GYM_ICON_REGISTRY } from './gymIconRegistry';
@@ -12,13 +13,18 @@ test('Gym V1 maps only high-confidence movement and equipment matches', () => {
   assert.equal(resolveGymArtworkKind('Remo en polea baja', 'polea'), 'gym-seated-row');
   assert.equal(resolveGymArtworkKind('Pec deck', 'maquina'), 'gym-pec-deck');
   assert.equal(resolveGymArtworkKind('Prensa de piernas', 'maquina'), 'gym-leg-press');
+  assert.equal(resolveGymArtworkKind('Sentadilla hack', 'maquina'), 'gym-hack-squat');
+  assert.equal(resolveGymArtworkKind('Extensión de cuádriceps', 'maquina'), 'gym-leg-extension');
   assert.equal(resolveGymArtworkKind('Press de hombros sentado', 'maquina'), 'gym-shoulder-press');
   assert.equal(resolveGymArtworkKind('Dominadas', 'corporal'), 'gym-pull-ups');
   assert.equal(resolveGymArtworkKind('Fondos en paralelas', 'corporal'), 'gym-power-tower');
   assert.equal(resolveGymArtworkKind('Peso muerto rumano', 'barra'), 'gym-deadlift');
   assert.equal(resolveGymArtworkKind('Curl martillo', 'mancuerna'), 'gym-curls');
+  assert.equal(resolveGymArtworkKind('Curl con barra EZ', 'barra'), 'gym-ez-bar');
   assert.equal(resolveGymArtworkKind('Curl predicador', 'barra'), 'gym-biceps');
   assert.equal(resolveGymArtworkKind('Press francés', 'barra'), 'gym-triceps');
+  assert.equal(resolveGymArtworkKind('Extensión de tríceps en polea', 'polea'), 'gym-tricep-pushdown');
+  assert.equal(resolveGymArtworkKind('Tríceps con cuerda', 'polea'), 'gym-tricep-pushdown');
   assert.equal(resolveGymArtworkKind('Flexiones de brazos', 'corporal'), 'gym-pushups');
   assert.equal(resolveGymArtworkKind('Plancha abdominal', 'corporal'), 'gym-plank');
   assert.equal(resolveGymArtworkKind('Crunch abdominal', 'corporal'), 'gym-abs');
@@ -26,7 +32,9 @@ test('Gym V1 maps only high-confidence movement and equipment matches', () => {
   assert.equal(resolveGymArtworkKind('Clean and jerk', 'barra'), 'gym-weightlifting');
   assert.equal(resolveGymArtworkKind('Chest press en máquina', 'maquina'), 'gym-torso');
   assert.equal(resolveGymArtworkKind('Curl femoral acostado', 'maquina'), 'gym-hamstrings');
+  assert.equal(resolveGymArtworkKind('Curl femoral sentado', 'maquina'), 'gym-seated-leg-curl');
   assert.equal(resolveGymArtworkKind('Elevación de talones', 'maquina'), 'gym-calves');
+  assert.equal(resolveGymArtworkKind('Banco ajustable', 'mancuerna'), 'gym-adjustable-bench');
 });
 
 test('structured equipment wins over ambiguous free-form exercise names', () => {
@@ -38,14 +46,24 @@ test('structured equipment wins over ambiguous free-form exercise names', () => 
   assert.equal(resolveGymArtworkKind('Ejercicio personalizado', undefined), 'gym-fallback');
 });
 
-test('the registry exposes 34 local SVG resources plus a neutral fallback', () => {
+test('the registry exposes 39 original first-party equipment SVG resources plus a neutral fallback', async () => {
   const resources = GYM_ICON_DEFINITIONS.filter((definition) => definition.src);
-  assert.equal(resources.length, 34);
+  assert.equal(resources.length, 39);
   assert.equal(GYM_ICON_REGISTRY['gym-fallback'].src, null);
   for (const definition of resources) {
     assert.match(definition.src || '', /gym-icons\/v1\/[a-z0-9-]+\.svg$/);
+    assert.equal(definition.licenseStatus, 'first-party-original');
+
+    const fileName = (definition.src || '').split('/').pop()!;
+    const raw = await readFile(new URL(`../../public/gym-icons/v1/${fileName}`, import.meta.url), 'utf8');
+    assert.ok(!raw.includes('\r'), `${fileName} must use LF line endings`);
+    assert.match(raw, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" viewBox="0 0 64 64" fill="none"(?: shape-rendering="geometricPrecision")?>/, `${fileName} must declare clean 64x64 viewBox`);
+    assert.doesNotMatch(raw, /<script|Noun Project|Created by|font-family|xmlns:xlink/i, `${fileName} must not contain scripts or third-party metadata`);
+    assert.doesNotMatch(raw, /#0F172A|#1E293B|#334155/i, `${fileName} must use the V2 high-contrast palette (no dark slate #0F172A/#1E293B/#334155)`);
+    if (fileName === 'rest.svg') {
+      assert.doesNotMatch(raw, /<rect\b/i, 'rest.svg must not render an outer box frame');
+    }
   }
-  assert.equal(GYM_ICON_REGISTRY['gym-adjustable-bench'].licenseStatus, 'pending-attribution');
 });
 
 test('bilingual singular/plural and case-insensitive terms infer muscle, equipment, and icon sensibly', () => {
