@@ -147,10 +147,10 @@ export const Topbar: React.FC<TopbarProps> = ({
     }
     if (cloudConfigured && !cloudUser) {
       return {
-        dotClass: 'bg-[var(--blue)]',
+        dotClass: 'bg-indigo-600 dark:bg-indigo-400',
         label: 'Conectar Google',
         textColor: 'text-[var(--text-soft)]',
-        badgeClass: 'text-[var(--text)] border-[var(--border)] bg-[var(--card)] hover:border-[var(--border-hover)] hover:bg-[var(--surface-muted)] shadow-2xs',
+        badgeClass: 'text-[var(--text)] border-[var(--border)] bg-[var(--card)] hover:border-indigo-500/40 hover:bg-[var(--surface-muted)] shadow-2xs',
       };
     }
     return {

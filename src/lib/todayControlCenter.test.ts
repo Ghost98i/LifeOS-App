@@ -296,3 +296,35 @@ test('getTodayRadarMilestones: aplica ventanas diferenciadas por dominio (Finanz
   assert.ok(titles.some((t) => t.includes('Parcial 25d')));
   assert.ok(!titles.some((t) => t.includes('Final 35d')));
 });
+
+test('partitionTodayAgenda: oculta el hábito por defecto "Repasar apuntes" cuando Estudios está desactivado sin borrar datos', () => {
+  const state = defaultState();
+  const dateIso = '2026-10-01'; // jueves
+  const now = new Date('2026-10-01T10:00:00');
+  // Ensure default Repasar apuntes is present in tasksRecurring
+  assert.ok(state.tasksRecurring.some((t) => t.name === 'Repasar apuntes'));
+
+  // With estudios disabled
+  state.settings.hiddenTabs = ['estudios', 'ia'];
+  const entriesWhenHidden = getTodayAgendaEntries(state, dateIso);
+  const hiddenPartition = partitionTodayAgenda(state, entriesWhenHidden, now, dateIso);
+  assert.equal(
+    hiddenPartition.microHabits.some((h) => h.label === 'Repasar apuntes'),
+    false
+  );
+  assert.equal(
+    hiddenPartition.microHabits.some((h) => h.label === 'Tender la cama'),
+    true
+  );
+  // Underlying task data is never deleted
+  assert.ok(state.tasksRecurring.some((t) => t.name === 'Repasar apuntes'));
+
+  // When estudios is re-enabled, habit reappears
+  state.settings.hiddenTabs = ['ia'];
+  const entriesWhenVisible = getTodayAgendaEntries(state, dateIso);
+  const visiblePartition = partitionTodayAgenda(state, entriesWhenVisible, now, dateIso);
+  assert.equal(
+    visiblePartition.microHabits.some((h) => h.label === 'Repasar apuntes'),
+    true
+  );
+});

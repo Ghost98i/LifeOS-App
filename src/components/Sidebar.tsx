@@ -136,7 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onCloseMobile();
                   }}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`group relative flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm transition-all cursor-pointer ${
+                  className={`group relative flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 ${
                     isActive
                       ? 'bg-[var(--blue-soft)] font-bold text-[var(--text)] ring-1 ring-inset ring-[var(--blue)]/25 shadow-2xs'
                       : 'font-medium text-[var(--text-soft)] hover:bg-[var(--surface-muted)]/60 hover:text-[var(--text)]'

@@ -89,7 +89,6 @@ import { nextFinanceDeletionTimestamp } from './lib/financeRevision';
 import { detectFinanceSnapshotRegression } from './lib/financeSnapshotIntegrity';
 import { stampGymMutation } from './lib/gymSync';
 
-import { AppIcon } from './components/AppIcon';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
@@ -178,21 +177,6 @@ export default function App() {
     conflicts?: SyncConflictItem[];
   } | null>(null);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
-  const [dismissedAnywhereBanner, setDismissedAnywhereBanner] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('lifeos_dismissed_anywhere_banner') === '1';
-    }
-    return false;
-  });
-
-  const handleDismissAnywhereBanner = () => {
-    setDismissedAnywhereBanner(true);
-    try {
-      localStorage.setItem('lifeos_dismissed_anywhere_banner', '1');
-    } catch {
-      // ignore
-    }
-  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -2475,7 +2459,7 @@ export default function App() {
   const handleCompleteOnboarding = (data: {
     selectedModuleIds: ViewType[];
     name: string;
-    initialContext: { sleepHours: number; energy: number; mood: number };
+    initialContext?: { sleepHours: number; energy: number; mood: number };
   }) => {
     updateState((draft) => {
       if (!draft.profile) {
@@ -2483,29 +2467,31 @@ export default function App() {
       }
       draft.profile.name = data.name.trim();
 
-      const today = todayISO();
-      if (!Array.isArray(draft.dailyContext)) {
-        draft.dailyContext = [];
-      }
-      const existingIndex = draft.dailyContext.findIndex((entry) => entry.date === today);
-      const nowIso = new Date().toISOString();
-      const contextEntry: DailyContextEntry = {
-        date: today,
-        sleepHours: data.initialContext.sleepHours,
-        energy: data.initialContext.energy,
-        mood: data.initialContext.mood,
-        connection: null,
-        recordedAt: nowIso,
-        updatedAt: nowIso,
-      };
-
-      if (existingIndex >= 0) {
-        draft.dailyContext[existingIndex] = {
-          ...draft.dailyContext[existingIndex],
-          ...contextEntry,
+      if (data.initialContext) {
+        const today = todayISO();
+        if (!Array.isArray(draft.dailyContext)) {
+          draft.dailyContext = [];
+        }
+        const existingIndex = draft.dailyContext.findIndex((entry) => entry.date === today);
+        const nowIso = new Date().toISOString();
+        const contextEntry: DailyContextEntry = {
+          date: today,
+          sleepHours: data.initialContext.sleepHours,
+          energy: data.initialContext.energy,
+          mood: data.initialContext.mood,
+          connection: null,
+          recordedAt: nowIso,
+          updatedAt: nowIso,
         };
-      } else {
-        draft.dailyContext.push(contextEntry);
+
+        if (existingIndex >= 0) {
+          draft.dailyContext[existingIndex] = {
+            ...draft.dailyContext[existingIndex],
+            ...contextEntry,
+          };
+        } else {
+          draft.dailyContext.push(contextEntry);
+        }
       }
 
       draft.settings.onboardingCompleted = true;
@@ -2593,36 +2579,6 @@ export default function App() {
                 </button>
                 <button type="button" onClick={handleExportResaleConflict} disabled={!resaleConflictRecordRef.current} className="rounded-xl border border-amber-500/40 px-3 py-2 text-xs font-semibold disabled:opacity-50">
                   Exportar versiones del conflicto
-                </button>
-              </div>
-            </div>
-          )}
-          {cloudSyncConfigured && !cloudUser && !dismissedAnywhereBanner && currentView === 'dashboard' && (
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-3.5 py-2.5 text-xs shadow-[var(--card-shadow-subtle)]">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[var(--blue-soft)] text-[var(--blue)]">
-                  <AppIcon name="cloud" className="h-4 w-4" />
-                </span>
-                <p className="min-w-0 truncate text-xs text-[var(--text-soft)]">
-                  <strong className="font-bold text-[var(--text)]">Sincronización en la nube:</strong> conectá Google para mantener tu celular al día.
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleCloudSignIn}
-                  className="min-h-9 rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] px-3 py-1.5 text-xs font-bold text-white shadow-2xs transition-colors cursor-pointer"
-                >
-                  Conectar
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDismissAnywhereBanner}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-faint)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] transition-colors cursor-pointer"
-                  aria-label="Descartar aviso"
-                  title="Descartar aviso"
-                >
-                  <AppIcon name="x" className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>

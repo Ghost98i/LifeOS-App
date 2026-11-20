@@ -14,6 +14,12 @@ import { DayKey, Exercise, ExerciseEquipment, GymActiveTimer, GymSession, GymSet
 import { GymRestTimerBar } from './GymRestTimerBar';
 import { GymActivityCalendar } from './GymActivityCalendar';
 import { GymWorkoutLauncher } from './GymWorkoutLauncher';
+import { GymStarterPanel } from './GymStarterPanel';
+import {
+  buildGymStarterTemplates,
+  GYM_STARTER_PACKS,
+  type GymStarterPackId,
+} from '../lib/gymStarterTemplates';
 import { useGymLauncher } from '../hooks/useGymLauncher';
 import { useScreenWakeLock } from '../hooks/useScreenWakeLock';
 import { GymNoteSurface } from './GymNoteSurface';
@@ -192,6 +198,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   const historyRootRef = useRef<HTMLDivElement>(null);
   const launcherRef = useRef<HTMLElement>(null);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showStarterTemplates, setShowStarterTemplates] = useState(false);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(initialEditingTemplateId);
   const [openExerciseIconKey, setOpenExerciseIconKey] = useState<string | null>(null);
 
@@ -746,6 +753,23 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     if (!saved) return;
     setTemplateName('');
     showToast('Rutina creada.');
+  };
+
+  const handleLoadStarterPack = (packId: GymStarterPackId) => {
+    const templates = buildGymStarterTemplates(packId);
+    if (templates.length === 0) return;
+    const saved = onUpdateState((draft) => {
+      if (!draft.gym.routineTemplates) draft.gym.routineTemplates = [];
+      draft.gym.routineTemplates.push(...templates);
+    });
+    if (!saved) return;
+    setShowStarterTemplates(false);
+    playSound('success');
+    const packMeta = GYM_STARTER_PACKS.find((p) => p.id === packId);
+    showToast(
+      `Plantilla cargada: ${packMeta?.title || 'Rutina inicial'} (${templates.length} rutinas).`,
+      'success'
+    );
   };
 
   const handleDeleteTemplate = (id: string) => {
@@ -1354,18 +1378,29 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
               }
             />
           ) : (
-            /* NO ACTIVE WORKOUT: TODAY LAUNCHER */
+            /* NO ACTIVE WORKOUT: TODAY LAUNCHER OR GUIDED START */
             <div className="space-y-6">
-              <GymWorkoutLauncher
-                launcherRef={launcherRef}
-                plan={launcherPlan}
-                routines={state.gym.routineTemplates}
-                completed={todayPresentation}
-                onSelect={setSessionTemplate}
-                onStart={() => { if (launcherPlan.canStart) handleStartWorkout(sessionTemplate || undefined); }}
-                onToggleRest={handleToggleRestDay}
-                onEditRoutine={(id) => { setActiveTab('rutinas'); if (id) setEditingTemplateId(id); else setShowTemplates(true); }}
-              />
+              {state.gym.routineTemplates.length === 0 && !todayPresentation && !isRestDayToday ? (
+                <GymStarterPanel
+                  onLoadPack={handleLoadStarterPack}
+                  onCreateCustom={() => {
+                    setActiveTab('rutinas');
+                    setShowTemplates(true);
+                  }}
+                  onStartFreeWorkout={() => handleStartWorkout(undefined)}
+                />
+              ) : (
+                <GymWorkoutLauncher
+                  launcherRef={launcherRef}
+                  plan={launcherPlan}
+                  routines={state.gym.routineTemplates}
+                  completed={todayPresentation}
+                  onSelect={setSessionTemplate}
+                  onStart={() => { if (launcherPlan.canStart) handleStartWorkout(sessionTemplate || undefined); }}
+                  onToggleRest={handleToggleRestDay}
+                  onEditRoutine={(id) => { setActiveTab('rutinas'); if (id) setEditingTemplateId(id); else setShowTemplates(true); }}
+                />
+              )}
 
               {GYM_NOTE_PLACEMENTS_ENABLED && <GymNoteSurface notes={state.notes.postits} storageUserId={storageUserId} privacyMode={state.settings.privacyMode} onOpenNote={onOpenNote} />}
 
@@ -1401,6 +1436,15 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end">
+                    {state.gym.routineTemplates.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowStarterTemplates((v) => !v)}
+                        className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-semibold text-[var(--text-soft)] transition-colors hover:border-[#4F46E5] hover:text-[var(--text)] cursor-pointer"
+                      >
+                        <span>{showStarterTemplates ? 'Ocultar plantillas' : 'Cargar plantilla inicial'}</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => setIsSettingsModalOpen(true)}
@@ -1420,6 +1464,14 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                     </button>
                   </div>
                 </div>
+
+                {showStarterTemplates && state.gym.routineTemplates.length > 0 && (
+                  <GymStarterPanel
+                    compact
+                    onLoadPack={handleLoadStarterPack}
+                    onClose={() => setShowStarterTemplates(false)}
+                  />
+                )}
 
                 {showTemplates && (
                   <div className="rounded-2xl bg-[var(--surface-muted)] p-3 animate-in fade-in sm:p-4">
@@ -1444,10 +1496,11 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
 
                 <div className="gym-routine-list overflow-visible">
                   {state.gym.routineTemplates.length === 0 && !showTemplates && (
-                    <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] px-5 py-6">
-                      <p className="text-sm font-semibold text-[var(--text)]">Todavía no hay rutinas guardadas.</p>
-                      <p className="mt-1 max-w-xl text-sm text-[var(--text-soft)]">Creá un plan con ejercicios, series y cargas objetivo. Las sesiones que hagas después aparecen en Historial.</p>
-                    </div>
+                    <GymStarterPanel
+                      onLoadPack={handleLoadStarterPack}
+                      onCreateCustom={() => setShowTemplates(true)}
+                      onStartFreeWorkout={() => handleStartWorkout(undefined)}
+                    />
                   )}
                   {state.gym.routineTemplates.map((t) => {
                     const isEditing = editingTemplateId === t.id;

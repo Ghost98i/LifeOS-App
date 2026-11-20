@@ -248,6 +248,7 @@ export function partitionTodayAgenda(
 ): TodayAgendaPartition {
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const gymInfo = getGymFusionInfo(state, todayIso);
+  const studyEnabled = isModuleEnabled(state, 'estudios');
 
   const microHabits: TodayAgendaEntry[] = [];
   const rawTimed: TodayAgendaEntry[] = [];
@@ -255,6 +256,9 @@ export function partitionTodayAgenda(
 
   for (const entry of entries) {
     if (isMicroHabitEntry(entry)) {
+      if (!studyEnabled && entry.label.trim().toLocaleLowerCase('es-UY') === 'repasar apuntes') {
+        continue;
+      }
       microHabits.push(entry);
     } else if (entry.time && parseTimeToMinutes(entry.time) !== null) {
       rawTimed.push(entry);

@@ -42,6 +42,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
   const [accName, setAccName] = useState('');
   const [accBalance, setAccBalance] = useState('');
   const [accCurrency, setAccCurrency] = useState<'UYU' | 'USD'>('UYU');
+  const [accError, setAccError] = useState<string | null>(null);
 
   const [isAddDebtOpen, setIsAddDebtOpen] = useState(false);
   const [debtName, setDebtName] = useState('');
@@ -102,13 +103,28 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
 
   const handleCreateAccount = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!accName.trim()) return;
-    const parsed = parseDecimalInput(accBalance.trim() || '0');
-    if (parsed.error || parsed.value === null) {
-      alert(parsed.error || 'Saldo inicial inválido');
+    const trimmedName = accName.trim();
+    if (!trimmedName) {
+      setAccError('Escribí un nombre para la cuenta.');
       return;
     }
-    onAddAccount(accName.trim(), parsed.value, accCurrency);
+    const normalizedName = trimmedName.toLocaleLowerCase('es-UY');
+    const duplicate = accounts.find(
+      (acc) =>
+        acc.name.trim().toLocaleLowerCase('es-UY') === normalizedName &&
+        (acc.currency || 'UYU').trim().toUpperCase() === accCurrency
+    );
+    if (duplicate) {
+      setAccError(`Ya existe una cuenta "${duplicate.name}" en ${accCurrency}.`);
+      return;
+    }
+    const parsed = parseDecimalInput(accBalance.trim() || '0');
+    if (parsed.error || parsed.value === null) {
+      setAccError(parsed.error || 'Saldo inicial inválido.');
+      return;
+    }
+    setAccError(null);
+    onAddAccount(trimmedName, parsed.value, accCurrency);
     setAccName('');
     setAccBalance('');
     setAccCurrency('UYU');
@@ -628,7 +644,10 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                   autoFocus
                   type="text"
                   value={accName}
-                  onChange={(e) => setAccName(e.target.value)}
+                  onChange={(e) => {
+                    setAccName(e.target.value);
+                    if (accError) setAccError(null);
+                  }}
                   placeholder="Ej. Banco, Efectivo, Prex..."
                   className="w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500 font-medium"
                 />
@@ -641,7 +660,10 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                   type="text"
                   inputMode="decimal"
                   value={accBalance}
-                  onChange={(e) => setAccBalance(e.target.value)}
+                  onChange={(e) => {
+                    setAccBalance(e.target.value);
+                    if (accError) setAccError(null);
+                  }}
                   placeholder="0,00"
                   className="w-full p-2.5 text-xs font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
                 />
@@ -652,13 +674,21 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                 </label>
                 <select
                   value={accCurrency}
-                  onChange={(e) => setAccCurrency(e.target.value as 'UYU' | 'USD')}
+                  onChange={(e) => {
+                    setAccCurrency(e.target.value as 'UYU' | 'USD');
+                    if (accError) setAccError(null);
+                  }}
                   className="w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500 font-medium"
                 >
                   <option value="UYU">UYU ($U - Pesos Uruguayos)</option>
                   <option value="USD">USD (US$ - Dólares)</option>
                 </select>
               </div>
+              {accError && (
+                <p role="alert" className="text-xs font-medium text-rose-600 dark:text-rose-400">
+                  {accError}
+                </p>
+              )}
               <button
                 type="submit"
                 className="w-full py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer shadow-xs active:scale-95 transition-all min-h-[44px]"

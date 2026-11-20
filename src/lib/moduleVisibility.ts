@@ -34,6 +34,13 @@ export const ONBOARDING_MODULE_IDS: readonly ViewType[] = [
   'reventa',
 ] as const;
 
+export const DEFAULT_ONBOARDING_MODULE_IDS: readonly ViewType[] = [
+  'agenda',
+  'gimnasio',
+  'finanzas',
+  'notas',
+] as const;
+
 export const ONBOARDING_MODULES: readonly OnboardingModuleOption[] = [
   {
     id: 'finanzas',

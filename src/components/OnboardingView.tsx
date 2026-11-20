@@ -1,14 +1,45 @@
 import React, { useState } from 'react';
+import {
+  ArrowRight,
+  Briefcase,
+  CalendarClock,
+  CalendarDays,
+  Check,
+  ChevronLeft,
+  Dumbbell,
+  FileText,
+  GraduationCap,
+  KeyRound,
+  Lock,
+  ShieldCheck,
+  Store,
+  Wallet,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import type { LifeOSState, ViewType } from '../types';
-import { ONBOARDING_MODULES } from '../lib/moduleVisibility';
-import { AppIcon } from './AppIcon';
+import {
+  DEFAULT_ONBOARDING_MODULE_IDS,
+  ONBOARDING_MODULES,
+} from '../lib/moduleVisibility';
+import { SurfaceCard } from './ui/SurfacePrimitives';
 import lifeosIcon from '../assets/lifeos-icon.png';
 import { playSound } from '../lib/audio';
+
+const MODULE_ICONS: Partial<Record<ViewType, LucideIcon>> = {
+  finanzas: Wallet,
+  gimnasio: Dumbbell,
+  estudios: GraduationCap,
+  trabajo: Briefcase,
+  agenda: CalendarClock,
+  calendario: CalendarDays,
+  notas: FileText,
+  reventa: Store,
+};
 
 export interface OnboardingCompleteData {
   selectedModuleIds: ViewType[];
   name: string;
-  initialContext: {
+  initialContext?: {
     sleepHours: number;
     energy: number;
     mood: number;
@@ -18,17 +49,37 @@ export interface OnboardingCompleteData {
 interface OnboardingViewProps {
   state: LifeOSState;
   onComplete: (data: OnboardingCompleteData) => void;
+  initialStep?: 1 | 2;
 }
 
-export const OnboardingView: React.FC<OnboardingViewProps> = ({ state, onComplete }) => {
-  const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [name, setName] = useState(state.profile?.name || '');
-  const [sleepHours, setSleepHours] = useState<number | string>(7);
-  const [energy, setEnergy] = useState<number>(3);
-  const [mood, setMood] = useState<number>(3);
+const PRIVACY_POINTS = [
+  {
+    icon: ShieldCheck,
+    title: 'Datos aislados en tu cuenta:',
+    detail: 'solo vos accedés a tus registros (con modo local o nube opcional).',
+  },
+  {
+    icon: Lock,
+    title: 'Finanzas 100 % privadas y manuales:',
+    detail: 'nunca conectamos bancos ni pedimos tarjetas o contraseñas.',
+  },
+  {
+    icon: KeyRound,
+    title: 'Control total:',
+    detail: 'cifrado de extremo a extremo opcional, exportación completa en JSON y borrado real de cuenta cuando quieras.',
+  },
+] as const;
 
-  // Start with clean initial selection state (user actively chooses what they need)
-  const [selectedIds, setSelectedIds] = useState<Set<ViewType>>(new Set());
+export const OnboardingView: React.FC<OnboardingViewProps> = ({
+  state,
+  onComplete,
+  initialStep = 1,
+}) => {
+  const [step, setStep] = useState<1 | 2>(initialStep);
+  const [name, setName] = useState(state.profile?.name || '');
+  const [selectedIds, setSelectedIds] = useState<Set<ViewType>>(
+    () => new Set<ViewType>(DEFAULT_ONBOARDING_MODULE_IDS)
+  );
 
   const toggleModule = (id: ViewType) => {
     setSelectedIds((prev) => {
@@ -48,8 +99,8 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ state, onComplet
     playSound('click');
   };
 
-  const handleDeselectAll = () => {
-    setSelectedIds(new Set());
+  const handleSelectEssentials = () => {
+    setSelectedIds(new Set<ViewType>(DEFAULT_ONBOARDING_MODULE_IDS));
     playSound('click');
   };
 
@@ -58,66 +109,41 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ state, onComplet
     onComplete({
       selectedModuleIds: Array.from(selectedIds),
       name: name.trim(),
-      initialContext: {
-        sleepHours: Number(sleepHours),
-        energy,
-        mood,
-      },
     });
   };
 
   const selectedCount = selectedIds.size;
-  const numSleep = Number(sleepHours);
-  const isStep2Valid =
-    sleepHours !== '' &&
-    !isNaN(numSleep) &&
-    numSleep >= 0 &&
-    numSleep <= 24 &&
-    energy >= 1 &&
-    energy <= 5 &&
-    mood >= 1 &&
-    mood <= 5;
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 antialiased selection:bg-blue-500/20 selection:text-blue-500">
-      <main
-        className="w-full max-w-2xl bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 sm:p-8 shadow-xl flex flex-col gap-6 animate-in fade-in zoom-in-95 duration-200"
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex flex-col justify-center items-center p-4 sm:p-6 antialiased selection:bg-[#4F46E5]/15 selection:text-[#4F46E5]">
+      <SurfaceCard
+        as="aside"
+        className="w-full max-w-xl p-6 sm:p-8 flex flex-col gap-6"
         aria-label="Configuración inicial"
       >
-        {/* Header with Step Indicator */}
-        <header className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <img
-                src={lifeosIcon}
-                alt=""
-                className="h-10 w-10 shrink-0 rounded-2xl shadow-xs"
-              />
-              <div className="flex flex-col">
-                <span className="text-[11px] font-bold tracking-widest uppercase text-[var(--text-faint)]">
-                  Celestian LifeOS · Primeros pasos
-                </span>
-                <h1 className="text-xl sm:text-2xl font-extrabold text-[var(--text)] tracking-tight">
-                  {step === 1 && 'Bienvenido a Celestian LifeOS'}
-                  {step === 2 && '¿Cómo estás hoy?'}
-                  {step === 3 && 'Personalizá tu espacio'}
-                </h1>
-              </div>
-            </div>
-            <div className="flex flex-col items-end gap-1 shrink-0">
-              <span className="text-[11px] font-bold text-[var(--blue)] bg-blue-500/10 px-2.5 py-1 rounded-full border border-blue-500/20">
-                Paso {step} de 3
+        {/* Header */}
+        <header className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <img
+              src={lifeosIcon}
+              alt=""
+              className="h-9 w-9 shrink-0 rounded-xl"
+            />
+            <div className="min-w-0">
+              <span className="block text-[11px] font-semibold tracking-wider uppercase text-slate-400 dark:text-slate-500">
+                Celestian LifeOS
               </span>
+              <h1 className="truncate text-lg sm:text-xl font-bold tracking-[-0.02em] text-slate-900 dark:text-slate-100">
+                {step === 1 ? 'Empecemos por tu espacio' : 'Elegí tus espacios'}
+              </h1>
             </div>
           </div>
-          <p className="text-xs sm:text-sm text-[var(--text-soft)] leading-relaxed">
-            {step === 1 && 'Ingresá tu nombre para que podamos personalizar tu centro de control.'}
-            {step === 2 && 'Usamos esto para recomendarte tareas según tu energía real.'}
-            {step === 3 && 'Elegí las áreas que querés gestionar. Podés activarlas o cambiarlas desde Configuración.'}
-          </p>
+          <span className="shrink-0 rounded-full bg-[#4F46E5]/10 px-2.5 py-1 text-[11px] font-semibold text-[#4F46E5] dark:bg-[#4F46E5]/15 dark:text-indigo-300 tabular-nums">
+            Paso {step} de 2
+          </span>
         </header>
 
-        {/* PASO 1: Bienvenida */}
+        {/* PASO 1: Identidad y Confianza */}
         {step === 1 && (
           <form
             onSubmit={(e) => {
@@ -126,10 +152,13 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ state, onComplet
               playSound('click');
               setStep(2);
             }}
-            className="space-y-6 animate-in fade-in duration-150"
+            className="space-y-6"
           >
             <div className="space-y-2">
-              <label htmlFor="onboarding-name" className="block text-xs sm:text-sm font-semibold text-[var(--text)]">
+              <label
+                htmlFor="onboarding-name"
+                className="block text-sm font-medium text-slate-800 dark:text-slate-200"
+              >
                 ¿Cómo te llamás?
               </label>
               <input
@@ -138,217 +167,90 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ state, onComplet
                 autoFocus
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Ingresá tu nombre o apodo"
-                className="w-full px-4 py-3 rounded-2xl bg-[var(--surface-muted)]/60 border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-faint)] focus:outline-hidden focus:border-[var(--blue)] focus:ring-2 focus:ring-blue-500/20 text-base font-medium transition-all"
+                placeholder="Tu nombre o apodo"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 transition-colors focus:border-[#4F46E5] focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 focus:ring-2 focus:ring-indigo-500/40 dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500"
               />
-              <p className="text-[11px] text-[var(--text-faint)]">
-                Lo usaremos para saludarte y personalizar tu experiencia diaria.
-              </p>
             </div>
 
-            <footer className="pt-2">
+            {/* Bloque compacto de confianza */}
+            <section
+              aria-label="Tu privacidad en 3 puntos"
+              className="border-t border-slate-100 pt-5 dark:border-white/[0.07] space-y-3"
+            >
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Tu privacidad en 3 puntos
+              </h2>
+              <ul className="space-y-2.5">
+                {PRIVACY_POINTS.map(({ icon: Icon, title, detail }) => (
+                  <li key={title} className="flex items-start gap-2.5 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                    <Icon
+                      size={16}
+                      strokeWidth={1.75}
+                      className="mt-0.5 shrink-0 text-[#4F46E5] dark:text-indigo-400"
+                      aria-hidden="true"
+                    />
+                    <span>
+                      <strong className="font-semibold text-slate-800 dark:text-slate-200">
+                        {title}
+                      </strong>{' '}
+                      {detail}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            <footer className="pt-1">
               <button
                 type="submit"
                 disabled={!name.trim()}
-                className="w-full px-5 py-3 rounded-2xl bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full rounded-xl bg-[#4F46E5] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span>Siguiente</span>
-                <AppIcon name="arrowRight" className="h-4 w-4" />
+                <ArrowRight size={16} strokeWidth={1.75} aria-hidden="true" />
               </button>
             </footer>
           </form>
         )}
 
-        {/* PASO 2: Check-in Inicial */}
+        {/* PASO 2: Elegí tus espacios */}
         {step === 2 && (
-          <div className="space-y-5 animate-in fade-in duration-150">
-            {/* Horas de sueño */}
-            <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)]/30 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <label htmlFor="onboarding-sleep" className="text-xs sm:text-sm font-semibold text-[var(--text)]">
-                  Horas de sueño
-                </label>
-                <span className="text-xs font-bold text-[var(--blue)] tabular-nums">
-                  {sleepHours !== '' ? `${sleepHours} hs` : 'Sin definir'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 flex-wrap flex-1">
-                  {[5, 6, 7, 8, 9].map((h) => (
-                    <button
-                      key={h}
-                      type="button"
-                      onClick={() => {
-                        setSleepHours(h);
-                        playSound('click');
-                      }}
-                      className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
-                        Number(sleepHours) === h
-                          ? 'bg-[var(--blue)] text-white border-[var(--blue)] shadow-xs'
-                          : 'bg-[var(--card)] border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)]'
-                      }`}
-                    >
-                      {h}h
-                    </button>
-                  ))}
-                </div>
-                <input
-                  id="onboarding-sleep"
-                  type="number"
-                  min="0"
-                  max="24"
-                  step="0.5"
-                  value={sleepHours}
-                  onChange={(e) => {
-                    const val = e.target.value === '' ? '' : Math.max(0, Math.min(24, Number(e.target.value)));
-                    setSleepHours(val);
-                  }}
-                  placeholder="0-24"
-                  className="w-20 px-3 py-1.5 text-xs rounded-xl bg-[var(--card)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden text-center tabular-nums font-semibold"
-                />
-              </div>
-            </div>
-
-            {/* Nivel de energía */}
-            <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)]/30 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs sm:text-sm font-semibold text-[var(--text)]">
-                  Energía (1 - 5)
-                </span>
-                <span className="text-xs font-bold text-amber-500 tabular-nums">
-                  {energy}/5 · {['Muy baja', 'Baja', 'Media', 'Alta', 'Muy alta'][energy - 1]}
-                </span>
-              </div>
-              <div className="grid grid-cols-5 gap-2">
-                {([1, 2, 3, 4, 5] as const).map((lvl) => {
-                  const isSelected = energy === lvl;
-                  return (
-                    <button
-                      key={lvl}
-                      type="button"
-                      onClick={() => {
-                        setEnergy(lvl);
-                        playSound('click');
-                      }}
-                      className={`py-2 px-1 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
-                        isSelected
-                          ? 'bg-amber-500/15 border-amber-500 text-amber-600 dark:text-amber-400 font-extrabold ring-1 ring-amber-500/30 shadow-xs'
-                          : 'bg-[var(--card)] border-[var(--border)] text-[var(--text-soft)] hover:border-[var(--border-hover)] hover:text-[var(--text)]'
-                      }`}
-                    >
-                      <span className="text-sm font-bold">{lvl}</span>
-                      <span className="text-[10px] opacity-80 truncate max-w-full">
-                        {['Muy baja', 'Baja', 'Media', 'Alta', 'Muy alta'][lvl - 1]}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Estado de ánimo */}
-            <div className="p-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)]/30 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs sm:text-sm font-semibold text-[var(--text)]">
-                  Ánimo (1 - 5)
-                </span>
-                <span className="text-xs font-bold text-[var(--blue)] tabular-nums">
-                  {mood}/5 · {['Muy bajo', 'Bajo', 'Estable', 'Bueno', 'Muy bueno'][mood - 1]}
-                </span>
-              </div>
-              <div className="grid grid-cols-5 gap-2">
-                {([1, 2, 3, 4, 5] as const).map((lvl) => {
-                  const isSelected = mood === lvl;
-                  return (
-                    <button
-                      key={lvl}
-                      type="button"
-                      onClick={() => {
-                        setMood(lvl);
-                        playSound('click');
-                      }}
-                      className={`py-2 px-1 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-0.5 ${
-                        isSelected
-                          ? 'bg-blue-500/15 border-[var(--blue)] text-[var(--blue)] font-extrabold ring-1 ring-blue-500/30 shadow-xs'
-                          : 'bg-[var(--card)] border-[var(--border)] text-[var(--text-soft)] hover:border-[var(--border-hover)] hover:text-[var(--text)]'
-                      }`}
-                    >
-                      <span className="text-sm font-bold">{lvl}</span>
-                      <span className="text-[10px] opacity-80 truncate max-w-full">
-                        {['Muy bajo', 'Bajo', 'Estable', 'Bueno', 'Muy bueno'][lvl - 1]}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Footer Step 2 */}
-            <footer className="flex items-center gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => {
-                  playSound('click');
-                  setStep(1);
-                }}
-                className="px-5 py-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)]/50 text-[var(--text)] hover:bg-[var(--surface-muted)] font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-98"
-              >
-                <AppIcon name="chevronLeft" className="h-4 w-4" />
-                <span>Atrás</span>
-              </button>
-              <button
-                type="button"
-                disabled={!isStep2Valid}
-                onClick={() => {
-                  playSound('click');
-                  setStep(3);
-                }}
-                className="flex-1 px-5 py-3 rounded-2xl bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-98 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                <span>Siguiente</span>
-                <AppIcon name="arrowRight" className="h-4 w-4" />
-              </button>
-            </footer>
-          </div>
-        )}
-
-        {/* PASO 3: Selección de Módulos */}
-        {step === 3 && (
-          <div className="space-y-6 animate-in fade-in duration-150">
+          <div className="space-y-5">
             {/* Quick Toolbar */}
-            <div className="flex items-center justify-between border-y border-[var(--border)] py-2 text-xs">
-              <span className="text-[11px] font-medium text-[var(--text-faint)]">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-y border-slate-100 py-2.5 text-xs dark:border-white/[0.07]">
+              <span className="font-medium text-slate-500 dark:text-slate-400 tabular-nums">
                 {selectedCount === 0
-                  ? 'Sin módulos opcionales (Modo mínimo)'
+                  ? 'Solo base diaria (Hoy)'
                   : `${selectedCount} de ${ONBOARDING_MODULES.length} seleccionados`}
               </span>
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={handleSelectAll}
-                  className="text-[11px] font-semibold text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer"
+                  className="font-semibold text-[#4F46E5] hover:underline dark:text-indigo-400 cursor-pointer"
                 >
                   Seleccionar todos
                 </button>
-                <span className="text-[var(--border)]">|</span>
+                <span className="text-slate-200 dark:text-white/10" aria-hidden="true">|</span>
                 <button
                   type="button"
-                  onClick={handleDeselectAll}
-                  className="text-[11px] font-semibold text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer"
+                  onClick={handleSelectEssentials}
+                  className="font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 cursor-pointer"
                 >
-                  Desmarcar todos
+                  Solo lo esencial
                 </button>
               </div>
             </div>
 
             {/* Modules Grid */}
             <div
-              className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[46vh] sm:max-h-none overflow-y-auto pr-0.5"
+              className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[48vh] sm:max-h-none overflow-y-auto pr-0.5"
               role="group"
               aria-label="Módulos disponibles"
             >
               {ONBOARDING_MODULES.map((mod) => {
                 const isSelected = selectedIds.has(mod.id);
+                const ModIcon = MODULE_ICONS[mod.id] || FileText;
 
                 return (
                   <button
@@ -364,46 +266,46 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ state, onComplet
                         toggleModule(mod.id);
                       }
                     }}
-                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3 select-none ${
+                    className={`rounded-xl border p-3.5 text-left transition-colors cursor-pointer flex items-start gap-3 select-none ${
                       isSelected
-                        ? 'bg-[var(--bg-elevated)] border-[var(--blue)] ring-1 ring-[var(--blue)] shadow-xs'
-                        : 'bg-[var(--surface-muted)]/50 border-[var(--border)] hover:border-[var(--border-hover)] hover:bg-[var(--surface-muted)] text-[var(--text-soft)]'
+                        ? 'border-[#4F46E5] bg-[#4F46E5]/[0.04] dark:bg-[#4F46E5]/10'
+                        : 'border-slate-200/80 bg-transparent hover:border-slate-300 dark:border-white/[0.07] dark:hover:border-white/[0.15]'
                     }`}
                   >
-                    {/* Icon */}
                     <span
-                      className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                      className={`mt-0.5 shrink-0 transition-colors ${
                         isSelected
-                          ? 'bg-blue-500/15 text-[var(--blue)]'
-                          : 'bg-[var(--card)] text-[var(--text-faint)] border border-[var(--border)]'
+                          ? 'text-[#4F46E5] dark:text-indigo-400'
+                          : 'text-slate-400 dark:text-slate-500'
                       }`}
+                      aria-hidden="true"
                     >
-                      <AppIcon name={mod.icon} className="h-4 w-4" />
+                      <ModIcon size={18} strokeWidth={1.75} />
                     </span>
 
-                    {/* Content */}
-                    <div className="flex-1 min-w-0 pr-1">
-                      <div className="flex items-center justify-between gap-1">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
                         <strong
-                          className={`text-xs font-bold leading-tight ${
-                            isSelected ? 'text-[var(--text)]' : 'text-[var(--text-soft)]'
+                          className={`text-xs font-semibold leading-tight ${
+                            isSelected
+                              ? 'text-slate-900 dark:text-slate-100'
+                              : 'text-slate-700 dark:text-slate-300'
                           }`}
                         >
                           {mod.name}
                         </strong>
-                        {/* Checkbox indicator */}
                         <span
                           aria-hidden="true"
                           className={`h-4 w-4 rounded-md border flex items-center justify-center transition-colors shrink-0 ${
                             isSelected
-                              ? 'border-[var(--blue)] bg-[var(--blue)] text-white'
-                              : 'border-[var(--border-hover)] bg-[var(--card)]'
+                              ? 'border-[#4F46E5] bg-[#4F46E5] text-white'
+                              : 'border-slate-300 dark:border-white/20'
                           }`}
                         >
-                          {isSelected && <AppIcon name="check" className="h-3 w-3 stroke-[3]" />}
+                          {isSelected && <Check size={11} strokeWidth={2.5} />}
                         </span>
                       </div>
-                      <p className="mt-1 text-[11px] text-[var(--text-faint)] leading-snug line-clamp-2">
+                      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 leading-snug line-clamp-2">
                         {mod.description}
                       </p>
                     </div>
@@ -412,41 +314,39 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({ state, onComplet
               })}
             </div>
 
-            {/* Footer Actions */}
-            <footer className="space-y-3 pt-2">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSound('click');
-                    setStep(2);
-                  }}
-                  className="px-5 py-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)]/50 text-[var(--text)] hover:bg-[var(--surface-muted)] font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-98"
-                >
-                  <AppIcon name="chevronLeft" className="h-4 w-4" />
-                  <span>Atrás</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirm}
-                  className="flex-1 px-5 py-3 rounded-2xl bg-[var(--text)] text-[var(--bg-elevated)] hover:opacity-90 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm active:scale-98"
-                >
-                  <span>
-                    {selectedCount > 0
-                      ? `Comenzar con ${selectedCount} ${selectedCount === 1 ? 'módulo' : 'módulos'}`
-                      : 'Comenzar sin módulos opcionales'}
-                  </span>
-                  <AppIcon name="arrowRight" className="h-4 w-4" />
-                </button>
-              </div>
+            <p className="text-center text-xs text-slate-500 dark:text-slate-400">
+              Podés activar o desactivar cualquier módulo después en Configuración sin perder datos.
+            </p>
 
-              <p className="text-center text-[11px] text-[var(--text-faint)]">
-                Las tareas diarias y la captura rápida están siempre disponibles como base del sistema.
-              </p>
+            {/* Footer Actions */}
+            <footer className="flex items-center gap-3 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  playSound('click');
+                  setStep(1);
+                }}
+                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/[0.1] dark:text-slate-200 dark:hover:bg-white/[0.04] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
+                <span>Atrás</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                className="flex-1 rounded-xl bg-[#4F46E5] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#4338CA] transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>
+                  {selectedCount > 0
+                    ? `Comenzar con ${selectedCount} ${selectedCount === 1 ? 'espacio' : 'espacios'}`
+                    : 'Comenzar solo con Hoy'}
+                </span>
+                <ArrowRight size={16} strokeWidth={1.75} aria-hidden="true" />
+              </button>
             </footer>
           </div>
         )}
-      </main>
+      </SurfaceCard>
     </div>
   );
 };

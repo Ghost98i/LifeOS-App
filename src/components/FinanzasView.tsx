@@ -70,8 +70,11 @@ import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 import { focusTargetElement } from '../lib/navigationFocus';
 import { loadWrappedKeyEnvelope } from '../lib/cryptoCore';
+import { FinanceQuickAccountsCard } from './FinanceQuickAccountsCard';
+import { applyQuickAccountSetup, type QuickAccountSetupItem } from '../lib/financeQuickSetup';
 
 const FINANCE_TRUST_DISMISSED_KEY = 'celestian-finance-trust-dismissed-v1';
+const FINANCE_QUICK_ACCOUNTS_DISMISSED_KEY = 'celestian-finance-quick-accounts-dismissed-v1';
 
 interface FinanzasViewProps {
   state: LifeOSState;
@@ -114,6 +117,47 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       // Ignore storage errors in private mode.
     }
   };
+  const [quickAccountsDismissed, setQuickAccountsDismissed] = useState<boolean>(() => {
+    try {
+      return typeof localStorage !== 'undefined' && localStorage.getItem(FINANCE_QUICK_ACCOUNTS_DISMISSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const handleDismissQuickAccounts = () => {
+    setQuickAccountsDismissed(true);
+    try {
+      localStorage.setItem(FINANCE_QUICK_ACCOUNTS_DISMISSED_KEY, '1');
+    } catch {
+      // Ignore storage errors in private mode.
+    }
+  };
+  const handleConfirmQuickAccounts = (items: QuickAccountSetupItem[]) => {
+    try {
+      let summaryCount = 0;
+      if (
+        onUpdateState((draft) => {
+          const result = applyQuickAccountSetup(draft, items);
+          summaryCount = result.accounts.length;
+        }) === false
+      ) {
+        return;
+      }
+      playSound('success');
+      handleDismissQuickAccounts();
+      showToast(
+        summaryCount === 1
+          ? '1 cuenta configurada.'
+          : `${summaryCount} cuentas configuradas.`,
+        'success'
+      );
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : 'No se pudieron configurar las cuentas.',
+        'error'
+      );
+    }
+  };
   // Main Tab State
   const [activeTab, setActiveTab] = useState<'movimientos' | 'cuentas' | 'analisis' | 'proyeccion'>(
     initialTab || 'movimientos'
@@ -149,6 +193,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   const [newAccName, setNewAccName] = useState('');
   const [newAccBalance, setNewAccBalance] = useState('');
   const [newAccCurrency, setNewAccCurrency] = useState<'UYU' | 'USD'>('UYU');
+  const [newAccError, setNewAccError] = useState<string | null>(null);
 
   // Projections Horizon & Memoized calculations
   const [projHorizon, setProjHorizon] = useState<30 | 60 | 90>(30);
@@ -485,13 +530,28 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
 
   const handleCreateFirstAccount = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAccName.trim()) return;
-    const parsed = parseDecimalInput(newAccBalance.trim() || '0');
-    if (parsed.error || parsed.value === null) {
-      showToast(parsed.error || 'Saldo inicial inválido', 'error');
+    const trimmedName = newAccName.trim();
+    if (!trimmedName) {
+      setNewAccError('Escribí un nombre para la cuenta.');
       return;
     }
-    handleAddAccount(newAccName.trim(), parsed.value, newAccCurrency);
+    const normalizedName = trimmedName.toLocaleLowerCase('es-UY');
+    const duplicate = (state.finance?.accounts || []).find(
+      (acc) =>
+        acc.name.trim().toLocaleLowerCase('es-UY') === normalizedName &&
+        (acc.currency || 'UYU').trim().toUpperCase() === newAccCurrency
+    );
+    if (duplicate) {
+      setNewAccError(`Ya existe una cuenta "${duplicate.name}" en ${newAccCurrency}.`);
+      return;
+    }
+    const parsed = parseDecimalInput(newAccBalance.trim() || '0');
+    if (parsed.error || parsed.value === null) {
+      setNewAccError(parsed.error || 'Saldo inicial inválido.');
+      return;
+    }
+    setNewAccError(null);
+    handleAddAccount(trimmedName, parsed.value, newAccCurrency);
     setNewAccName('');
     setNewAccBalance('');
     setNewAccCurrency('UYU');
@@ -1109,6 +1169,13 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         onEditCommitment={beginEditCommitment}
         onOpenCustomize={() => setIsCustomizeModalOpen(true)}
       />
+
+      {state.finance.transactions.length === 0 && !quickAccountsDismissed && (
+        <FinanceQuickAccountsCard
+          onConfirm={handleConfirmQuickAccounts}
+          onDismiss={handleDismissQuickAccounts}
+        />
+      )}
 
       {/* 3. Segmented Navigation Bar (4 Conceptual Areas) */}
       <div className="finance-tabs grid grid-cols-2 sm:flex items-center gap-1 rounded-2xl p-1">
@@ -2305,7 +2372,10 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   autoFocus
                   type="text"
                   value={newAccName}
-                  onChange={(e) => setNewAccName(e.target.value)}
+                  onChange={(e) => {
+                    setNewAccName(e.target.value);
+                    if (newAccError) setNewAccError(null);
+                  }}
                   placeholder="Ej. Banco, Efectivo, Prex..."
                   className="w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500 font-medium"
                 />
@@ -2318,7 +2388,10 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   type="text"
                   inputMode="decimal"
                   value={newAccBalance}
-                  onChange={(e) => setNewAccBalance(e.target.value)}
+                  onChange={(e) => {
+                    setNewAccBalance(e.target.value);
+                    if (newAccError) setNewAccError(null);
+                  }}
                   placeholder="0,00"
                   className="w-full p-2.5 text-xs font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
                 />
@@ -2329,13 +2402,21 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                 </label>
                 <select
                   value={newAccCurrency}
-                  onChange={(e) => setNewAccCurrency(e.target.value as 'UYU' | 'USD')}
+                  onChange={(e) => {
+                    setNewAccCurrency(e.target.value as 'UYU' | 'USD');
+                    if (newAccError) setNewAccError(null);
+                  }}
                   className="w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500 font-medium cursor-pointer"
                 >
                   <option value="UYU">UYU ($U - Pesos Uruguayos)</option>
                   <option value="USD">USD (US$ - Dólares)</option>
                 </select>
               </div>
+              {newAccError && (
+                <p role="alert" className="text-xs font-medium text-rose-600 dark:text-rose-400">
+                  {newAccError}
+                </p>
+              )}
               <button
                 type="submit"
                 className="w-full py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer shadow-xs active:scale-95 transition-all min-h-[44px]"

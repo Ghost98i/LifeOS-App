@@ -748,6 +748,15 @@ export function addAccount(
   if (!name) throw new Error('Escribí un nombre para la cuenta.');
   if (!Number.isFinite(balance)) throw new Error('Ingresá un saldo inicial válido.');
   const normalizedCur = currencyInput?.trim() ? currencyInput.trim().toUpperCase() : 'UYU';
+  const normalizedName = name.toLocaleLowerCase('es-UY');
+  const duplicate = state.finance.accounts.find(
+    (acc) =>
+      acc.name.trim().toLocaleLowerCase('es-UY') === normalizedName &&
+      (acc.currency || 'UYU').trim().toUpperCase() === normalizedCur
+  );
+  if (duplicate) {
+    throw new Error(`Ya existe una cuenta "${duplicate.name}" en ${normalizedCur}.`);
+  }
   const account: Account = { id: uid(), name, balance, initialBalance: balance, currency: normalizedCur };
   state.finance.accounts.push(account);
   return account;
