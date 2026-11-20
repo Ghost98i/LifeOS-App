@@ -6,6 +6,8 @@ import {
   Check,
   Clock,
   Moon,
+  Pin,
+  PinOff,
   Plus,
   Shield,
   X,
@@ -34,7 +36,8 @@ import { DailyStatusModal } from './DailyStatusModal';
 import { RecentActivityModal } from './RecentActivityModal';
 import { TodaySpotlightCard } from './TodaySpotlightCard';
 import { TodayRadarSection } from './TodayRadarSection';
-import { SurfaceCard } from './ui/SurfacePrimitives';
+import { SectionHeader, SurfaceCard } from './ui/SurfacePrimitives';
+import { getDashboardNotes, togglePinNote } from '../lib/notesFlows';
 import {
   getSevenDayStatusSparkline,
   getTodayPulse,
@@ -78,6 +81,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigate,
   onExportJSON,
   onOpenCapture,
+  onOpenQuickNote,
   onOpenNote,
   onNavigateToRecord,
   initialFocusId,
@@ -192,6 +196,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     if (isModuleEnabled(state, 'finanzas')) list.push({ view: 'finanzas', label: 'Finanzas' });
     return list;
   }, [state]);
+
+  const notesEnabled = isModuleEnabled(state, 'notas');
+  const pinnedNotes = useMemo(
+    () => (notesEnabled ? getDashboardNotes(state.notes?.postits || [], { pinned: 3, recent: 0 }).pinned : []),
+    [notesEnabled, state.notes?.postits]
+  );
+
+  const handleUnpinNote = (noteId: string) => {
+    const saved = onUpdateState((draft) => {
+      togglePinNote(draft, noteId);
+    });
+    if (!saved) return;
+    showToast('Nota desfijada de Hoy.', 'info', {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        onUpdateState((draft) => {
+          togglePinNote(draft, noteId);
+        });
+      },
+    });
+  };
 
   const pastPendingExtras = useMemo(() => getPastPendingExtras(state, todayIso), [state, todayIso]);
   const futureScheduledExtras = useMemo(() => getFutureScheduledExtras(state, todayIso), [state, todayIso]);
@@ -869,6 +894,82 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           onOpenActivity={() => setIsActivityModalOpen(true)}
         />
       </div>
+
+      {/* 5. Notas fijadas: ancho completo debajo de las 2 columnas (solo si hay fijadas y Notas habilitado) */}
+      {notesEnabled && pinnedNotes.length > 0 && (
+        <SurfaceCard
+          as="section"
+          aria-labelledby="today-pinned-notes-title"
+          className="p-5 sm:p-6"
+        >
+          <SectionHeader
+            id="today-pinned-notes-title"
+            icon={<Pin className="h-4 w-4" strokeWidth={1.75} />}
+            title="Fijadas"
+            count={pinnedNotes.length}
+            action={
+              <div className="flex items-center gap-3">
+                {onOpenQuickNote && (
+                  <button
+                    type="button"
+                    onClick={onOpenQuickNote}
+                    className="inline-flex items-center gap-1 whitespace-nowrap text-xs font-medium text-indigo-600 transition hover:underline dark:text-indigo-400 cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                    <span>Nota rápida</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => onNavigate('notas')}
+                  className="whitespace-nowrap text-xs font-medium text-slate-500 transition hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 cursor-pointer"
+                >
+                  Abrir Notas
+                </button>
+              </div>
+            }
+          />
+
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {pinnedNotes.map((note) => {
+              const title = note.title?.trim() || note.text.trim().split('\n')[0] || 'Nota sin título';
+              const excerpt = note.title?.trim() ? note.text.trim() : note.text.trim().split('\n').slice(1).join(' ').trim();
+              const isPrivate = Boolean(state.settings?.privacyMode);
+
+              return (
+                <div
+                  key={note.id}
+                  className="group flex items-start justify-between gap-2 rounded-xl border border-slate-200/70 bg-slate-50/40 p-3.5 transition hover:border-indigo-300/70 hover:bg-slate-50 dark:border-white/[0.06] dark:bg-white/[0.02] dark:hover:border-indigo-500/35 dark:hover:bg-white/[0.04]"
+                >
+                  <button
+                    type="button"
+                    onClick={() => (onOpenNote ? onOpenNote(note.id) : onNavigate('notas'))}
+                    className="min-w-0 flex-1 text-left cursor-pointer"
+                  >
+                    <p className="line-clamp-1 text-sm font-semibold text-slate-900 group-hover:text-indigo-600 dark:text-slate-100 dark:group-hover:text-indigo-400">
+                      {isPrivate ? 'Nota fijada' : title}
+                    </p>
+                    {!isPrivate && excerpt && (
+                      <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                        {excerpt}
+                      </p>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleUnpinNote(note.id)}
+                    aria-label={`Desfijar nota ${isPrivate ? '' : title}`.trim()}
+                    title="Desfijar de Hoy"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-200/70 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-white/[0.08] dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    <PinOff className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </SurfaceCard>
+      )}
 
       {/* Modal bajo demanda: Estado diario + Evolución 7 días */}
       <DailyStatusModal

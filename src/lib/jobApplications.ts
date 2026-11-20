@@ -3,6 +3,27 @@ import { daysBetween, todayISO } from './storage';
 
 export type JobTypeFilter = JobApplicationType | 'todos';
 
+export const JOB_SOURCE_SUGGESTIONS: readonly string[] = [
+  'LinkedIn',
+  'BuscoJobs',
+  'Portal empresa',
+  'Uruguay Concursa',
+  'Referido',
+] as const;
+
+export function hasAdvancedJobDetails(
+  application: Pick<JobApplication, 'reclutador' | 'notas' | 'followUpNotes' | 'nextAction' | 'nextActionDate' | 'keyDates'>
+): boolean {
+  return Boolean(
+    application.reclutador?.trim() ||
+    application.notas?.trim() ||
+    application.followUpNotes?.trim() ||
+    application.nextAction?.trim() ||
+    application.nextActionDate?.trim() ||
+    (Array.isArray(application.keyDates) && application.keyDates.length > 0)
+  );
+}
+
 export const JOB_KEY_DATE_KINDS: readonly JobKeyDateKind[] = ['inscripcion', 'prueba', 'entrevista', 'otro'] as const;
 
 export const JOB_KEY_DATE_LABELS: Record<JobKeyDateKind, string> = {
@@ -166,13 +187,19 @@ export function saveJobApplication(
     return { applications, saved: false, reason: 'invalid_status' };
   }
 
+  const cleanSource = typeof draft.source === 'string' ? draft.source.trim() : '';
+  const normalizedDraft: JobApplicationDraft = {
+    ...draft,
+    ...(cleanSource ? { source: cleanSource } : { source: undefined }),
+  };
+
   if (editingId) {
     const index = applications.findIndex((application) => application.id === editingId);
     if (index < 0) return { applications, saved: false, reason: 'missing_record' };
     const updated = applications.slice();
-    updated[index] = { ...applications[index], ...draft, id: applications[index].id };
+    updated[index] = { ...applications[index], ...normalizedDraft, id: applications[index].id };
     return { applications: updated, saved: true };
   }
 
-  return { applications: [...applications, { ...draft, id: createId() }], saved: true };
+  return { applications: [...applications, { ...normalizedDraft, id: createId() }], saved: true };
 }

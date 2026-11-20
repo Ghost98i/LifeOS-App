@@ -622,9 +622,21 @@ export interface StudyTopic {
   practice?: StudyTopicPracticeStats;
 }
 
+export type StudyProgramKind = 'carrera' | 'curso' | 'certificacion' | 'autoestudio';
+
+export interface StudyProgram {
+  id: string;
+  name: string;
+  kind: StudyProgramKind;
+  institution?: string;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
 export interface Subject {
   id: string;
   name: string;
+  programId?: string | null;
   topics?: StudyTopic[];
   updatedAt?: number;
   createdAt?: number;
@@ -735,6 +747,7 @@ export interface StudyPracticeSession {
 }
 
 export interface Study {
+  programs?: StudyProgram[];
   subjects: Subject[];
   exams: Exam[];
   studyLog: StudyLog[];
@@ -807,6 +820,8 @@ export interface JobApplication {
   puesto: string;
   estado: JobApplicationStatus;
   fecha: string;
+  /** Where the user applied (e.g. LinkedIn, BuscoJobs, Web empresa, Uruguay Concursa, Referido). */
+  source?: string;
   reclutador?: string;
   notas?: string;
   followUpNotes?: string;

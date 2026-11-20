@@ -1,11 +1,13 @@
 import { getStudyWorkspace } from '../lib/studyWorkspace';
 import React, { useState, useEffect, useMemo } from 'react';
+import { GraduationCap, Play, Plus } from 'lucide-react';
 import { showToast } from '../lib/toast';
-import type { LifeOSState, Exam, Subject, StudyLog, StudySessionPhase } from '../types';
+import type { LifeOSState, Exam, Subject, StudyLog, StudyProgramKind, StudySessionPhase } from '../types';
 import { FocusTimer } from './FocusTimer';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 import { StudyPracticeSection } from './StudyPracticeSection';
+import { SurfaceCard } from './ui/SurfacePrimitives';
 import { playSound } from '../lib/audio';
 import {
   todayISO,
@@ -18,7 +20,18 @@ import {
   studyMinutesThisWeek,
   examApprovalPct,
 } from '../lib/calculations';
-import { classifyStudyOverview, selectStudyExams } from '../lib/studyPresentation';
+import {
+  addStudyProgram,
+  classifyStudyOverview,
+  createGuidedStudySetup,
+  filterExamsByProgram,
+  filterSubjectsByProgram,
+  GENERAL_PROGRAM_FILTER,
+  hasGeneralSubjects,
+  selectStudyExams,
+  STUDY_PROGRAM_KIND_LABELS,
+  STUDY_PROGRAM_KINDS,
+} from '../lib/studyPresentation';
 import {
   validateStudyMinutes,
   validateSubjectName,
@@ -68,6 +81,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
   onOpenNote,
   onOpenAgenda,
 }) => {
+  const programs = useMemo(() => state.study?.programs || [], [state.study?.programs]);
   const subjects = useMemo(() => state.study?.subjects || [], [state.study?.subjects]);
   const exams = useMemo(() => state.study?.exams || [], [state.study?.exams]);
   const studyLogs = useMemo(() => state.study?.studyLog || [], [state.study?.studyLog]);
@@ -84,8 +98,22 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
     state.study?.activePracticeSession ? 'practice' : 'overview'
   );
   const [examTab, setExamTab] = useState<'upcoming' | 'pending_results' | 'completed' | 'all'>('all');
+  const [selectedProgramFilter, setSelectedProgramFilter] = useState<string | null>(null);
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string | null>(null);
   const [subjectError, setSubjectError] = useState<string | null>(null);
+
+  // Estado vacío guiado
+  const [guidedKind, setGuidedKind] = useState<StudyProgramKind>('carrera');
+  const [guidedProgramName, setGuidedProgramName] = useState('');
+  const [guidedSubjectsRaw, setGuidedSubjectsRaw] = useState('');
+  const [guidedError, setGuidedError] = useState<string | null>(null);
+
+  // Modal de nuevo programa (carrera / curso)
+  const [programModalOpen, setProgramModalOpen] = useState(false);
+  const [programInputName, setProgramInputName] = useState('');
+  const [programInputKind, setProgramInputKind] = useState<StudyProgramKind>('carrera');
+  const [programInputInstitution, setProgramInputInstitution] = useState('');
+  const [programInputError, setProgramInputError] = useState<string | null>(null);
 
   // Registro manual de estudio
   const [studyDate, setStudyDate] = useState(todayISO());
@@ -104,6 +132,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
   const [subjectModalOpen, setSubjectModalOpen] = useState(false);
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [subjectInputName, setSubjectInputName] = useState('');
+  const [subjectInputProgramId, setSubjectInputProgramId] = useState<string>('');
   const [subjectInputError, setSubjectInputError] = useState<string | null>(null);
 
   const [examModalOpen, setExamModalOpen] = useState(false);
@@ -123,16 +152,17 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
   const [newExamTopicTitle, setNewExamTopicTitle] = useState('');
 
   useEffect(() => {
-    if (!editingLog && !subjectModalOpen && !examModalOpen) return;
+    if (!editingLog && !subjectModalOpen && !examModalOpen && !programModalOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       if (editingLog) setEditingLog(null);
       if (subjectModalOpen) setSubjectModalOpen(false);
       if (examModalOpen) setExamModalOpen(false);
+      if (programModalOpen) setProgramModalOpen(false);
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [editingLog, subjectModalOpen, examModalOpen]);
+  }, [editingLog, subjectModalOpen, examModalOpen, programModalOpen]);
 
   const saveStudyChange = (updater: (draft: LifeOSState) => void) => {
     try { return onUpdateState(updater); }
@@ -143,12 +173,108 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
   const approvalRate = useMemo(() => examApprovalPct(state), [state]);
   const minutesToday = useMemo(() => studyMinutesForDate(state, todayISO()), [state]);
   const minutesWeek = useMemo(() => studyMinutesThisWeek(state), [state]);
-  const categorized = useMemo(() => categorizeExams(exams), [exams]);
+
+  const scopedSubjects = useMemo(
+    () => filterSubjectsByProgram(subjects, selectedProgramFilter, programs),
+    [subjects, selectedProgramFilter, programs]
+  );
+  const scopedExams = useMemo(
+    () => filterExamsByProgram(exams, subjects, selectedProgramFilter, programs),
+    [exams, subjects, selectedProgramFilter, programs]
+  );
+  const showGeneralProgramChip = useMemo(
+    () => programs.length > 0 && hasGeneralSubjects(subjects, programs),
+    [subjects, programs]
+  );
+  const programNameById = useMemo(
+    () => new Map(programs.map((program) => [program.id, program.name])),
+    [programs]
+  );
+
+  const categorized = useMemo(() => categorizeExams(scopedExams), [scopedExams]);
 
   // Filtrado de evaluaciones según pestaña y materia seleccionada
   const displayedExams = useMemo(() => {
-    return selectStudyExams(examTab, exams, categorized, selectedSubjectFilter);
-  }, [examTab, categorized, exams, selectedSubjectFilter]);
+    return selectStudyExams(examTab, scopedExams, categorized, selectedSubjectFilter);
+  }, [examTab, categorized, scopedExams, selectedSubjectFilter]);
+
+  // ---------------------------------------------------------------------------
+  // Handlers de Programas y Configuración Guiada
+  // ---------------------------------------------------------------------------
+  const handleSelectProgramFilter = (programId: string | null) => {
+    setSelectedProgramFilter(programId);
+    if (selectedSubjectFilter) {
+      const nextSubjects = filterSubjectsByProgram(subjects, programId, programs);
+      if (!nextSubjects.some((s) => s.id === selectedSubjectFilter)) {
+        setSelectedSubjectFilter(null);
+      }
+    }
+  };
+
+  const openCreateProgramModal = () => {
+    setProgramInputName('');
+    setProgramInputKind('carrera');
+    setProgramInputInstitution('');
+    setProgramInputError(null);
+    setProgramModalOpen(true);
+  };
+
+  const handleSaveProgram = (e: React.FormEvent) => {
+    e.preventDefault();
+    let resultError: string | undefined;
+    let createdId: string | undefined;
+    const saved = saveStudyChange((draft) => {
+      const res = addStudyProgram(draft, {
+        name: programInputName,
+        kind: programInputKind,
+        institution: programInputInstitution,
+      });
+      if (!res.success || !res.program) {
+        resultError = res.error;
+        throw new Error(res.error || 'No se pudo crear el programa.');
+      }
+      createdId = res.program.id;
+    });
+    if (!saved) {
+      if (resultError) setProgramInputError(resultError);
+      return;
+    }
+    setProgramModalOpen(false);
+    if (createdId) setSelectedProgramFilter(createdId);
+    showToast('Programa agregado.', 'success');
+  };
+
+  const handleGuidedSetupSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    let resultError: string | undefined;
+    let createdCount = 0;
+    const saved = saveStudyChange((draft) => {
+      const res = createGuidedStudySetup(draft, {
+        kind: guidedKind,
+        programName: guidedProgramName,
+        subjectsRaw: guidedSubjectsRaw,
+      });
+      if (!res.success) {
+        resultError = res.error;
+        throw new Error(res.error || 'Revisá los datos ingresados.');
+      }
+      createdCount = res.subjectsCreated.length;
+    });
+    if (!saved) {
+      if (resultError) setGuidedError(resultError);
+      return;
+    }
+    setGuidedProgramName('');
+    setGuidedSubjectsRaw('');
+    setGuidedError(null);
+    playSound('success');
+    showToast(
+      createdCount > 1
+        ? `${createdCount} materias listas para empezar.`
+        : 'Espacio de estudios configurado.',
+      'success'
+    );
+  };
 
   // ---------------------------------------------------------------------------
   // Handlers de Materias
@@ -156,6 +282,9 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
   const openCreateSubjectModal = () => {
     setEditingSubject(null);
     setSubjectInputName('');
+    setSubjectInputProgramId(
+      selectedProgramFilter && selectedProgramFilter !== GENERAL_PROGRAM_FILTER ? selectedProgramFilter : ''
+    );
     setSubjectInputError(null);
     setSubjectModalOpen(true);
   };
@@ -163,6 +292,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
   const openEditSubjectModal = (s: Subject) => {
     setEditingSubject(s);
     setSubjectInputName(s.name);
+    setSubjectInputProgramId(s.programId || '');
     setSubjectInputError(null);
     setSubjectModalOpen(true);
   };
@@ -179,13 +309,20 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
       return;
     }
 
+    const nextProgramId = subjectInputProgramId.trim() || null;
+
     if (editingSubject) {
       const saved = saveStudyChange((draft) => {
         const result = renameSubject(draft, editingSubject.id, validated.name!);
         if (!result.success) throw new Error(result.error);
+        const target = (draft.study?.subjects || []).find((s) => s.id === editingSubject.id);
+        if (target) {
+          target.programId = nextProgramId;
+          target.updatedAt = Date.now();
+        }
       });
       if (!saved) { setSubjectInputError('No se pudo guardar. Conservamos los datos para reintentar.'); return; }
-      showToast('Materia renombrada.', 'success');
+      showToast('Materia actualizada.', 'success');
     } else {
       const saved = saveStudyChange((draft) => {
         if (!draft.study) draft.study = { subjects: [], exams: [], studyLog: [] };
@@ -194,6 +331,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
         draft.study.subjects.push({
           id: uid(),
           name: validated.name!,
+          ...(nextProgramId ? { programId: nextProgramId } : {}),
           createdAt: now,
           updatedAt: now,
         });
@@ -703,11 +841,13 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
     subjectCount: subjects.length,
     examCount: exams.length,
     studyLogCount: studyLogs.length,
-  }), [subjects.length, exams.length, studyLogs.length]);
+    programCount: programs.length,
+  }), [subjects.length, exams.length, studyLogs.length, programs.length]);
   const workspace = getStudyWorkspace(state, selectedSubjectFilter, todayISO());
   const notesVisible = !state.settings.hiddenTabs?.includes('notas');
   const agendaVisible = !state.settings.hiddenTabs?.includes('agenda');
   const isEmptyModule = overviewKind === 'empty';
+  const showGuidedEmpty = isEmptyModule && !state.study?.activeSession;
 
   // Formato de hora registrada sin inventar horas inexistentes
   const formatRecordedTime = (epochMs?: number) => {
@@ -760,8 +900,193 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
           subjects={subjects}
           onUpdateState={onUpdateState}
         />
+      ) : showGuidedEmpty ? (
+        <SurfaceCard
+          as="section"
+          aria-label="Configuración rápida de Estudios"
+          className="p-5 sm:p-7 space-y-6"
+        >
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
+              <GraduationCap className="h-5 w-5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
+              <span className="text-xs font-semibold tracking-tight">Primeros pasos</span>
+            </div>
+            <h2 className="text-lg sm:text-xl font-bold tracking-[-0.02em] text-slate-900 dark:text-slate-100">
+              Organizá lo que estás estudiando
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 max-w-xl">
+              Podés llevar una o varias carreras, cursos o certificaciones al mismo tiempo. Empezá con tus primeras materias en segundos.
+            </p>
+          </div>
+
+          <form onSubmit={handleGuidedSetupSubmit} className="space-y-5">
+            <div className="space-y-2">
+              <span className="block text-xs font-semibold text-slate-600 dark:text-slate-300">
+                1. Tipo de estudio
+              </span>
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Tipo de estudio">
+                {STUDY_PROGRAM_KINDS.map((kind) => {
+                  const active = guidedKind === kind;
+                  return (
+                    <button
+                      key={kind}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setGuidedKind(kind)}
+                      className={`min-h-9 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition cursor-pointer ${
+                        active
+                          ? 'border-indigo-600 bg-indigo-600 text-white dark:border-indigo-500 dark:bg-indigo-500'
+                          : 'border-slate-200/80 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/[0.08] dark:bg-transparent dark:text-slate-300 dark:hover:border-indigo-500/40 dark:hover:text-indigo-400'
+                      }`}
+                    >
+                      {STUDY_PROGRAM_KIND_LABELS[kind]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="guided-study-program-name"
+                  className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-300"
+                >
+                  2. Carrera o curso <span className="font-normal text-slate-400 dark:text-slate-500">(opcional)</span>
+                </label>
+                <input
+                  id="guided-study-program-name"
+                  type="text"
+                  value={guidedProgramName}
+                  onChange={(e) => {
+                    setGuidedProgramName(e.target.value);
+                    if (guidedError) setGuidedError(null);
+                  }}
+                  placeholder={
+                    guidedKind === 'carrera'
+                      ? 'Ej. Ingeniería en Sistemas'
+                      : guidedKind === 'curso'
+                      ? 'Ej. Inglés B2'
+                      : guidedKind === 'certificacion'
+                      ? 'Ej. AWS Solutions Architect'
+                      : 'Ej. Desarrollo Frontend'
+                  }
+                  className="min-h-11 w-full rounded-xl border border-slate-200/80 bg-slate-50/50 px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-hidden focus:border-indigo-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="guided-study-subjects"
+                  className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-300"
+                >
+                  3. Primera materia o varias <span className="font-normal text-slate-400 dark:text-slate-500">(separadas por coma)</span>
+                </label>
+                <input
+                  id="guided-study-subjects"
+                  type="text"
+                  value={guidedSubjectsRaw}
+                  onChange={(e) => {
+                    setGuidedSubjectsRaw(e.target.value);
+                    if (guidedError) setGuidedError(null);
+                  }}
+                  placeholder="Ej. Álgebra Lineal, Programación I"
+                  className="min-h-11 w-full rounded-xl border border-slate-200/80 bg-slate-50/50 px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 outline-hidden focus:border-indigo-500 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500"
+                />
+              </div>
+            </div>
+
+            {guidedError && (
+              <p role="alert" className="text-xs font-medium text-rose-600 dark:text-rose-400">
+                {guidedError}
+              </p>
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <button
+                type="submit"
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 cursor-pointer"
+              >
+                <Plus className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                <span>Guardar y empezar</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleStartFreeSession}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 transition hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 cursor-pointer"
+              >
+                <Play className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                <span>Iniciar sesión libre de 25 min</span>
+              </button>
+            </div>
+          </form>
+        </SurfaceCard>
       ) : (
         <>
+
+      {/* Barra de filtro por carrera / curso (solo si existen programas) */}
+      {programs.length > 0 && (
+        <div
+          role="region"
+          aria-label="Filtrar por carrera o curso"
+          className="flex flex-wrap items-center gap-2"
+        >
+          <button
+            type="button"
+            onClick={() => handleSelectProgramFilter(null)}
+            aria-pressed={selectedProgramFilter === null}
+            className={`min-h-9 rounded-full border px-3.5 py-1 text-xs font-semibold transition cursor-pointer ${
+              selectedProgramFilter === null
+                ? 'border-indigo-600 bg-indigo-600 text-white dark:border-indigo-500 dark:bg-indigo-500'
+                : 'border-slate-200/80 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/[0.08] dark:bg-[#0D111A] dark:text-slate-300 dark:hover:border-indigo-500/40 dark:hover:text-indigo-400'
+            }`}
+          >
+            Todos
+          </button>
+          {programs.map((program) => {
+            const active = selectedProgramFilter === program.id;
+            return (
+              <button
+                key={program.id}
+                type="button"
+                onClick={() => handleSelectProgramFilter(program.id)}
+                aria-pressed={active}
+                className={`min-h-9 rounded-full border px-3.5 py-1 text-xs font-semibold transition cursor-pointer ${
+                  active
+                    ? 'border-indigo-600 bg-indigo-600 text-white dark:border-indigo-500 dark:bg-indigo-500'
+                    : 'border-slate-200/80 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/[0.08] dark:bg-[#0D111A] dark:text-slate-300 dark:hover:border-indigo-500/40 dark:hover:text-indigo-400'
+                }`}
+              >
+                {program.name}
+              </button>
+            );
+          })}
+          {showGeneralProgramChip && (
+            <button
+              type="button"
+              onClick={() => handleSelectProgramFilter(GENERAL_PROGRAM_FILTER)}
+              aria-pressed={selectedProgramFilter === GENERAL_PROGRAM_FILTER}
+              className={`min-h-9 rounded-full border px-3.5 py-1 text-xs font-semibold transition cursor-pointer ${
+                selectedProgramFilter === GENERAL_PROGRAM_FILTER
+                  ? 'border-indigo-600 bg-indigo-600 text-white dark:border-indigo-500 dark:bg-indigo-500'
+                  : 'border-slate-200/80 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/[0.08] dark:bg-[#0D111A] dark:text-slate-300 dark:hover:border-indigo-500/40 dark:hover:text-indigo-400'
+              }`}
+            >
+              Generales
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={openCreateProgramModal}
+            className="inline-flex min-h-9 items-center gap-1 rounded-full border border-dashed border-slate-300 px-3 py-1 text-xs font-medium text-slate-500 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-white/[0.14] dark:text-slate-400 dark:hover:border-indigo-400 dark:hover:text-indigo-400 cursor-pointer"
+          >
+            <Plus className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+            <span>Programa</span>
+          </button>
+        </div>
+      )}
 
       {/* -------------------------------------------------------------------- */}
       {/* B. Métricas resumen de un vistazo */}
@@ -772,7 +1097,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
           <h2 className="text-base font-semibold text-[var(--text)]">Para estudiar</h2>
           <label className="flex items-center gap-2 text-sm text-[var(--text-soft)]">Materia
             <select aria-label="Materia del espacio de estudio" value={selectedSubjectFilter || ''} onChange={(event) => setSelectedSubjectFilter(event.target.value || null)} className="min-h-11 max-w-[230px] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-[var(--text)]">
-              <option value="">Todas las materias</option>{subjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
+              <option value="">Todas las materias</option>{scopedSubjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
             </select>
           </label>
         </div>
@@ -880,53 +1205,6 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
       </section>
 
       {/* -------------------------------------------------------------------- */}
-      {/* Primeros pasos amigables si el módulo está completamente vacío */}
-      {/* -------------------------------------------------------------------- */}
-      {isEmptyModule && (
-        <section
-          aria-label="Primeros pasos en Estudios"
-          className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 text-center space-y-4 shadow-2xs"
-        >
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20">
-            <AppIcon name="book" className="h-6 w-6" />
-          </div>
-          <div className="max-w-md mx-auto space-y-1">
-            <h3 className="text-base font-bold text-[var(--text)]">
-              Comenzá a organizar tus materias
-            </h3>
-            <p className="text-xs text-[var(--text-soft)]">
-              Agregá materias o evaluaciones para vincular tus sesiones de enfoque.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
-            <button
-              type="button"
-              onClick={openCreateSubjectModal}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white transition cursor-pointer shadow-2xs"
-            >
-              <AppIcon name="plus" className="h-3.5 w-3.5" />
-              <span>Agregar primera materia</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => openCreateExamModal()}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] hover:bg-[var(--surface-muted)] text-[var(--text)] transition cursor-pointer shadow-2xs"
-            >
-              <AppIcon name="plus" className="h-3.5 w-3.5 text-[var(--blue)]" />
-              <span>Agregar evaluación</span>
-            </button>
-            <button
-              type="button"
-              onClick={handleStartFreeSession}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold rounded-xl border border-[var(--border)] bg-transparent hover:bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer"
-            >
-              <span className="inline-flex items-center gap-1.5"><AppIcon name="play" className="h-3.5 w-3.5" /><span>Sesión libre de 25 min</span></span>
-            </button>
-          </div>
-        </section>
-      )}
-
-      {/* -------------------------------------------------------------------- */}
       {/* D. Núcleo académico: 2 Columnas equilibradas (Materias y Evaluaciones) */}
       {/* -------------------------------------------------------------------- */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
@@ -942,22 +1220,35 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
               <h2 className="text-sm font-bold text-[var(--text)] flex items-center gap-2">
                 <span>Materias</span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--surface-muted)] text-[var(--text-soft)] font-semibold">
-                  {subjects.length}
+                  {scopedSubjects.length}
                 </span>
               </h2>
               <p className="text-xs text-[var(--text-soft)] mt-0.5">
                 Cursos y áreas de estudio.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={openCreateSubjectModal}
-              className="inline-flex min-h-11 items-center gap-1 px-3 py-2 text-sm font-semibold rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white transition cursor-pointer"
-              title="Nueva materia"
-            >
-              <AppIcon name="plus" className="h-4 w-4" />
-              <span>Nueva</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              {programs.length === 0 && (
+                <button
+                  type="button"
+                  onClick={openCreateProgramModal}
+                  className="inline-flex min-h-11 items-center gap-1 rounded-xl border border-[var(--border)] px-2.5 py-2 text-xs font-semibold text-[var(--text-soft)] transition hover:border-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer"
+                  title="Agrupar por carrera o curso"
+                >
+                  <Plus className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                  <span>Programa</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={openCreateSubjectModal}
+                className="inline-flex min-h-11 items-center gap-1 px-3 py-2 text-sm font-semibold rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white transition cursor-pointer"
+                title="Nueva materia"
+              >
+                <AppIcon name="plus" className="h-4 w-4" />
+                <span>Nueva</span>
+              </button>
+            </div>
           </div>
 
           {/* Aviso de protección contra eliminación */}
@@ -994,16 +1285,17 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
 
           {/* Lista de materias */}
           <div className="divide-y divide-[var(--border)]/60">
-            {subjects.length === 0 ? (
+            {scopedSubjects.length === 0 ? (
               <p className="text-center py-6 text-xs text-[var(--text-faint)]">
-                Sin materias registradas aún.
+                {selectedProgramFilter ? 'Sin materias en este programa.' : 'Sin materias registradas aún.'}
               </p>
             ) : (
-              subjects.map((s) => {
+              scopedSubjects.map((s) => {
                 const stats = getSubjectStats(s.id, state);
                 const isSelected = selectedSubjectFilter === s.id;
                 const topicsOpen = expandedSubjectTopicsId === s.id;
                 const subjectTopics = s.topics || [];
+                const programName = s.programId ? programNameById.get(s.programId) : undefined;
                 return (
                   <div
                     key={s.id}
@@ -1020,8 +1312,15 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                         className="min-w-0 flex-1 text-left cursor-pointer group"
                         title={isSelected ? 'Quitar filtro' : `Filtrar evaluaciones de ${s.name}`}
                       >
-                        <span className="font-bold text-sm text-[var(--text)] group-hover:text-[var(--blue)] truncate block">
-                          {s.name}
+                        <span className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-bold text-sm text-[var(--text)] group-hover:text-[var(--blue)] truncate">
+                            {s.name}
+                          </span>
+                          {!selectedProgramFilter && programs.length > 0 && (
+                            <span className="shrink-0 rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-soft)]">
+                              {programName || 'General'}
+                            </span>
+                          )}
                         </span>
                         <span className="text-[11px] text-[var(--text-soft)] block mt-0.5">
                           {stats.examCount} {stats.examCount === 1 ? 'evaluación' : 'evaluaciones'} · {formatStudyDuration(stats.studyMinutes)} de estudio
@@ -1723,6 +2022,27 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                 )}
               </div>
 
+              {programs.length > 0 && (
+                <div>
+                  <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
+                    Carrera o curso (opcional)
+                  </label>
+                  <select
+                    aria-label="Carrera o curso de la materia"
+                    value={subjectInputProgramId}
+                    onChange={(e) => setSubjectInputProgramId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-indigo-500 outline-hidden text-[var(--text)] cursor-pointer"
+                  >
+                    <option value="">Sin programa (Generales)</option>
+                    {programs.map((program) => (
+                      <option key={program.id} value={program.id}>
+                        {program.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -1736,6 +2056,110 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                   className="px-4 py-1.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs cursor-pointer"
                 >
                   {editingSubject ? 'Guardar cambios' : 'Crear materia'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------------------------- */}
+      {/* MODAL: Nuevo Programa (Carrera / Curso) */}
+      {/* -------------------------------------------------------------------- */}
+      {programModalOpen && (
+        <div
+          onClick={() => setProgramModalOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="program-modal-title"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <h3 id="program-modal-title" className="text-sm font-bold text-[var(--text)]">
+                Nuevo programa de estudio
+              </h3>
+              <button
+                type="button"
+                onClick={() => setProgramModalOpen(false)}
+                aria-label="Cerrar programa"
+                className="inline-flex items-center justify-center text-[var(--text-soft)] hover:text-[var(--text)] p-1 rounded-lg cursor-pointer"
+              >
+                <AppIcon name="x" className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProgram} className="space-y-3">
+              <div>
+                <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
+                  Nombre *
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  aria-label="Nombre del programa"
+                  value={programInputName}
+                  onChange={(e) => {
+                    setProgramInputName(e.target.value);
+                    if (programInputError) setProgramInputError(null);
+                  }}
+                  placeholder="Ej. Licenciatura en Sistemas / Inglés B2"
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-indigo-500 outline-hidden text-[var(--text)]"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
+                  Tipo
+                </label>
+                <select
+                  aria-label="Tipo de programa"
+                  value={programInputKind}
+                  onChange={(e) => setProgramInputKind(e.target.value as StudyProgramKind)}
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-indigo-500 outline-hidden text-[var(--text)] cursor-pointer"
+                >
+                  {STUDY_PROGRAM_KINDS.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {STUDY_PROGRAM_KIND_LABELS[kind]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
+                  Institución (opcional)
+                </label>
+                <input
+                  type="text"
+                  aria-label="Institución del programa"
+                  value={programInputInstitution}
+                  onChange={(e) => setProgramInputInstitution(e.target.value)}
+                  placeholder="Ej. FING, ORT, Coursera..."
+                  className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-indigo-500 outline-hidden text-[var(--text)]"
+                />
+              </div>
+
+              {programInputError && (
+                <p role="alert" className="text-xs text-red-500">{programInputError}</p>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setProgramModalOpen(false)}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-[var(--border)] hover:bg-[var(--surface-muted)] text-[var(--text-soft)] cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs cursor-pointer"
+                >
+                  Crear programa
                 </button>
               </div>
             </form>

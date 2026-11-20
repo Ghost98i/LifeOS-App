@@ -9,6 +9,8 @@ import {
   StudyQuestion,
   StudyPracticeAttempt,
   StudyPracticeSession,
+  StudyProgram,
+  StudyProgramKind,
   StudyTopicPracticeStats,
 } from '../types';
 import { assertCommercialTransition } from './commercialTransition';
@@ -1011,10 +1013,12 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
       ? rawJobs.applications
           .filter((app: any) => app && typeof app === 'object')
           .map((app: any) => {
-            const { followUpNotes: rawFollowUp, keyDates: rawKeyDates, ...rest } = app;
+            const { followUpNotes: rawFollowUp, keyDates: rawKeyDates, source: rawSource, ...rest } = app;
+            const trimmedSource = typeof rawSource === 'string' ? rawSource.trim() : '';
             return {
               ...rest,
               id: typeof app.id === 'string' && app.id ? app.id : uid(),
+              ...(trimmedSource ? { source: trimmedSource } : {}),
               ...(typeof rawFollowUp === 'string' ? { followUpNotes: rawFollowUp } : {}),
               keyDates: normalizeJobKeyDates(rawKeyDates),
             };
@@ -1114,9 +1118,33 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
     study: {
       ...def.study,
       ...(candidate.study || {}),
+      ...(Array.isArray(candidate.study?.programs)
+        ? {
+            programs: candidate.study.programs
+              .filter((p: any) => p && typeof p.name === 'string' && p.name.trim())
+              .map((p: any): StudyProgram => {
+                const validKinds: StudyProgramKind[] = ['carrera', 'curso', 'certificacion', 'autoestudio'];
+                const kind: StudyProgramKind = validKinds.includes(p.kind) ? p.kind : 'carrera';
+                const institution = typeof p.institution === 'string' && p.institution.trim() ? p.institution.trim() : undefined;
+                return {
+                  id: typeof p.id === 'string' && p.id ? p.id : uid(),
+                  name: p.name.trim(),
+                  kind,
+                  ...(institution ? { institution } : {}),
+                  ...(typeof p.createdAt === 'number' ? { createdAt: p.createdAt } : {}),
+                  ...(typeof p.updatedAt === 'number' ? { updatedAt: p.updatedAt } : {}),
+                };
+              }),
+          }
+        : {}),
       subjects: Array.isArray(candidate.study?.subjects)
         ? candidate.study.subjects.map((sub: any) => ({
             ...sub,
+            ...(typeof sub?.programId === 'string' && sub.programId.trim()
+              ? { programId: sub.programId.trim() }
+              : sub?.programId === null
+              ? { programId: null }
+              : {}),
             ...(Array.isArray(sub?.topics)
               ? {
                   topics: sub.topics

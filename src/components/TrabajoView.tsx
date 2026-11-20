@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Briefcase, ChevronDown, ChevronRight, Landmark } from 'lucide-react';
 import { JobApplication, JobApplicationType, JobKeyDate, JobKeyDateKind, LifeOSState } from '../types';
 import { todayISO, fmtDate, uid } from '../lib/storage';
 import { jobStats } from '../lib/calculations';
@@ -6,6 +7,7 @@ import { JobKanbanBoard } from './JobKanbanBoard';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 import { ContextualHelp } from './ContextualHelp';
+import { SurfaceCard } from './ui/SurfacePrimitives';
 import { showToast } from '../lib/toast';
 import { focusTargetElement } from '../lib/navigationFocus';
 import {
@@ -13,9 +15,11 @@ import {
   getJobApplicationType,
   getJobStageLabel,
   getNextJobKeyDate,
+  hasAdvancedJobDetails,
   isJobStatusForType,
   JOB_KEY_DATE_KINDS,
   JOB_KEY_DATE_LABELS,
+  JOB_SOURCE_SUGGESTIONS,
   JOB_STAGES,
   JobApplicationDraft,
   JobTypeFilter,
@@ -28,6 +32,10 @@ interface TrabajoViewProps {
   onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
   initialFocusId?: string | null;
   focusNonce?: number;
+  /** Optional initial form visibility (for deterministic testing). */
+  initialFormOpen?: boolean;
+  /** Optional initial form type when initialFormOpen is true. */
+  initialFormType?: JobApplicationType;
 }
 
 const NO_JOB_APPLICATIONS: JobApplication[] = [];
@@ -36,8 +44,9 @@ const emptyForm = (tipo: JobApplicationType = 'convencional'): JobApplicationDra
   tipo,
   empresa: '',
   puesto: '',
-  estado: tipo === 'concurso' ? 'pendiente_inscripcion' : 'pendiente',
+  estado: tipo === 'concurso' ? 'inscripto' : 'cv_enviado',
   fecha: todayISO(),
+  source: '',
   reclutador: '',
   notas: '',
   followUpNotes: '',
@@ -52,14 +61,24 @@ const initialProcessType = (applications: JobApplication[]): JobTypeFilter =>
     ? 'concurso'
     : 'convencional';
 
-export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState, initialFocusId, focusNonce }) => {
+export const TrabajoView: React.FC<TrabajoViewProps> = ({
+  state,
+  onUpdateState,
+  initialFocusId,
+  focusNonce,
+  initialFormOpen = false,
+  initialFormType,
+}) => {
   const applications = state.jobs?.applications || NO_JOB_APPLICATIONS;
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
   const [processType, setProcessType] = useState<JobTypeFilter>(() => initialProcessType(applications));
   const [processTypeChosen, setProcessTypeChosen] = useState(false);
-  const [formOpen, setFormOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(initialFormOpen);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<JobApplicationDraft>(() => emptyForm(initialProcessType(applications) === 'concurso' ? 'concurso' : 'convencional'));
+  const [form, setForm] = useState<JobApplicationDraft>(() =>
+    emptyForm(initialFormType ?? (initialProcessType(applications) === 'concurso' ? 'concurso' : 'convencional'))
+  );
   const [newKeyDateKind, setNewKeyDateKind] = useState<JobKeyDateKind>('entrevista');
   const [newKeyDateValue, setNewKeyDateValue] = useState<string>('');
   const [newKeyDateTime, setNewKeyDateTime] = useState<string>('');
@@ -109,7 +128,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState, 
     .sort((a, b) => (a.nextActionDate || '').localeCompare(b.nextActionDate || ''));
   const visibleApplications = scopedApplications.filter((application) => {
     const query = tableSearch.trim().toLocaleLowerCase();
-    return !query || [application.empresa, application.puesto, application.estado, application.reclutador, application.notas, application.followUpNotes, application.nextAction]
+    return !query || [application.empresa, application.puesto, application.estado, application.source, application.reclutador, application.notas, application.followUpNotes, application.nextAction]
       .some((value) => value?.toLocaleLowerCase().includes(query));
   });
   const stageCompatible = isJobStatusForType(form.tipo, form.estado);
@@ -126,9 +145,11 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState, 
     setNewKeyDateNote('');
   };
 
-  const openCreateForm = () => {
+  const openCreateForm = (presetType?: JobApplicationType) => {
+    const targetType = presetType ?? (processType === 'todos' ? 'convencional' : processType);
     setEditingId(null);
-    setForm(emptyForm(processType === 'todos' ? 'convencional' : processType));
+    setForm(emptyForm(targetType));
+    setDetailsOpen(false);
     resetNewKeyDateInputs();
     setFormError('');
     setFormOpen(true);
@@ -143,6 +164,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState, 
       puesto: application.puesto,
       estado: application.estado,
       fecha: application.fecha,
+      source: application.source || '',
       reclutador: application.reclutador || '',
       notas: application.notas || '',
       followUpNotes: application.followUpNotes || '',
@@ -151,6 +173,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState, 
       nextActionDate: application.nextActionDate || '',
       keyDates: normalizeJobKeyDates(application.keyDates),
     });
+    setDetailsOpen(hasAdvancedJobDetails(application));
     resetNewKeyDateInputs();
     setFormError('');
     setFormOpen(true);
@@ -158,6 +181,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState, 
 
   const closeForm = () => {
     setFormOpen(false);
+    setDetailsOpen(false);
     setEditingId(null);
     resetNewKeyDateInputs();
     setFormError('');
@@ -209,6 +233,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState, 
       ...form,
       empresa: form.empresa.trim(),
       puesto: form.puesto.trim(),
+      source: form.source?.trim() || '',
       reclutador: form.reclutador?.trim() || '',
       followUpNotes: form.followUpNotes?.trim() || '',
       keyDates: normalizeJobKeyDates(form.keyDates),
@@ -267,7 +292,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState, 
       <PageHeader
         title="Trabajo y empleo"
         actions={
-          <button id="qa-focus-trabajo" type="button" onClick={openCreateForm} className="flex min-h-11 items-center gap-2 rounded-xl bg-[var(--blue)] px-4 py-2 text-sm font-bold text-white shadow-xs transition-colors hover:bg-[var(--blue-hover)]">
+          <button id="qa-focus-trabajo" type="button" onClick={() => openCreateForm()} className="flex min-h-11 items-center gap-2 rounded-xl bg-[var(--blue)] px-4 py-2 text-sm font-bold text-white shadow-xs transition-colors hover:bg-[var(--blue-hover)] cursor-pointer">
             <AppIcon name="plus" className="h-4 w-4" /> Nueva postulación
           </button>
         }
@@ -327,156 +352,245 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState, 
       )}
 
       {formOpen && (
-        <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5" aria-labelledby="job-form-title">
+        <SurfaceCard as="section" className="p-4 sm:p-5" aria-labelledby="job-form-title">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h2 id="job-form-title" className="text-base font-bold text-[var(--text)]">{editingId ? 'Editar postulación' : 'Nueva postulación'}</h2>
-            <button type="button" onClick={closeForm} className="min-h-10 rounded-lg px-3 text-sm text-[var(--text-soft)] hover:bg-[var(--surface-muted)]">Cerrar</button>
+            <button type="button" onClick={closeForm} className="min-h-10 rounded-lg px-3 text-sm text-[var(--text-soft)] hover:bg-[var(--surface-muted)] cursor-pointer">Cerrar</button>
           </div>
           <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <label className={labelClass}>Tipo de proceso<select value={form.tipo} onChange={(e) => { setForm({ ...form, tipo: e.target.value as JobApplicationType }); setFormError(''); }} className={`${fieldClass} mt-1`}><option value="convencional">Empleo convencional</option><option value="concurso">Concurso público</option></select></label>
-            <label className={labelClass}>{form.tipo === 'concurso' ? 'Organismo' : 'Empresa'}<input required autoFocus value={form.empresa} onChange={(e) => setForm({ ...form, empresa: e.target.value })} placeholder={form.tipo === 'concurso' ? 'Ej.: Ministerio de Salud Pública' : 'Ej.: Scotiabank'} className={`${fieldClass} mt-1`} /></label>
+            <label className={labelClass}>Tipo de proceso<select value={form.tipo} onChange={(e) => {
+              const nextTipo = e.target.value as JobApplicationType;
+              const nextEstado = !editingId
+                ? (nextTipo === 'concurso' ? 'inscripto' : 'cv_enviado')
+                : form.estado;
+              setForm({ ...form, tipo: nextTipo, estado: nextEstado });
+              setFormError('');
+            }} className={`${fieldClass} mt-1`}><option value="convencional">Empleo convencional</option><option value="concurso">Concurso público</option></select></label>
+            <label className={labelClass}>{form.tipo === 'concurso' ? 'Organismo' : 'Empresa'}<input required autoFocus value={form.empresa} onChange={(e) => setForm({ ...form, empresa: e.target.value })} placeholder={form.tipo === 'concurso' ? 'Ej.: Ministerio de Salud Pública' : 'Ej.: Mercado Libre'} className={`${fieldClass} mt-1`} /></label>
             <label className={labelClass}>{form.tipo === 'concurso' ? 'Cargo' : 'Puesto'}<input value={form.puesto} onChange={(e) => setForm({ ...form, puesto: e.target.value })} placeholder={form.tipo === 'concurso' ? 'Ej.: Administrativo III' : 'Ej.: Analista'} className={`${fieldClass} mt-1`} /></label>
-            <label className={labelClass}>Estado<select value={stageCompatible ? form.estado : ''} onChange={(e) => { setForm({ ...form, estado: e.target.value as JobApplication['estado'] }); setFormError(''); }} className={`${fieldClass} mt-1`}><option value="" disabled>Elegí una etapa</option>{JOB_STAGES[form.tipo].map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}</select>{!stageCompatible && <span className="mt-1 block text-xs text-amber-700 dark:text-amber-300">La etapa guardada pertenece al otro tipo. Seleccioná una etapa compatible; los datos actuales se conservan hasta guardar.</span>}</label>
-            <label className={labelClass}>Fecha<input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} className={`${fieldClass} mt-1`} /></label>
-            <label className={labelClass}>{form.tipo === 'concurso' ? 'Contacto / referente' : 'Contacto / LinkedIn'}<input value={form.reclutador} onChange={(e) => setForm({ ...form, reclutador: e.target.value })} placeholder="Opcional" className={`${fieldClass} mt-1`} /></label>
-            <label className={labelClass}>Enlace a la publicación<input type="url" value={form.link} onChange={(e) => setForm({ ...form, link: e.target.value })} placeholder="https://…" className={`${fieldClass} mt-1`} /></label>
-            <label className={`${labelClass} sm:col-span-2 lg:col-span-3`}>Notas<textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} className={`${fieldClass} mt-1 resize-y`} /></label>
-            <label className={`${labelClass} sm:col-span-2 lg:col-span-3`}>Notas de seguimiento<textarea rows={2} value={form.followUpNotes || ''} onChange={(e) => setForm({ ...form, followUpNotes: e.target.value })} placeholder="Avances, contactos o próximos pasos de seguimiento…" className={`${fieldClass} mt-1 resize-y`} /></label>
-            <label className={labelClass}>Próxima acción<input value={form.nextAction} onChange={(e) => setForm({ ...form, nextAction: e.target.value })} placeholder="Ej.: Consultar por el proceso" className={`${fieldClass} mt-1`} /></label>
-            <label className={labelClass}>Fecha del seguimiento<input type="date" value={form.nextActionDate} onChange={(e) => setForm({ ...form, nextActionDate: e.target.value })} className={`${fieldClass} mt-1`} /></label>
-
-            <div className="sm:col-span-2 lg:col-span-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs font-bold text-[var(--text)]">Fechas clave (inscripción, pruebas, entrevistas)</span>
-                {form.nextActionDate && (
-                  <span className="text-[11px] text-[var(--text-soft)]">
-                    Seguimiento ({fmtDate(form.nextActionDate)}) se muestra como tipo Otro
-                  </span>
-                )}
-              </div>
-
-              {(form.keyDates || []).length > 0 && (
-                <ul className="space-y-2">
-                  {(form.keyDates || []).map((kd) => (
-                    <li key={kd.id} className="grid grid-cols-1 gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 sm:grid-cols-[130px_140px_110px_1fr_auto] items-center">
-                      <select
-                        aria-label="Tipo de fecha clave"
-                        value={kd.kind}
-                        onChange={(e) => handleUpdateFormKeyDate(kd.id, { kind: e.target.value as JobKeyDateKind })}
-                        className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-xs text-[var(--text)]"
-                      >
-                        {JOB_KEY_DATE_KINDS.map((kind) => (
-                          <option key={kind} value={kind}>{JOB_KEY_DATE_LABELS[kind]}</option>
-                        ))}
-                      </select>
-                      <input
-                        type="date"
-                        aria-label="Fecha clave"
-                        value={kd.date}
-                        onChange={(e) => handleUpdateFormKeyDate(kd.id, { date: e.target.value })}
-                        className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-xs text-[var(--text)]"
-                      />
-                      <input
-                        type="time"
-                        aria-label="Hora de fecha clave"
-                        value={kd.time || ''}
-                        onChange={(e) => handleUpdateFormKeyDate(kd.id, { time: e.target.value || null })}
-                        className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-xs text-[var(--text)]"
-                      />
-                      <input
-                        type="text"
-                        aria-label="Nota de fecha clave"
-                        value={kd.note || ''}
-                        placeholder="Nota opcional"
-                        onChange={(e) => handleUpdateFormKeyDate(kd.id, { note: e.target.value })}
-                        className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-xs text-[var(--text)]"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteFormKeyDate(kd.id)}
-                        aria-label="Eliminar fecha clave"
-                        className="min-h-9 rounded-lg px-2 text-xs font-semibold text-red-500 hover:bg-red-500/10 cursor-pointer"
-                      >
-                        Quitar
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[130px_140px_110px_1fr_auto] items-center">
-                <select
-                  aria-label="Tipo de nueva fecha clave"
-                  value={newKeyDateKind}
-                  onChange={(e) => setNewKeyDateKind(e.target.value as JobKeyDateKind)}
-                  className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--text)]"
-                >
-                  {JOB_KEY_DATE_KINDS.map((kind) => (
-                    <option key={kind} value={kind}>{JOB_KEY_DATE_LABELS[kind]}</option>
-                  ))}
-                </select>
+            <label className={labelClass}>Estado actual<select value={stageCompatible ? form.estado : ''} onChange={(e) => { setForm({ ...form, estado: e.target.value as JobApplication['estado'] }); setFormError(''); }} className={`${fieldClass} mt-1`}><option value="" disabled>Elegí una etapa</option>{JOB_STAGES[form.tipo].map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}</select>{!stageCompatible && <span className="mt-1 block text-xs text-amber-700 dark:text-amber-300">La etapa guardada pertenece al otro tipo. Seleccioná una etapa compatible; los datos actuales se conservan hasta guardar.</span>}</label>
+            <div className="sm:col-span-2 lg:col-span-1">
+              <label className={labelClass}>
+                Dónde te postulaste
                 <input
-                  type="date"
-                  aria-label="Nueva fecha clave"
-                  value={newKeyDateValue}
-                  onChange={(e) => setNewKeyDateValue(e.target.value)}
-                  className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--text)]"
+                  value={form.source || ''}
+                  onChange={(e) => setForm({ ...form, source: e.target.value })}
+                  placeholder="Ej.: LinkedIn, BuscoJobs, Uruguay Concursa"
+                  className={`${fieldClass} mt-1`}
                 />
-                <input
-                  type="time"
-                  aria-label="Hora de nueva fecha clave"
-                  value={newKeyDateTime}
-                  onChange={(e) => setNewKeyDateTime(e.target.value)}
-                  className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--text)]"
-                />
-                <input
-                  type="text"
-                  aria-label="Detalle de nueva fecha clave"
-                  value={newKeyDateNote}
-                  onChange={(e) => setNewKeyDateNote(e.target.value)}
-                  placeholder="Ej.: Entrevista técnica / Prueba escrita"
-                  className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--text)]"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddKeyDateToForm}
-                  className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-bold text-[var(--blue)] hover:bg-[var(--surface-muted)] cursor-pointer"
-                >
-                  + Fecha clave
-                </button>
+              </label>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {JOB_SOURCE_SUGGESTIONS.map((suggestion) => {
+                  const selected = (form.source || '').trim().toLocaleLowerCase('es') === suggestion.toLocaleLowerCase('es');
+                  return (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => setForm({ ...form, source: suggestion })}
+                      className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition cursor-pointer ${
+                        selected
+                          ? 'border-indigo-600 bg-indigo-600 text-white dark:border-indigo-500 dark:bg-indigo-500'
+                          : 'border-slate-200/80 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/[0.08] dark:bg-transparent dark:text-slate-300 dark:hover:border-indigo-500/40 dark:hover:text-indigo-400'
+                      }`}
+                    >
+                      {suggestion}
+                    </button>
+                  );
+                })}
               </div>
             </div>
+            <label className={labelClass}>Enlace a la publicación <span className="font-normal text-[var(--text-faint)]">(opcional)</span><input type="url" value={form.link} onChange={(e) => setForm({ ...form, link: e.target.value })} placeholder="https://…" className={`${fieldClass} mt-1`} /></label>
+
+            <div className="sm:col-span-2 lg:col-span-3 pt-1">
+              <button
+                type="button"
+                aria-expanded={detailsOpen}
+                aria-controls="job-form-advanced-details"
+                onClick={() => setDetailsOpen((open) => !open)}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-indigo-600 dark:text-slate-300 dark:hover:bg-white/[0.05] dark:hover:text-indigo-400 cursor-pointer"
+              >
+                {detailsOpen ? (
+                  <ChevronDown className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                )}
+                <span>Detalles, notas y fechas clave</span>
+              </button>
+            </div>
+
+            {detailsOpen && (
+              <div id="job-form-advanced-details" className="sm:col-span-2 lg:col-span-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 rounded-xl border border-slate-200/70 bg-slate-50/40 p-3.5 dark:border-white/[0.06] dark:bg-white/[0.02]">
+                <label className={labelClass}>Fecha<input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} className={`${fieldClass} mt-1`} /></label>
+                <label className={labelClass}>{form.tipo === 'concurso' ? 'Contacto / referente' : 'Contacto / LinkedIn'}<input value={form.reclutador} onChange={(e) => setForm({ ...form, reclutador: e.target.value })} placeholder="Opcional" className={`${fieldClass} mt-1`} /></label>
+                <label className={labelClass}>Próxima acción<input value={form.nextAction} onChange={(e) => setForm({ ...form, nextAction: e.target.value })} placeholder="Ej.: Consultar por el proceso" className={`${fieldClass} mt-1`} /></label>
+                <label className={labelClass}>Fecha del seguimiento<input type="date" value={form.nextActionDate} onChange={(e) => setForm({ ...form, nextActionDate: e.target.value })} className={`${fieldClass} mt-1`} /></label>
+                <label className={`${labelClass} sm:col-span-2 lg:col-span-3`}>Notas<textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} className={`${fieldClass} mt-1 resize-y`} /></label>
+                <label className={`${labelClass} sm:col-span-2 lg:col-span-3`}>Notas de seguimiento<textarea rows={2} value={form.followUpNotes || ''} onChange={(e) => setForm({ ...form, followUpNotes: e.target.value })} placeholder="Avances, contactos o próximos pasos de seguimiento…" className={`${fieldClass} mt-1 resize-y`} /></label>
+
+                <div className="sm:col-span-2 lg:col-span-3 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-bold text-[var(--text)]">Fechas clave (inscripción, pruebas, entrevistas)</span>
+                    {form.nextActionDate && (
+                      <span className="text-[11px] text-[var(--text-soft)]">
+                        Seguimiento ({fmtDate(form.nextActionDate)}) se muestra como tipo Otro
+                      </span>
+                    )}
+                  </div>
+
+                  {(form.keyDates || []).length > 0 && (
+                    <ul className="space-y-2">
+                      {(form.keyDates || []).map((kd) => (
+                        <li key={kd.id} className="grid grid-cols-1 gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] p-2 sm:grid-cols-[130px_140px_110px_1fr_auto] items-center">
+                          <select
+                            aria-label="Tipo de fecha clave"
+                            value={kd.kind}
+                            onChange={(e) => handleUpdateFormKeyDate(kd.id, { kind: e.target.value as JobKeyDateKind })}
+                            className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-xs text-[var(--text)]"
+                          >
+                            {JOB_KEY_DATE_KINDS.map((kind) => (
+                              <option key={kind} value={kind}>{JOB_KEY_DATE_LABELS[kind]}</option>
+                            ))}
+                          </select>
+                          <input
+                            type="date"
+                            aria-label="Fecha clave"
+                            value={kd.date}
+                            onChange={(e) => handleUpdateFormKeyDate(kd.id, { date: e.target.value })}
+                            className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-xs text-[var(--text)]"
+                          />
+                          <input
+                            type="time"
+                            aria-label="Hora de fecha clave"
+                            value={kd.time || ''}
+                            onChange={(e) => handleUpdateFormKeyDate(kd.id, { time: e.target.value || null })}
+                            className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-xs text-[var(--text)]"
+                          />
+                          <input
+                            type="text"
+                            aria-label="Nota de fecha clave"
+                            value={kd.note || ''}
+                            placeholder="Nota opcional"
+                            onChange={(e) => handleUpdateFormKeyDate(kd.id, { note: e.target.value })}
+                            className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-xs text-[var(--text)]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteFormKeyDate(kd.id)}
+                            aria-label="Eliminar fecha clave"
+                            className="min-h-9 rounded-lg px-2 text-xs font-semibold text-red-500 hover:bg-red-500/10 cursor-pointer"
+                          >
+                            Quitar
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[130px_140px_110px_1fr_auto] items-center">
+                    <select
+                      aria-label="Tipo de nueva fecha clave"
+                      value={newKeyDateKind}
+                      onChange={(e) => setNewKeyDateKind(e.target.value as JobKeyDateKind)}
+                      className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--text)]"
+                    >
+                      {JOB_KEY_DATE_KINDS.map((kind) => (
+                        <option key={kind} value={kind}>{JOB_KEY_DATE_LABELS[kind]}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="date"
+                      aria-label="Nueva fecha clave"
+                      value={newKeyDateValue}
+                      onChange={(e) => setNewKeyDateValue(e.target.value)}
+                      className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--text)]"
+                    />
+                    <input
+                      type="time"
+                      aria-label="Hora de nueva fecha clave"
+                      value={newKeyDateTime}
+                      onChange={(e) => setNewKeyDateTime(e.target.value)}
+                      className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--text)]"
+                    />
+                    <input
+                      type="text"
+                      aria-label="Detalle de nueva fecha clave"
+                      value={newKeyDateNote}
+                      onChange={(e) => setNewKeyDateNote(e.target.value)}
+                      placeholder="Ej.: Entrevista técnica / Prueba escrita"
+                      className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-xs text-[var(--text)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddKeyDateToForm}
+                      className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-bold text-[var(--blue)] hover:bg-[var(--surface-muted)] cursor-pointer"
+                    >
+                      + Fecha clave
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {formError && <p role="alert" className="text-sm font-medium text-amber-700 dark:text-amber-300 sm:col-span-2 lg:col-span-3">{formError}</p>}
             <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
-              <button type="submit" disabled={!stageCompatible} className="min-h-11 rounded-xl bg-[var(--blue)] px-4 py-2 text-sm font-bold text-white hover:bg-[var(--blue-hover)] disabled:cursor-not-allowed disabled:opacity-50">{editingId ? 'Guardar cambios' : 'Agregar postulación'}</button>
-              <button type="button" onClick={closeForm} className="min-h-11 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-muted)]">Cancelar</button>
+              <button type="submit" disabled={!stageCompatible} className="min-h-11 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer">{editingId ? 'Guardar cambios' : 'Agregar postulación'}</button>
+              <button type="button" onClick={closeForm} className="min-h-11 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-muted)] cursor-pointer">Cancelar</button>
             </div>
           </form>
-        </section>
+        </SurfaceCard>
       )}
 
-      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <label className="flex items-center gap-2.5 text-xs font-semibold text-[var(--text-soft)]">
-          <span className="shrink-0">Proceso</span>
-          <select aria-label="Filtrar por tipo de proceso" value={processType} onChange={(e) => chooseProcessType(e.target.value as JobTypeFilter)} className="min-h-10 flex-1 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-medium text-[var(--text)] shadow-2xs sm:flex-none">
-            <option value="convencional">Empleo convencional</option>
-            <option value="concurso">Concurso público</option>
-            <option value="todos">Todos los procesos (solo en Lista)</option>
-          </select>
-        </label>
-        <div className="flex w-full items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1 sm:w-fit">
-          <button type="button" onClick={() => setViewMode('kanban')} aria-pressed={viewMode === 'kanban'} className={`min-h-10 flex-1 rounded-lg px-3 text-xs font-semibold transition-colors sm:flex-none ${viewMode === 'kanban' ? 'bg-[var(--card)] text-[var(--text)] shadow-2xs' : 'text-[var(--text-soft)] hover:text-[var(--text)]'}`}><span className="inline-flex items-center justify-center gap-1.5"><AppIcon name="kanban" className="h-3.5 w-3.5" /> Tablero</span></button>
-          <button type="button" onClick={() => setViewMode('table')} aria-pressed={viewMode === 'table'} className={`min-h-10 flex-1 rounded-lg px-3 text-xs font-semibold transition-colors sm:flex-none ${viewMode === 'table' ? 'bg-[var(--card)] text-[var(--text)] shadow-2xs' : 'text-[var(--text-soft)] hover:text-[var(--text)]'}`}><span className="inline-flex items-center justify-center gap-1.5"><AppIcon name="list" className="h-3.5 w-3.5" /> Lista / Tabla</span></button>
+      {applications.length > 0 && (
+        <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+          <label className="flex items-center gap-2.5 text-xs font-semibold text-[var(--text-soft)]">
+            <span className="shrink-0">Proceso</span>
+            <select aria-label="Filtrar por tipo de proceso" value={processType} onChange={(e) => chooseProcessType(e.target.value as JobTypeFilter)} className="min-h-10 flex-1 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-medium text-[var(--text)] shadow-2xs sm:flex-none">
+              <option value="convencional">Empleo convencional</option>
+              <option value="concurso">Concurso público</option>
+              <option value="todos">Todos los procesos (solo en Lista)</option>
+            </select>
+          </label>
+          <div className="flex w-full items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-1 sm:w-fit">
+            <button type="button" onClick={() => setViewMode('kanban')} aria-pressed={viewMode === 'kanban'} className={`min-h-10 flex-1 rounded-lg px-3 text-xs font-semibold transition-colors sm:flex-none cursor-pointer ${viewMode === 'kanban' ? 'bg-[var(--card)] text-[var(--text)] shadow-2xs' : 'text-[var(--text-soft)] hover:text-[var(--text)]'}`}><span className="inline-flex items-center justify-center gap-1.5"><AppIcon name="kanban" className="h-3.5 w-3.5" /> Tablero</span></button>
+            <button type="button" onClick={() => setViewMode('table')} aria-pressed={viewMode === 'table'} className={`min-h-10 flex-1 rounded-lg px-3 text-xs font-semibold transition-colors sm:flex-none cursor-pointer ${viewMode === 'table' ? 'bg-[var(--card)] text-[var(--text)] shadow-2xs' : 'text-[var(--text-soft)] hover:text-[var(--text)]'}`}><span className="inline-flex items-center justify-center gap-1.5"><AppIcon name="list" className="h-3.5 w-3.5" /> Lista / Tabla</span></button>
+          </div>
         </div>
-      </div>
+      )}
 
       {applications.length === 0 ? (
-        <section className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] px-5 py-10 text-center sm:py-14">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-muted)] text-[var(--blue)]"><AppIcon name="briefcase" className="h-6 w-6" /></div>
-          <h2 className="text-lg font-bold text-[var(--text)]">Tu búsqueda empieza acá</h2>
-          <p className="mx-auto mt-1 max-w-md text-sm text-[var(--text-soft)]">Registrá una postulación laboral o un concurso público con su etapa y próximo seguimiento.</p>
-          {!formOpen && <button type="button" onClick={openCreateForm} className="mt-5 min-h-11 rounded-xl bg-[var(--blue)] px-4 py-2 text-sm font-bold text-white hover:bg-[var(--blue-hover)]">Crear primera postulación</button>}
-        </section>
+        !formOpen && (
+          <SurfaceCard as="section" className="p-6 sm:p-8 text-center space-y-4">
+            <div className="mx-auto flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+              <Briefcase className="h-6 w-6" strokeWidth={1.75} aria-hidden="true" />
+            </div>
+            <div className="space-y-1.5">
+              <h2 className="text-lg font-bold tracking-[-0.02em] text-slate-900 dark:text-slate-100">
+                Seguí tus postulaciones sin perder el hilo
+              </h2>
+              <p className="mx-auto max-w-lg text-sm text-slate-500 dark:text-slate-400">
+                CV enviado → Entrevista → Oferta / Rechazado
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => openCreateForm('convencional')}
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 cursor-pointer"
+              >
+                <Briefcase className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                <span>Registrar postulación privada</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => openCreateForm('concurso')}
+                className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-white/[0.08] dark:bg-transparent dark:text-slate-200 dark:hover:border-indigo-500/40 dark:hover:text-indigo-400 cursor-pointer"
+              >
+                <Landmark className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
+                <span>Registrar concurso público</span>
+              </button>
+            </div>
+          </SurfaceCard>
+        )
       ) : (
         <section className="space-y-3">
           <div className="flex items-center gap-1"><h2 className="text-base font-bold text-[var(--text)]">Postulaciones <span className="ml-1 text-sm font-normal text-[var(--text-soft)]">{scopedApplications.length}</span></h2><ContextualHelp label="Estados de las postulaciones">{processType === 'concurso' ? 'Las etapas del llamado no son obligatorias ni secuenciales. «Ingreso confirmado» indica que vas a ingresar al cargo.' : processType === 'todos' ? 'Cada proceso conserva sus etapas. «Oferta recibida» es una propuesta laboral; «Contratado» e «Ingreso confirmado» indican un ingreso confirmado.' : '«Oferta recibida» es una propuesta laboral. «Contratado» indica que el ingreso está confirmado.'}</ContextualHelp></div>
@@ -515,7 +629,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({ state, onUpdateState, 
                     {visibleApplications.sort((a, b) => b.fecha.localeCompare(a.fecha)).map((application) => {
                       const tipo = getJobApplicationType(application);
                       const nextKey = getNextJobKeyDate(application, today);
-                      return <tr key={application.id} id={`job-app-${application.id}`} className="hover:bg-[var(--bg)]/50"><td className="px-3 py-3"><span className="inline-flex rounded-md border border-[var(--border)] px-2 py-1 text-xs font-semibold text-[var(--text-soft)]">{typeLabel(tipo)}</span></td><td className="px-3 py-3 font-bold text-[var(--text)]">{application.empresa}{application.link && <a href={application.link} target="_blank" rel="noreferrer" className="ml-2 whitespace-nowrap text-[var(--blue)] hover:underline">Ver publicación ↗</a>}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.puesto}{application.notas && <p className="mt-1 max-w-xs truncate text-xs text-[var(--text-faint)]">{application.notas}</p>}{application.followUpNotes && <p className="mt-1 max-w-xs truncate text-xs text-[var(--text-soft)]">Seg.: {application.followUpNotes}</p>}</td><td className="px-3 py-3"><select aria-label={`Estado de ${application.empresa}`} value={application.estado} onChange={(e) => handleSetEstado(application.id, e.target.value as JobApplication['estado'])} className="max-w-[180px] rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-2 text-xs text-[var(--text)]">{JOB_STAGES[tipo].map((stage) => <option key={stage.id} value={stage.id}>{getJobStageLabel(tipo, stage.id)}</option>)}</select></td><td className="px-3 py-3 tabular-nums text-[var(--text-soft)]">{fmtDate(application.fecha)}{nextKey && !nextKey.keyDate.isLegacyNextAction && <span className={`mt-1 block w-fit rounded px-1.5 py-0.5 text-[10px] font-bold ${nextKey.proximity === 'overdue' ? 'bg-red-500/15 text-red-600 dark:text-red-400' : nextKey.proximity === 'today' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'}`}>{JOB_KEY_DATE_LABELS[nextKey.keyDate.kind]}: {fmtDate(nextKey.keyDate.date)}</span>}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.reclutador || '—'}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.nextAction ? <>{application.nextAction}<br />{application.nextActionDate && fmtDate(application.nextActionDate)}</> : '—'}</td><td className="whitespace-nowrap px-3 py-3"><button type="button" onClick={() => openEditForm(application)} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)]">Editar</button><button type="button" onClick={() => handleDeleteApplication(application.id)} className="min-h-10 rounded-lg px-2 text-xs text-[var(--text-faint)] hover:text-red-500" aria-label={`Eliminar postulación de ${application.empresa}`}>Eliminar</button></td></tr>;
+                      return <tr key={application.id} id={`job-app-${application.id}`} className="hover:bg-[var(--bg)]/50"><td className="px-3 py-3"><span className="inline-flex rounded-md border border-[var(--border)] px-2 py-1 text-xs font-semibold text-[var(--text-soft)]">{typeLabel(tipo)}</span></td><td className="px-3 py-3 font-bold text-[var(--text)]">{application.empresa}{application.source && <span className="ml-2 inline-flex rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-soft)]">{application.source}</span>}{application.link && <a href={application.link} target="_blank" rel="noreferrer" className="ml-2 whitespace-nowrap text-[var(--blue)] hover:underline">Ver publicación ↗</a>}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.puesto}{application.notas && <p className="mt-1 max-w-xs truncate text-xs text-[var(--text-faint)]">{application.notas}</p>}{application.followUpNotes && <p className="mt-1 max-w-xs truncate text-xs text-[var(--text-soft)]">Seg.: {application.followUpNotes}</p>}</td><td className="px-3 py-3"><select aria-label={`Estado de ${application.empresa}`} value={application.estado} onChange={(e) => handleSetEstado(application.id, e.target.value as JobApplication['estado'])} className="max-w-[180px] rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-2 text-xs text-[var(--text)]">{JOB_STAGES[tipo].map((stage) => <option key={stage.id} value={stage.id}>{getJobStageLabel(tipo, stage.id)}</option>)}</select></td><td className="px-3 py-3 tabular-nums text-[var(--text-soft)]">{fmtDate(application.fecha)}{nextKey && !nextKey.keyDate.isLegacyNextAction && <span className={`mt-1 block w-fit rounded px-1.5 py-0.5 text-[10px] font-bold ${nextKey.proximity === 'overdue' ? 'bg-red-500/15 text-red-600 dark:text-red-400' : nextKey.proximity === 'today' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'}`}>{JOB_KEY_DATE_LABELS[nextKey.keyDate.kind]}: {fmtDate(nextKey.keyDate.date)}</span>}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.reclutador || '—'}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.nextAction ? <>{application.nextAction}<br />{application.nextActionDate && fmtDate(application.nextActionDate)}</> : '—'}</td><td className="whitespace-nowrap px-3 py-3"><button type="button" onClick={() => openEditForm(application)} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)]">Editar</button><button type="button" onClick={() => handleDeleteApplication(application.id)} className="min-h-10 rounded-lg px-2 text-xs text-[var(--text-faint)] hover:text-red-500" aria-label={`Eliminar postulación de ${application.empresa}`}>Eliminar</button></td></tr>;
                     })}
                     {visibleApplications.length === 0 && <tr><td colSpan={8} className="px-3 py-8 text-center text-sm text-[var(--text-faint)]">{scopedApplications.length === 0 ? 'No hay postulaciones para este tipo de proceso.' : 'No hay postulaciones que coincidan con esa búsqueda.'}</td></tr>}
                   </tbody>

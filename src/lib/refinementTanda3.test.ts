@@ -33,7 +33,9 @@ test('notes retain progressive rendering and historical data while tools get pee
 });
 
 test('study audio stays opt-in on rendering and never edits academic history', () => {
-  const state = defaultState(); const original = structuredClone(state);
+  const state = defaultState();
+  state.study.subjects.push({ id: 'sub-audio', name: 'Física' });
+  const original = structuredClone(state);
   const html = renderToStaticMarkup(React.createElement(EstudiosView, { state, onUpdateState: () => { throw Error('Unexpected study write'); } }));
   assert.match(html, /Sonidos de concentración/);
   assert.match(html, /Reproducir/);

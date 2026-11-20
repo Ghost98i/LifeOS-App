@@ -20,11 +20,14 @@ const application = (id: string, estado: JobApplication['estado']): JobApplicati
   fecha: todayISO(),
 });
 
-test('Trabajo vacío muestra una sola bienvenida, conserva vistas y oculta métricas en cero', () => {
+test('Trabajo vacío muestra bienvenida limpia, oculta filtros redundantes y métricas en cero', () => {
   const html = renderTrabajo();
-  assert.match(html, /Tu búsqueda empieza acá/);
-  assert.match(html, /Crear primera postulación/);
-  assert.match(html, /Lista \/ Tabla/);
+  assert.match(html, /Seguí tus postulaciones sin perder el hilo/);
+  assert.match(html, /CV enviado → Entrevista → Oferta \/ Rechazado/);
+  assert.match(html, /Registrar postulación privada/);
+  assert.match(html, /Registrar concurso público/);
+  assert.doesNotMatch(html, /Lista \/ Tabla/);
+  assert.doesNotMatch(html, /Filtrar por tipo de proceso/);
   assert.doesNotMatch(html, /Sin postulaciones/);
   assert.doesNotMatch(html, /En etapa CV enviado/);
 });

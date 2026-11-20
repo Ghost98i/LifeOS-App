@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Compass,
   Dumbbell,
+  FolderKanban,
   Repeat,
   Wallet,
 } from 'lucide-react';
@@ -27,6 +28,7 @@ export interface TodayRadarSectionProps {
 function renderModuleIcon(module: ViewType | TodayRadarMilestone['module'], className: string) {
   if (module === 'estudios') return <BookOpen className={className} strokeWidth={1.75} aria-hidden="true" />;
   if (module === 'trabajo') return <Briefcase className={className} strokeWidth={1.75} aria-hidden="true" />;
+  if (module === 'proyectos') return <FolderKanban className={className} strokeWidth={1.75} aria-hidden="true" />;
   return <Wallet className={className} strokeWidth={1.75} aria-hidden="true" />;
 }
 

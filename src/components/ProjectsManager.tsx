@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import type { LifeOSState, Project, ProjectStatus } from '../types';
+import { ArrowUpRight } from 'lucide-react';
+import type { LifeOSState, Project, ProjectStatus, ProjectTask } from '../types';
 import { AppIcon } from './AppIcon';
 import { daysBetween, fmtDate, todayISO, uid } from '../lib/storage';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
+import { sendProjectNextStepToToday, sendProjectTaskToToday } from '../lib/projectFlows';
 import {
   getUnifiedTaskMap,
   isTaskBlocked,
@@ -147,19 +149,43 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
 
   const handleSendNextStepToToday = (project: Project) => {
     if (!project.nextStep.trim()) return;
+    let reason: string | undefined;
+    let added = false;
     const saved = onUpdateState((draft) => {
-      draft.todayExtras.push({
-        id: uid(),
-        date: today,
-        text: `[${project.name}] ${project.nextStep}`,
-        priority: 'alta',
-        done: false,
-        effort: 'medium',
-      });
+      const res = sendProjectNextStepToToday(draft, project, today);
+      added = res.added;
+      reason = res.reason;
     });
     if (saved === false) return;
+    if (!added) {
+      if (reason === 'duplicate') {
+        showToast('Este próximo paso ya está en tus tareas de Hoy.', 'info');
+      }
+      return;
+    }
     playSound('success');
-    showToast(`Próximo paso agregado a Hoy.`);
+    showToast('Próximo paso agregado a Hoy.');
+  };
+
+  const handleSendTaskToToday = (project: Project, task: ProjectTask) => {
+    let reason: string | undefined;
+    let added = false;
+    const saved = onUpdateState((draft) => {
+      const res = sendProjectTaskToToday(draft, project, task, today);
+      added = res.added;
+      reason = res.reason;
+    });
+    if (saved === false) return;
+    if (!added) {
+      if (reason === 'already_due_today') {
+        showToast('Esta tarea ya vence hoy y figura en Hoy.', 'info');
+      } else if (reason === 'duplicate') {
+        showToast('Esta tarea ya fue enviada a Hoy.', 'info');
+      }
+      return;
+    }
+    playSound('success');
+    showToast('Tarea enviada a Hoy.');
   };
 
   const handleAddTask = (projectId: string) => {
@@ -476,6 +502,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
             return (
               <div
                 key={project.id}
+                id={`project-${project.id}`}
                 className="bg-[var(--card)] border border-[var(--border)] hover:border-[var(--border-hover)] rounded-2xl p-4 sm:p-5 shadow-xs space-y-4 transition-all"
               >
                 {/* Project Top Bar */}
@@ -690,6 +717,20 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                             </label>
 
                             <div className="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+                              {/* Send incomplete task to Hoy */}
+                              {!t.done && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendTaskToToday(project, t)}
+                                  className="inline-flex items-center gap-0.5 rounded-lg px-1.5 py-1 text-[11px] font-medium text-slate-500 transition hover:bg-indigo-500/10 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 cursor-pointer"
+                                  title="Enviar esta tarea a Hoy"
+                                  aria-label={`Enviar ${t.text} a Hoy`}
+                                >
+                                  <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                                  <span className="hidden sm:inline">Hoy</span>
+                                </button>
+                              )}
+
                               {/* Toggle dependency edit */}
                               {otherTasksInProject.length > 0 && (
                                 <button

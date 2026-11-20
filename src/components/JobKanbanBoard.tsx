@@ -69,6 +69,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
     return (
       app.empresa.toLowerCase().includes(q) ||
       app.puesto.toLowerCase().includes(q) ||
+      (app.source && app.source.toLowerCase().includes(q)) ||
       (app.reclutador && app.reclutador.toLowerCase().includes(q)) ||
       (app.followUpNotes && app.followUpNotes.toLowerCase().includes(q)) ||
       (app.nextAction && app.nextAction.toLowerCase().includes(q))
@@ -187,7 +188,10 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                         <h4 className="truncate text-sm font-bold text-[var(--text)]">{app.empresa}</h4>
                         {app.link && <a href={app.link} target="_blank" rel="noreferrer" className="shrink-0 text-[var(--blue)]" title={tipo === 'concurso' ? 'Abrir publicación o bases' : 'Abrir publicación de la vacante'}><AppIcon name="externalLink" className="h-3.5 w-3.5" /></a>}
                       </div>
-                      <p className="break-words text-xs font-medium text-[var(--text-soft)]">{app.puesto}</p>
+                      <p className="break-words text-xs font-medium text-[var(--text-soft)]">
+                        {app.puesto}
+                        {app.source && <span className="ml-1.5 inline-flex rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-faint)]">{app.source}</span>}
+                      </p>
                     </div>
                     <button type="button" onClick={() => onDeleteApplication(app.id)} className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] hover:bg-red-500/10 hover:text-red-500" aria-label={`Eliminar postulación de ${app.empresa}`} title="Eliminar postulación"><AppIcon name="x" className="h-4 w-4" /></button>
                   </div>
@@ -308,6 +312,11 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                           <p className="truncate text-xs font-medium text-[var(--text-soft)]">
                             {app.puesto}
                           </p>
+                          {app.source && (
+                            <span className="mt-1 inline-flex rounded bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-soft)]">
+                              {app.source}
+                            </span>
+                          )}
 
                         </div>
 

@@ -70,7 +70,7 @@ export interface TodaySpotlight {
 
 export interface TodayRadarMilestone {
   id: string;
-  module: 'estudios' | 'trabajo' | 'finanzas';
+  module: 'estudios' | 'trabajo' | 'finanzas' | 'proyectos';
   moduleLabel: string;
   title: string;
   detail: string;
@@ -730,6 +730,54 @@ export function getTodayRadarMilestones(
         targetTab: 'cuentas',
         targetFocusId: `agreement-${agreement.id}`,
       });
+    }
+  }
+
+  // 4. Proyectos activos: revisiones y tareas con fecha límite (vencidas + próximos 14 días)
+  if (isModuleEnabled(state, 'notas')) {
+    for (const project of state.projects || []) {
+      if (project.status !== 'activo') continue;
+
+      if (project.reviewDate && /^\d{4}-\d{2}-\d{2}$/.test(project.reviewDate)) {
+        const daysUntil = daysBetween(todayIso, project.reviewDate);
+        if (daysUntil <= 14) {
+          milestones.push({
+            id: `radar-project-review-${project.id}`,
+            module: 'proyectos',
+            moduleLabel: 'Proyectos',
+            title: `Revisión: ${project.name}`,
+            detail: fmtDate(project.reviewDate),
+            date: project.reviewDate,
+            daysUntil,
+            countdownLabel: formatCountdown(daysUntil),
+            urgency: urgencyForDays(daysUntil),
+            targetView: 'notas',
+            targetTab: 'proyectos',
+            targetFocusId: `project-${project.id}`,
+          });
+        }
+      }
+
+      for (const task of project.tasks || []) {
+        if (task.done) continue;
+        if (!task.dueDate || !/^\d{4}-\d{2}-\d{2}$/.test(task.dueDate)) continue;
+        const daysUntil = daysBetween(todayIso, task.dueDate);
+        if (daysUntil > 14) continue;
+        milestones.push({
+          id: `radar-project-task-${task.id}`,
+          module: 'proyectos',
+          moduleLabel: 'Proyectos',
+          title: task.text,
+          detail: `${project.name} · ${fmtDate(task.dueDate)}`,
+          date: task.dueDate,
+          daysUntil,
+          countdownLabel: formatCountdown(daysUntil),
+          urgency: urgencyForDays(daysUntil),
+          targetView: 'notas',
+          targetTab: 'proyectos',
+          targetFocusId: `project-task-${task.id}`,
+        });
+      }
     }
   }
 
