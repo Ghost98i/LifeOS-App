@@ -61,20 +61,27 @@ service cloud.firestore {
     function isValidCryptoEnvelope(envelope) {
       return envelope is map
         && envelope.keys().hasOnly(['cryptoVersion', 'algorithm', 'iv', 'ciphertext', 'aad', 'createdAt', 'compressed'])
+        && envelope.keys().hasAll(['cryptoVersion', 'algorithm', 'iv', 'ciphertext', 'createdAt'])
         && envelope.cryptoVersion is int
         && envelope.cryptoVersion == 1
         && envelope.algorithm == 'AES-GCM-256'
         && envelope.iv is string
+        && envelope.iv.size() > 0
+        && envelope.iv.size() <= 128
         && envelope.ciphertext is string
-        && (!('aad' in envelope) || envelope.aad is string)
+        && envelope.ciphertext.size() > 0
+        && (!('aad' in envelope) || (envelope.aad is string && envelope.aad.size() <= 512))
         && (!('compressed' in envelope) || envelope.compressed is bool)
-        && envelope.createdAt is string;
+        && envelope.createdAt is string
+        && envelope.createdAt.size() > 0
+        && envelope.createdAt.size() <= 64;
     }
 
     // Validation for WrappedKeyEnvelope stored in users/{userId}/lifeosAccount/keyEnvelope
     function isValidWrappedKeyEnvelope(envelope, userId) {
       return envelope is map
         && envelope.keys().hasOnly(['keyFormatVersion', 'cryptoVersion', 'algorithm', 'wrappedMdek', 'kdf', 'aad', 'createdAt'])
+        && envelope.keys().hasAll(['keyFormatVersion', 'cryptoVersion', 'algorithm', 'wrappedMdek', 'kdf', 'aad', 'createdAt'])
         && envelope.keyFormatVersion is int
         && envelope.keyFormatVersion == 1
         && envelope.cryptoVersion is int
@@ -82,17 +89,67 @@ service cloud.firestore {
         && envelope.algorithm == 'AES-GCM-256'
         && envelope.wrappedMdek is map
         && envelope.wrappedMdek.keys().hasOnly(['iv', 'ciphertext'])
+        && envelope.wrappedMdek.keys().hasAll(['iv', 'ciphertext'])
         && envelope.wrappedMdek.iv is string
+        && envelope.wrappedMdek.iv.size() > 0
+        && envelope.wrappedMdek.iv.size() <= 128
         && envelope.wrappedMdek.ciphertext is string
+        && envelope.wrappedMdek.ciphertext.size() > 0
+        && envelope.wrappedMdek.ciphertext.size() <= 1024
         && envelope.kdf is map
         && envelope.kdf.keys().hasOnly(['algorithm', 'salt', 'info'])
+        && envelope.kdf.keys().hasAll(['algorithm', 'salt', 'info'])
         && envelope.kdf.algorithm == 'HKDF-SHA-256'
         && envelope.kdf.salt is string
+        && envelope.kdf.salt.size() > 0
+        && envelope.kdf.salt.size() <= 256
         && envelope.kdf.info is string
+        && envelope.kdf.info.size() > 0
+        && envelope.kdf.info.size() <= 256
         && envelope.aad is string
         // Strict context & user binding: envelope cannot be bound to a different userId
         && envelope.aad == 'keyFormatVersion:1|userId:' + userId
-        && envelope.createdAt is string;
+        && envelope.createdAt is string
+        && envelope.createdAt.size() > 0
+        && envelope.createdAt.size() <= 64;
+    }
+
+    function isValidCapability(data) {
+      return data is map
+        && data.keys().hasOnly([
+          'version', 'minimumSyncProtocolVersion', 'encryptionState', 'encryptedModules', 'updatedAt'
+        ])
+        && data.keys().hasAll([
+          'version', 'minimumSyncProtocolVersion', 'encryptionState', 'updatedAt'
+        ])
+        && data.version is int
+        && data.version >= 1
+        && data.minimumSyncProtocolVersion is int
+        && data.minimumSyncProtocolVersion >= 1
+        && data.encryptionState in ['plaintext', 'mixed', 'encrypted']
+        && (!('encryptedModules' in data) || (data.encryptedModules is list && data.encryptedModules.size() <= 256))
+        && data.updatedAt is string
+        && data.updatedAt.size() > 0
+        && data.updatedAt.size() <= 64;
+    }
+
+    function preservesCapabilityMonotonicity(prev, next) {
+      return next.minimumSyncProtocolVersion >= prev.minimumSyncProtocolVersion
+        && (
+          prev.encryptionState == 'plaintext'
+          || (prev.encryptionState == 'mixed' && next.encryptionState in ['mixed', 'encrypted'])
+          || (prev.encryptionState == 'encrypted' && next.encryptionState == 'encrypted')
+        )
+        && (
+          next.encryptionState != 'mixed'
+          || !('encryptedModules' in prev)
+          || !(prev.encryptedModules is list)
+          || (
+            ('encryptedModules' in next)
+            && next.encryptedModules is list
+            && next.encryptedModules.hasAll(prev.encryptedModules)
+          )
+        );
     }
 
     function hasCapability(userId) {
@@ -138,8 +195,13 @@ service cloud.firestore {
         && request.resource.data.schemaVersion is int
         && request.resource.data.module == module
         && request.resource.data.revision is string
+        && request.resource.data.revision.size() > 0
+        && request.resource.data.revision.size() <= 128
         && request.resource.data.deviceId is string
+        && request.resource.data.deviceId.size() > 0
+        && request.resource.data.deviceId.size() <= 128
         && request.resource.data.clientUpdatedAt is int
+        && request.resource.data.clientUpdatedAt > 0
         && (!('isEncrypted' in request.resource.data) || request.resource.data.isEncrypted is bool)
         && (!('syncProtocolVersion' in request.resource.data) || request.resource.data.syncProtocolVersion is int)
         && (module in ['resale', 'finance'] || !('commercialProtocolVersion' in request.resource.data))
@@ -286,17 +348,23 @@ service cloud.firestore {
     // Account Sync Capability, Cloud Wrapped Key Envelope & Deletion Marker
     match /users/{userId}/lifeosAccount/{documentId} {
       allow read: if isOwner(userId);
-      allow create, update: if isOwner(userId) && (
+      allow create: if isOwner(userId) && (
         (documentId == 'capability'
           && !hasDeletionMarker(userId)
-          && request.resource.data.keys().hasOnly([
-            'version', 'minimumSyncProtocolVersion', 'encryptionState', 'encryptedModules', 'updatedAt'
-          ])
-          && request.resource.data.version is int
-          && request.resource.data.minimumSyncProtocolVersion is int
-          && request.resource.data.encryptionState in ['plaintext', 'mixed', 'encrypted']
-          && (!('encryptedModules' in request.resource.data) || request.resource.data.encryptedModules is list)
-          && request.resource.data.updatedAt is string)
+          && isValidCapability(request.resource.data))
+        ||
+        (documentId == 'keyEnvelope'
+          && !hasDeletionMarker(userId)
+          && isValidWrappedKeyEnvelope(request.resource.data, userId))
+        ||
+        (documentId == 'deletion'
+          && isValidDeletionMarker(request.resource.data))
+      );
+      allow update: if isOwner(userId) && (
+        (documentId == 'capability'
+          && !hasDeletionMarker(userId)
+          && isValidCapability(request.resource.data)
+          && preservesCapabilityMonotonicity(resource.data, request.resource.data))
         ||
         (documentId == 'keyEnvelope'
           && !hasDeletionMarker(userId)
@@ -322,7 +390,9 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['schemaVersion', 'state', 'deviceId', 'updatedAt'])
         && request.resource.data.schemaVersion is int
         && request.resource.data.state is map
-        && request.resource.data.deviceId is string;
+        && request.resource.data.deviceId is string
+        && request.resource.data.deviceId.size() > 0
+        && request.resource.data.deviceId.size() <= 128;
       allow delete: if isOwner(userId)
         && documentId == 'state'
         && (hasDeletionMarker(userId)
@@ -382,7 +452,8 @@ service cloud.firestore {
         && request.resource.data.revision == revisionId;
       allow update: if isOwner(userId)
         && !hasDeletionMarker(userId)
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt'])
+        && request.resource.data.updatedAt is timestamp;
       // El propietario puede eliminar revisiones durante la eliminación explícita
       // de cuenta (marcador deletion) o al purgar revisiones legacy en texto plano
       // tras completar la migración E2EE.

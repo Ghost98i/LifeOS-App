@@ -5,6 +5,7 @@ import { disableNetwork, getFirestore } from 'firebase/firestore';
 import {
   clearCloudAccountLocalState,
   CloudSyncSuspendedError,
+  deleteCloudAccountAndAuth,
   deleteCloudAccountData,
   getLastCloudUserId,
   isCloudSyncSuspended,
@@ -379,4 +380,88 @@ test('wipeLocalStateAfterDeletion: wipes scoped keys even after sign-out when gi
   } finally {
     globalThis.localStorage = prevStorage;
   }
+});
+
+const emptyDeleteResult = {
+  deleted: 3,
+  legacyStateDeleted: false,
+  collections: { lifeosModules: 2, lifeosRevisions: 0, lifeosAccount: 1 },
+};
+
+test('deleteCloudAccountAndAuth: recent session deletes Firestore then deletes Auth user without reauth', async () => {
+  const events: string[] = [];
+  const now = Date.parse('2026-11-20T18:00:00.000Z');
+  const result = await deleteCloudAccountAndAuth('alice', {
+    getCurrentUser: () => ({ uid: 'alice', lastSignInTime: '2026-11-20T17:58:00.000Z' }),
+    reauthenticate: async () => { events.push('reauth'); },
+    deleteFirestoreData: async (uid) => { events.push(`firestore:${uid}`); return emptyDeleteResult; },
+    deleteAuthUser: async () => { events.push('delete-auth'); },
+    nowMs: () => now,
+  });
+
+  assert.equal(result.authUserDeleted, true);
+  assert.equal(result.reauthenticated, false);
+  assert.deepEqual(events, ['firestore:alice', 'delete-auth']);
+});
+
+test('deleteCloudAccountAndAuth: stale session aborts cleanly before Firestore deletion when user cancels reauth', async () => {
+  const events: string[] = [];
+  const now = Date.parse('2026-11-20T18:00:00.000Z');
+
+  await assert.rejects(
+    deleteCloudAccountAndAuth('alice', {
+      getCurrentUser: () => ({ uid: 'alice', lastSignInTime: '2026-11-20T17:00:00.000Z' }),
+      reauthenticate: async () => {
+        events.push('reauth-cancelled');
+        throw Object.assign(new Error('Popup closed'), { code: 'auth/popup-closed-by-user' });
+      },
+      deleteFirestoreData: async () => { events.push('firestore-should-not-run'); return emptyDeleteResult; },
+      deleteAuthUser: async () => { events.push('auth-should-not-run'); },
+      nowMs: () => now,
+    }),
+    /canceló la verificación de identidad/i,
+  );
+
+  assert.deepEqual(events, ['reauth-cancelled']);
+});
+
+test('deleteCloudAccountAndAuth: stale session reauthenticates first, then deletes Firestore and Auth user', async () => {
+  const events: string[] = [];
+  const now = Date.parse('2026-11-20T18:00:00.000Z');
+
+  const result = await deleteCloudAccountAndAuth('alice', {
+    getCurrentUser: () => ({ uid: 'alice', lastSignInTime: '2026-11-20T17:00:00.000Z' }),
+    reauthenticate: async () => { events.push('reauth'); },
+    deleteFirestoreData: async (uid) => { events.push(`firestore:${uid}`); return emptyDeleteResult; },
+    deleteAuthUser: async () => { events.push('delete-auth'); },
+    nowMs: () => now,
+  });
+
+  assert.equal(result.authUserDeleted, true);
+  assert.equal(result.reauthenticated, true);
+  assert.deepEqual(events, ['reauth', 'firestore:alice', 'delete-auth']);
+});
+
+test('deleteCloudAccountAndAuth: retries deleteAuthUser after reauthentication when Firebase throws auth/requires-recent-login', async () => {
+  const events: string[] = [];
+  const now = Date.parse('2026-11-20T18:00:00.000Z');
+  let deleteAttempts = 0;
+
+  const result = await deleteCloudAccountAndAuth('alice', {
+    getCurrentUser: () => ({ uid: 'alice', lastSignInTime: '2026-11-20T17:59:00.000Z' }),
+    reauthenticate: async () => { events.push('reauth-fallback'); },
+    deleteFirestoreData: async (uid) => { events.push(`firestore:${uid}`); return emptyDeleteResult; },
+    deleteAuthUser: async () => {
+      deleteAttempts += 1;
+      events.push(`delete-auth-${deleteAttempts}`);
+      if (deleteAttempts === 1) {
+        throw Object.assign(new Error('Requires recent login'), { code: 'auth/requires-recent-login' });
+      }
+    },
+    nowMs: () => now,
+  });
+
+  assert.equal(result.authUserDeleted, true);
+  assert.equal(result.reauthenticated, true);
+  assert.deepEqual(events, ['firestore:alice', 'delete-auth-1', 'reauth-fallback', 'delete-auth-2']);
 });

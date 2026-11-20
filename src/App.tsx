@@ -32,7 +32,7 @@ import {
   CloudSyncSuspendedError,
   ResaleRevisionConflict,
   ResaleProtocolConflict,
-  deleteCloudAccountData,
+  deleteCloudAccountAndAuth,
   isCloudSyncSuspended,
   resumeCloudSync,
   saveCloudBaselineData,
@@ -1647,7 +1647,7 @@ export default function App() {
     queuedModulesRef.current.clear();
     queuedStateRef.current = null;
     try {
-      await deleteCloudAccountData(userId);
+      await deleteCloudAccountAndAuth(userId);
       // Remember the deleted uid before signOutFromCloud() resets storageUserIdRef to null,
       // so handleDeleteLocalData can still wipe every scoped key and IndexedDB Device Trust.
       lastDeletedUserIdRef.current = userId;
@@ -1659,7 +1659,7 @@ export default function App() {
       if (!preservedLocally) {
         showToast('La cuenta en la nube fue eliminada, pero no se pudo guardar una copia local en este navegador. Exportá un backup si querés conservar tus datos.', 'error');
       }
-      await signOutFromCloud();
+      await signOutFromCloud().catch(() => undefined);
     } catch (error) {
       resumeCloudSync();
       throw error;
@@ -2282,13 +2282,16 @@ export default function App() {
   };
 
   const handleExportJSON = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(state, null, 2));
+    const json = JSON.stringify(state, null, 2);
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
     const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', dataStr);
+    downloadAnchor.setAttribute('href', url);
     downloadAnchor.setAttribute('download', `celestian_lifeos_backup_${todayISO()}.json`);
     document.body.appendChild(downloadAnchor);
     downloadAnchor.click();
     downloadAnchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 
     updateState((draft) => {
       draft.settings.lastBackupAt = todayISO();
@@ -2720,6 +2723,12 @@ export default function App() {
                   state={state}
                   onUpdateState={updateState}
                   onOpenCommercial={() => handleNavigate('reventa')}
+                  onOpenSecurityConfig={() => {
+                    window.location.hash = '#security-section';
+                    handleNavigate('config');
+                  }}
+                  storageUserId={storageUserId}
+                  cloudConnected={Boolean(cloudUser)}
                   initialTransactionType={quickTransactionType}
                   initialTab={initialFinanceTab}
                   initialFocusId={initialFocusId}

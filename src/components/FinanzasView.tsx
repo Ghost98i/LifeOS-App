@@ -69,11 +69,17 @@ import { showToast } from '../lib/toast';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 import { focusTargetElement } from '../lib/navigationFocus';
+import { loadWrappedKeyEnvelope } from '../lib/cryptoCore';
+
+const FINANCE_TRUST_DISMISSED_KEY = 'celestian-finance-trust-dismissed-v1';
 
 interface FinanzasViewProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
   onOpenCommercial?: () => void;
+  onOpenSecurityConfig?: () => void;
+  storageUserId?: string | null;
+  cloudConnected?: boolean;
   initialTransactionType?: 'gasto' | 'ingreso' | null;
   initialTab?: 'movimientos' | 'cuentas' | 'analisis' | 'proyeccion' | null;
   initialFocusId?: string | null;
@@ -84,11 +90,30 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   state,
   onUpdateState,
   onOpenCommercial,
+  onOpenSecurityConfig,
+  storageUserId = null,
+  cloudConnected = false,
   initialTransactionType,
   initialTab,
   initialFocusId,
   focusNonce,
 }) => {
+  const [trustNoticeDismissed, setTrustNoticeDismissed] = useState<boolean>(() => {
+    try {
+      return typeof localStorage !== 'undefined' && localStorage.getItem(FINANCE_TRUST_DISMISSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const hasLocalE2EE = useMemo(() => Boolean(loadWrappedKeyEnvelope(storageUserId)), [storageUserId]);
+  const handleDismissTrustNotice = () => {
+    setTrustNoticeDismissed(true);
+    try {
+      localStorage.setItem(FINANCE_TRUST_DISMISSED_KEY, '1');
+    } catch {
+      // Ignore storage errors in private mode.
+    }
+  };
   // Main Tab State
   const [activeTab, setActiveTab] = useState<'movimientos' | 'cuentas' | 'analisis' | 'proyeccion'>(
     initialTab || 'movimientos'
@@ -1025,6 +1050,39 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       <PageHeader
         title="Finanzas"
       />
+
+      {!trustNoticeDismissed && (
+        <section
+          aria-label="Privacidad en Finanzas"
+          className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)]/75 px-4 py-3 text-xs text-[var(--text-soft)]"
+        >
+          <div className="flex items-start gap-2.5 min-w-0">
+            <AppIcon name="shield" className="h-4 w-4 shrink-0 text-[var(--blue)] mt-0.5" />
+            <p className="leading-relaxed">
+              <strong className="font-semibold text-[var(--text)]">Celestian LifeOS nunca se conecta a tu banco ni te pide contraseñas o tarjetas.</strong>{' '}
+              Es un registro privado manual bajo tu cuenta aislada, con cifrado de extremo a extremo opcional en Configuración y Modo Privacidad para ocultar montos en pantalla.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+            {!hasLocalE2EE && onOpenSecurityConfig && (
+              <button
+                type="button"
+                onClick={onOpenSecurityConfig}
+                className="text-xs font-semibold text-[var(--blue)] hover:underline whitespace-nowrap cursor-pointer"
+              >
+                {cloudConnected ? 'Activar cifrado →' : 'Ver seguridad →'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={handleDismissTrustNotice}
+              className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-[11px] font-semibold text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition-colors cursor-pointer"
+            >
+              Entendido
+            </button>
+          </div>
+        </section>
+      )}
 
       {/* 2. Cabecera Financiera Command Clarity */}
       <FinanceHero

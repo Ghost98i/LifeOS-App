@@ -79,7 +79,7 @@ export const ONBOARDING_MODULES: readonly OnboardingModuleOption[] = [
   },
   {
     id: 'reventa',
-    name: 'Reventa',
+    name: 'Mi negocio',
     description: 'Inventario de productos, compras, ventas y márgenes.',
     icon: 'store',
   },
@@ -140,7 +140,7 @@ export const MODULE_NAV_METADATA: Record<ViewType, ModuleNavMetadata> = {
   agenda: { id: 'agenda', label: 'Agenda', icon: 'calendar' },
   calendario: { id: 'calendario', label: 'Calendario', icon: 'calendarDays' },
   trabajo: { id: 'trabajo', label: 'Trabajo', icon: 'briefcase' },
-  reventa: { id: 'reventa', label: 'Reventa', icon: 'store' },
+  reventa: { id: 'reventa', label: 'Mi negocio', icon: 'store' },
   estudios: { id: 'estudios', label: 'Estudios', icon: 'graduation' },
   notas: { id: 'notas', label: 'Notas', icon: 'note' },
   ia: { id: 'ia', label: 'IA', icon: 'ai' },

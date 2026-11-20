@@ -1256,3 +1256,208 @@ test('Rules Runtime: cliente legacy y compatible comparten revisión sin poder d
   assert.equal(finalHead?.revision, 'protected-r4');
   assert.deepEqual(finalHead?.data, protectedHead?.data);
 });
+
+test('Rules Runtime: capability impide downgrade de encryptionState, minimumSyncProtocolVersion y pérdida de encryptedModules', async () => {
+  const alice = testEnv.authenticatedContext('alice').firestore();
+  const capRef = doc(alice, 'users', 'alice', 'lifeosAccount', 'capability');
+
+  // Crear en mixed con ['profile']
+  await assertSucceeds(setDoc(capRef, {
+    version: 1,
+    minimumSyncProtocolVersion: 2,
+    encryptionState: 'mixed',
+    encryptedModules: ['profile'],
+    updatedAt: '2026-11-20T12:00:00.000Z',
+  }));
+
+  // Prohibido bajar de mixed a plaintext
+  await assertFails(setDoc(capRef, {
+    version: 1,
+    minimumSyncProtocolVersion: 2,
+    encryptionState: 'plaintext',
+    encryptedModules: ['profile'],
+    updatedAt: '2026-11-20T12:01:00.000Z',
+  }));
+
+  // Prohibido quitar módulos ya protegidos mientras sigue en mixed
+  await assertFails(setDoc(capRef, {
+    version: 1,
+    minimumSyncProtocolVersion: 2,
+    encryptionState: 'mixed',
+    encryptedModules: ['finance'],
+    updatedAt: '2026-11-20T12:01:00.000Z',
+  }));
+
+  // Prohibido reducir minimumSyncProtocolVersion
+  await assertFails(setDoc(capRef, {
+    version: 1,
+    minimumSyncProtocolVersion: 1,
+    encryptionState: 'mixed',
+    encryptedModules: ['profile', 'finance'],
+    updatedAt: '2026-11-20T12:01:00.000Z',
+  }));
+
+  // Permitido agregar módulos en mixed
+  await assertSucceeds(setDoc(capRef, {
+    version: 1,
+    minimumSyncProtocolVersion: 2,
+    encryptionState: 'mixed',
+    encryptedModules: ['profile', 'finance'],
+    updatedAt: '2026-11-20T12:02:00.000Z',
+  }));
+
+  // Permitido promover mixed -> encrypted
+  await assertSucceeds(setDoc(capRef, {
+    version: 1,
+    minimumSyncProtocolVersion: 2,
+    encryptionState: 'encrypted',
+    encryptedModules: ['profile', 'finance'],
+    updatedAt: '2026-11-20T12:03:00.000Z',
+  }));
+
+  // Prohibido bajar de encrypted a mixed o plaintext
+  await assertFails(setDoc(capRef, {
+    version: 1,
+    minimumSyncProtocolVersion: 2,
+    encryptionState: 'mixed',
+    encryptedModules: ['profile', 'finance'],
+    updatedAt: '2026-11-20T12:04:00.000Z',
+  }));
+  await assertFails(setDoc(capRef, {
+    version: 1,
+    minimumSyncProtocolVersion: 2,
+    encryptionState: 'plaintext',
+    encryptedModules: ['profile', 'finance'],
+    updatedAt: '2026-11-20T12:04:00.000Z',
+  }));
+
+  // Permitido actualizar timestamp manteniendo encrypted y protocolo monotónico
+  await assertSucceeds(setDoc(capRef, {
+    version: 1,
+    minimumSyncProtocolVersion: 2,
+    encryptionState: 'encrypted',
+    encryptedModules: ['profile', 'finance'],
+    updatedAt: '2026-11-20T12:05:00.000Z',
+  }));
+});
+
+test('Rules Runtime: límites de tamaño y tipo estricto en capability, envelopes, payloads y revisiones', async () => {
+  const alice = testEnv.authenticatedContext('alice').firestore();
+  const capRef = doc(alice, 'users', 'alice', 'lifeosAccount', 'capability');
+  const envRef = doc(alice, 'users', 'alice', 'lifeosAccount', 'keyEnvelope');
+  const profileRef = doc(alice, 'users', 'alice', 'lifeosModules', 'profile');
+
+  // Capability con updatedAt > 64 chars o lista > 256 elementos -> RECHAZADO
+  await assertFails(setDoc(capRef, {
+    version: 1,
+    minimumSyncProtocolVersion: 1,
+    encryptionState: 'plaintext',
+    updatedAt: 'x'.repeat(65),
+  }));
+  await assertFails(setDoc(capRef, {
+    version: 1,
+    minimumSyncProtocolVersion: 2,
+    encryptionState: 'mixed',
+    encryptedModules: Array.from({ length: 257 }, (_, i) => `m${i}`),
+    updatedAt: '2026-11-20T12:00:00.000Z',
+  }));
+
+  // WrappedKeyEnvelope con ciphertext > 1024 o salt > 256 -> RECHAZADO
+  await assertFails(setDoc(envRef, {
+    ...makeValidWrappedKeyEnvelope('alice'),
+    wrappedMdek: { iv: 'AQIDBAUGBwgJCgsMDQ4PEA==', ciphertext: 'a'.repeat(1025) },
+  }));
+  await assertFails(setDoc(envRef, {
+    ...makeValidWrappedKeyEnvelope('alice'),
+    kdf: { algorithm: 'HKDF-SHA-256', salt: 's'.repeat(257), info: 'LifeOS-Recovery-KEK-v1' },
+  }));
+
+  // Payload con revision > 128, deviceId > 128 o clientUpdatedAt <= 0 -> RECHAZADO
+  await assertFails(setDoc(profileRef, {
+    schemaVersion: 2,
+    syncProtocolVersion: 1,
+    isEncrypted: false,
+    module: 'profile',
+    data: { name: 'Alice' },
+    revision: 'r'.repeat(129),
+    parentRevision: null,
+    deviceId: 'dev-1',
+    clientUpdatedAt: Date.now(),
+  }));
+  await assertFails(setDoc(profileRef, {
+    schemaVersion: 2,
+    syncProtocolVersion: 1,
+    isEncrypted: false,
+    module: 'profile',
+    data: { name: 'Alice' },
+    revision: 'rev-ok-1',
+    parentRevision: null,
+    deviceId: 'd'.repeat(129),
+    clientUpdatedAt: Date.now(),
+  }));
+  await assertFails(setDoc(profileRef, {
+    schemaVersion: 2,
+    syncProtocolVersion: 1,
+    isEncrypted: false,
+    module: 'profile',
+    data: { name: 'Alice' },
+    revision: 'rev-ok-2',
+    parentRevision: null,
+    deviceId: 'dev-1',
+    clientUpdatedAt: 0,
+  }));
+
+  // CryptoEnvelope con iv > 128, aad > 512 o ciphertext vacío -> RECHAZADO
+  await assertFails(setDoc(profileRef, {
+    schemaVersion: 2,
+    syncProtocolVersion: 2,
+    isEncrypted: true,
+    module: 'profile',
+    data: { ...validCryptoEnvelope, iv: 'i'.repeat(129) },
+    revision: 'rev-enc-1',
+    parentRevision: null,
+    deviceId: 'dev-1',
+    clientUpdatedAt: Date.now(),
+  }));
+  await assertFails(setDoc(profileRef, {
+    schemaVersion: 2,
+    syncProtocolVersion: 2,
+    isEncrypted: true,
+    module: 'profile',
+    data: { ...validCryptoEnvelope, aad: 'a'.repeat(513) },
+    revision: 'rev-enc-2',
+    parentRevision: null,
+    deviceId: 'dev-1',
+    clientUpdatedAt: Date.now(),
+  }));
+  await assertFails(setDoc(profileRef, {
+    schemaVersion: 2,
+    syncProtocolVersion: 2,
+    isEncrypted: true,
+    module: 'profile',
+    data: { ...validCryptoEnvelope, ciphertext: '' },
+    revision: 'rev-enc-3',
+    parentRevision: null,
+    deviceId: 'dev-1',
+    clientUpdatedAt: Date.now(),
+  }));
+
+  // lifeosRevisions update solo acepta updatedAt de tipo timestamp
+  const revId = 'rev-ts-check';
+  const revRef = doc(alice, 'users', 'alice', 'lifeosRevisions', revId);
+  const revPayload = {
+    schemaVersion: 2,
+    syncProtocolVersion: 1,
+    isEncrypted: false,
+    module: 'profile',
+    data: { name: 'Alice' },
+    revision: revId,
+    parentRevision: null,
+    deviceId: 'dev-1',
+    clientUpdatedAt: Date.now(),
+    updatedAt: serverTimestamp(),
+  };
+  await assertSucceeds(setDoc(revRef, revPayload));
+  await assertFails(setDoc(revRef, { ...revPayload, updatedAt: 'not-a-timestamp' }));
+  await assertSucceeds(setDoc(revRef, { ...revPayload, updatedAt: serverTimestamp() }));
+});

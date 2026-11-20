@@ -3,11 +3,13 @@ import {
   browserLocalPersistence,
   connectAuthEmulator,
   createUserWithEmailAndPassword,
+  deleteUser,
   getAuth,
   getRedirectResult,
   GoogleAuthProvider,
   inMemoryPersistence,
   onAuthStateChanged,
+  reauthenticateWithPopup,
   setPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -817,6 +819,130 @@ export async function deleteCloudAccountData(
 
   await ops.deleteMarker(userId);
   return result;
+}
+
+const RECENT_LOGIN_MAX_AGE_MS = 4 * 60 * 1000;
+
+export function isAuthRequiresRecentLoginError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const code = 'code' in error ? String((error as { code?: unknown }).code) : '';
+  return code === 'auth/requires-recent-login';
+}
+
+export function isAuthPopupCancelledError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const code = 'code' in error ? String((error as { code?: unknown }).code) : '';
+  return code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request';
+}
+
+export interface FullCloudAccountDeletionOps {
+  getCurrentUser: () => { uid: string; lastSignInTime?: string | null } | null;
+  reauthenticate: () => Promise<void>;
+  deleteFirestoreData: (userId: string) => Promise<DeleteCloudAccountResult>;
+  deleteAuthUser: () => Promise<void>;
+  nowMs?: () => number;
+}
+
+export interface FullCloudAccountDeletionResult {
+  firestore: DeleteCloudAccountResult;
+  reauthenticated: boolean;
+  authUserDeleted: boolean;
+}
+
+/**
+ * Deletes both Firestore data and the Firebase Authentication user account:
+ * 1. Verifies the authenticated user matches `userId`.
+ * 2. If the session is older than 4 minutes (or lastSignInTime is unknown),
+ *    proactively triggers `reauthenticateWithPopup` BEFORE touching Firestore so
+ *    cancelling re-authentication aborts cleanly with zero data loss.
+ * 3. Deletes all Firestore documents via `deleteCloudAccountData(userId)`.
+ * 4. Calls `deleteUser(auth.currentUser)`. If Firebase still responds with
+ *    `auth/requires-recent-login`, re-authenticates once and retries `deleteUser`.
+ */
+export async function deleteCloudAccountAndAuth(
+  userId: string,
+  customOps?: FullCloudAccountDeletionOps,
+): Promise<FullCloudAccountDeletionResult> {
+  const ops: FullCloudAccountDeletionOps = customOps ?? (() => {
+    const { auth } = services();
+    const runReauth = async () => {
+      const current = auth.currentUser;
+      if (!current) {
+        throw new Error('No hay una sesión activa de Google para confirmar la eliminación.');
+      }
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      await reauthenticateWithPopup(current, provider);
+    };
+    return {
+      getCurrentUser: () => {
+        const current = auth.currentUser;
+        if (!current) return null;
+        return {
+          uid: current.uid,
+          lastSignInTime: current.metadata?.lastSignInTime ?? null,
+        };
+      },
+      reauthenticate: runReauth,
+      deleteFirestoreData: (uid) => deleteCloudAccountData(uid),
+      deleteAuthUser: async () => {
+        const current = auth.currentUser;
+        if (!current) {
+          throw new Error('No hay una sesión activa de Google para eliminar la cuenta.');
+        }
+        await deleteUser(current);
+      },
+    };
+  })();
+
+  const currentUser = ops.getCurrentUser();
+  if (!currentUser || currentUser.uid !== userId) {
+    throw new Error('La sesión activa no coincide con la cuenta a eliminar. Volvé a iniciar sesión e intentá de nuevo.');
+  }
+
+  const now = ops.nowMs ? ops.nowMs() : Date.now();
+  const lastSignInMs = currentUser.lastSignInTime ? Date.parse(currentUser.lastSignInTime) : Number.NaN;
+  const sessionIsFresh = Number.isFinite(lastSignInMs) && (now - lastSignInMs) >= 0 && (now - lastSignInMs) < RECENT_LOGIN_MAX_AGE_MS;
+
+  let reauthenticated = false;
+  if (!sessionIsFresh) {
+    try {
+      await ops.reauthenticate();
+      reauthenticated = true;
+    } catch (error) {
+      if (isAuthPopupCancelledError(error)) {
+        throw new Error('Se canceló la verificación de identidad con Google. No se eliminó ningún dato.');
+      }
+      throw error;
+    }
+  }
+
+  const firestore = await ops.deleteFirestoreData(userId);
+
+  try {
+    await ops.deleteAuthUser();
+  } catch (error) {
+    if (isAuthRequiresRecentLoginError(error)) {
+      try {
+        await ops.reauthenticate();
+        reauthenticated = true;
+      } catch (reauthError) {
+        if (isAuthPopupCancelledError(reauthError)) {
+          throw new Error('Los datos de la nube se eliminaron, pero se canceló la verificación para cerrar definitivamente la cuenta en Firebase Auth. Volvé a intentarlo para completar el borrado.');
+        }
+        throw reauthError;
+      }
+      await ops.deleteAuthUser();
+    } else {
+      throw error;
+    }
+  }
+
+  return {
+    firestore,
+    reauthenticated,
+    authUserDeleted: true,
+  };
 }
 
 /** Removes all local sync bookkeeping and per-account caches associated with a deleted account. */
