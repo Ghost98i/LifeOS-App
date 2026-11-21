@@ -106,19 +106,19 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-[var(--border)] bg-[var(--nav-mobile)] shadow-[0_-12px_32px_-26px_rgba(15,23,42,.45)] backdrop-blur-xl md:hidden">
       {/* Micro-bar: Sync status LED & Privacy quick toggle */}
-      <div className="flex items-center justify-between px-3.5 py-1 border-b border-[var(--border)]/35 text-[10px]">
+      <div className="flex items-center justify-between px-3.5 py-1 border-b border-[var(--border)]/35 text-[11px]">
         {cloudConfigured && !cloudUser && onCloudSignIn ? (
           <button
             type="button"
             onClick={onCloudSignIn}
-            className="flex items-center gap-1.5 cursor-pointer hover:opacity-90"
+            className="flex min-h-8 items-center gap-1.5 rounded-full px-1.5 cursor-pointer hover:opacity-90"
             title="Conectar con Google para sincronizar"
           >
             <span className={`inline-block h-1.5 w-1.5 rounded-full ${syncLed.dotClass}`} />
             <span className={syncLed.textColor}>{syncLed.label}</span>
           </button>
         ) : (
-          <div className="flex items-center gap-1.5">
+          <div className="flex min-h-8 items-center gap-1.5">
             <span className={`inline-block h-1.5 w-1.5 rounded-full ${syncLed.dotClass}`} />
             <span className={`font-medium ${syncLed.textColor}`}>{syncLed.label}</span>
           </div>
@@ -127,21 +127,21 @@ export const MobileNav: React.FC<MobileNavProps> = ({
           <button
             type="button"
             onClick={onTogglePrivacy}
-            className={`flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold transition-all ${
+            className={`flex min-h-8 items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold transition-all cursor-pointer ${
               privacyMode
                 ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30'
                 : 'text-[var(--text-faint)] hover:text-[var(--text)]'
             }`}
             title="Alternar Privacidad"
           >
-            <AppIcon name={privacyMode ? 'eyeOff' : 'eye'} className="h-3 w-3" />
+            <AppIcon name={privacyMode ? 'eyeOff' : 'eye'} className="h-3.5 w-3.5" />
             <span>{privacyMode ? 'Privacidad activa' : 'Privacidad'}</span>
           </button>
         )}
       </div>
 
       {/* Main Bottom Tabs */}
-      <div className="flex items-end px-2 pt-1 pb-[max(.45rem,env(safe-area-inset-bottom))]">
+      <div className="flex items-end px-2 pt-2 pb-[max(.45rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
           onClick={() => onNavigate('dashboard')}
@@ -173,7 +173,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
         <button
           type="button"
           onClick={onOpenCapture}
-          className="relative mx-2 -mt-4 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white shadow-md active:scale-95 transition-all cursor-pointer border border-white/15"
+          className="relative mx-2 -mt-1.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white shadow-md active:scale-95 transition-all cursor-pointer border border-white/15"
           aria-label="Captura rápida"
         >
           <AppIcon name="squarePlus" strokeWidth={1.75} className="h-5 w-5 text-white" />

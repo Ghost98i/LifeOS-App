@@ -493,7 +493,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
         aria-modal="true"
         aria-label="Captura rápida"
         onKeyDown={handleDialogKeyDown}
-        className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-[var(--card)] border border-[var(--border)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl transition-transform relative"
+        className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-[var(--card)] border border-[var(--border)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl transition-transform relative"
         onClick={(event) => event.stopPropagation()}
       >
         {/* Exit Confirmation Dialog */}
@@ -631,7 +631,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                 </button>
               </div>
             ) : (
-              <div className="space-y-2.5 max-h-[60vh] overflow-y-auto pr-0.5">
+              <div className="space-y-2.5 max-h-[60dvh] overflow-y-auto pr-0.5">
                 {(state.inbox || []).map((item) => (
                   <div
                     key={item.id}

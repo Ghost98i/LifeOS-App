@@ -532,7 +532,7 @@ test('Cockpit 11: Navegación por teclado, conservación del foco y semántica d
   const controls = html.match(/<(?:button|input|select|summary)\b[^>]*>/g) || [];
   assert.ok(controls.length > 5);
   for (const control of controls) {
-    assert.match(control, /class="[^"]*(?:h-11|min-h-11|h-12|min-h-12|min-h-14)[^"]*"/);
+    assert.match(control, /class="[^"]*(?:h-11|min-h-11|h-12|min-h-12|min-h-\[50px\]|min-h-14)[^"]*"/);
   }
 });
 

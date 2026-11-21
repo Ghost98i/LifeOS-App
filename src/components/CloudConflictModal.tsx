@@ -35,7 +35,7 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="cloud-conflict-title"
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl space-y-4"
+        className="w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl space-y-4"
       >
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400">

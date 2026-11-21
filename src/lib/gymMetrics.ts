@@ -576,6 +576,7 @@ export function calcDetailedPRs(
         prs[key] = { exerciseId: ex.id, exerciseName: ex.name };
       }
       const record = prs[key];
+      const isBodyweight = ex.equipment === 'corporal';
       const sets = getPerformedExerciseSets(session, ex);
       let sessionExVolume = 0;
 
@@ -586,6 +587,8 @@ export function calcDetailedPRs(
 
         // Solo computar sets válidos con peso o reps positivos
         if (w <= 0 && r <= 0) continue;
+        // En ejercicios con carga externa (equipment !== 'corporal'), ignorar series en 0 kg
+        if (!isBodyweight && w <= 0) continue;
 
         // 1. Max Weight
         if (w > 0) {
@@ -671,7 +674,7 @@ export function detectSessionPRs(
   if (!isPerformedGymSession(session)) return newPRs;
 
   // Agrupar todas las series realizadas por clave de ejercicio métrico para evitar duplicados en la misma sesión
-  const exercisesByKey = new Map<string, { exerciseName: string; sets: GymSet[] }>();
+  const exercisesByKey = new Map<string, { exerciseName: string; equipment?: ExerciseEquipment; sets: GymSet[] }>();
   for (const ex of session.exercises || []) {
     const key = getExercisePRKey(ex);
     if (!key) continue;
@@ -679,14 +682,18 @@ export function detectSessionPRs(
     if (sets.length === 0) continue;
     const existing = exercisesByKey.get(key);
     if (!existing) {
-      exercisesByKey.set(key, { exerciseName: ex.name, sets: [...sets] });
+      exercisesByKey.set(key, { exerciseName: ex.name, equipment: ex.equipment, sets: [...sets] });
     } else {
+      if (!existing.equipment && ex.equipment) {
+        existing.equipment = ex.equipment;
+      }
       existing.sets.push(...sets);
     }
   }
 
-  for (const [key, { exerciseName, sets }] of exercisesByKey.entries()) {
+  for (const [key, { exerciseName, equipment, sets }] of exercisesByKey.entries()) {
     const oldPR = historicalPRs[key] || {};
+    const isBodyweight = equipment === 'corporal';
 
     let sessionMaxWeight = 0;
     let sessionMaxWeightReps = 0;
@@ -702,6 +709,8 @@ export function detectSessionPRs(
       const w = Number(set.weight) || 0;
       const r = Number(set.reps) || 0;
       if (w <= 0 && r <= 0) continue;
+      // En ejercicios con carga externa (equipment !== 'corporal'), ignorar series en 0 kg
+      if (!isBodyweight && w <= 0) continue;
 
       if (w > sessionMaxWeight) {
         sessionMaxWeight = w;

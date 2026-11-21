@@ -115,7 +115,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({
   const selectedCount = selectedIds.size;
 
   return (
-    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex flex-col justify-center items-center p-4 sm:p-6 antialiased selection:bg-[#4F46E5]/15 selection:text-[#4F46E5]">
+    <div className="min-h-dvh bg-[var(--bg)] text-[var(--text)] flex flex-col justify-center items-center p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 antialiased selection:bg-[#4F46E5]/15 selection:text-[#4F46E5]">
       <SurfaceCard
         as="aside"
         className="w-full max-w-xl p-6 sm:p-8 flex flex-col gap-6"
@@ -204,7 +204,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({
               <button
                 type="submit"
                 disabled={!name.trim()}
-                className="w-full rounded-xl bg-[#4F46E5] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full min-h-11 rounded-xl bg-[#4F46E5] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <span>Siguiente</span>
                 <ArrowRight size={16} strokeWidth={1.75} aria-hidden="true" />
@@ -223,11 +223,11 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({
                   ? 'Solo base diaria (Hoy)'
                   : `${selectedCount} de ${ONBOARDING_MODULES.length} seleccionados`}
               </span>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={handleSelectAll}
-                  className="font-semibold text-[#4F46E5] hover:underline dark:text-indigo-400 cursor-pointer"
+                  className="inline-flex min-h-10 items-center rounded-lg px-2.5 font-semibold text-[#4F46E5] hover:bg-[#4F46E5]/8 hover:underline dark:text-indigo-400 cursor-pointer"
                 >
                   Seleccionar todos
                 </button>
@@ -235,7 +235,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({
                 <button
                   type="button"
                   onClick={handleSelectEssentials}
-                  className="font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 cursor-pointer"
+                  className="inline-flex min-h-10 items-center rounded-lg px-2.5 font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
                 >
                   Solo lo esencial
                 </button>
@@ -244,7 +244,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({
 
             {/* Modules Grid */}
             <div
-              className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[48vh] sm:max-h-none overflow-y-auto pr-0.5"
+              className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[48dvh] sm:max-h-none overflow-y-auto pr-0.5"
               role="group"
               aria-label="Módulos disponibles"
             >
@@ -326,7 +326,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({
                   playSound('click');
                   setStep(1);
                 }}
-                className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/[0.1] dark:text-slate-200 dark:hover:bg-white/[0.04] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                className="min-h-11 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/[0.1] dark:text-slate-200 dark:hover:bg-white/[0.04] transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <ChevronLeft size={16} strokeWidth={1.75} aria-hidden="true" />
                 <span>Atrás</span>
@@ -334,7 +334,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({
               <button
                 type="button"
                 onClick={handleConfirm}
-                className="flex-1 rounded-xl bg-[#4F46E5] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#4338CA] transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                className="min-h-11 flex-1 rounded-xl bg-[#4F46E5] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#4338CA] transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>
                   {selectedCount > 0

@@ -756,13 +756,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 type="button"
                 onClick={() => onNavigate('checkout')}
                 aria-label="Cerrar el día"
-                className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/20 bg-slate-950/50 px-3 py-1 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/70 cursor-pointer"
+                className="inline-flex min-h-10 sm:min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/20 bg-slate-950/50 px-3.5 py-1.5 sm:px-3 sm:py-1 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/70 cursor-pointer"
               >
                 <Moon className="h-3.5 w-3.5 text-white/80" strokeWidth={1.75} aria-hidden="true" />
                 <span>Cerrar el día</span>
               </button>
             ) : (
-              <span className="inline-flex min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/15 bg-slate-950/45 px-3 py-1 text-xs font-medium text-white/90 backdrop-blur-md">
+              <span className="inline-flex min-h-10 sm:min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/15 bg-slate-950/45 px-3.5 py-1.5 sm:px-3 sm:py-1 text-xs font-medium text-white/90 backdrop-blur-md">
                 <Check className="h-3.5 w-3.5 text-white/80" strokeWidth={1.75} aria-hidden="true" />
                 <span>Día cerrado</span>
               </span>
@@ -781,7 +781,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 type="button"
                 onClick={() => setIsStatusModalOpen(true)}
                 aria-label="Registrar estado de hoy y ver evolución de 7 días"
-                className="inline-flex min-h-8 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/20 bg-slate-950/55 px-3.5 py-1.5 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/75 cursor-pointer"
+                className="inline-flex min-h-10 sm:min-h-8 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/20 bg-slate-950/55 px-3.5 py-1.5 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/75 cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5 text-white/80" strokeWidth={1.75} aria-hidden="true" />
                 <span>Registrar estado de hoy</span>
@@ -791,7 +791,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 type="button"
                 onClick={() => setIsStatusModalOpen(true)}
                 aria-label={`Estado de hoy: ${compactStatusText}. Abrir editor y evolución de 7 días`}
-                className="inline-flex min-h-9 items-center gap-3 rounded-full border border-white/20 bg-slate-950/55 px-3.5 py-1.5 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/75 cursor-pointer"
+                className="inline-flex min-h-11 sm:min-h-9 items-center gap-3 rounded-full border border-white/20 bg-slate-950/55 px-3.5 py-1.5 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/75 cursor-pointer"
               >
                 <span className="tabular-nums tracking-[-0.01em] text-white/95">
                   {compactStatusText}
@@ -887,7 +887,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <button
                     type="button"
                     onClick={onExportJSON}
-                    className="whitespace-nowrap rounded-lg px-2 py-1 text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400 cursor-pointer"
+                    className="inline-flex min-h-10 sm:min-h-8 items-center whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400 cursor-pointer"
                   >
                     Descargar copia
                   </button>
@@ -895,7 +895,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <button
                     type="button"
                     onClick={() => handleAttentionAction(topAdminNotice)}
-                    className="inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1 text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400 cursor-pointer"
+                    className="inline-flex min-h-10 sm:min-h-8 items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 hover:underline dark:text-indigo-400 cursor-pointer"
                   >
                     <span>{topAdminNotice.actionLabel}</span>
                     <ArrowRight className="h-3 w-3" strokeWidth={1.75} aria-hidden="true" />
@@ -904,7 +904,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <button
                   type="button"
                   onClick={() => handleDismissAttention(topAdminNotice)}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 cursor-pointer"
+                  className="flex h-10 w-10 sm:h-7 sm:w-7 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 cursor-pointer"
                   aria-label={`Descartar aviso: ${topAdminNotice.title}`}
                   title="Descartar aviso"
                 >

@@ -1461,14 +1461,16 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                       <AppIcon name="stopwatch" className="h-4 w-4" />
                       <span>Descansos</span>
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowTemplates((v) => !v)}
-                      className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-sm font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--surface-muted)]"
-                    >
-                      <AppIcon name={showTemplates ? 'x' : 'plus'} className="h-4 w-4" />
-                      {showTemplates ? 'Cancelar' : state.gym.routineTemplates.length === 0 ? 'Crear primera rutina' : 'Nueva rutina'}
-                    </button>
+                    {(state.gym.routineTemplates.length > 0 || showTemplates) && (
+                      <button
+                        type="button"
+                        onClick={() => setShowTemplates((v) => !v)}
+                        className="inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-sm font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--surface-muted)]"
+                      >
+                        <AppIcon name={showTemplates ? 'x' : 'plus'} className="h-4 w-4" />
+                        {showTemplates ? 'Cancelar' : 'Nueva rutina'}
+                      </button>
+                    )}
                   </div>
                 </div>
 

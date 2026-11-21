@@ -870,7 +870,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
             role="tab"
             aria-selected={studyTab === 'overview'}
             onClick={() => setStudyTab('overview')}
-            className={`min-h-9 rounded-lg px-3.5 text-xs font-bold transition cursor-pointer ${
+            className={`min-h-11 sm:min-h-9 rounded-lg px-3.5 text-xs font-bold transition cursor-pointer ${
               studyTab === 'overview'
                 ? 'bg-[var(--blue)] text-white shadow-xs'
                 : 'text-[var(--text-soft)] hover:text-[var(--text)]'
@@ -883,7 +883,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
             role="tab"
             aria-selected={studyTab === 'practice'}
             onClick={() => setStudyTab('practice')}
-            className={`min-h-9 rounded-lg px-3.5 text-xs font-bold transition cursor-pointer ${
+            className={`min-h-11 sm:min-h-9 rounded-lg px-3.5 text-xs font-bold transition cursor-pointer ${
               studyTab === 'practice'
                 ? 'bg-[var(--blue)] text-white shadow-xs'
                 : 'text-[var(--text-soft)] hover:text-[var(--text)]'
@@ -1037,7 +1037,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
             type="button"
             onClick={() => handleSelectProgramFilter(null)}
             aria-pressed={selectedProgramFilter === null}
-            className={`min-h-9 rounded-full border px-3.5 py-1 text-xs font-semibold transition cursor-pointer ${
+            className={`min-h-10 sm:min-h-9 rounded-full border px-3.5 py-1 text-xs font-semibold transition cursor-pointer ${
               selectedProgramFilter === null
                 ? 'border-indigo-600 bg-indigo-600 text-white dark:border-indigo-500 dark:bg-indigo-500'
                 : 'border-slate-200/80 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/[0.08] dark:bg-[#0D111A] dark:text-slate-300 dark:hover:border-indigo-500/40 dark:hover:text-indigo-400'
@@ -1053,7 +1053,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                 type="button"
                 onClick={() => handleSelectProgramFilter(program.id)}
                 aria-pressed={active}
-                className={`min-h-9 rounded-full border px-3.5 py-1 text-xs font-semibold transition cursor-pointer ${
+                className={`min-h-10 sm:min-h-9 rounded-full border px-3.5 py-1 text-xs font-semibold transition cursor-pointer ${
                   active
                     ? 'border-indigo-600 bg-indigo-600 text-white dark:border-indigo-500 dark:bg-indigo-500'
                     : 'border-slate-200/80 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/[0.08] dark:bg-[#0D111A] dark:text-slate-300 dark:hover:border-indigo-500/40 dark:hover:text-indigo-400'
@@ -1068,7 +1068,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
               type="button"
               onClick={() => handleSelectProgramFilter(GENERAL_PROGRAM_FILTER)}
               aria-pressed={selectedProgramFilter === GENERAL_PROGRAM_FILTER}
-              className={`min-h-9 rounded-full border px-3.5 py-1 text-xs font-semibold transition cursor-pointer ${
+              className={`min-h-10 sm:min-h-9 rounded-full border px-3.5 py-1 text-xs font-semibold transition cursor-pointer ${
                 selectedProgramFilter === GENERAL_PROGRAM_FILTER
                   ? 'border-indigo-600 bg-indigo-600 text-white dark:border-indigo-500 dark:bg-indigo-500'
                   : 'border-slate-200/80 bg-white text-slate-600 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/[0.08] dark:bg-[#0D111A] dark:text-slate-300 dark:hover:border-indigo-500/40 dark:hover:text-indigo-400'
@@ -1080,7 +1080,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
           <button
             type="button"
             onClick={openCreateProgramModal}
-            className="inline-flex min-h-9 items-center gap-1 rounded-full border border-dashed border-slate-300 px-3 py-1 text-xs font-medium text-slate-500 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-white/[0.14] dark:text-slate-400 dark:hover:border-indigo-400 dark:hover:text-indigo-400 cursor-pointer"
+            className="inline-flex min-h-10 sm:min-h-9 items-center gap-1 rounded-full border border-dashed border-slate-300 px-3 py-1 text-xs font-medium text-slate-500 transition hover:border-indigo-400 hover:text-indigo-600 dark:border-white/[0.14] dark:text-slate-400 dark:hover:border-indigo-400 dark:hover:text-indigo-400 cursor-pointer"
           >
             <Plus className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
             <span>Programa</span>

@@ -37,7 +37,7 @@ export const DailyStatusModal: React.FC<DailyStatusModalProps> = ({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-slate-200/80 bg-white shadow-xl dark:border-white/[0.07] dark:bg-[#0D111A] dark:shadow-none sm:rounded-2xl"
+        className="relative flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-slate-200/80 bg-white shadow-xl dark:border-white/[0.07] dark:bg-[#0D111A] dark:shadow-none sm:rounded-2xl"
       >
         <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5 dark:border-white/[0.06] sm:px-6">
           <div className="flex min-w-0 items-center gap-2.5">
@@ -57,13 +57,13 @@ export const DailyStatusModal: React.FC<DailyStatusModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Cerrar estado diario"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:text-slate-500 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 cursor-pointer"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:text-slate-500 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 cursor-pointer"
           >
             <X className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 sm:py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-5">
           <PersonalContextCard
             state={state}
             onUpdateState={onUpdateState}

@@ -625,11 +625,107 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
           ) : (
             <div className="space-y-3">
               <div className="max-w-sm"><label className="sr-only" htmlFor="job-table-search">Buscar postulaciones</label><input id="job-table-search" value={tableSearch} onChange={(e) => setTableSearch(e.target.value)} placeholder="Buscar por empresa, puesto o contacto…" className={fieldClass} /></div>
-              <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--card)]">
+
+              {/* Vista Lista móvil (< sm): tarjetas verticales sin scroll horizontal */}
+              <div className="space-y-2.5 sm:hidden" data-job-mobile-list="true">
+                {visibleApplications.length === 0 ? (
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-8 text-center text-sm text-[var(--text-faint)]">
+                    {scopedApplications.length === 0 ? 'No hay postulaciones para este tipo de proceso.' : 'No hay postulaciones que coincidan con esa búsqueda.'}
+                  </div>
+                ) : (
+                  [...visibleApplications].sort((a, b) => b.fecha.localeCompare(a.fecha)).map((application) => {
+                    const tipo = getJobApplicationType(application);
+                    const nextKey = getNextJobKeyDate(application, today);
+                    return (
+                      <article
+                        key={application.id}
+                        id={`job-app-mobile-list-${application.id}`}
+                        className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3.5 space-y-2.5"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <h3 className="text-sm font-bold text-[var(--text)] break-words">{application.empresa}</h3>
+                              {application.source && (
+                                <span className="inline-flex rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-soft)]">
+                                  {application.source}
+                                </span>
+                              )}
+                            </div>
+                            {application.puesto && (
+                              <p className="mt-0.5 text-xs text-[var(--text-soft)] break-words">{application.puesto}</p>
+                            )}
+                          </div>
+                          <span className="shrink-0 rounded-md border border-[var(--border)] px-2 py-0.5 text-[10px] font-semibold text-[var(--text-soft)]">
+                            {typeLabel(tipo)}
+                          </span>
+                        </div>
+
+                        {(application.nextAction || (nextKey && !nextKey.keyDate.isLegacyNextAction)) && (
+                          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                            {nextKey && !nextKey.keyDate.isLegacyNextAction && (
+                              <span className={`inline-flex rounded px-1.5 py-0.5 text-[10px] font-bold ${nextKey.proximity === 'overdue' ? 'bg-red-500/15 text-red-600 dark:text-red-400' : nextKey.proximity === 'today' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'}`}>
+                                {JOB_KEY_DATE_LABELS[nextKey.keyDate.kind]}: {fmtDate(nextKey.keyDate.date)}
+                              </span>
+                            )}
+                            {application.nextAction && (
+                              <span className="text-xs text-[var(--text-soft)]">
+                                Seg.: {application.nextAction}{application.nextActionDate ? ` · ${fmtDate(application.nextActionDate)}` : ''}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        <select
+                          aria-label={`Estado de ${application.empresa}`}
+                          value={application.estado}
+                          onChange={(e) => handleSetEstado(application.id, e.target.value as JobApplication['estado'])}
+                          className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-medium text-[var(--text)]"
+                        >
+                          {JOB_STAGES[tipo].map((stage) => (
+                            <option key={stage.id} value={stage.id}>{getJobStageLabel(tipo, stage.id)}</option>
+                          ))}
+                        </select>
+
+                        <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] pt-2">
+                          <span className="text-xs tabular-nums text-[var(--text-faint)]">
+                            {fmtDate(application.fecha)}
+                            {application.link && (
+                              <a href={application.link} target="_blank" rel="noreferrer" className="ml-2 font-semibold text-[var(--blue)] hover:underline">
+                                Publicación ↗
+                              </a>
+                            )}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => openEditForm(application)}
+                              className="min-h-10 rounded-lg px-3 text-xs font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)] cursor-pointer"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteApplication(application.id)}
+                              className="min-h-10 rounded-lg px-3 text-xs font-semibold text-[var(--text-faint)] hover:text-red-500 cursor-pointer"
+                              aria-label={`Eliminar postulación de ${application.empresa}`}
+                            >
+                              Eliminar
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Tabla completa en sm+ y desktop */}
+              <div className="hidden sm:block overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--card)]">
                 <table className="w-full min-w-[900px] border-collapse text-left text-xs">
                   <thead><tr className="border-b border-[var(--border)] text-xs text-[var(--text-faint)]"><th className="px-3 py-2.5">Tipo</th><th className="px-3 py-2.5">Empresa / Organismo</th><th className="px-3 py-2.5">Puesto / Cargo</th><th className="px-3 py-2.5">Estado</th><th className="px-3 py-2.5">Fecha</th><th className="px-3 py-2.5">Contacto</th><th className="px-3 py-2.5">Seguimiento</th><th className="px-3 py-2.5">Acciones</th></tr></thead>
                   <tbody className="divide-y divide-[var(--border)]">
-                    {visibleApplications.sort((a, b) => b.fecha.localeCompare(a.fecha)).map((application) => {
+                    {[...visibleApplications].sort((a, b) => b.fecha.localeCompare(a.fecha)).map((application) => {
                       const tipo = getJobApplicationType(application);
                       const nextKey = getNextJobKeyDate(application, today);
                       return <tr key={application.id} id={`job-app-${application.id}`} className="hover:bg-[var(--bg)]/50"><td className="px-3 py-3"><span className="inline-flex rounded-md border border-[var(--border)] px-2 py-1 text-xs font-semibold text-[var(--text-soft)]">{typeLabel(tipo)}</span></td><td className="px-3 py-3 font-bold text-[var(--text)]">{application.empresa}{application.source && <span className="ml-2 inline-flex rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-soft)]">{application.source}</span>}{application.link && <a href={application.link} target="_blank" rel="noreferrer" className="ml-2 whitespace-nowrap text-[var(--blue)] hover:underline">Ver publicación ↗</a>}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.puesto}{application.notas && <p className="mt-1 max-w-xs truncate text-xs text-[var(--text-faint)]">{application.notas}</p>}{application.followUpNotes && <p className="mt-1 max-w-xs truncate text-xs text-[var(--text-soft)]">Seg.: {application.followUpNotes}</p>}</td><td className="px-3 py-3"><select aria-label={`Estado de ${application.empresa}`} value={application.estado} onChange={(e) => handleSetEstado(application.id, e.target.value as JobApplication['estado'])} className="max-w-[180px] rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2 py-2 text-xs text-[var(--text)]">{JOB_STAGES[tipo].map((stage) => <option key={stage.id} value={stage.id}>{getJobStageLabel(tipo, stage.id)}</option>)}</select></td><td className="px-3 py-3 tabular-nums text-[var(--text-soft)]">{fmtDate(application.fecha)}{nextKey && !nextKey.keyDate.isLegacyNextAction && <span className={`mt-1 block w-fit rounded px-1.5 py-0.5 text-[10px] font-bold ${nextKey.proximity === 'overdue' ? 'bg-red-500/15 text-red-600 dark:text-red-400' : nextKey.proximity === 'today' ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300' : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'}`}>{JOB_KEY_DATE_LABELS[nextKey.keyDate.kind]}: {fmtDate(nextKey.keyDate.date)}</span>}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.reclutador || '—'}</td><td className="px-3 py-3 text-[var(--text-soft)]">{application.nextAction ? <>{application.nextAction}<br />{application.nextActionDate && fmtDate(application.nextActionDate)}</> : '—'}</td><td className="whitespace-nowrap px-3 py-3"><button type="button" onClick={() => openEditForm(application)} className="min-h-10 rounded-lg px-2 text-xs font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)]">Editar</button><button type="button" onClick={() => handleDeleteApplication(application.id)} className="min-h-10 rounded-lg px-2 text-xs text-[var(--text-faint)] hover:text-red-500" aria-label={`Eliminar postulación de ${application.empresa}`}>Eliminar</button></td></tr>;

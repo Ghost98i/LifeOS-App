@@ -370,8 +370,70 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
     }
   };
 
+  const compactRestBar = (
+    <div className="gym-rest-sticky-bar w-full" data-gym-rest-compact-bar="true">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--blue)]/40 bg-[var(--card)]/95 p-3 shadow-md backdrop-blur-md">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--blue-soft)] text-[var(--gym-visual-accent)] text-xs">
+            <AppIcon name={isPaused ? 'pause' : 'clock'} className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <span className="block text-[10px] font-black uppercase tracking-wider text-[var(--text-faint)] truncate">
+              {isPaused ? 'En pausa' : (activeTimer?.kind === 'exercise' ? 'Cambio estación' : 'Descanso activo')}
+            </span>
+            <strong className="block text-base font-black tabular-nums text-[var(--text)]">
+              {formattedTimer}
+            </strong>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+          {onTogglePauseRestTimer && (
+            <button
+              type="button"
+              onClick={onTogglePauseRestTimer}
+              className="min-h-11 px-2.5 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-xs font-bold text-[var(--text)]"
+              aria-label={isPaused ? 'Reanudar' : 'Pausar'}
+            >
+              <AppIcon name={isPaused ? 'play' : 'pause'} className="h-3.5 w-3.5 inline mr-1" />
+              {isPaused ? 'Seguir' : 'Pausa'}
+            </button>
+          )}
+          {onAdjustRestTimer && showQuickRestAdjustments && (
+            <button
+              type="button"
+              onClick={() => onAdjustRestTimer(30)}
+              className="min-h-11 px-2 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-xs font-bold text-[var(--text-soft)]"
+            >
+              +30s
+            </button>
+          )}
+          {onToggleMinimizeRest && (
+            <button
+              type="button"
+              onClick={() => {
+                if (isReviewingPreviousSet) setIsReviewingPreviousSet(false);
+                if (activeTimer?.minimized) onToggleMinimizeRest();
+                else if (!isRestingThisExercise) selectExercise(restingExerciseIndex);
+              }}
+              className="min-h-11 px-2.5 py-1.5 rounded-xl bg-[var(--blue)] text-xs font-bold text-white shadow-xs"
+            >
+              Ver
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleSkipOrAdvance}
+            className="min-h-11 px-2.5 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-xs font-bold text-[var(--text-soft)] hover:text-[var(--text)]"
+          >
+            Saltar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
-    <section data-active-workout-view className="gym-workout-shell w-full min-w-0 space-y-4 overflow-x-hidden">
+    <section data-active-workout-view className="gym-workout-shell w-full min-w-0 space-y-4 overflow-x-clip">
       {/* 1. Barra Superior Operativa */}
       <header className="gym-workout-topbar flex items-center justify-between gap-3">
         <div className="min-w-0">
@@ -453,6 +515,12 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
       </header>
 
       {exercise ? (
+        <>
+          {isTimerRunning && !isRestPhaseActive && (
+            <div className="sticky top-[68px] z-20 lg:hidden" data-gym-rest-mobile-sticky="true">
+              {compactRestBar}
+            </div>
+          )}
         <div className="gym-active-layout grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           {/* COCKPIT PRINCIPAL */}
           <main data-active-set-editor className="gym-cockpit-wrap min-w-0 lg:col-span-2">
@@ -820,7 +888,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     <button
                       type="button"
                       onClick={onToggleCurrentSet}
-                      className={`c-primary-cta w-full h-12 ${currentSet.completed ? 'is-completed' : ''}`}
+                      className={`c-primary-cta w-full min-h-[50px] h-auto py-3 px-4 leading-snug ${currentSet.completed ? 'is-completed' : ''}`}
                     >
                       <AppIcon name={currentSet.completed ? 'checkCircle' : 'check'} className="h-5 w-5" />
                       <span>
@@ -856,14 +924,14 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
             {isRestPhaseActive ? (
               <div className="c-stage-card c-rest-phase rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 lg:p-3.5 xl:p-5 shadow-xs">
                 {/* Centro Focal del Cronómetro de Recuperación */}
-                <div className="c-rest-focal-center flex flex-col items-center gap-4 text-center">
+                <div className="c-rest-focal-center flex flex-col items-center gap-3 sm:gap-4 text-center">
                   <span className="c-rest-label">
                     {isPaused
                       ? 'Descanso en pausa'
                       : (activeTimer?.kind === 'exercise' ? 'Cambio de ejercicio' : 'Descanso entre series')}
                   </span>
 
-                  <div className="c-rest-timer-wrap relative mx-auto grid place-items-center w-48 h-48 sm:w-52 sm:h-52 lg:w-full lg:h-auto lg:max-w-[256px] aspect-square">
+                  <div className="c-rest-timer-wrap relative mx-auto grid place-items-center w-36 h-36 sm:w-48 sm:h-48 lg:w-full lg:h-auto lg:max-w-[256px] aspect-square">
                     <div className="c-rest-ring absolute inset-0 -rotate-90">
                       <svg viewBox="0 0 100 100" className="c-timer-svg w-full h-full" aria-hidden="true">
                         <circle cx="50" cy="50" r={RING_RADIUS} fill="none" stroke="currentColor" strokeWidth="3" className="c-timer-track" />
@@ -882,7 +950,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                       </svg>
                     </div>
                     <div
-                      className="c-rest-timer-text relative z-10 text-6xl xl:text-7xl font-bold tabular-nums text-[var(--gym-visual-accent)]"
+                      className="c-rest-timer-text relative z-10 text-4xl sm:text-6xl xl:text-7xl font-bold tabular-nums text-[var(--gym-visual-accent)]"
                       role="timer"
                       aria-label="Tiempo de descanso restante"
                     >
@@ -953,7 +1021,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                 {/* Acción Primaria de Descanso */}
                 <button
                   type="button"
-                  className="c-primary-cta c-next-effort-cta w-full h-12"
+                  className="c-primary-cta c-next-effort-cta w-full min-h-[50px] h-auto py-3 px-4 leading-snug"
                   onClick={handleSkipOrAdvance}
                 >
                   <span>{nextEffortButtonText}</span>
@@ -972,61 +1040,9 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                 </div>
               </div>
             ) : isTimerRunning ? (
-              /* Barra compacta si el temporizador está minimizado, en otro ejercicio o revisando serie */
-              <div className="gym-rest-sticky-bar w-full">
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--blue)]/40 bg-[var(--card)] p-3.5 shadow-xs">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--blue-soft)] text-[var(--gym-visual-accent)] text-xs">
-                      <AppIcon name={isPaused ? 'pause' : 'clock'} className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <span className="block text-[10px] font-black uppercase tracking-wider text-[var(--text-faint)] truncate">
-                        {isPaused ? 'En pausa' : (activeTimer?.kind === 'exercise' ? 'Cambio estación' : 'Descanso activo')}
-                      </span>
-                      <strong className="block text-base font-black tabular-nums text-[var(--text)]">
-                        {formattedTimer}
-                      </strong>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                    {onTogglePauseRestTimer && (
-                      <button
-                        type="button"
-                        onClick={onTogglePauseRestTimer}
-                        className="min-h-11 px-2.5 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-xs font-bold text-[var(--text)]"
-                        aria-label={isPaused ? 'Reanudar' : 'Pausar'}
-                      >
-                        <AppIcon name={isPaused ? 'play' : 'pause'} className="h-3.5 w-3.5 inline mr-1" />
-                        {isPaused ? 'Seguir' : 'Pausa'}
-                      </button>
-                    )}
-                    {onAdjustRestTimer && showQuickRestAdjustments && (
-                      <button
-                        type="button"
-                        onClick={() => onAdjustRestTimer(30)}
-                        className="min-h-11 px-2 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-xs font-bold text-[var(--text-soft)]"
-                      >
-                        +30s
-                      </button>
-                    )}
-                    {onToggleMinimizeRest && (
-                      <button
-                        type="button"
-                        onClick={onToggleMinimizeRest}
-                        className="min-h-11 px-2.5 py-1.5 rounded-xl bg-[var(--blue)] text-xs font-bold text-white shadow-xs"
-                      >
-                        Ver
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={handleSkipOrAdvance}
-                      className="min-h-11 px-2.5 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-xs font-bold text-[var(--text-soft)] hover:text-[var(--text)]"
-                    >
-                      Saltar
-                    </button>
-                  </div>
-                </div>
+              /* Barra compacta en escritorio (en móvil se muestra sticky arriba del ejercicio) */
+              <div className="hidden lg:block">
+                {compactRestBar}
               </div>
             ) : !restTimer ? (
               <div className="gym-rest-idle-card flex items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xs">
@@ -1270,6 +1286,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
             </details>
           </aside>
         </div>
+        </>
       ) : (
         /* Estado Sesión sin ejercicios */
         <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--card)] p-5 sm:p-6 shadow-xs">

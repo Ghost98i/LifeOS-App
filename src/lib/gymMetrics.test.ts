@@ -1008,3 +1008,65 @@ test('nowTimeHHmm: genera hora en formato HH:mm de 24 horas', () => {
   const morning = new Date('2026-10-28T09:07:00');
   assert.equal(nowTimeHHmm(morning), '09:07');
 });
+
+test('detectSessionPRs y calcDetailedPRs: ignora PRs en 0 kg para carga externa pero conserva PRs en corporal y carga > 0', () => {
+  const zeroWeightSession: GymSession = {
+    id: 'sess-zero-external',
+    date: '2026-10-29',
+    status: 'completed',
+    exercises: [
+      {
+        id: 'ex-bar',
+        name: 'Press banca',
+        equipment: 'barra',
+        sets: [
+          { id: 'zb1', weight: 0, reps: 12, completed: true },
+          { id: 'zb2', weight: 0, reps: 10, completed: true },
+        ],
+      },
+      {
+        id: 'ex-db',
+        name: 'Curl bíceps',
+        equipment: 'mancuerna',
+        sets: [{ id: 'zd1', weight: 0, reps: 15, completed: true }],
+      },
+      {
+        id: 'ex-bw',
+        name: 'Dominadas',
+        equipment: 'corporal',
+        sets: [{ id: 'zbw1', weight: 0, reps: 14, completed: true }],
+      },
+      {
+        id: 'ex-valid',
+        name: 'Remo con barra',
+        equipment: 'barra',
+        sets: [{ id: 'zv1', weight: 60, reps: 10, completed: true }],
+      },
+    ],
+  };
+
+  // calcDetailedPRs no debe registrar maxReps en 0 kg para barra/mancuerna
+  const detailedPRs = calcDetailedPRs([zeroWeightSession]);
+  assert.equal(detailedPRs['press banca']?.maxReps, undefined);
+  assert.equal(detailedPRs['press banca']?.maxWeight, undefined);
+  assert.equal(detailedPRs['press banca']?.maxVolume, undefined);
+  assert.equal(detailedPRs['curl biceps']?.maxReps, undefined);
+
+  // Pero sí debe registrar maxReps para corporal en 0 kg y todos los PRs para carga > 0
+  assert.equal(detailedPRs['dominadas']?.maxReps?.value, 14);
+  assert.equal(detailedPRs['remo con barra']?.maxWeight?.value, 60);
+  assert.equal(detailedPRs['remo con barra']?.maxReps?.value, 10);
+
+  // detectSessionPRs contra historial vacío
+  const newPRs = detectSessionPRs(zeroWeightSession, {});
+  assert.equal(newPRs.some((pr) => pr.exerciseName === 'Press banca'), false);
+  assert.equal(newPRs.some((pr) => pr.exerciseName === 'Curl bíceps'), false);
+  assert.equal(
+    newPRs.some((pr) => pr.exerciseName === 'Dominadas' && pr.type === 'maxReps' && pr.value === 14),
+    true
+  );
+  assert.equal(
+    newPRs.some((pr) => pr.exerciseName === 'Remo con barra' && pr.type === 'maxWeight' && pr.value === 60),
+    true
+  );
+});

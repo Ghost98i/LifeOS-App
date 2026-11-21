@@ -1182,7 +1182,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('movimientos')}
-          className={`finance-tab flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`finance-tab min-h-11 sm:min-h-0 flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === 'movimientos'
               ? 'finance-tab-active'
               : ''
@@ -1195,7 +1195,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('cuentas')}
-          className={`finance-tab flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`finance-tab min-h-11 sm:min-h-0 flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === 'cuentas'
               ? 'finance-tab-active'
               : ''
@@ -1211,7 +1211,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('analisis')}
-          className={`finance-tab flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`finance-tab min-h-11 sm:min-h-0 flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === 'analisis'
               ? 'finance-tab-active'
               : ''
@@ -1224,7 +1224,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
         <button
           type="button"
           onClick={() => setActiveTab('proyeccion')}
-          className={`finance-tab flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`finance-tab min-h-11 sm:min-h-0 flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
             activeTab === 'proyeccion'
               ? 'finance-tab-active'
               : ''

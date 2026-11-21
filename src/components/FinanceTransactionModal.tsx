@@ -137,7 +137,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer"
+            className="flex h-10 w-10 min-h-[40px] min-w-[40px] shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer"
             aria-label="Cerrar"
           >
             <AppIcon name="x" className="h-4 w-4" />
@@ -150,7 +150,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
             <button
               type="button"
               onClick={() => setType('gasto')}
-              className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              className={`min-h-11 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 type === 'gasto'
                   ? 'bg-[var(--card)] text-rose-600 dark:text-rose-400 shadow-xs'
                   : 'text-[var(--text-soft)] hover:text-[var(--text)]'
@@ -161,7 +161,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
             <button
               type="button"
               onClick={() => setType('ingreso')}
-              className={`py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+              className={`min-h-11 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 type === 'ingreso'
                   ? 'bg-[var(--card)] text-emerald-600 dark:text-emerald-400 shadow-xs'
                   : 'text-[var(--text-soft)] hover:text-[var(--text)]'
@@ -224,7 +224,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
                   <button
                     type="button"
                     onClick={onOpenCategoryModal}
-                    className="text-[10px] font-bold text-[var(--blue)] hover:underline cursor-pointer"
+                    className="inline-flex min-h-10 sm:min-h-0 items-center px-2 sm:px-0 text-xs sm:text-[10px] font-bold text-[var(--blue)] hover:underline cursor-pointer"
                   >
                     Editar
                   </button>

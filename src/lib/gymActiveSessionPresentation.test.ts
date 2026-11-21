@@ -117,6 +117,52 @@ test('los controles de la sesión activa mantienen targets de al menos 44 px', (
 
   assert.ok(controls.length > 0);
   for (const control of controls) {
-    assert.match(control, /class="[^"]*(?:h-11|min-h-11|h-12|min-h-12|min-h-14)[^"]*"/);
+    assert.match(control, /class="[^"]*(?:h-11|min-h-11|h-12|min-h-12|min-h-\[50px\]|min-h-14)[^"]*"/);
   }
+});
+
+test('ActiveWorkoutView renderiza barra compacta sticky visible cuando el descanso está minimizado', () => {
+  const state = defaultState();
+  state.gym.sessions = [
+    {
+      id: 'active-rest-session',
+      date: '2026-10-08',
+      weekLabel: 'Torso',
+      status: 'active',
+      startedAt: '18:30',
+      exercises: [
+        {
+          id: 'bench',
+          name: 'Press banca plano',
+          equipment: 'barra',
+          barWeight: 20,
+          sets: [
+            { id: 's1', weight: 70, reps: 8, completed: true },
+            { id: 's2', weight: 70, reps: 8, completed: false },
+          ],
+        },
+      ],
+    },
+  ];
+  state.gym.activeTimer = {
+    sessionId: 'active-rest-session',
+    exerciseId: 'bench',
+    exerciseIndex: 0,
+    setId: 's1',
+    kind: 'set',
+    endsAt: Date.now() + 80_000,
+    durationSeconds: 90,
+    minimized: true,
+  };
+
+  const html = renderToStaticMarkup(
+    React.createElement(GimnasioView, {
+      state,
+      onUpdateState: () => undefined,
+    })
+  );
+
+  assert.match(html, /data-gym-rest-mobile-sticky="true"/);
+  assert.match(html, /data-gym-rest-compact-bar="true"/);
+  assert.match(html, /Descanso activo/);
 });

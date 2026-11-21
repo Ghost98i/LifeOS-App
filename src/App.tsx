@@ -2526,14 +2526,14 @@ export default function App() {
   );
 
   const mainBottomPadding = (isGymOverlayActive && isStudyOverlayActive)
-    ? 'pb-72 sm:pb-44 md:pb-32'
+    ? 'pb-[calc(18rem+env(safe-area-inset-bottom))] sm:pb-44 lg:pb-32'
     : (isGymOverlayActive || isStudyOverlayActive)
-    ? 'pb-52 sm:pb-36 md:pb-32'
-    : 'pb-28 md:pb-10';
+    ? 'pb-[calc(13rem+env(safe-area-inset-bottom))] sm:pb-36 lg:pb-32'
+    : 'pb-[calc(8.5rem+env(safe-area-inset-bottom))] lg:pb-8';
 
   return (
     <PrivacyProvider active={Boolean(state.settings.privacyMode)}>
-    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex flex-col lg:flex-row antialiased selection:bg-blue-500/20 selection:text-blue-500">
+    <div className="min-h-dvh bg-[var(--bg)] text-[var(--text)] flex flex-col lg:flex-row antialiased selection:bg-blue-500/20 selection:text-blue-500">
       {/* Sidebar */}
       <Sidebar
         currentView={currentView}
@@ -2802,7 +2802,7 @@ export default function App() {
             role="dialog"
             aria-modal="true"
             aria-label="Previsualización de conciliación de conflicto"
-            className="flex max-h-[90vh] w-full max-w-4xl flex-col rounded-2xl border border-amber-500/40 bg-[var(--card)] p-5 shadow-2xl"
+            className="flex max-h-[90dvh] w-full max-w-4xl flex-col rounded-2xl border border-amber-500/40 bg-[var(--card)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl"
           >
             <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] pb-3">
               <div>

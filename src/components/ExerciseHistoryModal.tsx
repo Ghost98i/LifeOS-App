@@ -129,7 +129,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = React.m
         role="dialog"
         aria-modal="true"
         aria-labelledby="exercise-history-title"
-        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6 shadow-2xl space-y-4 outline-none"
+        className="w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 shadow-2xl space-y-4 outline-none"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

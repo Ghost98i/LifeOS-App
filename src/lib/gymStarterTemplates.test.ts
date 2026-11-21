@@ -164,4 +164,16 @@ test('GimnasioView — muestra arranque guiado con Guía rápida cuando no hay r
     })
   );
   assert.match(populatedRoutinesHtml, /Cargar plantilla inicial/);
+
+  const emptyRoutinesTabHtml = renderToStaticMarkup(
+    React.createElement(GimnasioView, {
+      state: freshState,
+      onUpdateState: () => true,
+      storageUserId: null,
+      onOpenNote: () => {},
+      initialTab: 'rutinas',
+    })
+  );
+  assert.doesNotMatch(emptyRoutinesTabHtml, /Crear primera rutina/);
+  assert.match(emptyRoutinesTabHtml, /Crear mi propia rutina/);
 });

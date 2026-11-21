@@ -192,7 +192,7 @@ export const GuidedWeeklyReviewModal: React.FC<GuidedWeeklyReviewModalProps> = (
         role="dialog"
         aria-modal="true"
         aria-label="Revisión Semanal Guiada"
-        className="w-full max-w-2xl max-h-[92vh] flex flex-col rounded-3xl bg-[var(--card)] border border-[var(--border)] shadow-2xl overflow-hidden"
+        className="w-full max-w-2xl max-h-[92dvh] flex flex-col rounded-3xl bg-[var(--card)] border border-[var(--border)] pb-[env(safe-area-inset-bottom)] shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

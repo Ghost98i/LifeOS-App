@@ -1035,7 +1035,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             aria-modal="true"
             aria-labelledby="agenda-weekly-title"
             aria-describedby="agenda-weekly-hint"
-            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5"
+            className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
             onClick={(event) => event.stopPropagation()}
           >
             <h2 id="agenda-weekly-title" className="text-base font-bold text-[var(--text)]">Nueva actividad semanal</h2>
@@ -1169,7 +1169,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             role="dialog"
             aria-modal="true"
             aria-labelledby="edit-agenda-block-title"
-            className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 max-w-md w-full max-h-[90vh] overflow-y-auto space-y-4 shadow-xl"
+            className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] max-w-md w-full max-h-[90dvh] overflow-y-auto space-y-4 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">

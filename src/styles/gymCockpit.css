@@ -479,6 +479,10 @@
 .gym-page :is(button, input, select, summary):focus-visible,
 [data-gym-rest-settings] :is(button, input):focus-visible,
 [aria-labelledby="exercise-history-title"] :is(button, input):focus-visible { outline: 2px solid var(--gym-visual-accent, #4f46e5); outline-offset: 2px; }
+.gym-page :is(.c-primary-cta, .gym-rest-skip, .gym-rest-mini-skip):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgb(99 102 241 / 0.4);
+}
 .gym-workout-shell :is(button, input, select, summary) { scroll-margin-block: 6rem 9rem; }
 [data-gym-rest-settings] .gym-rest-switch { background: transparent; }
 .gym-rest-switch::before { content: ''; position: absolute; inset: 8px 0; border-radius: 999px; background: var(--border-strong); }
@@ -536,16 +540,26 @@
   .gym-page.space-y-6 > :not(:last-child) { margin-block-end: 16px; }
   .gym-page-heading .page-heading { font-size: 24px; }
   .gym-page .gym-section-nav { gap: 3px; padding: 3px; border-radius: 12px; }
-  .gym-page .gym-section-nav > button { min-width: 0; padding: 0 4px; font-size: 11.5px; gap: 4px; border-radius: 9px; }
-  .gym-page .gym-section-nav svg { width: 14px; height: 14px; }
-  .gym-page .gym-workout-topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 0 0 12px; }
+  .gym-page .gym-section-nav > button {
+    min-width: 0;
+    min-height: 48px;
+    flex-direction: column;
+    padding: 6px 4px;
+    font-size: 11px;
+    line-height: 1.15;
+    gap: 3px;
+    border-radius: 9px;
+  }
+  .gym-page .gym-section-nav svg { width: 16px; height: 16px; }
+  .gym-page .gym-workout-topbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 0 0 10px; }
   .gym-workout-topbar > div { display: contents; }
   .gym-workout-topbar > div > div { grid-column: 1 / -1; grid-row: 2; }
   .gym-workout-topbar > details { grid-column: 2; grid-row: 1; }
   .gym-page .gym-live-label { grid-column: 1; grid-row: 1; }
   .gym-workout-topbar h1 { font-size: 17px; }
   .gym-page .gym-workout-shell.space-y-4 > :not(:last-child) { margin-block-end: 10px; }
-  .gym-page .c-header-card { padding: 10px 12px 12px; gap: 10px; }
+  .gym-page .gym-active-layout { gap: 12px; }
+  .gym-page .c-header-card { padding: 10px 12px; gap: 8px; }
   .c-exercise-title { font-size: 18px; }
   .c-header-main-row { gap: 10px; }
   .c-meta-sub { gap: 6px; margin-top: 2px; }
@@ -555,6 +569,9 @@
   .c-tool-btn { padding-inline: 8px; }
   .gym-page .c-stage-card { padding: 12px; gap: 10px; }
   .gym-page .c-logging-phase { padding-block: 10px 12px; gap: 10px; }
+  .gym-page .c-rest-phase { padding: 12px; gap: 10px; }
+  .c-rest-focal-center { gap: 10px; }
+  .c-next-effort-card { padding: 10px 12px; }
   .c-load-grid { gap: 8px; }
   .c-load-col { padding: 8px 10px; gap: 6px; border-radius: 12px; }
   .c-load-col + .c-load-col { padding-left: 10px; }
