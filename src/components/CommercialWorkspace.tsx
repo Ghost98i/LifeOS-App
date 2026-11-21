@@ -6,6 +6,7 @@ import { applyCommercialSnapshot } from '../lib/commercialProduction';
 import { CommercialInventorySandbox } from './CommercialInventorySandbox';
 import type { CommercialPilotSnapshot } from '../lib/commercialPilot';
 import { ContextualHelp } from './ContextualHelp';
+import { SurfaceCard } from './ui/SurfacePrimitives';
 
 export function CommercialWorkspace({ state, userId, syncStatus, onUpdate, onClose }: {
   state: LifeOSState; userId?: string; syncStatus: CloudSyncStatus;
@@ -75,11 +76,26 @@ export function CommercialWorkspace({ state, userId, syncStatus, onUpdate, onClo
             : 'Función temporalmente no disponible';
 
   return <div className="space-y-3">
-    {(status || !enabled) && <div className="flex flex-wrap items-center justify-between gap-2">
-      <p role="status" className="text-sm font-medium text-[var(--text-soft)]">{status}</p>
-      {!enabled && <button disabled={busy} onClick={() => void checkAccess()} className="rounded-xl bg-[var(--blue)] px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busy ? 'Comprobando disponibilidad…' : 'Habilitar operaciones en esta sesión'}</button>}
-    </div>}
-    {error && <p role="alert" className="text-sm font-medium text-amber-700 dark:text-amber-400">{error}</p>}
+    {(status || !enabled || error) && (
+      <SurfaceCard as="div" className="p-4 sm:p-5 space-y-2.5">
+        {(status || !enabled) && (
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <p role="status" className="text-sm font-semibold text-slate-900 dark:text-slate-100">{status}</p>
+            {!enabled && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void checkAccess()}
+                className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {busy ? 'Comprobando disponibilidad…' : 'Habilitar operaciones en esta sesión'}
+              </button>
+            )}
+          </div>
+        )}
+        {error && <p role="alert" className="text-sm font-medium text-amber-700 dark:text-amber-400">{error}</p>}
+      </SurfaceCard>
+    )}
     <fieldset aria-label="Operaciones comerciales" disabled={!enabled || syncStatus === 'conflict' || syncStatus === 'locked'} className="space-y-3">
       <CommercialInventorySandbox onClose={onClose || (() => undefined)} pilotEnabled={false} production={{
         snapshot, commit, accounts: state.finance.accounts,

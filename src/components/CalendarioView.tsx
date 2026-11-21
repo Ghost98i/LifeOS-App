@@ -34,10 +34,10 @@ function formatNaturalDate(iso: string, isToday = false): string {
   if (!iso) return '';
   const parts = iso.split('-').map(Number);
   const date = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
-  const weekday = date.toLocaleDateString('es-UY', { weekday: 'long' });
-  const monthName = date.toLocaleDateString('es-UY', { month: 'long' }).toLocaleLowerCase('es-UY');
+  const weekday = date.toLocaleDateString('es-UY', { weekday: 'short' }).replace(/\.$/, '');
+  const monthName = date.toLocaleDateString('es-UY', { month: 'short' }).replace(/\.$/, '').toLocaleLowerCase('es-UY');
   const capitalizedWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
-  const formatted = `${capitalizedWeekday} ${parts[2]} de ${monthName}`;
+  const formatted = `${capitalizedWeekday} ${parts[2]} ${monthName}`;
   return isToday ? `${formatted} · Hoy` : formatted;
 }
 

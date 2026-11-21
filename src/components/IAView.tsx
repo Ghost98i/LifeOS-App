@@ -1,4 +1,16 @@
 import React, { useState } from 'react';
+import {
+  Briefcase,
+  Check,
+  Copy,
+  ExternalLink,
+  FileJson,
+  Lightbulb,
+  Plus,
+  ShoppingBag,
+  Sparkles,
+  X,
+} from 'lucide-react';
 import { LifeOSState } from '../types';
 import { computeResaleMarginPct, computeResalePriority } from '../lib/calculations';
 import { fmtMoney, todayISO, uid } from '../lib/storage';
@@ -10,7 +22,7 @@ import {
   parseAIImport,
 } from '../lib/aiImport';
 import { PageHeader } from './PageHeader';
-import { AppIcon } from './AppIcon';
+import { ListDivider, SectionHeader, SurfaceCard } from './ui/SurfacePrimitives';
 
 function safeExternalLink(value: string): string | undefined {
   try { const url = new URL(value); return ['https:', 'http:'].includes(url.protocol) ? url.href : undefined; } catch { return undefined; }
@@ -221,118 +233,360 @@ export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState, onOpenBusi
     });
   };
 
+  const fieldClass =
+    'w-full min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
+  const primaryBtnClass =
+    'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
+  const secondaryBtnClass =
+    'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-transparent px-3.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:bg-white/[0.04] cursor-pointer';
+
   return (
-    <div className="ai-refinement space-y-6">
+    <div className="ai-refinement space-y-5 sm:space-y-6">
       <PageHeader title="IA · Oportunidades e ideas" subtitle="Usá una IA externa para investigar y traé los resultados para revisarlos acá." />
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-3" aria-label="Preparar búsqueda externa">
-        <h2 className="text-base font-bold text-[var(--text)]">1. Prepará la búsqueda</h2>
-        <p className="text-sm text-[var(--text-soft)]">Buscá empleos, posibles compras para reventa e ideas. Copiá las instrucciones en la IA que uses; Celestian no le envía tus datos.</p>
-        <button type="button" onClick={() => copyText('prompt', AI_PROMPT)} className="min-h-11 px-4 rounded-xl bg-[var(--blue)] text-white text-sm font-semibold">{copied === 'prompt' ? 'Copiado' : 'Copiar instrucciones'}</button>
-        <details className="text-sm text-[var(--text-soft)]">
-          <summary className="min-h-9 cursor-pointer">Ver instrucciones y formato de respuesta</summary>
-          <label className="block space-y-1 pt-3">Instrucciones<textarea aria-label="Instrucciones para la IA externa" readOnly value={AI_PROMPT} rows={7} className="block w-full p-3 rounded-xl bg-[var(--bg)] border border-[var(--border)] font-mono" /></label>
-          <label className="block space-y-1 pt-3">Formato JSON<textarea aria-label="Formato JSON" readOnly value={AI_SCHEMA} rows={7} className="block w-full p-3 rounded-xl bg-[var(--bg)] border border-[var(--border)] font-mono" /></label>
-          <button type="button" onClick={() => copyText('schema', AI_SCHEMA)} className="min-h-11 mt-2 px-3 border border-[var(--border)] rounded-xl">{copied === 'schema' ? 'Copiado' : 'Copiar formato'}</button>
-        </details>
-      </section>
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-3" aria-label="Revisar respuesta externa">
-        <h2 className="text-base font-bold text-[var(--text)]">2. Traé la respuesta</h2>
-        <label className="block space-y-2 text-sm text-[var(--text-soft)]">Respuesta de la IA (JSON)
-          <textarea aria-label="Respuesta de la IA (JSON)" value={rawImport} onChange={event => { setRawImport(event.target.value); setPreview(null); setMessage(''); }} rows={5} placeholder="Pegá la respuesta para revisarla…" className="block w-full p-3 rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] font-mono" />
-        </label>
-        <button type="button" onClick={handlePreview} className="min-h-11 px-4 bg-[var(--blue)] text-white text-sm font-semibold rounded-xl">Revisar resultados</button>
-        {message && <p role="status" className="text-sm font-medium text-[var(--text)]">{message}</p>}
-        {preview && <div className="border-t border-[var(--border)] pt-4 space-y-3" aria-label="Vista previa de la importación">
-          <h3 className="text-base font-bold text-[var(--text)]">3. Revisá antes de guardar</h3>
-          <p className="text-sm text-[var(--text-soft)]">Guardarlos no crea postulaciones ni registra compras. Verificá las fuentes y los precios antes de actuar.</p>
-          {invalidImportLink && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">Hay un enlace no utilizable. Corregilo o quitá su dirección antes de guardar; solo se admiten enlaces http o https.</p>}
-          <div className="max-h-[60vh] overflow-y-auto space-y-3 text-sm text-[var(--text)]">
-            {preview.payload.empleo.length > 0 && <section><h4 className="font-semibold">Empleos ({preview.payload.empleo.length})</h4><ul className="divide-y divide-[var(--border)]">{preview.payload.empleo.map((item,index) => <li key={index} className="py-2 break-words"><strong>{item.empresa}</strong> · {item.puesto}<p>{item.nota}</p>{item.link && <p className="break-all">{item.link}{!safeExternalLink(item.link) && ' · Enlace no utilizable'}</p>}</li>)}</ul></section>}
-            {preview.payload.reventa.length > 0 && <section><h4 className="font-semibold">Posibles compras ({preview.payload.reventa.length})</h4><ul>{preview.payload.reventa.map((item,index) => <li key={index} className="py-2 break-words"><strong>{item.item}</strong> · Compra {fmtMoney(item.buyPrice)} · Mercado {fmtMoney(item.marketPrice)}<p>{item.nota}</p></li>)}</ul></section>}
-            {preview.payload.ideas.length > 0 && <section><h4 className="font-semibold">Ideas ({preview.payload.ideas.length})</h4><ul>{preview.payload.ideas.map((item,index) => <li key={index} className="py-2 break-words">{item}</li>)}</ul></section>}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" disabled={Boolean(invalidImportLink)} onClick={handleConfirmImport} className="min-h-11 px-4 bg-[var(--blue)] text-white text-sm font-semibold rounded-xl disabled:opacity-50">Confirmar importación</button>
-            <button type="button" onClick={() => { setPreview(null); setMessage(''); }} className="min-h-11 px-4 border border-[var(--border)] text-[var(--text)] text-sm rounded-xl">Cancelar revisión</button>
-          </div>
-        </div>}
-      </section>
 
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-base font-extrabold text-[var(--text)]">Empleos para revisar</h2>
-          <p className="text-xs text-[var(--text-soft)]">Creá una postulación cuando decidas seguir una oportunidad.</p>
-        </div>
-        <details><summary className="min-h-11 cursor-pointer text-sm font-semibold text-[var(--text-soft)]">Agregar empleo manualmente</summary><form onSubmit={handleAddJob} className="flex flex-wrap items-end gap-2 p-3.5 bg-[var(--bg)] border border-dashed border-[var(--border)] rounded-xl">
-          <input aria-label="Empresa" value={jobCompany} onChange={(event) => setJobCompany(event.target.value)} placeholder="Empresa" className="flex-1 min-w-32 px-3 py-2 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]" />
-          <input aria-label="Puesto" value={jobRole} onChange={(event) => setJobRole(event.target.value)} placeholder="Puesto" className="flex-1 min-w-32 px-3 py-2 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]" />
-          <input aria-label="Enlace del empleo" value={jobLink} onChange={(event) => setJobLink(event.target.value)} placeholder="Link opcional" className="flex-1 min-w-40 px-3 py-2 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]" />
-          <button type="submit" className="px-3.5 py-2 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold rounded-lg cursor-pointer">Agregar</button>
-        </form></details>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {jobOpportunities.length === 0 ? <p className="text-xs text-[var(--text-faint)]">No hay oportunidades pendientes.</p> : jobOpportunities.sort((a, b) => (b.rating || 0) - (a.rating || 0)).map((opportunity) => (
-            <article key={opportunity.id} className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-2">
-              <div className="font-bold text-sm text-[var(--text)]">{opportunity.empresa}</div>
-              <div className="text-xs text-[var(--text-soft)]">{opportunity.puesto || 'Puesto sin especificar'}</div>
-              <div className="text-[var(--text-soft)] text-sm">Valoración: {opportunity.rating}/5</div>
-              {opportunity.nota && <p className="text-xs text-[var(--text-soft)]">{opportunity.nota}</p>}
-              {safeExternalLink(opportunity.link) && <a href={safeExternalLink(opportunity.link)} target="_blank" rel="noreferrer" className="block text-xs font-bold text-[var(--blue)] hover:underline">Ver oferta ↗</a>}
-              <div className="flex gap-2 pt-1">
-                <button onClick={() => handleApplyJob(opportunity.id)} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-600 text-xs font-bold rounded-lg cursor-pointer">Crear postulación</button>
-                <button onClick={() => handleDiscardJob(opportunity.id)} className="px-3 py-1.5 bg-red-500/10 text-red-500 text-xs font-bold rounded-lg cursor-pointer">Descartar</button>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <SurfaceCard className="p-4 sm:p-5 space-y-3.5" aria-label="Preparar búsqueda externa">
+          <SectionHeader
+            icon={<Sparkles size={16} strokeWidth={1.75} />}
+            title="1. Prepará la búsqueda"
+          />
+          <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+            Buscá empleos, posibles compras para reventa e ideas. Copiá las instrucciones en la IA que uses; Celestian no le envía tus datos.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => copyText('prompt', AI_PROMPT)} className={primaryBtnClass}>
+              {copied === 'prompt' ? <Check size={15} strokeWidth={1.75} aria-hidden="true" /> : <Copy size={15} strokeWidth={1.75} aria-hidden="true" />}
+              <span>{copied === 'prompt' ? 'Copiado' : 'Copiar instrucciones'}</span>
+            </button>
+          </div>
+          <details className="border-t border-slate-100 pt-2.5 text-sm text-slate-600 dark:border-white/[0.06] dark:text-slate-400">
+            <summary className="flex min-h-10 cursor-pointer items-center font-medium text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100">
+              Ver instrucciones y formato de respuesta
+            </summary>
+            <div className="space-y-3 pt-2">
+              <label className="block space-y-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                <span>Instrucciones</span>
+                <textarea aria-label="Instrucciones para la IA externa" readOnly value={AI_PROMPT} rows={6} className="block w-full rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 font-mono text-xs text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200" />
+              </label>
+              <label className="block space-y-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                <span>Formato JSON</span>
+                <textarea aria-label="Formato JSON" readOnly value={AI_SCHEMA} rows={6} className="block w-full rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 font-mono text-xs text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200" />
+              </label>
+              <button type="button" onClick={() => copyText('schema', AI_SCHEMA)} className={secondaryBtnClass}>
+                {copied === 'schema' ? <Check size={15} strokeWidth={1.75} aria-hidden="true" /> : <Copy size={15} strokeWidth={1.75} aria-hidden="true" />}
+                <span>{copied === 'schema' ? 'Copiado' : 'Copiar formato'}</span>
+              </button>
+            </div>
+          </details>
+        </SurfaceCard>
+
+        <SurfaceCard className="p-4 sm:p-5 space-y-3.5" aria-label="Revisar respuesta externa">
+          <SectionHeader
+            icon={<FileJson size={16} strokeWidth={1.75} />}
+            title="2. Traé la respuesta"
+          />
+          <label className="block space-y-2 text-sm text-slate-600 dark:text-slate-400">
+            <span>Respuesta de la IA (JSON)</span>
+            <textarea
+              aria-label="Respuesta de la IA (JSON)"
+              value={rawImport}
+              onChange={(event) => { setRawImport(event.target.value); setPreview(null); setMessage(''); }}
+              rows={5}
+              placeholder="Pegá la respuesta para revisarla…"
+              className="block w-full rounded-xl border border-slate-200/80 bg-white p-3 font-mono text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500"
+            />
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={handlePreview} className={primaryBtnClass}>
+              Revisar resultados
+            </button>
+          </div>
+          {message && <p role="status" className="text-sm font-medium text-slate-800 dark:text-slate-200">{message}</p>}
+          {preview && (
+            <div className="border-t border-slate-100 pt-4 space-y-3 dark:border-white/[0.06]" aria-label="Vista previa de la importación">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">3. Revisá antes de guardar</h3>
+                <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-400">
+                  Guardarlos no crea postulaciones ni registra compras. Verificá las fuentes y los precios antes de actuar.
+                </p>
               </div>
-            </article>
-          ))}
-        </div>
-      </section>
+              {invalidImportLink && (
+                <p role="alert" className="text-sm font-medium text-rose-600 dark:text-rose-400">
+                  Hay un enlace no utilizable. Corregilo o quitá su dirección antes de guardar; solo se admiten enlaces http o https.
+                </p>
+              )}
+              <div className="max-h-[60dvh] overflow-y-auto space-y-3 text-sm text-slate-900 dark:text-slate-100">
+                {preview.payload.empleo.length > 0 && (
+                  <section>
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-200">Empleos ({preview.payload.empleo.length})</h4>
+                    <ListDivider className="mt-1">
+                      {preview.payload.empleo.map((item, index) => (
+                        <div key={index} className="py-2 break-words">
+                          <strong>{item.empresa}</strong> · {item.puesto}
+                          {item.nota && <p className="text-slate-600 dark:text-slate-400">{item.nota}</p>}
+                          {item.link && (
+                            <p className="break-all text-slate-500 dark:text-slate-400">
+                              {item.link}
+                              {!safeExternalLink(item.link) && ' · Enlace no utilizable'}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </ListDivider>
+                  </section>
+                )}
+                {preview.payload.reventa.length > 0 && (
+                  <section>
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-200">Posibles compras ({preview.payload.reventa.length})</h4>
+                    <ListDivider className="mt-1">
+                      {preview.payload.reventa.map((item, index) => (
+                        <div key={index} className="py-2 break-words">
+                          <strong>{item.item}</strong> · Compra {fmtMoney(item.buyPrice)} · Mercado {fmtMoney(item.marketPrice)}
+                          {item.nota && <p className="text-slate-600 dark:text-slate-400">{item.nota}</p>}
+                        </div>
+                      ))}
+                    </ListDivider>
+                  </section>
+                )}
+                {preview.payload.ideas.length > 0 && (
+                  <section>
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-200">Ideas ({preview.payload.ideas.length})</h4>
+                    <ListDivider className="mt-1">
+                      {preview.payload.ideas.map((item, index) => (
+                        <div key={index} className="py-2 break-words">{item}</div>
+                      ))}
+                    </ListDivider>
+                  </section>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" disabled={Boolean(invalidImportLink)} onClick={handleConfirmImport} className={primaryBtnClass}>
+                  Confirmar importación
+                </button>
+                <button type="button" onClick={() => { setPreview(null); setMessage(''); }} className={secondaryBtnClass}>
+                  Cancelar revisión
+                </button>
+              </div>
+            </div>
+          )}
+        </SurfaceCard>
+      </div>
 
-      <section className="space-y-3">
+      {/* Bandeja 1: Empleos para revisar */}
+      <SurfaceCard className="p-4 sm:p-5 space-y-3.5">
         <div>
-          <h2 className="text-base font-extrabold text-[var(--text)]">Posibles compras para reventa</h2>
-          <p className="text-xs text-[var(--text-soft)]">Registrá la compra en Mi negocio eligiendo su cuenta, categoría y forma de pago. La oportunidad se conserva para consultar sus datos.</p>
+          <SectionHeader
+            icon={<Briefcase size={16} strokeWidth={1.75} />}
+            title="Empleos para revisar"
+            count={jobOpportunities.length > 0 ? jobOpportunities.length : null}
+          />
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Creá una postulación cuando decidas seguir una oportunidad.
+          </p>
         </div>
-        <details><summary className="min-h-11 cursor-pointer text-sm font-semibold text-[var(--text-soft)]">Agregar posible compra manualmente</summary><form onSubmit={handleAddResale} className="flex flex-wrap items-end gap-2 p-3.5 bg-[var(--bg)] border border-dashed border-[var(--border)] rounded-xl">
-          <input aria-label="Producto" value={resaleItem} onChange={(event) => setResaleItem(event.target.value)} placeholder="Producto" className="flex-1 min-w-36 px-3 py-2 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]" />
-          <input type="number" aria-label="Costo de compra estimado" value={resaleBuy} onChange={(event) => setResaleBuy(event.target.value)} placeholder="Compra" className="w-28 px-3 py-2 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]" />
-          <input type="number" aria-label="Precio de mercado estimado" value={resaleMarket} onChange={(event) => setResaleMarket(event.target.value)} placeholder="Mercado" className="w-28 px-3 py-2 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]" />
-          <button type="submit" className="px-3.5 py-2 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold rounded-lg cursor-pointer">Agregar</button>
-        </form></details>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {resaleOpportunities.length === 0 ? <p className="text-xs text-[var(--text-faint)]">No hay oportunidades pendientes.</p> : resaleOpportunities.sort((a, b) => computeResalePriority(b) - computeResalePriority(a)).map((opportunity) => {
-            const profit = opportunity.marketPrice - opportunity.buyPrice;
-            return (
-              <article key={opportunity.id} className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-2">
-                <div className="font-bold text-sm text-[var(--text)]">{opportunity.item}</div>
-                <div className="text-[var(--text-soft)] text-sm">Prioridad: {computeResalePriority(opportunity)}/5</div>
-                <p className="text-xs text-[var(--text-soft)]">Compra {fmtMoney(opportunity.buyPrice)} · Mercado {fmtMoney(opportunity.marketPrice)}</p>
-                <p className={`text-xs font-bold ${profit >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>Margen estimado: {fmtMoney(profit)} ({computeResaleMarginPct(opportunity).toFixed(0)}%)</p>
-                {opportunity.nota && <p className="text-xs text-[var(--text-soft)]">{opportunity.nota}</p>}
-                <div className="flex gap-2 pt-1">
-                  <button onClick={() => handleBuyResale(opportunity.id)} className="px-3 py-1.5 bg-emerald-500/10 text-emerald-600 text-xs font-bold rounded-lg cursor-pointer">{onOpenBusiness ? 'Registrar en Mi negocio' : 'Comprar'}</button>
-                  <button onClick={() => handleDiscardResale(opportunity.id)} className="px-3 py-1.5 bg-red-500/10 text-red-500 text-xs font-bold rounded-lg cursor-pointer">Descartar</button>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </section>
 
-      <section className="space-y-3">
-        <h2 className="text-base font-extrabold text-[var(--text)]">Ideas guardadas</h2>
-        <details><summary className="min-h-11 cursor-pointer text-sm font-semibold text-[var(--text-soft)]">Agregar idea manualmente</summary><form onSubmit={handleAddIdea} className="flex gap-2">
-          <input aria-label="Idea" value={ideaText} onChange={(event) => setIdeaText(event.target.value)} placeholder="Guardar una idea manual…" className="flex-1 px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)]" />
-          <button type="submit" className="px-4 py-2 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold rounded-xl cursor-pointer">Guardar idea</button>
-        </form></details>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {(state.ideas || []).length === 0 ? <p className="text-xs text-[var(--text-faint)]">No hay ideas guardadas.</p> : (state.ideas || []).map((idea) => (
-            <article key={idea.id} className="relative bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 pr-9">
-              <button aria-label="Eliminar idea" onClick={() => handleDeleteIdea(idea.id)} className="absolute right-3 top-3 min-h-9 min-w-9 flex items-center justify-center text-[var(--text-faint)] hover:text-red-500 cursor-pointer"><AppIcon name="x" className="h-4 w-4" /></button>
-              <p className="text-xs font-medium text-[var(--text)]">{idea.text}</p>
-              <span className="block mt-2 text-[10px] text-[var(--text-faint)]">{idea.source === 'ia' ? 'IA externa' : 'Manual'} · {idea.date}</span>
-            </article>
-          ))}
+        <details className="border-t border-slate-100 pt-2 dark:border-white/[0.06]">
+          <summary className="flex min-h-10 cursor-pointer items-center gap-1.5 text-sm font-medium text-[#4F46E5] dark:text-indigo-400">
+            <Plus size={15} strokeWidth={1.75} aria-hidden="true" />
+            <span>Agregar empleo manualmente</span>
+          </summary>
+          <form onSubmit={handleAddJob} className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.2fr_auto]">
+            <input aria-label="Empresa" value={jobCompany} onChange={(event) => setJobCompany(event.target.value)} placeholder="Empresa" className={fieldClass} />
+            <input aria-label="Puesto" value={jobRole} onChange={(event) => setJobRole(event.target.value)} placeholder="Puesto" className={fieldClass} />
+            <input aria-label="Enlace del empleo" value={jobLink} onChange={(event) => setJobLink(event.target.value)} placeholder="Link opcional" className={fieldClass} />
+            <button type="submit" className={primaryBtnClass}>Agregar</button>
+          </form>
+        </details>
+
+        {jobOpportunities.length === 0 ? (
+          <div className="border-t border-slate-100 py-5 text-center dark:border-white/[0.06]">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">No hay oportunidades pendientes.</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Importá una respuesta JSON arriba o agregá una búsqueda manualmente para evaluarla antes de postularte.
+            </p>
+          </div>
+        ) : (
+          <ListDivider className="border-t border-slate-100 dark:border-white/[0.06]">
+            {jobOpportunities
+              .slice()
+              .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+              .map((opportunity) => {
+                const safeLink = safeExternalLink(opportunity.link);
+                return (
+                  <article key={opportunity.id} className="py-3.5 first:pt-3 last:pb-0 flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{opportunity.empresa}</h3>
+                        <span className="text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">
+                          Valoración: {opportunity.rating}/5
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-600 dark:text-slate-400">{opportunity.puesto || 'Puesto sin especificar'}</p>
+                      {opportunity.nota && <p className="text-sm text-slate-500 dark:text-slate-400">{opportunity.nota}</p>}
+                      {safeLink && (
+                        <a
+                          href={safeLink}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex min-h-10 items-center gap-1 text-sm font-semibold text-[#4F46E5] hover:underline dark:text-indigo-400"
+                        >
+                          <span>Ver oferta</span>
+                          <ExternalLink size={14} strokeWidth={1.75} aria-hidden="true" />
+                        </a>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleApplyJob(opportunity.id)}
+                        className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#4F46E5] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer"
+                      >
+                        Crear postulación
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDiscardJob(opportunity.id)}
+                        className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200/80 px-3.5 py-2 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-500/10 dark:border-white/[0.08] dark:text-rose-400 cursor-pointer"
+                      >
+                        Descartar
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+          </ListDivider>
+        )}
+      </SurfaceCard>
+
+      {/* Bandeja 2: Posibles compras para reventa */}
+      <SurfaceCard className="p-4 sm:p-5 space-y-3.5">
+        <div>
+          <SectionHeader
+            icon={<ShoppingBag size={16} strokeWidth={1.75} />}
+            title="Posibles compras para reventa"
+            count={resaleOpportunities.length > 0 ? resaleOpportunities.length : null}
+          />
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Registrá la compra en Mi negocio eligiendo su cuenta, categoría y forma de pago. La oportunidad se conserva para consultar sus datos.
+          </p>
         </div>
-      </section>
+
+        <details className="border-t border-slate-100 pt-2 dark:border-white/[0.06]">
+          <summary className="flex min-h-10 cursor-pointer items-center gap-1.5 text-sm font-medium text-[#4F46E5] dark:text-indigo-400">
+            <Plus size={15} strokeWidth={1.75} aria-hidden="true" />
+            <span>Agregar posible compra manualmente</span>
+          </summary>
+          <form onSubmit={handleAddResale} className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-[1.5fr_0.8fr_0.8fr_auto]">
+            <input aria-label="Producto" value={resaleItem} onChange={(event) => setResaleItem(event.target.value)} placeholder="Producto" className={fieldClass} />
+            <input type="number" aria-label="Costo de compra estimado" value={resaleBuy} onChange={(event) => setResaleBuy(event.target.value)} placeholder="Compra" className={fieldClass} />
+            <input type="number" aria-label="Precio de mercado estimado" value={resaleMarket} onChange={(event) => setResaleMarket(event.target.value)} placeholder="Mercado" className={fieldClass} />
+            <button type="submit" className={primaryBtnClass}>Agregar</button>
+          </form>
+        </details>
+
+        {resaleOpportunities.length === 0 ? (
+          <div className="border-t border-slate-100 py-5 text-center dark:border-white/[0.06]">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">No hay oportunidades pendientes.</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Traé hallazgos desde tu IA o cargá un producto manualmente para comparar margen antes de comprar.
+            </p>
+          </div>
+        ) : (
+          <ListDivider className="border-t border-slate-100 dark:border-white/[0.06]">
+            {resaleOpportunities
+              .slice()
+              .sort((a, b) => computeResalePriority(b) - computeResalePriority(a))
+              .map((opportunity) => {
+                const profit = opportunity.marketPrice - opportunity.buyPrice;
+                return (
+                  <article key={opportunity.id} className="py-3.5 first:pt-3 last:pb-0 flex flex-col gap-2.5 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{opportunity.item}</h3>
+                        <span className="text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">
+                          Prioridad: {computeResalePriority(opportunity)}/5
+                        </span>
+                      </div>
+                      <p className="text-sm tabular-nums text-slate-600 dark:text-slate-400">
+                        Compra {fmtMoney(opportunity.buyPrice)} · Mercado {fmtMoney(opportunity.marketPrice)}
+                      </p>
+                      <p className={`text-sm font-semibold tabular-nums ${profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                        Margen estimado: {fmtMoney(profit)} ({computeResaleMarginPct(opportunity).toFixed(0)}%)
+                      </p>
+                      {opportunity.nota && <p className="text-sm text-slate-500 dark:text-slate-400">{opportunity.nota}</p>}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleBuyResale(opportunity.id)}
+                        className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#4F46E5] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer"
+                      >
+                        {onOpenBusiness ? 'Registrar en Mi negocio' : 'Comprar'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDiscardResale(opportunity.id)}
+                        className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200/80 px-3.5 py-2 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-500/10 dark:border-white/[0.08] dark:text-rose-400 cursor-pointer"
+                      >
+                        Descartar
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+          </ListDivider>
+        )}
+      </SurfaceCard>
+
+      {/* Bandeja 3: Ideas guardadas */}
+      <SurfaceCard className="p-4 sm:p-5 space-y-3.5">
+        <SectionHeader
+          icon={<Lightbulb size={16} strokeWidth={1.75} />}
+          title="Ideas guardadas"
+          count={(state.ideas || []).length > 0 ? (state.ideas || []).length : null}
+        />
+
+        <details className="border-t border-slate-100 pt-2 dark:border-white/[0.06]">
+          <summary className="flex min-h-10 cursor-pointer items-center gap-1.5 text-sm font-medium text-[#4F46E5] dark:text-indigo-400">
+            <Plus size={15} strokeWidth={1.75} aria-hidden="true" />
+            <span>Agregar idea manualmente</span>
+          </summary>
+          <form onSubmit={handleAddIdea} className="mt-2.5 flex flex-col gap-2.5 sm:flex-row">
+            <input aria-label="Idea" value={ideaText} onChange={(event) => setIdeaText(event.target.value)} placeholder="Guardar una idea manual…" className={`${fieldClass} flex-1`} />
+            <button type="submit" className={`${primaryBtnClass} shrink-0`}>Guardar idea</button>
+          </form>
+        </details>
+
+        {(state.ideas || []).length === 0 ? (
+          <div className="border-t border-slate-100 py-5 text-center dark:border-white/[0.06]">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">No hay ideas guardadas.</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Guardá becas, descuentos o propuestas de ingreso para revisarlas más adelante.
+            </p>
+          </div>
+        ) : (
+          <ListDivider className="border-t border-slate-100 dark:border-white/[0.06]">
+            {(state.ideas || []).map((idea) => (
+              <article key={idea.id} className="py-3 first:pt-2.5 last:pb-0 flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-slate-900 dark:text-slate-100 break-words">{idea.text}</p>
+                  <span className="mt-1 block text-xs tabular-nums text-slate-400 dark:text-slate-500">
+                    {idea.source === 'ia' ? 'IA externa' : 'Manual'} · {idea.date}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Eliminar idea"
+                  onClick={() => handleDeleteIdea(idea.id)}
+                  className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-600 dark:text-slate-500 dark:hover:text-rose-400 cursor-pointer"
+                >
+                  <X size={16} strokeWidth={1.75} aria-hidden="true" />
+                </button>
+              </article>
+            ))}
+          </ListDivider>
+        )}
+      </SurfaceCard>
     </div>
   );
 };

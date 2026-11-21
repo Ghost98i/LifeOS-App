@@ -426,7 +426,7 @@ export const CommercialInventorySandbox: React.FC<{ onClose: () => void; pilotEn
         {inventory.items.length === 0 && !showNew && <div className="flex flex-col items-center justify-center gap-3 py-6 text-center">
           <AppIcon name="store" className="h-6 w-6 text-slate-400 dark:text-slate-500" />
           <div><h3 className="text-base font-semibold text-[var(--text)]">Sin artículos registrados</h3><p className="mt-1 text-sm text-[var(--text-soft)]">Agregá un artículo o insumo con su cantidad y costo de compra.</p></div>
-          <button type="button" onClick={() => { setShowNew(true); setActive(null); setError(''); setEntryTiming('later'); setEntryAccount(''); entrySubmitted.current = false; }} className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] sm:w-auto cursor-pointer">
+          <button type="button" onClick={() => { setShowNew(true); setActive(null); setError(''); setEntryTiming('later'); setEntryAccount(''); entrySubmitted.current = false; }} className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto cursor-pointer">
             <AppIcon name="plus" className="h-4 w-4" />
             <span>Agregar artículo o insumo</span>
           </button>

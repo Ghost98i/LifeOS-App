@@ -833,7 +833,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
         title="Agenda y rutinas"
         badge={
           <span className="rounded-md border border-[var(--border)] bg-[var(--surface-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--text-soft)]">
-            {weeklyBlockCount} {weeklyBlockCount === 1 ? 'actividad semanal' : 'actividades semanales'}
+            {weeklyBlockCount} {weeklyBlockCount === 1 ? 'bloque fijo' : 'bloques fijos'}
           </span>
         }
       />

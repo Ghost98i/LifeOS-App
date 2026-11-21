@@ -1,4 +1,21 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import {
+  AlertTriangle,
+  Bell,
+  Check,
+  Cloud,
+  Dumbbell,
+  HardDrive,
+  Info,
+  RotateCcw,
+  Search,
+  Shield,
+  Sliders,
+  Trash2,
+  User,
+  Wallet,
+  X,
+} from 'lucide-react';
 import { LifeOSState } from '../types';
 import { NAV_ITEMS } from './Sidebar';
 import { isModuleHidden } from '../lib/moduleVisibility';
@@ -24,6 +41,7 @@ import { PrivacyAmount } from './PrivacyAmount';
 import { PrivacySecuritySection } from './PrivacySecuritySection';
 import { getDismissedAttentionItems, nextAttentionDismissalTimestamp, type AttentionItem } from '../lib/todayAttention';
 import { DismissedAttentionModal } from './DismissedAttentionModal';
+import { ListDivider, SectionHeader, SurfaceCard } from './ui/SurfacePrimitives';
 import type { AttentionDismissalRecord } from '../types';
 
 export type ConfigTab = 'cuenta' | 'preferencias' | 'copias' | 'diagnostico';
@@ -382,49 +400,56 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   const syncStatusMeta = (() => {
     if (syncStatus === 'synced') {
       return {
-        dotClass: 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]',
+        dotClass: 'bg-emerald-500',
         label: 'Sincronizado',
-        textColor: 'text-emerald-700 dark:text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
+        textColor: 'text-emerald-700 dark:text-emerald-300 border-emerald-500/25 bg-emerald-500/10',
       };
     }
     if (syncStatus === 'saving' || syncStatus === 'connecting') {
       return {
-        dotClass: 'bg-amber-400 animate-pulse shadow-[0_0_6px_rgba(251,191,36,0.7)]',
+        dotClass: 'bg-amber-500 animate-pulse',
         label: syncStatus === 'connecting' ? 'Conectando...' : 'Guardando cambios...',
-        textColor: 'text-amber-700 dark:text-amber-300 border-amber-500/30 bg-amber-500/10',
+        textColor: 'text-amber-700 dark:text-amber-300 border-amber-500/25 bg-amber-500/10',
       };
     }
     if (syncStatus === 'conflict') {
       return {
-        dotClass: 'bg-rose-500 animate-ping',
+        dotClass: 'bg-rose-500',
         label: 'Conflicto de versiones',
-        textColor: 'text-rose-700 dark:text-rose-300 border-rose-500/30 bg-rose-500/10',
+        textColor: 'text-rose-700 dark:text-rose-300 border-rose-500/25 bg-rose-500/10',
       };
     }
-    if (syncStatus === 'locked') return { dotClass: 'bg-amber-500', label: 'Sincronización bloqueada', textColor: 'text-amber-700 dark:text-amber-300 border-amber-500/30 bg-amber-500/10' };
+    if (syncStatus === 'locked') return { dotClass: 'bg-amber-500', label: 'Sincronización bloqueada', textColor: 'text-amber-700 dark:text-amber-300 border-amber-500/25 bg-amber-500/10' };
     if (syncStatus === 'error') {
       return {
-        dotClass: 'bg-rose-500 animate-pulse',
+        dotClass: 'bg-rose-500',
         label: 'Error al sincronizar',
-        textColor: 'text-rose-700 dark:text-rose-300 border-rose-500/30 bg-rose-500/10',
+        textColor: 'text-rose-700 dark:text-rose-300 border-rose-500/25 bg-rose-500/10',
       };
     }
     if (syncStatus === 'offline') {
       return {
         dotClass: 'bg-slate-400',
         label: 'Sin conexión',
-        textColor: 'text-[var(--text-faint)] border-[var(--border)] bg-[var(--surface-muted)]',
+        textColor: 'text-slate-600 dark:text-slate-400 border-slate-200/80 dark:border-white/[0.08] bg-slate-50 dark:bg-white/[0.03]',
       };
     }
     return {
       dotClass: 'bg-slate-400',
       label: 'Desconectado',
-      textColor: 'text-[var(--text-faint)] border-[var(--border)] bg-[var(--surface-muted)]',
+      textColor: 'text-slate-600 dark:text-slate-400 border-slate-200/80 dark:border-white/[0.08] bg-slate-50 dark:bg-white/[0.03]',
     };
   })();
 
+  const fieldClass =
+    'w-full min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100';
+  const primaryBtnClass =
+    'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
+  const secondaryBtnClass =
+    'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-transparent px-3.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:bg-white/[0.04] cursor-pointer';
+
   return (
-    <div className="config-refinement max-w-4xl space-y-6">
+    <div className="config-refinement max-w-4xl space-y-5 sm:space-y-6">
       <PageHeader
         title="Configuración"
         actions={(
@@ -433,14 +458,14 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
             onClick={() => setIsAboutModalOpen(true)}
             aria-label="Créditos, privacidad y términos"
             title="Créditos, privacidad y términos"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition-colors cursor-pointer"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-900 dark:border-white/[0.08] dark:bg-[#0D111A] dark:text-slate-400 dark:hover:text-slate-100 cursor-pointer"
           >
-            <AppIcon name="alertCircle" className="h-4 w-4" />
+            <Info size={17} strokeWidth={1.75} aria-hidden="true" />
           </button>
         )}
       />
 
-      <div role="tablist" aria-label="Secciones de Configuración" className="flex items-center gap-6 border-b border-[var(--border)] w-full overflow-x-auto">
+      <div role="tablist" aria-label="Secciones de Configuración" className="flex w-full items-center gap-1 overflow-x-auto border-b border-slate-200/80 pb-px dark:border-white/[0.08]">
         {CONFIG_TABS.map((tab) => {
           const isSelected = activeTab === tab.id;
           return (
@@ -450,32 +475,31 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               role="tab"
               aria-selected={isSelected}
               onClick={() => setActiveTab(tab.id)}
-              className={`relative py-3 text-sm transition-colors cursor-pointer whitespace-nowrap ${
+              className={`relative min-h-11 shrink-0 whitespace-nowrap px-3 py-2.5 text-sm transition-colors cursor-pointer sm:px-4 ${
                 isSelected
-                  ? 'font-bold text-[var(--text)]'
-                  : 'font-medium text-[var(--text-soft)] hover:text-[var(--text)]'
+                  ? 'font-semibold text-[#4F46E5] dark:text-indigo-300'
+                  : 'font-medium text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
               }`}
             >
               {tab.label}
               {isSelected && (
-                <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-[3px] rounded-full bg-[var(--blue)]" />
+                <span aria-hidden="true" className="absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-[#4F46E5]" />
               )}
             </button>
           );
         })}
       </div>
+
       {/* Alerta prioritaria si hay discrepancia en finanzas */}
       {discrepantShadows.length > 0 && (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 shrink-0">
-              <AppIcon name="alertTriangle" className="h-5 w-5" />
-            </div>
+        <SurfaceCard className="border-amber-500/35 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={18} strokeWidth={1.75} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
             <div>
-              <h3 className="text-xs font-bold text-amber-800 dark:text-amber-300">
+              <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300">
                 Diferencia entre saldos detectada ({discrepantShadows.length} {discrepantShadows.length === 1 ? 'cuenta' : 'cuentas'})
               </h3>
-              <p className="text-[11px] text-[var(--text-soft)]">
+              <p className="text-xs text-slate-600 dark:text-slate-400">
                 El saldo guardado no coincide con los movimientos registrados. Revisá las diferencias antes de corregir.
               </p>
             </div>
@@ -483,58 +507,61 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           <button
             type="button"
             onClick={handleOpenRepairModal}
-            className="shrink-0 flex items-center justify-center gap-1.5 px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold rounded-xl cursor-pointer shadow-2xs"
+            className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-semibold text-slate-950 transition-colors hover:bg-amber-600 cursor-pointer"
           >
-            <AppIcon name="rotateCcw" className="h-3.5 w-3.5" />
+            <RotateCcw size={14} strokeWidth={1.75} aria-hidden="true" />
             <span>Revisar saldos</span>
           </button>
-        </div>
+        </SurfaceCard>
       )}
 
       {activeTab === 'cuenta' && (
         <div role="tabpanel" aria-label="Cuenta y Seguridad" className="grid grid-cols-1 gap-5">
           {/* Mi cuenta */}
-          <div id="config-account" className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xs">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <h2 className="text-sm font-bold text-[var(--text)]">Mi cuenta</h2>
-                <p className="text-xs text-[var(--text-soft)]">
-                  Tu cuenta de Google y el estado de sincronización.
-                </p>
-              </div>
-              <ContextualHelp label="Sincronización con Google">
-                Iniciar sesión y sincronizar no demuestran por sí solos que los datos estén cifrados. Consultá el estado del cifrado en Privacidad y seguridad.
-              </ContextualHelp>
+          <SurfaceCard id="config-account" className="p-4 sm:p-5 space-y-4">
+            <div className="space-y-1">
+              <SectionHeader
+                icon={<Cloud size={16} strokeWidth={1.75} />}
+                title="Mi cuenta"
+                action={
+                  <ContextualHelp label="Sincronización con Google">
+                    Iniciar sesión y sincronizar no demuestran por sí solos que los datos estén cifrados. Consultá el estado del cifrado en Privacidad y seguridad.
+                  </ContextualHelp>
+                }
+              />
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Tu cuenta de Google y el estado de sincronización.
+              </p>
             </div>
 
             {cloudConfigured ? (
               cloudUser ? (
-                <div className="space-y-3 pt-1">
-                  <div className="flex flex-col items-start sm:flex-row sm:items-center justify-between gap-3 py-1">
-                    <div className="flex items-center gap-3 min-w-0">
+                <div className="space-y-3 border-t border-slate-100 pt-3.5 dark:border-white/[0.06]">
+                  <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+                    <div className="flex min-w-0 items-center gap-3">
                       {cloudUser.photoURL && !avatarError ? (
                         <img
                           src={cloudUser.photoURL}
                           alt={cloudUser.name}
                           onError={() => setAvatarError(true)}
-                          className="h-10 w-10 rounded-full border border-[var(--border)] shrink-0"
+                          className="h-10 w-10 shrink-0 rounded-full border border-slate-200/80 dark:border-white/[0.08]"
                         />
                       ) : (
-                        <div className="h-10 w-10 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#4F46E5] text-sm font-semibold text-white">
                           {(cloudUser.name || cloudUser.email || 'C')[0].toUpperCase()}
                         </div>
                       )}
                       <div className="min-w-0">
-                        <p className="text-xs font-bold text-[var(--text)] break-words">{cloudUser.name || 'Usuario Google'}</p>
-                        <p className="text-[11px] text-[var(--text-soft)] break-all">{cloudUser.email}</p>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 break-words">{cloudUser.name || 'Usuario Google'}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 break-all">{cloudUser.email}</p>
                         {lastSyncedAt && (
-                          <p className="text-[10px] text-[var(--text-faint)] mt-0.5">
-                            Última sincronización: <strong className="text-[var(--text)]">{lastSyncedAt}</strong>
+                          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                            Última sincronización: <strong className="text-slate-900 dark:text-slate-100">{lastSyncedAt}</strong>
                           </p>
                         )}
                       </div>
                     </div>
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg border text-[11px] font-bold shrink-0 ${syncStatusMeta.textColor}`}>
+                    <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold ${syncStatusMeta.textColor}`}>
                       <span className={`h-1.5 w-1.5 rounded-full ${syncStatusMeta.dotClass}`} />
                       <span>{syncStatusMeta.label}</span>
                     </span>
@@ -542,12 +569,8 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
                   <div className="flex flex-wrap items-center gap-2">
                     {onForceSync && (
-                      <button
-                        type="button"
-                        onClick={onForceSync}
-                        className="flex items-center gap-1.5 px-3.5 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs"
-                      >
-                        <AppIcon name="rotateCcw" className="h-3.5 w-3.5" />
+                      <button type="button" onClick={onForceSync} className={primaryBtnClass}>
+                        <RotateCcw size={14} strokeWidth={1.75} aria-hidden="true" />
                         <span>Sincronizar ahora</span>
                       </button>
                     )}
@@ -555,37 +578,33 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                       <button
                         type="button"
                         onClick={onCloudSignOut}
-                        className="px-3.5 py-2 border border-[var(--border)] hover:border-red-500/40 text-[var(--text-soft)] hover:text-red-600 dark:hover:text-red-400 text-xs font-semibold rounded-xl transition-colors cursor-pointer"
+                        className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200/80 px-3.5 py-2 text-sm font-medium text-slate-600 transition-colors hover:border-rose-500/40 hover:text-rose-600 dark:border-white/[0.08] dark:text-slate-300 dark:hover:text-rose-400 cursor-pointer"
                       >
                         <span>Cerrar sesión</span>
                       </button>
                     )}
                   </div>
-                  {onCloudSignOut && <p className="text-sm text-[var(--text-soft)]">Cerrar sesión detiene la sincronización en este navegador.</p>}
+                  {onCloudSignOut && <p className="text-sm text-slate-500 dark:text-slate-400">Cerrar sesión detiene la sincronización en este navegador.</p>}
                 </div>
               ) : (
-                <div className="space-y-3 pt-1">
-                  <p className="text-xs text-[var(--text-soft)] leading-relaxed">
+                <div className="space-y-3 border-t border-slate-100 pt-3.5 dark:border-white/[0.06]">
+                  <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
                     Conectá Google para sincronizar entre tus dispositivos.
                   </p>
                   {onCloudSignIn && (
-                    <button
-                      type="button"
-                      onClick={onCloudSignIn}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs"
-                    >
-                      <AppIcon name="cloud" className="h-4 w-4" />
+                    <button type="button" onClick={onCloudSignIn} className={primaryBtnClass}>
+                      <Cloud size={15} strokeWidth={1.75} aria-hidden="true" />
                       <span>Conectar con Google</span>
                     </button>
                   )}
                 </div>
               )
             ) : (
-              <div className="p-3 rounded-xl bg-[var(--surface-muted)] text-xs text-[var(--text-soft)]">
+              <p className="border-t border-slate-100 pt-3 text-sm text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
                 Celestian opera en modo local en este dispositivo (sin conexión a Firebase).
-              </div>
+              </p>
             )}
-          </div>
+          </SurfaceCard>
 
           {/* Privacidad y Cifrado de Extremo a Extremo */}
           <div id="security-section">
@@ -604,36 +623,35 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
       {activeTab === 'copias' && (
         <div role="tabpanel" aria-label="Copias y Datos" className="space-y-4">
           {/* Backup y Gestión de Datos */}
-          <div id="config-backups" className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xs">
-            <div>
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-bold text-[var(--text)]">Copias de seguridad</h2>
-                <ContextualHelp label="Copias de respaldo">
-                  Las copias locales son archivos JSON descargables a tu equipo. Son independientes de la sincronización y del cifrado E2EE en la nube.
-                </ContextualHelp>
-              </div>
-              <p className="text-xs text-[var(--text-soft)]">
+          <SurfaceCard id="config-backups" className="p-4 sm:p-5 space-y-4">
+            <div className="space-y-1">
+              <SectionHeader
+                icon={<HardDrive size={16} strokeWidth={1.75} />}
+                title="Copias de seguridad"
+                action={
+                  <ContextualHelp label="Copias de respaldo">
+                    Las copias locales son archivos JSON descargables a tu equipo. Son independientes de la sincronización y del cifrado E2EE en la nube.
+                  </ContextualHelp>
+                }
+              />
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 Guardá un archivo JSON fuera de este dispositivo. Esta copia no queda cifrada por la sincronización.
               </p>
               {state.settings?.lastBackupAt && (
-                <p className="text-[11px] tabular-nums text-[var(--blue)] mt-1 font-medium">
+                <p className="pt-0.5 text-xs font-medium tabular-nums text-[#4F46E5] dark:text-indigo-400">
                   Última exportación registrada: {state.settings.lastBackupAt}
                 </p>
               )}
             </div>
 
             <div className="flex flex-wrap gap-2.5">
-              <button
-                type="button"
-                onClick={onExportJSON}
-                className="flex items-center gap-1.5 px-3.5 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs"
-              >
-                <AppIcon name="cloud" className="h-3.5 w-3.5" />
+              <button type="button" onClick={onExportJSON} className={primaryBtnClass}>
+                <Cloud size={15} strokeWidth={1.75} aria-hidden="true" />
                 <span>Descargar copia</span>
               </button>
 
-              <label className="flex items-center gap-1.5 px-3.5 py-2 bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] text-xs font-bold rounded-xl hover:border-[var(--blue)] cursor-pointer transition-colors shadow-2xs">
-                <AppIcon name="rotateCcw" className="h-3.5 w-3.5 text-[var(--blue)]" />
+              <label className={secondaryBtnClass}>
+                <RotateCcw size={15} strokeWidth={1.75} className="text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
                 <span>Importar copia</span>
                 <input
                   type="file"
@@ -644,143 +662,141 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               </label>
             </div>
 
-            {/* Slot de recuperación disponible */}
+            {/* Slot de recuperación disponible (flat section, depth = 1) */}
             {recoveryInfo && (
-              <div className="bg-[var(--bg-elevated)] border border-emerald-500/30 rounded-xl p-3.5 space-y-2">
-                <div className="flex items-center justify-between gap-2">
+              <div className="border-t border-slate-100 pt-4 space-y-2.5 dark:border-white/[0.06]">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <AppIcon name="shield" className="h-4 w-4 text-emerald-500" />
-                    <h3 className="text-xs font-bold text-[var(--text)]">Copia de emergencia en este navegador</h3>
+                    <Shield size={16} strokeWidth={1.75} className="text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Copia de emergencia en este navegador</h3>
                   </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  <span className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
                     Lista
                   </span>
                 </div>
-                <p className="text-[11px] text-[var(--text-soft)]">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Capturada: {recoveryInfo.meta?.savedAt ? new Date(recoveryInfo.meta.savedAt).toLocaleString('es-UY') : 'Reciente'} · {recoveryInfo.meta?.description || recoveryInfo.meta?.action || 'Copia preventiva'}
                 </p>
                 <button
                   type="button"
                   onClick={() => setIsRestoreModalOpen(true)}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-xs font-bold rounded-xl text-[var(--text)] cursor-pointer transition-colors shadow-2xs"
+                  className={`${secondaryBtnClass} w-full sm:w-auto`}
                 >
-                  <AppIcon name="rotateCcw" className="h-3.5 w-3.5 text-[var(--blue)]" />
+                  <RotateCcw size={15} strokeWidth={1.75} className="text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
                   <span>Restaurar copia de emergencia</span>
                 </button>
               </div>
             )}
-
-
-          </div>
+          </SurfaceCard>
 
           {/* Zona de peligro: Reiniciar datos */}
-          <section className="rounded-2xl border border-rose-500/30 bg-[var(--card)] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3" aria-label="Reiniciar datos">
-            <div>
-              <h2 className="text-sm font-bold text-[var(--text)]">Reiniciar datos</h2>
-              <p className="text-xs text-[var(--text-soft)]">Reemplaza los datos actuales por los valores iniciales.</p>
+          <SurfaceCard className="border-rose-500/30 p-4 sm:p-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" aria-label="Reiniciar datos">
+            <div className="space-y-0.5">
+              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Reiniciar datos</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Reemplaza los datos actuales por los valores iniciales.</p>
             </div>
             <button
               type="button"
               onClick={() => setIsResetModalOpen(true)}
-              className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs font-bold rounded-xl hover:bg-red-500/20 cursor-pointer transition-colors shadow-2xs self-start sm:self-auto"
+              className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 self-start rounded-xl border border-rose-500/25 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-500/20 dark:text-rose-400 sm:self-auto cursor-pointer"
             >
-              <AppIcon name="trash" className="h-3.5 w-3.5" />
+              <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
               <span>Reiniciar datos</span>
             </button>
-          </section>
+          </SurfaceCard>
         </div>
       )}
 
       {activeTab === 'preferencias' && (
         <section id="config-preferences" role="tabpanel" aria-label="Preferencias" className="space-y-4">
-          <div className="grid grid-cols-1 gap-5">
           {/* Formulario de Perfil y Metas */}
-          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xs">
+          <SurfaceCard className="p-4 sm:p-5 space-y-4">
             <div className="space-y-1">
-              <h2 className="text-sm font-bold text-[var(--text)]">Perfil y objetivos</h2>
-              <p className="text-xs text-[var(--text-soft)]">
+              <SectionHeader icon={<User size={16} strokeWidth={1.75} />} title="Perfil y objetivos" />
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 Datos personales utilizados para estimaciones corporales y objetivos mensuales.
               </p>
             </div>
-            <form onSubmit={handleSaveProfile} className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="config-name" className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
+            <form onSubmit={handleSaveProfile} className="space-y-4 border-t border-slate-100 pt-3.5 dark:border-white/[0.06]">
+              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <label htmlFor="config-name" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
                     Nombre o apodo
                   </label>
-                  <input id="config-name"
+                  <input
+                    id="config-name"
                     type="text"
                     value={profileName}
                     onChange={(e) => setProfileName(e.target.value)}
                     placeholder="Ej: Chino"
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
+                    className={fieldClass}
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="config-height" className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
+                <div className="min-w-0">
+                  <label htmlFor="config-height" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
                     Altura (cm)
                   </label>
-                  <input id="config-height"
+                  <input
+                    id="config-height"
                     type="number"
                     value={profileHeight}
                     onChange={(e) => setProfileHeight(e.target.value)}
                     placeholder="175"
-                    className="w-full px-3 py-2 text-xs tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
+                    className={`${fieldClass} tabular-nums`}
                   />
                 </div>
 
-                <div>
-                  <label htmlFor="config-body-sex" className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
+                <div className="min-w-0">
+                  <label htmlFor="config-body-sex" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
                     Sexo para cálculos corporales
                   </label>
-                  <select id="config-body-sex"
+                  <select
+                    id="config-body-sex"
                     value={profileBodySex}
                     onChange={(e) => setProfileBodySex(e.target.value as '' | 'male' | 'female')}
-                    className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)] cursor-pointer"
+                    className={`${fieldClass} cursor-pointer`}
                   >
                     <option value="">Seleccionar…</option>
                     <option value="male">Masculino</option>
                     <option value="female">Femenino</option>
                   </select>
-                  <p className="mt-1 text-[10px] text-[var(--text-faint)]">Se guarda en tu perfil y se usa para fórmulas como RFM.</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Se guarda en tu perfil y se usa para fórmulas como RFM.</p>
                 </div>
 
-                <div>
-                  <label htmlFor="config-stream-goal" className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">
+                <div className="min-w-0">
+                  <label htmlFor="config-stream-goal" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
                     Transmisiones por mes
                   </label>
-                  <input id="config-stream-goal"
+                  <input
+                    id="config-stream-goal"
                     type="number"
                     value={streamGoal}
                     onChange={(e) => setStreamGoal(e.target.value)}
                     placeholder="12"
-                    className="w-full px-3 py-2 text-xs tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden text-[var(--text)]"
+                    className={`${fieldClass} tabular-nums`}
                   />
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-[var(--border)] flex justify-end">
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl transition-all cursor-pointer shadow-2xs"
-                >
+              <div className="flex justify-end border-t border-slate-100 pt-3 dark:border-white/[0.06]">
+                <button type="submit" className={primaryBtnClass}>
                   Guardar cambios
                 </button>
               </div>
             </form>
-          </div>
+          </SurfaceCard>
 
           {/* Módulos visibles */}
-          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 space-y-3 shadow-2xs">
-            <div>
-              <h2 className="text-sm font-bold text-[var(--text)]">Módulos visibles</h2>
-              <p className="text-xs text-[var(--text-soft)]">
+          <SurfaceCard className="p-4 sm:p-5 space-y-3.5">
+            <div className="space-y-1">
+              <SectionHeader icon={<Sliders size={16} strokeWidth={1.75} />} title="Módulos visibles" />
+              <p className="text-sm text-slate-500 dark:text-slate-400">
                 Elegí qué módulos mostrar en la barra lateral. Ocultar un módulo no borra sus datos.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2">
+            <div className="grid grid-cols-1 gap-2 border-t border-slate-100 pt-3.5 sm:grid-cols-2 lg:grid-cols-3 dark:border-white/[0.06]">
               {NAV_ITEMS.filter((item) => item.optional).map((item) => {
                 const isHidden = isModuleHidden(state, item.id);
 
@@ -790,24 +806,24 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                     type="button"
                     onClick={() => handleToggleTab(item.id)}
                     aria-pressed={!isHidden}
-                    className={`p-3 rounded-xl border text-left text-xs font-semibold flex flex-wrap items-center justify-between gap-2 transition-colors cursor-pointer ${
+                    className={`flex min-h-11 items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left text-sm font-medium transition-colors cursor-pointer ${
                       !isHidden
-                        ? 'bg-[var(--bg-elevated)] border-[var(--blue)] text-[var(--text)] ring-1 ring-[var(--blue)]/30 shadow-2xs'
-                        : 'bg-[var(--bg)] border-[var(--border)] text-[var(--text-faint)] hover:border-[var(--border-hover)]'
+                        ? 'border-[#4F46E5]/40 bg-[#4F46E5]/[0.05] text-slate-900 dark:border-indigo-400/40 dark:bg-indigo-500/10 dark:text-slate-100'
+                        : 'border-slate-200/80 bg-transparent text-slate-500 hover:border-slate-300 dark:border-white/[0.08] dark:text-slate-400 dark:hover:border-white/[0.15]'
                     }`}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
                       <AppIcon
                         name={item.icon}
-                        className={`h-4 w-4 ${!isHidden ? 'text-[var(--blue)]' : 'text-[var(--text-faint)]'}`}
+                        className={`h-4 w-4 shrink-0 ${!isHidden ? 'text-[#4F46E5] dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}
                       />
-                      <span>{item.label}</span>
+                      <span className="truncate">{item.label}</span>
                     </div>
                     <span
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                      className={`shrink-0 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-semibold ${
                         !isHidden
-                          ? 'bg-blue-500/10 text-[var(--blue)] border border-blue-500/20'
-                          : 'bg-[var(--surface-muted)] text-[var(--text-faint)] border border-[var(--border)]'
+                          ? 'border-[#4F46E5]/20 bg-[#4F46E5]/10 text-[#4F46E5] dark:text-indigo-300'
+                          : 'border-slate-200/80 bg-slate-50 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400'
                       }`}
                     >
                       {!isHidden ? 'Visible' : 'Oculto'}
@@ -816,18 +832,17 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 );
               })}
             </div>
-          </div>
-          </div>
+          </SurfaceCard>
 
           {/* Recordatorios de Atención ahora */}
-          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 shadow-2xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <h2 className="text-sm font-bold text-[var(--text)] flex items-center gap-2">
-                  <AppIcon name="bell" className="h-4 w-4 text-amber-500" />
-                  <span>Recordatorios de «Atención ahora»</span>
-                </h2>
-                <p className="text-xs text-[var(--text-soft)] mt-0.5">
+          <SurfaceCard className="p-4 sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-0.5">
+                <SectionHeader
+                  icon={<Bell size={16} strokeWidth={1.75} />}
+                  title="Recordatorios de «Atención ahora»"
+                />
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   {dismissedAttentionItems.length === 0
                     ? 'No hay avisos silenciados.'
                     : `Tenés ${dismissedAttentionItems.length === 1 ? '1 aviso silenciado' : `${dismissedAttentionItems.length} avisos silenciados`} para sus ocurrencias actuales.`}
@@ -837,253 +852,238 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowDismissedModal(true)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] hover:bg-[var(--bg-elevated)] text-[var(--text)] transition cursor-pointer shadow-2xs self-start sm:self-auto"
+                  className={`${secondaryBtnClass} shrink-0 self-start sm:self-auto`}
                 >
-                  <AppIcon name="rotateCcw" className="h-3.5 w-3.5 text-[var(--blue)]" />
+                  <RotateCcw size={14} strokeWidth={1.75} className="text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
                   <span>Gestionar avisos silenciados</span>
                 </button>
               )}
             </div>
-          </div>
+          </SurfaceCard>
         </section>
       )}
 
       {activeTab === 'diagnostico' && (
         <div role="tabpanel" aria-label="Diagnóstico">
-          {/* Auditoría y Consistencia */}
-          <section id="config-diagnostics" className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-5 space-y-4 shadow-2xs">
+          <SurfaceCard id="config-diagnostics" className="p-4 sm:p-5 space-y-5">
             <div>
-              <h2 className="text-base font-bold text-[var(--text)]">Diagnóstico de datos <span className="ml-2 text-sm font-normal text-[var(--text-soft)]">Saldos y almacenamiento</span></h2>
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                Diagnóstico de datos <span className="ml-2 text-sm font-normal text-slate-500 dark:text-slate-400">Saldos y almacenamiento</span>
+              </h2>
             </div>
-            {/* Tarjeta Finanzas */}
-            <div className="border-t border-[var(--border)] pt-4 space-y-3">
-              <div className="flex items-center justify-between">
+
+            {/* Consistencia de Finanzas */}
+            <div className="border-t border-slate-100 pt-4 space-y-3 dark:border-white/[0.06]">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  <AppIcon name="wallet" className="h-4 w-4 text-[var(--emerald)]" />
-                  <h3 className="text-xs font-bold text-[var(--text)]">Consistencia de Finanzas</h3>
+                  <Wallet size={16} strokeWidth={1.75} className="text-slate-400 dark:text-slate-500" aria-hidden="true" />
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Consistencia de Finanzas</h3>
                 </div>
                 {discrepantShadows.length === 0 ? (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  <span className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
                     Saldos coincidentes
                   </span>
                 ) : (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse">
+                  <span className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
                     {discrepantShadows.length} {discrepantShadows.length === 1 ? 'cuenta divergente' : 'cuentas divergentes'}
                   </span>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="p-2 rounded-lg bg-[var(--surface-muted)]">
-                  <span className="block text-[10px] font-semibold text-[var(--text-faint)] uppercase">Cuentas auditadas</span>
-                  <span className="tabular-nums font-bold text-[var(--text)]">
+              <ListDivider className="text-sm">
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-slate-500 dark:text-slate-400">Cuentas auditadas</span>
+                  <strong className="tabular-nums text-slate-900 dark:text-slate-100">
                     {financeShadows.length} cuenta{financeShadows.length === 1 ? '' : 's'}
-                  </span>
+                  </strong>
                 </div>
-                <div className="p-2 rounded-lg bg-[var(--surface-muted)]">
-                  <span className="block text-[10px] font-semibold text-[var(--text-faint)] uppercase">Estado contable</span>
-                  <span className="tabular-nums font-bold text-emerald-600 dark:text-emerald-400">
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-slate-500 dark:text-slate-400">Estado contable</span>
+                  <strong className="tabular-nums text-emerald-700 dark:text-emerald-400">
                     {financeShadows.length - discrepantShadows.length} coincidente{financeShadows.length - discrepantShadows.length === 1 ? '' : 's'}
-                  </span>
+                  </strong>
                 </div>
-              </div>
-
-              <div className="text-[11px] text-[var(--text-soft)] space-y-1">
-                <div className="flex justify-between">
-                  <span>Transacciones registradas:</span>
-                  <strong className="text-[var(--text)]">{state.finance?.transactions?.length || 0}</strong>
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-slate-500 dark:text-slate-400">Transacciones registradas</span>
+                  <strong className="tabular-nums text-slate-900 dark:text-slate-100">{state.finance?.transactions?.length || 0}</strong>
                 </div>
-                <div className="flex justify-between">
-                  <span>Transferencias registradas:</span>
-                  <strong className="text-[var(--text)]">{state.finance?.transfers?.length || 0}</strong>
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-slate-500 dark:text-slate-400">Transferencias registradas</span>
+                  <strong className="tabular-nums text-slate-900 dark:text-slate-100">{state.finance?.transfers?.length || 0}</strong>
                 </div>
-                <div className="flex justify-between">
-                  <span>Conciliaciones / Arqueos:</span>
-                  <strong className="text-[var(--text)]">{state.finance?.reconciliations?.length || 0}</strong>
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-slate-500 dark:text-slate-400">Conciliaciones / Arqueos</span>
+                  <strong className="tabular-nums text-slate-900 dark:text-slate-100">{state.finance?.reconciliations?.length || 0}</strong>
                 </div>
-              </div>
+              </ListDivider>
 
               {discrepantShadows.length > 0 ? (
                 <button
                   type="button"
                   onClick={handleOpenRepairModal}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-xl transition-all cursor-pointer shadow-2xs"
+                  className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-3.5 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-amber-600 cursor-pointer"
                 >
-                  <AppIcon name="rotateCcw" className="h-3.5 w-3.5" />
+                  <RotateCcw size={15} strokeWidth={1.75} aria-hidden="true" />
                   <span>Revisar y corregir saldos</span>
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={handleOpenRepairModal}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] font-medium text-xs rounded-xl transition-all cursor-pointer"
+                  className={`${secondaryBtnClass} w-full`}
                 >
-                  <AppIcon name="check" className="h-3.5 w-3.5 text-emerald-500" />
+                  <Check size={15} strokeWidth={1.75} className="text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
                   <span>Revisar saldos</span>
                 </button>
               )}
             </div>
 
-            {/* Tarjeta Gimnasio */}
+            {/* Consistencia de Gimnasio */}
             {(!isModuleHidden(state, 'gimnasio') || staleGymCount > 0) && (
-              <div className="border-t border-[var(--border)] pt-4 space-y-2.5">
-                <div className="flex items-center justify-between">
+              <div className="border-t border-slate-100 pt-4 space-y-2.5 dark:border-white/[0.06]">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <AppIcon name="dumbbell" className="h-4 w-4 text-[var(--purple)]" />
-                    <h3 className="text-xs font-bold text-[var(--text)]">Consistencia de Gimnasio</h3>
+                    <Dumbbell size={16} strokeWidth={1.75} className="text-slate-400 dark:text-slate-500" aria-hidden="true" />
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Consistencia de Gimnasio</h3>
                   </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[var(--surface-muted)] text-[var(--text-soft)] border border-[var(--border)]">
+                  <span className="rounded-md border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
                     {sortedGymSessions.length} sesiones
                   </span>
                 </div>
 
-                <div className="text-[11px] text-[var(--text-soft)] space-y-1">
-                  <div className="flex justify-between">
-                    <span>Sesiones completadas:</span>
-                    <strong className="text-[var(--text)]">{sortedGymSessions.filter((s) => s.status === 'completed').length}</strong>
+                <ListDivider className="text-sm">
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-slate-500 dark:text-slate-400">Sesiones completadas</span>
+                    <strong className="tabular-nums text-slate-900 dark:text-slate-100">{sortedGymSessions.filter((s) => s.status === 'completed').length}</strong>
                   </div>
-                  <div className="flex justify-between">
-                    <span>Sesión activa de hoy:</span>
-                    <strong className="text-[var(--text)]">
+                  <div className="flex items-center justify-between py-2">
+                    <span className="text-slate-500 dark:text-slate-400">Sesión activa de hoy</span>
+                    <strong className="text-slate-900 dark:text-slate-100">
                       {sortedGymSessions.some((s) => s.date === todayISO() && s.status === 'active') ? 'Sí (en curso)' : 'Ninguna'}
                     </strong>
                   </div>
                   {staleGymCount > 0 && (
-                    <div className="flex justify-between text-amber-600 dark:text-amber-400">
-                      <span>Sesiones previas incompletas:</span>
-                      <strong className="font-bold">{staleGymCount}</strong>
+                    <div className="flex items-center justify-between py-2 text-amber-700 dark:text-amber-400">
+                      <span>Sesiones previas incompletas</span>
+                      <strong className="tabular-nums font-semibold">{staleGymCount}</strong>
                     </div>
                   )}
-                </div>
+                </ListDivider>
               </div>
             )}
 
             {/* Diagnóstico técnico y almacenamiento (Divulgación Progresiva) */}
-            <details className="pt-2 border-t border-[var(--border)] group">
-              <summary className="cursor-pointer text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] flex items-center justify-between py-1 select-none">
-                <span className="flex items-center gap-1.5">
-                  <AppIcon name="shield" className="h-3.5 w-3.5 text-[var(--blue)]" />
+            <details className="group border-t border-slate-100 pt-3 dark:border-white/[0.06]">
+              <summary className="flex min-h-10 cursor-pointer items-center justify-between gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 select-none">
+                <span className="flex items-center gap-2">
+                  <Shield size={15} strokeWidth={1.75} className="text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
                   <span>Almacenamiento y detalles técnicos</span>
                 </span>
-                <span className="text-[10px] font-mono text-[var(--text-faint)]">
+                <span className="font-mono text-xs text-slate-400 dark:text-slate-500">
                   Dispositivo: {deviceId.slice(0, 8)}…
                 </span>
               </summary>
-              <div className="pt-3 space-y-2.5">
-                <div className="flex items-center justify-between text-xs">
+              <div className="pt-3 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h3 className="text-xs font-bold text-[var(--text)]">Almacenamiento Local</h3>
-                    <p className="text-[11px] text-[var(--text-soft)]">IndexedDB / LocalStorage</p>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Almacenamiento Local</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">IndexedDB / LocalStorage</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setDiagnostics(getStorageDiagnostics(storageUserId))}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-elevated)] border border-[var(--border)] text-xs font-bold rounded-xl hover:border-[var(--blue)] cursor-pointer transition-colors shadow-2xs text-[var(--text)]"
+                    className={secondaryBtnClass}
                   >
-                    <AppIcon name="search" className="h-3.5 w-3.5 text-[var(--blue)]" />
+                    <Search size={14} strokeWidth={1.75} className="text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
                     <span>Diagnosticar</span>
                   </button>
                 </div>
 
                 {diagnostics && (
-                  <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-                    <div className="rounded-xl bg-[var(--surface-muted)] p-2.5">
-                      <span className="block text-[10px] font-bold uppercase text-[var(--text-faint)]">Motor</span>
-                      <strong className="text-[var(--text)]">{diagnostics.backend}</strong>
+                  <ListDivider className="text-sm">
+                    <div className="flex items-center justify-between py-2">
+                      <span className="text-slate-500 dark:text-slate-400">Motor</span>
+                      <strong className="text-slate-900 dark:text-slate-100">{diagnostics.backend}</strong>
                     </div>
-                    <div className="rounded-xl bg-[var(--surface-muted)] p-2.5">
-                      <span className="block text-[10px] font-bold uppercase text-[var(--text-faint)]">Esquema</span>
-                      <strong className="text-[var(--text)]">v{diagnostics.schemaVersion}</strong>
+                    <div className="flex items-center justify-between py-2">
+                      <span className="text-slate-500 dark:text-slate-400">Esquema</span>
+                      <strong className="text-slate-900 dark:text-slate-100">v{diagnostics.schemaVersion}</strong>
                     </div>
-                    <div className="rounded-xl bg-[var(--surface-muted)] p-2.5">
-                      <span className="block text-[10px] font-bold uppercase text-[var(--text-faint)]">Datos</span>
-                      <strong className="tabular-nums text-[var(--text)]">{diagnostics.primaryBytes.toLocaleString('es-UY')} B</strong>
+                    <div className="flex items-center justify-between py-2">
+                      <span className="text-slate-500 dark:text-slate-400">Datos</span>
+                      <strong className="tabular-nums text-slate-900 dark:text-slate-100">{diagnostics.primaryBytes.toLocaleString('es-UY')} B</strong>
                     </div>
-                    <div className="rounded-xl bg-[var(--surface-muted)] p-2.5">
-                      <span className="block text-[10px] font-bold uppercase text-[var(--text-faint)]">Recuperación</span>
-                      <strong className="tabular-nums text-[var(--text)]">{diagnostics.recoveryAvailable ? `${diagnostics.recoveryBytes.toLocaleString('es-UY')} B` : 'Sin copia'}</strong>
+                    <div className="flex items-center justify-between py-2">
+                      <span className="text-slate-500 dark:text-slate-400">Recuperación</span>
+                      <strong className="tabular-nums text-slate-900 dark:text-slate-100">{diagnostics.recoveryAvailable ? `${diagnostics.recoveryBytes.toLocaleString('es-UY')} B` : 'Sin copia'}</strong>
                     </div>
-                  </div>
+                  </ListDivider>
                 )}
               </div>
             </details>
-          </section>
+          </SurfaceCard>
         </div>
       )}
 
       {/* Modal 1: Revisar copia antes de importar */}
       {importPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div role="dialog" aria-modal="true" aria-label="Revisar copia antes de importar" className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Revisar copia antes de importar" className="w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <AppIcon name="cloud" className="h-5 w-5 text-[var(--blue)]" />
-                  <h3 className="text-base font-bold text-[var(--text)]">Revisar copia antes de importar</h3>
+                  <Cloud size={18} strokeWidth={1.75} className="text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Revisar copia antes de importar</h3>
                 </div>
-                <p className="text-xs text-[var(--text-soft)]">
-                  Archivo seleccionado: <strong className="text-[var(--text)] font-mono">{importFileName}</strong>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Archivo seleccionado: <strong className="font-mono text-slate-900 dark:text-slate-100">{importFileName}</strong>
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setImportPreview(null)}
-                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg"
+                aria-label="Cerrar"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
               >
-                ✕
+                <X size={16} strokeWidth={1.75} aria-hidden="true" />
               </button>
             </div>
 
-            <div className="bg-[var(--surface-muted)] rounded-xl p-3 text-xs space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-[var(--text-soft)]">Perfil en backup:</span>
-                <strong className="text-[var(--text)]">{importPreview.profileName || 'No especificado'}</strong>
+            <ListDivider className="border-t border-slate-100 text-sm dark:border-white/[0.06]">
+              <div className="flex justify-between py-2">
+                <span className="text-slate-500 dark:text-slate-400">Perfil en backup</span>
+                <strong className="text-slate-900 dark:text-slate-100">{importPreview.profileName || 'No especificado'}</strong>
               </div>
-              <div className="flex justify-between">
-                <span className="text-[var(--text-soft)]">Versión de esquema:</span>
-                <strong className="text-[var(--text)]">v{importPreview.schemaVersion}</strong>
+              <div className="flex justify-between py-2">
+                <span className="text-slate-500 dark:text-slate-400">Versión de esquema</span>
+                <strong className="text-slate-900 dark:text-slate-100">v{importPreview.schemaVersion}</strong>
               </div>
               {importPreview.backupDate && (
-                <div className="flex justify-between">
-                  <span className="text-[var(--text-soft)]">Fecha de exportación:</span>
-                  <strong className="text-[var(--text)]">{importPreview.backupDate}</strong>
+                <div className="flex justify-between py-2">
+                  <span className="text-slate-500 dark:text-slate-400">Fecha de exportación</span>
+                  <strong className="text-slate-900 dark:text-slate-100">{importPreview.backupDate}</strong>
                 </div>
               )}
-            </div>
+            </ListDivider>
 
-            <div className="space-y-1.5">
-              <h4 className="text-xs font-bold text-[var(--text)] uppercase tracking-wider">Entidades a importar:</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                <div className="p-2 rounded-lg bg-[var(--surface-muted)] flex justify-between">
-                  <span className="text-[var(--text-soft)]">Tareas:</span>
-                  <strong className="text-[var(--text)]">{importPreview.tasksCount}</strong>
-                </div>
-                <div className="p-2 rounded-lg bg-[var(--surface-muted)] flex justify-between">
-                  <span className="text-[var(--text-soft)]">Transacciones:</span>
-                  <strong className="text-[var(--text)]">{importPreview.transactionsCount}</strong>
-                </div>
-                <div className="p-2 rounded-lg bg-[var(--surface-muted)] flex justify-between">
-                  <span className="text-[var(--text-soft)]">Cuentas:</span>
-                  <strong className="text-[var(--text)]">{importPreview.accountsCount}</strong>
-                </div>
-                <div className="p-2 rounded-lg bg-[var(--surface-muted)] flex justify-between">
-                  <span className="text-[var(--text-soft)]">Sesiones Gym:</span>
-                  <strong className="text-[var(--text)]">{importPreview.gymSessionsCount}</strong>
-                </div>
-                <div className="p-2 rounded-lg bg-[var(--surface-muted)] flex justify-between">
-                  <span className="text-[var(--text-soft)]">Notas:</span>
-                  <strong className="text-[var(--text)]">{importPreview.notesCount}</strong>
-                </div>
+            <div className="space-y-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
+              <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300">Entidades a importar</h4>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-3">
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Tareas:</span><strong className="tabular-nums text-slate-900 dark:text-slate-100">{importPreview.tasksCount}</strong></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Movimientos:</span><strong className="tabular-nums text-slate-900 dark:text-slate-100">{importPreview.transactionsCount}</strong></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Cuentas:</span><strong className="tabular-nums text-slate-900 dark:text-slate-100">{importPreview.accountsCount}</strong></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Sesiones Gym:</span><strong className="tabular-nums text-slate-900 dark:text-slate-100">{importPreview.gymSessionsCount}</strong></div>
+                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Notas:</span><strong className="tabular-nums text-slate-900 dark:text-slate-100">{importPreview.notesCount}</strong></div>
               </div>
             </div>
 
             {importPreview.warnings.length > 0 && (
-              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs space-y-1">
-                <div className="flex items-center gap-1.5 font-bold">
-                  <AppIcon name="shield" className="h-4 w-4" />
+              <div className="border-l-2 border-amber-500 pl-3 py-1 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                <div className="flex items-center gap-1.5 font-semibold">
+                  <Shield size={14} strokeWidth={1.75} aria-hidden="true" />
                   <span>Avisos de compatibilidad</span>
                 </div>
-                <ul className="list-disc list-inside space-y-0.5 text-[11px]">
+                <ul className="list-disc list-inside space-y-0.5">
                   {importPreview.warnings.map((w, idx) => (
                     <li key={idx}>{w}</li>
                   ))}
@@ -1091,188 +1091,163 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               </div>
             )}
 
-            <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-[var(--text-soft)] flex items-start gap-2">
-              <AppIcon name="shield" className="h-4 w-4 text-[var(--blue)] shrink-0 mt-0.5" />
-              <span>
-                Al confirmar, tus datos actuales se guardarán automáticamente en una copia de recuperación de emergencia antes de aplicar el nuevo archivo.
-              </span>
-            </div>
+            <p className="flex items-start gap-2 border-l-2 border-[#4F46E5] pl-3 py-1 text-xs text-slate-600 dark:text-slate-400">
+              <Shield size={14} strokeWidth={1.75} className="mt-0.5 shrink-0 text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
+              <span>Al confirmar, tus datos actuales se guardarán automáticamente en una copia de recuperación de emergencia antes de aplicar el nuevo archivo.</span>
+            </p>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[var(--border)]">
-              <button
-                type="button"
-                onClick={() => setImportPreview(null)}
-                className="px-4 py-2 border border-[var(--border)] text-xs font-semibold rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
-              >
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
+              <button type="button" onClick={() => setImportPreview(null)} className={secondaryBtnClass}>
                 Cancelar
               </button>
-              <button
-                type="button"
-                onClick={handleConfirmImport}
-                className="px-4 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl cursor-pointer shadow-2xs"
-              >
-                Confirmar y Reemplazar Datos
+              <button type="button" onClick={handleConfirmImport} className={primaryBtnClass}>
+                Confirmar y reemplazar datos
               </button>
             </div>
-          </div>
+          </SurfaceCard>
         </div>
       )}
 
       {/* Modal 2: Confirmar Reinicio de Datos */}
       {isResetModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div role="dialog" aria-modal="true" aria-label="Reiniciar datos" className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-red-500/10 text-red-600 dark:text-red-400">
-                <AppIcon name="shield" className="h-6 w-6" />
-              </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Reiniciar datos" className="w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2.5">
+              <Shield size={20} strokeWidth={1.75} className="shrink-0 text-rose-600 dark:text-rose-400" aria-hidden="true" />
               <div>
-                <h3 className="text-base font-bold text-[var(--text)]">Reiniciar datos</h3>
-                <p className="text-xs text-[var(--text-soft)]">Operación destructiva</p>
+                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Reiniciar datos</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Operación destructiva</p>
               </div>
             </div>
 
-            <div className="text-xs text-[var(--text-soft)] space-y-2">
+            <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
               <p>
                 Esta acción reemplazará todas las tareas, finanzas, notas y registros de este dispositivo por el estado inicial en blanco de Celestian LifeOS.
               </p>
-              <ul className="space-y-1 text-[11px] list-disc list-inside">
+              <ul className="list-disc list-inside space-y-1 text-xs">
                 <li>Tu sesión de Google <strong>no</strong> se cerrará.</li>
                 <li>Antes del reinicio se guardará una copia de emergencia en este navegador.</li>
                 <li>Si estás conectado a la nube, los datos limpios se propagarán a tus otros dispositivos.</li>
               </ul>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[var(--border)]">
-              <button
-                type="button"
-                onClick={() => setIsResetModalOpen(false)}
-                className="px-4 py-2 border border-[var(--border)] text-xs font-semibold rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
-              >
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
+              <button type="button" onClick={() => setIsResetModalOpen(false)} className={secondaryBtnClass}>
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleConfirmReset}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl cursor-pointer shadow-2xs"
+                className="inline-flex min-h-10 items-center justify-center rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-700 cursor-pointer"
               >
-                Sí, Reiniciar Todo
+                Sí, reiniciar todo
               </button>
             </div>
-          </div>
+          </SurfaceCard>
         </div>
       )}
 
       {/* Modal 3: Confirmar Restauración de Copia de Recuperación */}
       {isRestoreModalOpen && recoveryInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div role="dialog" aria-modal="true" aria-label="Restaurar copia de emergencia" className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                <AppIcon name="rotateCcw" className="h-6 w-6" />
-              </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Restaurar copia de emergencia" className="w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2.5">
+              <RotateCcw size={18} strokeWidth={1.75} className="shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
               <div>
-                <h3 className="text-base font-bold text-[var(--text)]">Restaurar copia de emergencia</h3>
-                <p className="text-xs text-[var(--text-soft)]">Recuperación de emergencia</p>
+                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Restaurar copia de emergencia</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Recuperación de emergencia</p>
               </div>
             </div>
 
-            <div className="bg-[var(--surface-muted)] rounded-xl p-3 text-xs space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-[var(--text-soft)]">Fecha de captura:</span>
-                <strong className="text-[var(--text)]">
+            <ListDivider className="border-t border-slate-100 text-sm dark:border-white/[0.06]">
+              <div className="flex justify-between gap-2 py-2">
+                <span className="text-slate-500 dark:text-slate-400">Fecha de captura</span>
+                <strong className="text-right text-slate-900 dark:text-slate-100">
                   {recoveryInfo.meta?.savedAt ? new Date(recoveryInfo.meta.savedAt).toLocaleString('es-UY') : 'Desconocida'}
                 </strong>
               </div>
-              <div className="flex justify-between">
-                <span className="text-[var(--text-soft)]">Motivo registrado:</span>
-                <strong className="text-[var(--text)]">
+              <div className="flex justify-between gap-2 py-2">
+                <span className="text-slate-500 dark:text-slate-400">Motivo registrado</span>
+                <strong className="text-right text-slate-900 dark:text-slate-100">
                   {recoveryInfo.meta?.description || recoveryInfo.meta?.action || 'Manual'}
                 </strong>
               </div>
-              <div className="flex justify-between">
-                <span className="text-[var(--text-soft)]">Versión de esquema:</span>
-                <strong className="text-[var(--text)]">v{recoveryInfo.meta?.schemaVersion || CURRENT_SCHEMA_VERSION}</strong>
+              <div className="flex justify-between gap-2 py-2">
+                <span className="text-slate-500 dark:text-slate-400">Versión de esquema</span>
+                <strong className="text-slate-900 dark:text-slate-100">v{recoveryInfo.meta?.schemaVersion || CURRENT_SCHEMA_VERSION}</strong>
               </div>
-            </div>
+            </ListDivider>
 
-            <p className="text-xs text-[var(--text-soft)]">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               Esta copia reemplazará tus datos actuales. Antes se guardará una copia de emergencia para poder volver atrás.
             </p>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[var(--border)]">
-              <button
-                type="button"
-                onClick={() => setIsRestoreModalOpen(false)}
-                className="px-4 py-2 border border-[var(--border)] text-xs font-semibold rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
-              >
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
+              <button type="button" onClick={() => setIsRestoreModalOpen(false)} className={secondaryBtnClass}>
                 Cancelar
               </button>
-              <button
-                type="button"
-                onClick={handleConfirmRestoreRecovery}
-                className="px-4 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl cursor-pointer shadow-2xs"
-              >
-                Restaurar Copia
+              <button type="button" onClick={handleConfirmRestoreRecovery} className={primaryBtnClass}>
+                Restaurar copia
               </button>
             </div>
-          </div>
+          </SurfaceCard>
         </div>
       )}
 
       {/* Modal 4: Reparación de Saldos */}
       {isRepairModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div role="dialog" aria-modal="true" aria-label="Auditoría y Reparación de Saldos" className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Auditoría y Reparación de Saldos" className="w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <AppIcon name="wallet" className="h-5 w-5 text-amber-500" />
-                  <h3 className="text-base font-bold text-[var(--text)]">Auditoría y Reparación de Saldos</h3>
+                  <Wallet size={18} strokeWidth={1.75} className="text-amber-600 dark:text-amber-400" aria-hidden="true" />
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Auditoría y Reparación de Saldos</h3>
                 </div>
-                <p className="text-xs text-[var(--text-soft)]">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Se detectaron discrepancias entre el saldo de las cuentas y el libro contable cerrado.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setIsRepairModalOpen(false)}
-                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg"
+                aria-label="Cerrar"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
               >
-                ✕
+                <X size={16} strokeWidth={1.75} aria-hidden="true" />
               </button>
             </div>
 
-            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+            <ListDivider className="max-h-60 overflow-y-auto border-t border-slate-100 pr-1 dark:border-white/[0.06]">
               {accountDiffs.map((diff) => {
                 const diffAmount = diff.difference ?? (diff.computedBalance !== null ? Math.round((diff.computedBalance - diff.currentBalance) * 100) / 100 : null);
                 const curPrefix = diff.currency === 'USD' ? 'US$ ' : '$U ';
                 return (
-                  <div key={diff.id} className="p-3 rounded-xl bg-[var(--surface-muted)] text-xs space-y-1.5">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-[var(--text)]">{diff.name}</span>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text-soft)]">
+                  <div key={diff.id} className="py-3 text-sm space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-slate-900 dark:text-slate-100">{diff.name}</span>
+                      <span className="rounded-md border border-slate-200/80 px-1.5 py-0.5 text-xs font-semibold text-slate-500 dark:border-white/[0.08] dark:text-slate-400">
                         {diff.currency}
                       </span>
                     </div>
 
                     {diff.repairable && diff.computedBalance !== null ? (
-                      <div className="grid grid-cols-3 gap-2 text-[11px]">
-                        <div>
-                          <span className="text-[var(--text-faint)] block">Saldo actual:</span>
-                          <strong className="text-[var(--text)]">
+                      <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+                        <div className="flex justify-between sm:block">
+                          <span className="text-slate-500 dark:text-slate-400">Saldo actual:</span>
+                          <strong className="block tabular-nums text-slate-900 dark:text-slate-100">
                             <PrivacyAmount>{curPrefix}{diff.currentBalance.toLocaleString('es-UY', { minimumFractionDigits: 2 })}</PrivacyAmount>
                           </strong>
                         </div>
-                        <div>
-                          <span className="text-[var(--text-faint)] block">Libro contable:</span>
-                          <strong className="text-emerald-600 dark:text-emerald-400">
+                        <div className="flex justify-between sm:block">
+                          <span className="text-slate-500 dark:text-slate-400">Libro contable:</span>
+                          <strong className="block tabular-nums text-emerald-700 dark:text-emerald-400">
                             <PrivacyAmount>{curPrefix}{diff.computedBalance.toLocaleString('es-UY', { minimumFractionDigits: 2 })}</PrivacyAmount>
                           </strong>
                         </div>
-                        <div>
-                          <span className="text-[var(--text-faint)] block">Ajuste:</span>
-                          <strong className={diffAmount && diffAmount >= 0 ? 'text-emerald-500' : 'text-rose-500'}>
+                        <div className="flex justify-between sm:block">
+                          <span className="text-slate-500 dark:text-slate-400">Ajuste:</span>
+                          <strong className={`block tabular-nums ${diffAmount && diffAmount >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                             <PrivacyAmount>
                               {diffAmount && diffAmount >= 0 ? '+' : ''}
                               {curPrefix}
@@ -1282,51 +1257,45 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                         </div>
                       </div>
                     ) : (
-                      <div className="text-[11px] text-amber-600 dark:text-amber-400 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                        ⚠️ <strong>Protegida:</strong> {diff.unrepairableReason || 'No se puede reparar automáticamente para evitar pérdida de datos.'}
+                      <div className="border-l-2 border-amber-500 pl-2.5 text-xs text-amber-800 dark:text-amber-300">
+                        <strong>Protegida:</strong> {diff.unrepairableReason || 'No se puede reparar automáticamente para evitar pérdida de datos.'}
                       </div>
                     )}
                   </div>
                 );
               })}
-            </div>
+            </ListDivider>
 
-            <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-[var(--text-soft)] flex items-start gap-2">
-              <AppIcon name="shield" className="h-4 w-4 text-[var(--blue)] shrink-0 mt-0.5" />
-              <span>
-                Antes de aplicar la corrección de saldos, Celestian guardará automáticamente una copia en recuperación.
-              </span>
-            </div>
+            <p className="flex items-start gap-2 border-l-2 border-[#4F46E5] pl-3 py-1 text-xs text-slate-600 dark:text-slate-400">
+              <Shield size={14} strokeWidth={1.75} className="mt-0.5 shrink-0 text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
+              <span>Antes de aplicar la corrección de saldos, Celestian guardará automáticamente una copia en recuperación.</span>
+            </p>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[var(--border)]">
-              <button
-                type="button"
-                onClick={() => setIsRepairModalOpen(false)}
-                className="px-4 py-2 border border-[var(--border)] text-xs font-semibold rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
-              >
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
+              <button type="button" onClick={() => setIsRepairModalOpen(false)} className={secondaryBtnClass}>
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={handleConfirmRepairBalances}
                 disabled={accountDiffs.every((d) => !d.repairable)}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-bold text-xs rounded-xl cursor-pointer shadow-2xs"
+                className="inline-flex min-h-10 items-center justify-center rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                Aplicar Reparación de Saldos
+                Aplicar reparación de saldos
               </button>
             </div>
-          </div>
+          </SurfaceCard>
         </div>
       )}
 
       {/* Modal 5: Privacidad y términos */}
       {isAboutModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div role="dialog" aria-modal="true" aria-label="Privacidad y términos" className="bg-[var(--bg-elevated)] border border-[var(--border)] rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Privacidad y términos" className="w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
-                <h3 className="text-base font-bold text-[var(--text)]">Privacidad, términos y créditos</h3>
-                <p className="text-xs text-[var(--text-soft)]">
+                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Privacidad, términos y créditos</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Organización personal con almacenamiento local y sincronización opcional con Google.
                 </p>
               </div>
@@ -1334,49 +1303,45 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 type="button"
                 onClick={() => setIsAboutModalOpen(false)}
                 aria-label="Cerrar"
-                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg cursor-pointer"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
               >
-                <AppIcon name="x" className="h-4 w-4" />
+                <X size={16} strokeWidth={1.75} aria-hidden="true" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs text-[var(--text-soft)] leading-relaxed max-h-[60vh] overflow-y-auto pr-1">
-              <div className="border-t border-[var(--border)] pt-3 space-y-1.5">
-                <h4 className="font-bold text-[var(--text)]">Privacidad, seguridad y tratamiento de datos</h4>
+            <div className="max-h-[60dvh] overflow-y-auto space-y-3 pr-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+              <div className="border-t border-slate-100 pt-3 space-y-1.5 dark:border-white/[0.06]">
+                <h4 className="font-semibold text-slate-900 dark:text-slate-100">Privacidad, seguridad y tratamiento de datos</h4>
                 <p>La base de datos local se guarda de forma autónoma en el almacenamiento del navegador. El cifrado de sincronización E2EE protege tus módulos antes de subirlos a Firebase, pero no altera los backups JSON descargados. Recordá guardar periódicamente un respaldo fuera de este dispositivo.</p>
                 <p>Al conectar tu cuenta de Google, la sincronización se realiza mediante Firebase. Si activás la protección de extremo a extremo, la clave de recuperación nunca sale de tu navegador.</p>
                 <p>El clima consulta Open-Meteo según la ubicación seleccionada. Las funciones de asistencia no envían datos sin tu consentimiento.</p>
               </div>
 
-              <div className="border-t border-[var(--border)] pt-3 space-y-1.5">
-                <h4 className="font-bold text-[var(--text)]">Política de privacidad y términos y condiciones</h4>
+              <div className="border-t border-slate-100 pt-3 space-y-1.5 dark:border-white/[0.06]">
+                <h4 className="font-semibold text-slate-900 dark:text-slate-100">Política de privacidad y términos y condiciones</h4>
                 <p>Esta descripción refleja el funcionamiento técnico actual de la aplicación. Celestian es una herramienta de productividad personal diseñada con principios de soberanía de datos del usuario.</p>
                 <p>Qué datos se guardan, cómo se sincronizan con Firebase y cómo eliminarlos:</p>
-                <a href="/privacidad.html" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-8 items-center text-xs font-semibold text-[var(--blue)] underline underline-offset-2 hover:text-[var(--blue-hover)]">
+                <a href="/privacidad.html" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center text-xs font-semibold text-[#4F46E5] underline underline-offset-2 hover:text-[#4338CA] dark:text-indigo-400">
                   Ver política de privacidad completa (nueva pestaña)
                 </a>
               </div>
 
-              <div className="border-t border-[var(--border)] pt-3 space-y-1">
-                <h4 className="font-bold text-[var(--text)]">Créditos y licencias</h4>
-                <p>Iconos por <a href="https://icons8.com" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-[var(--blue)]">Icons8</a>.</p>
+              <div className="border-t border-slate-100 pt-3 space-y-1 dark:border-white/[0.06]">
+                <h4 className="font-semibold text-slate-900 dark:text-slate-100">Créditos y licencias</h4>
+                <p>Iconos por <a href="https://icons8.com" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-[#4F46E5]">Icons8</a>.</p>
                 <p>Fotografía panorámica del Hero adaptada de una obra de Andrew Bossi.</p>
-                <a href="/creditos.html" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-8 items-center text-xs font-semibold text-[var(--blue)] underline underline-offset-2 hover:text-[var(--blue-hover)]">
+                <a href="/creditos.html" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center text-xs font-semibold text-[#4F46E5] underline underline-offset-2 hover:text-[#4338CA] dark:text-indigo-400">
                   Ver atribución, modificaciones y licencia (nueva pestaña)
                 </a>
               </div>
             </div>
 
-            <div className="flex justify-end pt-2 border-t border-[var(--border)]">
-              <button
-                type="button"
-                onClick={() => setIsAboutModalOpen(false)}
-                className="px-4 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl cursor-pointer shadow-2xs"
-              >
+            <div className="flex justify-end border-t border-slate-100 pt-3 dark:border-white/[0.06]">
+              <button type="button" onClick={() => setIsAboutModalOpen(false)} className={primaryBtnClass}>
                 Cerrar
               </button>
             </div>
-          </div>
+          </SurfaceCard>
         </div>
       )}
 

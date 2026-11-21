@@ -1,7 +1,23 @@
 import React, { useState } from 'react';
-import { ArrowUpRight } from 'lucide-react';
+import {
+  ArrowUpRight,
+  Calendar,
+  Check,
+  Clock,
+  FolderKanban,
+  Link2,
+  Lock,
+  MessageSquare,
+  Pencil,
+  Plus,
+  Target,
+  Trash2,
+  Unlock,
+  X,
+  Zap,
+} from 'lucide-react';
 import type { LifeOSState, Project, ProjectStatus, ProjectTask } from '../types';
-import { AppIcon } from './AppIcon';
+import { SurfaceCard, SectionHeader, ListDivider } from './ui/SurfacePrimitives';
 import { daysBetween, fmtDate, todayISO, uid } from '../lib/storage';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
@@ -306,192 +322,203 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
     showToast('Bloqueo marcado como resuelto.');
   };
 
+  const fieldClass =
+    'w-full min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       {/* Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[var(--card)] p-4 sm:p-5 rounded-2xl border border-[var(--border)] shadow-xs">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600">
-              <AppIcon name="target" className="h-4 w-4" />
-            </span>
-            <h2 className="text-base font-black text-[var(--text)]">Proyectos</h2>
-          </div>
-          <p className="text-xs text-[var(--text-soft)] mt-0.5">
-            Tareas, próximo paso y bloqueos de cada proyecto.
-          </p>
+      <SurfaceCard className="p-4 sm:p-5 space-y-3">
+        <SectionHeader
+          icon={<Target size={16} strokeWidth={1.75} />}
+          title="Proyectos"
+          count={projects.length > 0 ? projects.length : null}
+          action={
+            <button
+              type="button"
+              onClick={() => {
+                if (showCreateForm) resetForm();
+                else setShowCreateForm(true);
+              }}
+              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer"
+            >
+              {showCreateForm ? <X size={15} strokeWidth={1.75} aria-hidden="true" /> : <Plus size={15} strokeWidth={1.75} aria-hidden="true" />}
+              <span>{showCreateForm ? 'Cerrar' : 'Nuevo proyecto'}</span>
+            </button>
+          }
+        />
+        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+          Tareas, próximo paso y bloqueos de cada proyecto.
+        </p>
+
+        {/* Filter Tabs (scrollable on 389px without horizontal page overflow) */}
+        <div className="flex w-full items-center gap-1 overflow-x-auto rounded-xl border border-slate-200/80 bg-slate-50/80 p-1 dark:border-white/[0.08] dark:bg-white/[0.03] sm:w-fit">
+          {(['activos', 'pausados', 'completados', 'todos'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setFilter(tab)}
+              className={`min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                filter === tab
+                  ? 'bg-white text-[#4F46E5] dark:bg-[#0D111A] dark:text-indigo-300'
+                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+              }`}
+            >
+              {tab === 'activos'
+                ? `Activos (${projects.filter((p) => p.status === 'activo').length})`
+                : tab === 'pausados'
+                ? `En pausa (${projects.filter((p) => p.status === 'en_pausa').length})`
+                : tab === 'completados'
+                ? `Completados (${projects.filter((p) => p.status === 'completado').length})`
+                : `Todos (${projects.length})`}
+            </button>
+          ))}
         </div>
+      </SurfaceCard>
 
-        <button
-          type="button"
-          onClick={() => {
-            if (showCreateForm) resetForm();
-            else setShowCreateForm(true);
-          }}
-          className="px-3.5 py-2 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5 shrink-0"
-        >
-          <AppIcon name={showCreateForm ? 'x' : 'plus'} className="h-3.5 w-3.5" />
-          <span>{showCreateForm ? 'Cerrar formulario' : 'Nuevo proyecto'}</span>
-        </button>
-      </div>
-
-      {/* Create / Edit Form Modal / Card */}
+      {/* Create / Edit Form */}
       {showCreateForm && (
-        <form onSubmit={handleSaveProject} className="bg-[var(--card)] border-2 border-blue-500/30 rounded-2xl p-4 sm:p-5 shadow-lg space-y-4 animate-in fade-in">
-          <div className="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
-            <h3 className="text-sm font-extrabold text-[var(--text)]">
-              {editingProjectId ? 'Editar proyecto' : 'Nuevo proyecto'}
-            </h3>
-            <button
-              type="button"
-              onClick={resetForm}
-              className="text-xs font-bold text-[var(--text-soft)] hover:text-rose-500 cursor-pointer"
-            >
-              Cancelar ✕
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                Nombre del Proyecto *
-              </label>
-              <input
-                type="text"
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ej: Lanzamiento de producto, Mudanza, Certificación AWS"
-                className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] outline-hidden font-bold text-[var(--text)]"
-              />
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                Fecha de revisión
-              </label>
-              <input
-                type="date"
-                value={reviewDate}
-                onChange={(e) => setReviewDate(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-              Resultado esperado
-            </label>
-            <input
-              type="text"
-              value={objective}
-              onChange={(e) => setObjective(e.target.value)}
-              placeholder="Ej: Conseguir los primeros 10 clientes de pago antes de fin de mes."
-              className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
+        <SurfaceCard as="div" className="p-4 sm:p-5">
+          <form onSubmit={handleSaveProject} className="space-y-4">
+            <SectionHeader
+              title={editingProjectId ? 'Editar proyecto' : 'Nuevo proyecto'}
+              action={
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="inline-flex min-h-10 items-center gap-1 rounded-lg px-2.5 text-xs font-medium text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 cursor-pointer"
+                >
+                  <X size={14} strokeWidth={1.75} aria-hidden="true" />
+                  <span>Cancelar</span>
+                </button>
+              }
             />
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                Próximo paso
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 border-t border-slate-100 pt-3.5 dark:border-white/[0.06]">
+              <div className="min-w-0">
+                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Nombre del proyecto *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ej: Lanzamiento de producto, Mudanza"
+                  className={`${fieldClass} font-semibold`}
+                />
+              </div>
+
+              <div className="min-w-0">
+                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Fecha de revisión
+                </label>
+                <input
+                  type="date"
+                  value={reviewDate}
+                  onChange={(e) => setReviewDate(e.target.value)}
+                  className={fieldClass}
+                />
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                Resultado esperado
               </label>
               <input
                 type="text"
-                value={nextStep}
-                onChange={(e) => setNextStep(e.target.value)}
-                placeholder="Ej: Redactar email para agendar reunión con 3 contactos clave."
-                className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
+                value={objective}
+                onChange={(e) => setObjective(e.target.value)}
+                placeholder="Ej: Conseguir los primeros 10 clientes antes de fin de mes."
+                className={fieldClass}
               />
             </div>
 
-            <div>
-              <label className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 block mb-1">
-                Bloqueos (opcional)
+            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+              <div className="min-w-0">
+                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Próximo paso
+                </label>
+                <input
+                  type="text"
+                  value={nextStep}
+                  onChange={(e) => setNextStep(e.target.value)}
+                  placeholder="Ej: Redactar email para agendar reunión."
+                  className={fieldClass}
+                />
+              </div>
+
+              <div className="min-w-0">
+                <label className="mb-1 block text-xs font-medium text-amber-700 dark:text-amber-400">
+                  Bloqueos (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={blockers}
+                  onChange={(e) => setBlockers(e.target.value)}
+                  placeholder="Ej: Esperando respuesta o aprobación."
+                  className="w-full min-h-10 rounded-xl border border-amber-500/30 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:bg-white/[0.03] dark:text-slate-100"
+                />
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                Notas y contexto adicional
               </label>
-              <input
-                type="text"
-                value={blockers}
-                onChange={(e) => setBlockers(e.target.value)}
-                placeholder="Ej: Esperando respuesta legal o aprobación de presupuesto."
-                className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-amber-500/30 text-[var(--text)]"
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Detalles, enlaces, consideraciones técnicas..."
+                rows={2}
+                className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 resize-y"
               />
             </div>
-          </div>
 
-          <div>
-            <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-              Notas y Contexto Adicional
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Detalles, enlaces, consideraciones técnicas..."
-              rows={2}
-              className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] resize-y"
-            />
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-1 border-t border-[var(--border)]">
-            <button
-              type="button"
-              onClick={resetForm}
-              className="px-4 py-2 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)]"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs cursor-pointer transition-all"
-            >
-              {editingProjectId ? 'Guardar Cambios' : '＋ Crear Proyecto'}
-            </button>
-          </div>
-        </form>
+            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200/80 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:bg-white/[0.04] cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer"
+              >
+                <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
+                <span>{editingProjectId ? 'Guardar cambios' : 'Crear proyecto'}</span>
+              </button>
+            </div>
+          </form>
+        </SurfaceCard>
       )}
 
-      {/* Filter Tabs */}
-      <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)] w-fit text-xs font-bold">
-        {(['activos', 'pausados', 'completados', 'todos'] as const).map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setFilter(tab)}
-            className={`px-3 py-1.5 rounded-lg transition-all capitalize cursor-pointer ${
-              filter === tab
-                ? 'bg-[var(--card)] text-[var(--blue)] shadow-2xs'
-                : 'text-[var(--text-soft)] hover:text-[var(--text)]'
-            }`}
-          >
-            {tab === 'activos'
-              ? `Activos (${projects.filter((p) => p.status === 'activo').length})`
-              : tab === 'pausados'
-              ? `En Pausa (${projects.filter((p) => p.status === 'en_pausa').length})`
-              : tab === 'completados'
-              ? `Completados (${projects.filter((p) => p.status === 'completado').length})`
-              : `Todos (${projects.length})`}
-          </button>
-        ))}
-      </div>
-
-      {/* Projects Grid */}
+      {/* Projects List */}
       {filteredProjects.length === 0 ? (
-        <div className="py-12 text-center bg-[var(--card)] border border-[var(--border)] rounded-2xl space-y-2">
-          <span className="text-3xl block">🚀</span>
-          <p className="text-xs text-[var(--text-soft)] font-medium">
-            {filter === 'activos'
-              ? 'No tenés proyectos activos en este momento.'
-              : 'No hay proyectos en esta categoría.'}
-          </p>
+        <SurfaceCard className="flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">
+          <FolderKanban size={24} strokeWidth={1.75} className="text-slate-400 dark:text-slate-500" aria-hidden="true" />
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              {filter === 'activos'
+                ? 'No tenés proyectos activos en este momento.'
+                : 'No hay proyectos en esta categoría.'}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Definí un resultado esperado y el próximo paso concreto para avanzar sin fricción.
+            </p>
+          </div>
           <button
             type="button"
             onClick={() => setShowCreateForm(true)}
-            className="text-xs text-[var(--blue)] font-bold hover:underline cursor-pointer"
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer"
           >
-            ＋ Crear tu primer proyecto
+            <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
+            <span>Crear tu primer proyecto</span>
           </button>
-        </div>
+        </SurfaceCard>
       ) : (
         <div className="space-y-4">
           {filteredProjects.map((project) => {
@@ -500,27 +527,27 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
             const daysToReview = project.reviewDate ? daysBetween(today, project.reviewDate) : null;
 
             return (
-              <div
+              <SurfaceCard
                 key={project.id}
                 id={`project-${project.id}`}
-                className="bg-[var(--card)] border border-[var(--border)] hover:border-[var(--border-hover)] rounded-2xl p-4 sm:p-5 shadow-xs space-y-4 transition-all"
+                className="p-4 sm:p-5 space-y-4"
               >
                 {/* Project Top Bar */}
-                <div className="flex flex-wrap items-start justify-between gap-2 border-b border-[var(--border)] pb-3">
-                  <div className="space-y-1 min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-base font-black text-[var(--text)] tracking-tight">
+                <div className="flex flex-wrap items-start justify-between gap-2.5 border-b border-slate-100 pb-3 dark:border-white/[0.06]">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-[15px] font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100">
                         {project.name}
                       </h3>
                       <span
-                        className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                        className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold capitalize ${
                           project.status === 'activo'
-                            ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                            ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
                             : project.status === 'en_pausa'
-                            ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
+                            ? 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-400'
                             : project.status === 'completado'
-                            ? 'bg-blue-500/10 text-blue-600 border-blue-500/20'
-                            : 'bg-slate-500/10 text-slate-500 border-slate-500/20'
+                            ? 'border-[#4F46E5]/20 bg-[#4F46E5]/10 text-[#4F46E5] dark:text-indigo-300'
+                            : 'border-slate-200 bg-slate-100 text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400'
                         }`}
                       >
                         {project.status.replace('_', ' ')}
@@ -528,21 +555,22 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                     </div>
 
                     {project.objective && (
-                      <p className="text-xs text-[var(--text-soft)] font-medium">
-                        🎯 <strong>Objetivo:</strong> {project.objective}
+                      <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                        <strong className="font-semibold text-slate-700 dark:text-slate-300">Objetivo:</strong> {project.objective}
                       </p>
                     )}
                   </div>
 
                   {/* Actions & Status Switcher */}
-                  <div className="flex items-center gap-1.5 flex-wrap">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <select
+                      aria-label={`Estado de ${project.name}`}
                       value={project.status}
                       onChange={(e) => handleUpdateStatus(project.id, e.target.value as ProjectStatus)}
-                      className="px-2 py-1 text-xs font-semibold rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
+                      className="min-h-10 rounded-xl border border-slate-200/80 bg-white px-2.5 text-xs font-medium text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200 cursor-pointer"
                     >
                       <option value="activo">Activo</option>
-                      <option value="en_pausa">En Pausa</option>
+                      <option value="en_pausa">En pausa</option>
                       <option value="completado">Completado</option>
                       <option value="cancelado">Cancelado</option>
                     </select>
@@ -550,31 +578,31 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                     <button
                       type="button"
                       onClick={() => handleStartEdit(project)}
-                      className="p-1.5 text-xs text-[var(--text-soft)] hover:text-[var(--blue)] cursor-pointer rounded-lg hover:bg-[var(--surface-muted)] transition-colors"
+                      className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-[#4F46E5] dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-indigo-300 cursor-pointer"
                       title="Editar proyecto"
                       aria-label="Editar proyecto"
                     >
-                      <AppIcon name="edit" className="h-3.5 w-3.5" />
+                      <Pencil size={15} strokeWidth={1.75} aria-hidden="true" />
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDeleteProject(project.id)}
-                      className="p-1.5 text-xs text-[var(--text-soft)] hover:text-rose-500 cursor-pointer rounded-lg hover:bg-[var(--surface-muted)] transition-colors"
+                      className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-rose-500/10 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 cursor-pointer"
                       title="Eliminar proyecto"
                       aria-label="Eliminar proyecto"
                     >
-                      <AppIcon name="trash" className="h-3.5 w-3.5" />
+                      <Trash2 size={15} strokeWidth={1.75} aria-hidden="true" />
                     </button>
                   </div>
                 </div>
 
-                {/* Próximo Paso Highlight (El corazón de GTD / Proyectos) */}
-                <div className="p-3 bg-[var(--surface-muted)] rounded-xl border border-[var(--border)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                {/* Próximo Paso (flat section, depth = 1) */}
+                <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 flex-1">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--blue)] block mb-0.5">
+                    <span className="block text-xs font-semibold text-[#4F46E5] dark:text-indigo-400">
                       Próximo paso
                     </span>
-                    <p className="text-xs font-bold text-[var(--text)] truncate">
+                    <p className="mt-0.5 text-sm font-medium text-slate-900 dark:text-slate-100 break-words">
                       {project.nextStep || 'Sin próximo paso definido.'}
                     </p>
                   </div>
@@ -583,46 +611,49 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                     <button
                       type="button"
                       onClick={() => handleSendNextStepToToday(project)}
-                      className="px-3 py-1.5 bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-[var(--blue)] text-xs font-bold rounded-xl transition cursor-pointer shrink-0 flex items-center gap-1.5 active:scale-95"
+                      className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-indigo-50 px-3.5 py-2 text-xs font-semibold text-[#4F46E5] transition-colors hover:bg-[#4F46E5] hover:text-white dark:bg-indigo-500/15 dark:text-indigo-300 dark:hover:bg-[#4F46E5] dark:hover:text-white cursor-pointer"
                       title="Insertar en las tareas de Hoy"
                     >
-                      <AppIcon name="plus" className="h-3.5 w-3.5" />
+                      <ArrowUpRight size={14} strokeWidth={1.75} aria-hidden="true" />
                       <span>Enviar a Hoy</span>
                     </button>
                   )}
                 </div>
 
-                {/* Blockers Alert Banner */}
+                {/* Blockers inline bar (flat left accent, no nested box) */}
                 {project.blockers && (
-                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between gap-2 text-xs text-amber-900 dark:text-amber-200">
-                    <div className="flex items-center gap-2">
-                      <AppIcon name="zap" className="h-4 w-4 text-amber-600 shrink-0" />
-                      <span><strong>Bloqueo identificado:</strong> {project.blockers}</span>
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-l-2 border-amber-500 pl-3 py-1 text-xs text-amber-800 dark:text-amber-300">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Zap size={15} strokeWidth={1.75} className="shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+                      <span className="break-words"><strong>Bloqueo:</strong> {project.blockers}</span>
                     </div>
                     <button
                       type="button"
                       onClick={() => handleResolveBlocker(project.id)}
-                      className="text-[11px] font-bold text-amber-700 dark:text-amber-300 hover:underline cursor-pointer shrink-0"
+                      className="inline-flex min-h-10 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-amber-700 hover:underline dark:text-amber-300 cursor-pointer shrink-0"
                     >
-                      Resolver ✓
+                      <Check size={14} strokeWidth={1.75} aria-hidden="true" />
+                      <span>Resolver</span>
                     </button>
                   </div>
                 )}
 
                 {/* Review Date Indicator */}
                 {project.reviewDate && (
-                  <div className="flex items-center gap-2 text-xs text-[var(--text-soft)]">
-                    <AppIcon name="calendar" className="h-3.5 w-3.5" />
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-400">
+                    <Calendar size={14} strokeWidth={1.75} className="shrink-0 text-slate-400 dark:text-slate-500" aria-hidden="true" />
                     <span>
-                      Fecha de revisión: <strong>{fmtDate(project.reviewDate)}</strong>
+                      Revisión: <strong className="text-slate-800 dark:text-slate-200">{fmtDate(project.reviewDate)}</strong>
                       {daysToReview !== null && (
-                        <span className={`ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                          daysToReview < 0
-                            ? 'bg-rose-500/15 text-rose-600'
-                            : daysToReview === 0
-                            ? 'bg-amber-500/15 text-amber-600'
-                            : 'bg-blue-500/10 text-blue-600'
-                        }`}>
+                        <span
+                          className={`ml-2 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${
+                            daysToReview < 0
+                              ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
+                              : daysToReview === 0
+                              ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                              : 'bg-indigo-500/10 text-[#4F46E5] dark:text-indigo-300'
+                          }`}
+                        >
                           {daysToReview < 0
                             ? `Vencida hace ${Math.abs(daysToReview)} días`
                             : daysToReview === 0
@@ -635,155 +666,152 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                 )}
 
                 {/* Subtasks Checklist */}
-                <div className="space-y-2 pt-2 border-t border-[var(--border)]">
+                <div className="space-y-2.5 border-t border-slate-100 pt-3.5 dark:border-white/[0.06]">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-[var(--text)]">
-                      Tareas del Proyecto ({completedTasks}/{totalTasks})
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">
+                      Tareas del proyecto ({completedTasks}/{totalTasks})
                     </span>
                     {totalTasks > 0 && (
-                      <span className="text-[11px] tabular-nums text-[var(--text-faint)]">
+                      <span className="tabular-nums text-slate-500 dark:text-slate-400">
                         {Math.round((completedTasks / totalTasks) * 100)}% completado
                       </span>
                     )}
                   </div>
 
                   {/* Task List */}
-                  <div className="divide-y divide-[var(--border)]">
+                  <ListDivider>
                     {(project.tasks || []).map((t) => {
                       const isBlocked = isTaskBlocked(t.id, state);
                       const taskMap = getUnifiedTaskMap(state);
-                      const blockers = getBlockingTasks(t.id, taskMap);
+                      const blockersList = getBlockingTasks(t.id, taskMap);
                       const unblocks = getUnblockedCountIfCompleted(t.id, taskMap);
                       const isEditingDeps = editingDepTaskId === t.id;
                       const isEditingDueDate = editingDueDateTaskId === t.id;
                       const otherTasksInProject = (project.tasks || []).filter((other) => other.id !== t.id);
 
                       return (
-                        <div key={t.id} id={`project-task-${t.id}`} className="py-2 border-b border-[var(--border)] last:border-b-0 rounded-xl px-1.5 transition-all">
-                          <div className="flex items-center justify-between gap-2 group">
-                            <label className="flex items-center gap-2 cursor-pointer min-w-0 flex-1 flex-wrap">
+                        <div key={t.id} id={`project-task-${t.id}`} className="py-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <label className="flex min-h-10 min-w-0 flex-1 flex-wrap items-center gap-2 cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={t.done}
                                 onChange={() => handleToggleTask(project.id, t.id)}
-                                className="rounded text-blue-600 cursor-pointer shrink-0"
+                                className="h-4 w-4 rounded accent-[#4F46E5] cursor-pointer shrink-0"
                               />
                               <span
-                                className={`text-xs ${
-                                  t.done ? 'line-through text-[var(--text-faint)]' : 'text-[var(--text)] font-medium'
+                                className={`text-sm break-words ${
+                                  t.done ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'
                                 }`}
                               >
                                 {t.text}
                               </span>
 
-                              {/* Blocked indicator */}
                               {!t.done && isBlocked && (
                                 <span
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 shrink-0"
-                                  title={`Bloqueada por:\n${blockers.map((b) => `• ${b.text}`).join('\n')}`}
+                                  className="inline-flex items-center gap-1 rounded-md border border-rose-500/20 bg-rose-500/10 px-1.5 py-0.5 text-[11px] font-semibold text-rose-600 dark:text-rose-400 shrink-0"
+                                  title={`Bloqueada por:\n${blockersList.map((b) => `• ${b.text}`).join('\n')}`}
                                 >
-                                  <AppIcon name="lock" className="h-2.5 w-2.5" />
+                                  <Lock size={11} strokeWidth={1.75} aria-hidden="true" />
                                   <span>Bloqueada</span>
                                 </span>
                               )}
 
-                              {/* Unblocks indicator */}
                               {!t.done && unblocks > 0 && (
                                 <span
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 shrink-0"
+                                  className="inline-flex items-center gap-1 rounded-md border border-[#4F46E5]/20 bg-[#4F46E5]/10 px-1.5 py-0.5 text-[11px] font-semibold text-[#4F46E5] dark:text-indigo-300 shrink-0"
                                   title={`Completar esta tarea desbloqueará ${unblocks} tarea(s)`}
                                 >
-                                  <AppIcon name="unlock" className="h-2.5 w-2.5" />
+                                  <Unlock size={11} strokeWidth={1.75} aria-hidden="true" />
                                   <span>Desbloquea {unblocks}</span>
                                 </span>
                               )}
 
-                              {/* Due Date pill */}
                               {t.dueDate && (
                                 <span
-                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold border shrink-0 ${
+                                  className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-semibold shrink-0 ${
                                     t.dueDate < today
-                                      ? 'bg-rose-500/15 text-rose-600 border-rose-500/30'
+                                      ? 'border-rose-500/30 bg-rose-500/15 text-rose-600 dark:text-rose-400'
                                       : t.dueDate === today
-                                      ? 'bg-amber-500/15 text-amber-600 border-amber-500/30'
-                                      : 'bg-blue-500/10 text-blue-600 border-blue-500/20'
+                                      ? 'border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                                      : 'border-[#4F46E5]/20 bg-[#4F46E5]/10 text-[#4F46E5] dark:text-indigo-300'
                                   }`}
                                   title={`Fecha límite: ${fmtDate(t.dueDate)}`}
                                 >
-                                  <AppIcon name="clock" className="h-2.5 w-2.5" />
+                                  <Clock size={11} strokeWidth={1.75} aria-hidden="true" />
                                   <span>{t.dueDate === today ? 'Hoy' : fmtDate(t.dueDate)}</span>
                                 </span>
                               )}
                             </label>
 
-                            <div className="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
-                              {/* Send incomplete task to Hoy */}
+                            <div className="flex items-center gap-0.5 shrink-0">
                               {!t.done && (
                                 <button
                                   type="button"
                                   onClick={() => handleSendTaskToToday(project, t)}
-                                  className="inline-flex items-center gap-0.5 rounded-lg px-1.5 py-1 text-[11px] font-medium text-slate-500 transition hover:bg-indigo-500/10 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 cursor-pointer"
+                                  className="inline-flex min-h-10 min-w-10 items-center justify-center gap-1 rounded-lg px-2 text-xs font-medium text-slate-500 transition-colors hover:bg-indigo-500/10 hover:text-[#4F46E5] dark:text-slate-400 dark:hover:text-indigo-300 cursor-pointer"
                                   title="Enviar esta tarea a Hoy"
                                   aria-label={`Enviar ${t.text} a Hoy`}
                                 >
-                                  <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
+                                  <ArrowUpRight size={15} strokeWidth={1.75} aria-hidden="true" />
                                   <span className="hidden sm:inline">Hoy</span>
                                 </button>
                               )}
 
-                              {/* Toggle dependency edit */}
                               {otherTasksInProject.length > 0 && (
                                 <button
                                   type="button"
                                   onClick={() => setEditingDepTaskId(isEditingDeps ? null : t.id)}
-                                  className={`p-1 rounded-lg text-xs cursor-pointer transition ${
+                                  className={`inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg transition-colors cursor-pointer ${
                                     isEditingDeps || (t.dependsOn && t.dependsOn.length > 0)
-                                      ? 'bg-blue-500/15 text-[var(--blue)] font-bold'
-                                      : 'text-[var(--text-faint)] hover:text-[var(--text)]'
+                                      ? 'bg-indigo-500/15 text-[#4F46E5] dark:text-indigo-300'
+                                      : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/[0.06] dark:hover:text-slate-200'
                                   }`}
                                   title="Configurar dependencias"
+                                  aria-label={`Configurar dependencias de ${t.text}`}
                                 >
-                                  <AppIcon name="link" className="h-3.5 w-3.5" />
+                                  <Link2 size={15} strokeWidth={1.75} aria-hidden="true" />
                                 </button>
                               )}
 
-                              {/* Toggle DueDate edit */}
                               <button
                                 type="button"
                                 onClick={() => setEditingDueDateTaskId(isEditingDueDate ? null : t.id)}
-                                className={`p-1 rounded-lg text-xs cursor-pointer transition ${
+                                className={`inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg transition-colors cursor-pointer ${
                                   isEditingDueDate || t.dueDate
-                                    ? 'bg-amber-500/15 text-amber-600 font-bold'
-                                    : 'text-[var(--text-faint)] hover:text-[var(--text)]'
+                                    ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400'
+                                    : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/[0.06] dark:hover:text-slate-200'
                                 }`}
                                 title="Configurar fecha límite"
+                                aria-label={`Configurar fecha límite de ${t.text}`}
                               >
-                                <AppIcon name="calendar" className="h-3.5 w-3.5" />
+                                <Calendar size={15} strokeWidth={1.75} aria-hidden="true" />
                               </button>
 
-                              {/* Delete task */}
                               <button
                                 type="button"
                                 onClick={() => handleDeleteTask(project.id, t.id)}
-                                className="text-xs text-[var(--text-faint)] hover:text-rose-500 p-1 cursor-pointer"
+                                className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
                                 title="Eliminar tarea"
+                                aria-label={`Eliminar tarea ${t.text}`}
                               >
-                                ✕
+                                <X size={15} strokeWidth={1.75} aria-hidden="true" />
                               </button>
                             </div>
                           </div>
 
-                          {/* Inline Dependencies Selector */}
+                          {/* Inline Dependencies Selector (flat indented divider, no nested card) */}
                           {isEditingDeps && (
-                            <div className="mt-2 p-2 bg-[var(--surface-muted)] rounded-xl border border-[var(--border)] text-xs space-y-1.5">
-                              <div className="flex items-center justify-between text-[11px] font-bold text-[var(--text-soft)]">
+                            <div className="mt-2 border-l-2 border-[#4F46E5]/40 pl-3 py-1.5 text-xs space-y-2">
+                              <div className="flex items-center justify-between font-semibold text-slate-600 dark:text-slate-300">
                                 <span>Esta tarea depende de:</span>
                                 <button
                                   type="button"
                                   onClick={() => setEditingDepTaskId(null)}
-                                  className="text-[10px] text-[var(--text-faint)] hover:text-[var(--text)] cursor-pointer"
+                                  className="inline-flex min-h-9 items-center gap-1 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer"
                                 >
-                                  Cerrar ✕
+                                  <span>Cerrar</span>
+                                  <X size={13} strokeWidth={1.75} aria-hidden="true" />
                                 </button>
                               </div>
                               <div className="flex flex-wrap gap-1.5">
@@ -794,10 +822,10 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                                       key={other.id}
                                       type="button"
                                       onClick={() => handleToggleTaskDependency(project.id, t.id, other.id)}
-                                      className={`px-2 py-1 rounded-lg text-[11px] font-semibold border cursor-pointer transition ${
+                                      className={`min-h-10 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
                                         isSelected
-                                          ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                                          : 'bg-[var(--card)] text-[var(--text-soft)] border-[var(--border)] hover:border-[var(--blue)]'
+                                          ? 'border-[#4F46E5] bg-[#4F46E5] text-white'
+                                          : 'border-slate-200/80 bg-transparent text-slate-600 hover:border-[#4F46E5] dark:border-white/[0.08] dark:text-slate-300'
                                       }`}
                                     >
                                       {isSelected ? '✓ ' : '+ '}
@@ -809,21 +837,21 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                             </div>
                           )}
 
-                          {/* Inline Due Date Picker */}
+                          {/* Inline Due Date Picker (flat indented divider, no nested card) */}
                           {isEditingDueDate && (
-                            <div className="mt-2 p-2 bg-[var(--surface-muted)] rounded-xl border border-[var(--border)] text-xs flex items-center gap-2">
-                              <span className="text-[11px] font-bold text-[var(--text-soft)]">Fecha límite:</span>
+                            <div className="mt-2 flex flex-wrap items-center gap-2 border-l-2 border-amber-500/40 pl-3 py-1.5 text-xs">
+                              <span className="font-semibold text-slate-600 dark:text-slate-300">Fecha límite:</span>
                               <input
                                 type="date"
                                 defaultValue={t.dueDate || today}
                                 onChange={(e) => handleSetTaskDueDate(project.id, t.id, e.target.value)}
-                                className="px-2 py-1 rounded-lg bg-[var(--card)] border border-[var(--border)] text-xs text-[var(--text)] outline-hidden"
+                                className="min-h-10 rounded-lg border border-slate-200/80 bg-white px-2.5 text-xs text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100"
                               />
                               {t.dueDate && (
                                 <button
                                   type="button"
                                   onClick={() => handleSetTaskDueDate(project.id, t.id, '')}
-                                  className="text-[10px] text-rose-500 hover:underline cursor-pointer"
+                                  className="inline-flex min-h-10 items-center px-2 text-xs font-medium text-rose-600 hover:underline dark:text-rose-400 cursor-pointer"
                                 >
                                   Quitar fecha
                                 </button>
@@ -831,19 +859,20 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                               <button
                                 type="button"
                                 onClick={() => setEditingDueDateTaskId(null)}
-                                className="ml-auto text-[10px] text-[var(--text-faint)] hover:text-[var(--text)] cursor-pointer"
+                                className="ml-auto inline-flex min-h-10 items-center gap-1 px-2 text-xs font-medium text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer"
                               >
-                                Listo ✓
+                                <Check size={13} strokeWidth={1.75} aria-hidden="true" />
+                                <span>Listo</span>
                               </button>
                             </div>
                           )}
                         </div>
                       );
                     })}
-                  </div>
+                  </ListDivider>
 
                   {/* Add Subtask Input */}
-                  <div className="flex items-center gap-2 pt-1">
+                  <div className="flex flex-col gap-2 pt-1 sm:flex-row sm:items-center">
                     <input
                       type="text"
                       value={taskInputs[project.id] || ''}
@@ -856,13 +885,13 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                           handleAddTask(project.id);
                         }
                       }}
-                      placeholder="＋ Agregar tarea al proyecto..."
-                      className="flex-1 px-3 py-1.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden"
+                      placeholder="Agregar tarea al proyecto..."
+                      className={`${fieldClass} flex-1`}
                     />
                     <button
                       type="button"
                       onClick={() => handleAddTask(project.id)}
-                      className="px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--border)] text-xs font-bold text-[var(--text)] rounded-xl border border-[var(--border)] cursor-pointer"
+                      className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl border border-slate-200/80 bg-transparent px-4 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:bg-white/[0.04] cursor-pointer"
                     >
                       Añadir
                     </button>
@@ -871,11 +900,12 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
 
                 {/* Notes footer if present */}
                 {project.notes && (
-                  <p className="text-[11px] text-[var(--text-faint)] italic border-t border-[var(--border)] pt-2">
-                    💬 {project.notes}
+                  <p className="flex items-start gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
+                    <MessageSquare size={14} strokeWidth={1.75} className="mt-0.5 shrink-0 text-slate-400 dark:text-slate-500" aria-hidden="true" />
+                    <span className="break-words">{project.notes}</span>
                   </p>
                 )}
-              </div>
+              </SurfaceCard>
             );
           })}
         </div>

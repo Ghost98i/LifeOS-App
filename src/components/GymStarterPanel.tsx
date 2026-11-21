@@ -34,6 +34,19 @@ const QUICK_GUIDE_POINTS = [
   },
 ] as const;
 
+const renderNoBreakRir = (text: string): React.ReactNode => {
+  const parts = text.split(/(RIR\s+\d+[–-]\d+)/g);
+  return parts.map((part, index) =>
+    /^RIR\s+\d+[–-]\d+$/.test(part) ? (
+      <span key={index} className="whitespace-nowrap">
+        {part}
+      </span>
+    ) : (
+      <React.Fragment key={index}>{part}</React.Fragment>
+    )
+  );
+};
+
 export const GymStarterPanel: React.FC<GymStarterPanelProps> = ({
   onLoadPack,
   onCreateCustom,
@@ -74,7 +87,7 @@ export const GymStarterPanel: React.FC<GymStarterPanelProps> = ({
         <div className="space-y-1.5">
           <SectionHeader
             icon={<Dumbbell size={17} strokeWidth={1.75} />}
-            title={compact ? 'Cargar plantilla inicial' : 'Empezá con una rutina lista'}
+            title={compact ? 'Cargar plantilla inicial' : 'Rutinas listas'}
             action={
               <div className="flex items-center gap-2">
                 <button
@@ -120,7 +133,7 @@ export const GymStarterPanel: React.FC<GymStarterPanelProps> = ({
                     {pack.title}
                   </span>
                   <span className="block text-[11px] leading-snug text-slate-500 dark:text-slate-400">
-                    {pack.subtitle}
+                    {renderNoBreakRir(pack.subtitle)}
                   </span>
                 </div>
                 <GymIcon
@@ -218,7 +231,7 @@ export const GymStarterPanel: React.FC<GymStarterPanelProps> = ({
                   </span>
                   <span>
                     <strong className="font-semibold text-slate-800 dark:text-slate-200">
-                      {point.title}
+                      {renderNoBreakRir(point.title)}
                     </strong>{' '}
                     {point.detail}
                   </span>

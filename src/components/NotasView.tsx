@@ -1,4 +1,21 @@
 import React, { useMemo, useState } from 'react';
+import {
+  Archive,
+  Check,
+  ExternalLink,
+  Gift,
+  Link2,
+  MapPin,
+  MoreHorizontal,
+  Pin,
+  Plus,
+  Radio,
+  Search,
+  ShoppingCart,
+  StickyNote,
+  Target,
+  X,
+} from 'lucide-react';
 import type { LifeOSState, Goal, Postit } from '../types';
 import {
   todayISO,
@@ -25,7 +42,7 @@ import {
 } from '../lib/notesFlows';
 import { showToast } from '../lib/toast';
 import { ProjectsManager } from './ProjectsManager';
-import { AppIcon } from './AppIcon';
+import { ListDivider, SectionHeader, SurfaceCard } from './ui/SurfacePrimitives';
 import { addGymPlacement, GYM_NOTE_PLACEMENTS_ENABLED, loadPlacements, placementStorageKey, removePlacement, savePlacements } from '../lib/notePlacements';
 
 const TagEditor: React.FC<{ value: string; onChange: (value: string) => void }> = ({ value, onChange }) => {
@@ -38,17 +55,19 @@ const TagEditor: React.FC<{ value: string; onChange: (value: string) => void }> 
     setInput('');
   };
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-2.5 focus-within:border-[var(--blue)]">
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200/80 bg-white p-2 focus-within:border-[#4F46E5] dark:border-white/[0.08] dark:bg-white/[0.03]">
       {tags.map((tag) => (
-        <span key={tag} className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)] px-2 text-sm text-[var(--text)]">
+        <span key={tag} className="inline-flex min-h-10 items-center gap-1 rounded-lg border border-slate-200/80 bg-slate-50 px-2.5 text-sm text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.05] dark:text-slate-200">
           #{tag}
-          <button type="button" onClick={() => onChange(tags.filter((item) => item !== tag).join(', '))} aria-label={`Quitar etiqueta ${tag}`} className="ml-1 inline-flex h-7 w-7 items-center justify-center rounded-md text-[var(--text-soft)] hover:bg-[var(--card)] hover:text-rose-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--blue)] cursor-pointer">×</button>
+          <button type="button" onClick={() => onChange(tags.filter((item) => item !== tag).join(', '))} aria-label={`Quitar etiqueta ${tag}`} className="ml-0.5 inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-rose-500/10 hover:text-rose-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#4F46E5] cursor-pointer">
+            <X size={13} strokeWidth={1.75} aria-hidden="true" />
+          </button>
         </span>
       ))}
       <input type="text" value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ',') { event.preventDefault(); add(); }
-      }} placeholder="Agregar etiqueta…" aria-label="Agregar etiqueta" className="min-h-10 min-w-32 flex-1 bg-transparent px-1 text-sm text-[var(--text)] outline-none" />
-      <button type="button" onClick={add} disabled={!input.trim()} className="min-h-10 rounded-lg border border-[var(--border)] px-3 text-sm font-semibold text-[var(--text-soft)] hover:bg-[var(--card)] disabled:opacity-40 cursor-pointer">Agregar</button>
+      }} placeholder="Agregar etiqueta…" aria-label="Agregar etiqueta" className="min-h-10 min-w-32 flex-1 bg-transparent px-1.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none dark:text-slate-100 dark:placeholder:text-slate-500" />
+      <button type="button" onClick={add} disabled={!input.trim()} className="min-h-10 rounded-lg border border-slate-200/80 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-white/[0.08] dark:text-slate-300 dark:hover:bg-white/[0.05] cursor-pointer">Agregar</button>
     </div>
   );
 };
@@ -562,893 +581,1018 @@ export const NotasView: React.FC<NotasViewProps> = ({
   const inTools = activeTab !== 'notas';
 
 
+  const fieldClass =
+    'w-full min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
+  const primaryBtnClass =
+    'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer';
+  const secondaryBtnClass =
+    'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-transparent px-3.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:bg-white/[0.04] cursor-pointer';
+
   return (
     <div className="notes-refinement space-y-5">
-      {noteError && !editingNote && <p role="alert" className="text-sm text-rose-600">{noteError}</p>}
+      {noteError && !editingNote && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{noteError}</p>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight text-[var(--text)]">Notas y herramientas</h1>
-          {activeTab === 'notas' && <p className="mt-0.5 text-sm text-[var(--text-soft)]">{totalActiveNotes} {totalActiveNotes === 1 ? 'nota activa' : 'notas activas'}</p>}
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">Notas y herramientas</h1>
+          {activeTab === 'notas' && <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{totalActiveNotes} {totalActiveNotes === 1 ? 'nota activa' : 'notas activas'}</p>}
         </div>
         <div className="flex items-center">
-          {activeTab === 'notas' && <button type="button" onClick={() => setShowAddForm(!showAddForm)} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-3.5 text-sm font-semibold text-white hover:bg-[#4338CA] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] cursor-pointer"><AppIcon name="plus" className="h-4 w-4" />{showAddForm ? 'Cerrar' : 'Nueva nota'}</button>}
+          {activeTab === 'notas' && (
+            <button type="button" onClick={() => setShowAddForm(!showAddForm)} className={primaryBtnClass}>
+              {showAddForm ? <X size={16} strokeWidth={1.75} aria-hidden="true" /> : <Plus size={16} strokeWidth={1.75} aria-hidden="true" />}
+              <span>{showAddForm ? 'Cerrar' : 'Nueva nota'}</span>
+            </button>
+          )}
         </div>
       </div>
 
-      <nav aria-label="Secciones de Notas" className="flex gap-1 border-b border-[var(--border)]">
-        <button type="button" onClick={() => setActiveTab('notas')} aria-current={!inTools ? 'page' : undefined} className={`min-h-11 border-b-2 px-4 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--blue)] cursor-pointer ${!inTools ? 'border-[#4F46E5] text-[var(--text)]' : 'border-transparent text-[var(--text-soft)] hover:text-[var(--text)]'}`}>Mis notas</button>
-        <button type="button" onClick={() => setActiveTab('proyectos')} aria-current={inTools ? 'page' : undefined} className={`min-h-11 border-b-2 px-4 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--blue)] cursor-pointer ${inTools ? 'border-[#4F46E5] text-[var(--text)]' : 'border-transparent text-[var(--text-soft)] hover:text-[var(--text)]'}`}>Herramientas<span className="hidden sm:inline font-normal ml-2 text-[var(--text-soft)]">Proyectos, listas y enlaces</span></button>
+      <nav aria-label="Secciones de Notas" className="flex gap-1 border-b border-slate-200/80 dark:border-white/[0.08]">
+        <button type="button" onClick={() => setActiveTab('notas')} aria-current={!inTools ? 'page' : undefined} className={`min-h-11 border-b-2 px-4 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#4F46E5] cursor-pointer ${!inTools ? 'border-[#4F46E5] text-slate-900 dark:text-slate-100' : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'}`}>Mis notas</button>
+        <button type="button" onClick={() => setActiveTab('proyectos')} aria-current={inTools ? 'page' : undefined} className={`min-h-11 border-b-2 px-4 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#4F46E5] cursor-pointer ${inTools ? 'border-[#4F46E5] text-slate-900 dark:text-slate-100' : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'}`}>Herramientas<span className="hidden sm:inline font-normal ml-2 text-slate-400 dark:text-slate-500">Proyectos, listas y enlaces</span></button>
       </nav>
 
-      {inTools && toolMessage && <p role="status" className="text-sm text-[var(--text)]">{toolMessage}</p>}
-      {inTools && <nav aria-label="Herramientas personales" className="flex flex-wrap gap-2">
-        {([['proyectos', 'Proyectos y objetivos'], ['streaming', 'Streaming y contenido'], ['cosas', 'Objetos y regalos'], ['compras', 'Lista de compras'], ['links', 'Enlaces']] as const).map(([section, label]) =>
-          <button key={section} type="button" aria-current={activeTab === section ? 'page' : undefined} onClick={() => setActiveTab(section)} className={`min-h-11 rounded-xl border px-3 text-sm font-semibold ${activeTab === section ? 'border-[var(--blue)] text-[var(--blue)]' : 'border-[var(--border)] text-[var(--text-soft)]'}`}>{label}</button>)}
-      </nav>}
+      {inTools && toolMessage && <p role="status" className="text-sm font-medium text-slate-700 dark:text-slate-300">{toolMessage}</p>}
+      {inTools && (
+        <nav aria-label="Herramientas personales" className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          {([['proyectos', 'Proyectos y objetivos'], ['streaming', 'Streaming y contenido'], ['cosas', 'Objetos y regalos'], ['compras', 'Lista de compras'], ['links', 'Enlaces']] as const).map(([section, label]) => (
+            <button
+              key={section}
+              type="button"
+              aria-current={activeTab === section ? 'page' : undefined}
+              onClick={() => setActiveTab(section)}
+              className={`min-h-10 shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-sm font-semibold transition-colors cursor-pointer ${
+                activeTab === section
+                  ? 'border-[#4F46E5] bg-[#4F46E5]/10 text-[#4F46E5] dark:border-indigo-400 dark:bg-indigo-500/15 dark:text-indigo-300'
+                  : 'border-slate-200/80 text-slate-600 hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-400 dark:hover:bg-white/[0.04]'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      )}
 
       {/* Tab: Proyectos & Metas */}
       {activeTab === 'proyectos' && (
-        <div className="space-y-8">
-          <div className="flex flex-wrap gap-2 border-b border-[var(--border)] pb-3" role="group" aria-label="Tipo de seguimiento">
-            <button type="button" aria-pressed={projectView === 'projects'} onClick={() => setProjectView('projects')} className="min-h-11 rounded-xl border border-[var(--border)] px-3 text-sm">Proyectos · tareas y próximo paso</button>
-            <button type="button" aria-pressed={projectView === 'goals'} onClick={() => setProjectView('goals')} className="min-h-11 rounded-xl border border-[var(--border)] px-3 text-sm">Objetivos · avance numérico</button>
+        <div className="space-y-5">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1" role="group" aria-label="Tipo de seguimiento">
+            <button
+              type="button"
+              aria-pressed={projectView === 'projects'}
+              onClick={() => setProjectView('projects')}
+              className={`min-h-10 shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-sm font-medium transition-colors cursor-pointer ${
+                projectView === 'projects'
+                  ? 'border-[#4F46E5] bg-[#4F46E5]/10 text-[#4F46E5] dark:border-indigo-400 dark:text-indigo-300'
+                  : 'border-slate-200/80 text-slate-600 dark:border-white/[0.08] dark:text-slate-400'
+              }`}
+            >
+              Proyectos · tareas y próximo paso
+            </button>
+            <button
+              type="button"
+              aria-pressed={projectView === 'goals'}
+              onClick={() => setProjectView('goals')}
+              className={`min-h-10 shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-sm font-medium transition-colors cursor-pointer ${
+                projectView === 'goals'
+                  ? 'border-[#4F46E5] bg-[#4F46E5]/10 text-[#4F46E5] dark:border-indigo-400 dark:text-indigo-300'
+                  : 'border-slate-200/80 text-slate-600 dark:border-white/[0.08] dark:text-slate-400'
+              }`}
+            >
+              Objetivos · avance numérico
+            </button>
           </div>
-          <div hidden={projectView !== 'projects'}><ProjectsManager state={state} onUpdateState={saveToolChange} initialFocusId={projectView === 'projects' ? initialFocusId : null} focusNonce={focusNonce} /></div>
+
+          <div hidden={projectView !== 'projects'}>
+            <ProjectsManager state={state} onUpdateState={saveToolChange} initialFocusId={projectView === 'projects' ? initialFocusId : null} focusNonce={focusNonce} />
+          </div>
 
           {/* Quantitative Goals */}
-          <div hidden={projectView !== 'goals'} className="space-y-3">
-            <div className="flex items-center justify-between">
+          <div hidden={projectView !== 'goals'} className="space-y-4">
+            <SurfaceCard className="p-4 sm:p-5 space-y-4">
               <div>
-                <h2 className="text-sm font-bold text-[var(--text)]">Objetivos con progreso</h2>
-                <p className="text-xs text-[var(--text-faint)]">Un valor actual y una meta. Actualizalos manualmente o vinculalos a tus registros.</p>
-              </div>
-            </div>
-
-        <form onSubmit={handleAddGoal} className="flex flex-wrap items-end gap-2 p-3.5 bg-[var(--bg)] border border-dashed border-[var(--border)] rounded-xl">
-          <div className="flex-1 min-w-[150px]">
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Nombre</label>
-            <input
-              type="text"
-              aria-label="Nombre del objetivo" value={goalName}
-              onChange={(e) => setGoalName(e.target.value)}
-              placeholder="Ej.: Leer 8 capítulos"
-              className="w-full px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
-            />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Valor inicial</label>
-            <input
-              type="number"
-              aria-label="Valor inicial" value={goalInitial}
-              onChange={(e) => setGoalInitial(e.target.value)}
-              placeholder="0"
-              className="w-24 px-2.5 py-1.5 text-xs tabular-nums rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
-            />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Meta</label>
-            <input
-              type="number"
-              aria-label="Meta" value={goalTarget}
-              onChange={(e) => setGoalTarget(e.target.value)}
-              placeholder="8"
-              className="w-24 px-2.5 py-1.5 text-xs tabular-nums rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
-            />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Actualizar desde</label>
-            <select
-              aria-label="Origen del avance" value={goalLinked || ''}
-              onChange={(e) => setGoalLinked((e.target.value as any) || null)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
-            >
-              <option value="">Manual</option>
-              <option value="weight">Peso corporal (kg)</option>
-              <option value="available">Dinero disponible ($)</option>
-              <option value="net_worth">Patrimonio neto ($)</option>
-              <option value="gym_sessions">Sesiones de gimnasio</option>
-              <option value="study_hours">Horas de estudio</option>
-              <option value="resale_profit">Ganancia de reventa ($)</option>
-            </select>
-          </div>
-          <button
-            type="submit"
-            className="px-3.5 py-1.5 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-semibold rounded-lg hover:opacity-90 cursor-pointer"
-          >
-            ＋ Crear objetivo
-          </button>
-        </form>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {(state.goals || []).length === 0 ? (
-            <p className="text-center py-6 text-xs text-[var(--text-faint)] col-span-full">
-              Todavía no creaste objetivos.
-            </p>
-          ) : (
-            (state.goals || []).map((g) => {
-              const cur = goalCurrentValue(state, g);
-              const pct = goalProgressPct(g, cur);
-              const isFinancial = g.linked === 'available' || g.linked === 'net_worth' || g.linked === 'resale_profit';
-
-              const fmtVal = (val: number) => {
-                if (!Number.isFinite(val)) return 'No comparable';
-                if (isFinancial) return fmtMoney(val);
-                if (g.linked === 'study_hours') return `${Number(val).toFixed(1)}h`;
-                if (g.linked === 'weight') return `${Number(val).toFixed(1)} kg`;
-                if (g.linked === 'gym_sessions') return `${Math.round(val)}`;
-                return Number(val).toFixed(1);
-              };
-
-              const getBadge = () => {
-                switch (g.linked) {
-                  case 'weight': return '⚖️ Peso';
-                  case 'available': return 'Disponible';
-                  case 'net_worth': return 'Patrimonio';
-                  case 'gym_sessions': return 'Gimnasio';
-                  case 'study_hours': return 'Estudio';
-                  case 'resale_profit': return 'Reventa';
-                  default: return 'Manual';
-                }
-              };
-
-              return (
-                <div key={g.id} className={`bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 relative overflow-hidden space-y-3 ${isFinancial ? 'privacy-sensitive' : ''}`}>
-                  <div className="flex items-start justify-between">
-                    <span className="font-bold text-sm text-[var(--text)]">{g.name}</span>
-                    <button
-                      type="button"
-                      aria-label={`Eliminar objetivo ${g.name}`} onClick={() => handleDeleteGoal(g.id)}
-                      className="inline-flex items-center justify-center rounded-md p-1 text-xs text-[var(--text-faint)] hover:text-red-500 cursor-pointer"
-                    >
-                      <AppIcon name="x" className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-
-                  <div className="tabular-nums text-2xl font-extrabold text-[var(--text)]">
-                    {fmtVal(cur)}
-                    <span className="text-xs font-normal text-[var(--text-faint)] ml-1">
-                      / {fmtVal(g.target)}
-                    </span>
-                  </div>
-
-                  <div className="w-full h-2 rounded-full bg-[var(--bg)] overflow-hidden">
-                    <div className="h-full bg-purple-500 rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs pt-1">
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400">
-                      {getBadge()}
-                    </span>
-                    {!g.linked && (
-                      <button
-                        onClick={() => handleUpdateGoal(g)}
-                        className="text-xs text-[var(--text-soft)] hover:text-[var(--text)] border border-[var(--border)] px-2 py-0.5 rounded-md cursor-pointer"
-                      >
-                        Actualizar
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    </div>
-  )}
-
-  {/* Tab: Notas & Personal */}
-  {activeTab === 'notas' && (
-    <div className="space-y-4">
-      {/* Post-its / Notas Grid */}
-      <div className="space-y-4">
-
-        {/* Quick Add / Form */}
-        {showAddForm && (
-          <form
-            onSubmit={handleAddPostit}
-            className="p-4 sm:p-5 bg-[var(--surface-muted)]/45 border border-[var(--border)] rounded-2xl space-y-3 animate-in fade-in duration-150"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-[var(--text)]">Nueva nota</span>
-              <label className="flex items-center gap-1.5 text-xs text-[var(--text-soft)] cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={notePinned}
-                  onChange={(e) => setNotePinned(e.target.checked)}
-                  className="rounded accent-amber-500"
+                <SectionHeader
+                  icon={<Target size={16} strokeWidth={1.75} />}
+                  title="Objetivos con progreso"
+                  count={(state.goals || []).length > 0 ? (state.goals || []).length : null}
                 />
-                <span>📌 Fijar arriba</span>
-              </label>
-            </div>
-
-            <input
-              type="text"
-              aria-label="Título de la nueva nota"
-              value={noteTitle}
-              onChange={(e) => setNoteTitle(e.target.value)}
-              placeholder="Título (opcional)..."
-              className="w-full px-3 py-2.5 text-sm font-semibold rounded-xl bg-[var(--card)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)]"
-            />
-
-            <textarea
-              aria-label="Contenido de la nueva nota"
-              autoFocus
-              value={noteContent}
-              onChange={(e) => setNoteContent(e.target.value)}
-              placeholder="Escribí el contenido de la nota..."
-              rows={3}
-              className="w-full px-3 py-3 text-sm leading-6 rounded-xl bg-[var(--card)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)] resize-y"
-              required
-            />
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-              <div className="w-full sm:flex-1"><TagEditor value={noteTags} onChange={setNoteTags} /></div>
-              <div className="flex items-center gap-2 self-end sm:self-auto">
-                <button
-                  type="button"
-                  onClick={() => setShowAddForm(false)}
-                  className="px-3 py-1.5 text-xs text-[var(--text-soft)] hover:text-[var(--text)] rounded-xl border border-[var(--border)] cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={!noteContent.trim()}
-                  className="px-4 py-1.5 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold rounded-xl hover:opacity-90 disabled:opacity-40 cursor-pointer shadow-2xs"
-                >
-                  Guardar nota
-                </button>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Un valor actual y una meta. Actualizalos manualmente o vinculalos a tus registros.
+                </p>
               </div>
-            </div>
-          </form>
-        )}
 
-        {/* Search & Filter Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-          {/* Search */}
-          <div className="relative flex-1 max-w-md">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-faint)]">
-              <AppIcon name="search" className="h-3.5 w-3.5" />
-            </span>
-            <input
-              type="text"
-              value={noteSearch}
-              onChange={(e) => setNoteSearch(e.target.value)}
-              aria-label="Buscar notas"
-              placeholder="Buscar por título, texto o etiqueta"
-              className="w-full pl-8 pr-8 py-2.5 text-sm rounded-xl bg-[var(--card)] border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-faint)] focus:border-[var(--blue)] outline-none transition"
-            />
-            {noteSearch && (
-              <button
-                type="button"
-                onClick={() => setNoteSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[var(--text-faint)] hover:text-[var(--text)] p-0.5"
-                title="Limpiar búsqueda"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-
-          {/* Filter Tabs */}
-          <div className="flex items-center gap-1 overflow-x-auto bg-[var(--surface-muted)] p-1 rounded-xl border border-[var(--border)] text-xs font-bold">
-            <button
-              type="button"
-              onClick={() => setNoteFilter('activas')}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                noteFilter === 'activas'
-                  ? 'bg-[var(--card)] text-[var(--text)] shadow-2xs'
-                  : 'text-[var(--text-faint)] hover:text-[var(--text)]'
-              }`}
-            >
-              Activas ({totalActiveNotes})
-            </button>
-            <button
-              type="button"
-              onClick={() => setNoteFilter('fijadas')}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                noteFilter === 'fijadas'
-                  ? 'bg-[var(--card)] text-amber-600 dark:text-amber-400 shadow-2xs'
-                  : 'text-[var(--text-faint)] hover:text-[var(--text)]'
-              }`}
-            >
-              📌 Fijadas ({totalPinnedNotes})
-            </button>
-            <button
-              type="button"
-              onClick={() => setNoteFilter('archivadas')}
-              className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                noteFilter === 'archivadas'
-                  ? 'bg-[var(--card)] text-[var(--text)] shadow-2xs'
-                  : 'text-[var(--text-faint)] hover:text-[var(--text)]'
-              }`}
-            >
-              Archivadas ({totalArchivedNotes})
-            </button>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-soft)]">
-          <span role="status">{displayedNotes.length} {displayedNotes.length === 1 ? 'nota' : 'notas'}{noteSearch ? ' encontradas' : ''}</span>
-          <label className="flex items-center gap-2">Ordenar
-            <select aria-label="Ordenar notas" value={noteOrder} onChange={(event) => setNoteOrder(event.target.value as 'recent' | 'pinned')} className="min-h-11 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-[var(--text)]">
-              <option value="recent">Más recientes</option><option value="pinned">Fijadas primero</option>
-            </select>
-          </label>
-        </div>
-        {/* Notes Grid */}
-        <div id="notes-grid" className="grid grid-cols-1 items-start md:grid-cols-2 2xl:grid-cols-3 gap-4">
-          {displayedNotes.length === 0 ? (
-            <div className="py-12 text-center col-span-full bg-[var(--surface-muted)]/40 rounded-2xl border border-dashed border-[var(--border)] p-6">
-              <p className="text-xs text-[var(--text-faint)] font-medium">
-                {noteSearch.trim()
-                  ? `No se encontraron notas para "${noteSearch}".`
-                  : noteFilter === 'fijadas'
-                  ? 'No tenés notas fijadas. Fijá una nota importante para verla arriba.'
-                  : noteFilter === 'archivadas'
-                  ? 'No hay notas archivadas.'
-                  : 'No tenés notas guardadas. ¡Creá una nota para comenzar!'}
-              </p>
-              {!showAddForm && !noteSearch.trim() && noteFilter === 'activas' && (
-                <button
-                  type="button"
-                  onClick={() => setShowAddForm(true)}
-                  className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold rounded-xl bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 transition cursor-pointer"
-                >
-                  <AppIcon name="plus" className="h-3.5 w-3.5" />
-                  <span>Crear primera nota</span>
+              <form onSubmit={handleAddGoal} className="grid grid-cols-1 gap-3 border-t border-slate-100 pt-3.5 sm:grid-cols-2 lg:grid-cols-[1.4fr_0.7fr_0.7fr_1fr_auto] lg:items-end dark:border-white/[0.06]">
+                <div className="min-w-0">
+                  <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Nombre</label>
+                  <input
+                    type="text"
+                    aria-label="Nombre del objetivo"
+                    value={goalName}
+                    onChange={(e) => setGoalName(e.target.value)}
+                    placeholder="Ej.: Leer 8 capítulos"
+                    className={fieldClass}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Valor inicial</label>
+                  <input
+                    type="number"
+                    aria-label="Valor inicial"
+                    value={goalInitial}
+                    onChange={(e) => setGoalInitial(e.target.value)}
+                    placeholder="0"
+                    className={`${fieldClass} tabular-nums`}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Meta</label>
+                  <input
+                    type="number"
+                    aria-label="Meta"
+                    value={goalTarget}
+                    onChange={(e) => setGoalTarget(e.target.value)}
+                    placeholder="8"
+                    className={`${fieldClass} tabular-nums`}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Actualizar desde</label>
+                  <select
+                    aria-label="Origen del avance"
+                    value={goalLinked || ''}
+                    onChange={(e) => setGoalLinked((e.target.value as any) || null)}
+                    className={fieldClass}
+                  >
+                    <option value="">Manual</option>
+                    <option value="weight">Peso corporal (kg)</option>
+                    <option value="available">Dinero disponible ($)</option>
+                    <option value="net_worth">Patrimonio neto ($)</option>
+                    <option value="gym_sessions">Sesiones de gimnasio</option>
+                    <option value="study_hours">Horas de estudio</option>
+                    <option value="resale_profit">Ganancia de reventa ($)</option>
+                  </select>
+                </div>
+                <button type="submit" className={`${primaryBtnClass} sm:col-span-2 lg:col-span-1`}>
+                  <Plus size={15} strokeWidth={1.75} aria-hidden="true" />
+                  <span>Crear objetivo</span>
                 </button>
-              )}
-            </div>
-          ) : (
-            renderedNotes.map((p) => {
-              const relative = formatRelativeTime(p.updatedAt || p.date);
-              const isPinned = Boolean(p.pinned);
-              const isArchived = Boolean(p.archived);
+              </form>
+            </SurfaceCard>
 
-              return (
-                <div
-                  key={p.id}
-                  id={`note-${p.id}`}
-                  className={`relative p-4 sm:p-5 rounded-2xl border flex flex-col gap-3 transition-[border-color,box-shadow] shadow-[0_8px_24px_-20px_rgba(17,24,39,0.35)] dark:shadow-[0_8px_24px_-20px_rgba(0,0,0,0.75)] ${openNoteMenuId === p.id ? 'z-20' : ''} ${
-                    isPinned
-                      ? 'bg-[#4F46E5]/[0.075] dark:bg-[#4F46E5]/[0.16] border-[#4F46E5]/30 dark:border-[#8B84FF]/40 hover:border-[#4F46E5]/55'
-                      : isArchived
-                      ? 'bg-[var(--surface-muted)]/45 border-[var(--border)]'
-                      : 'bg-[var(--card)] border-[var(--border)] hover:border-[#4F46E5]/30'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex min-w-0 flex-1 items-start gap-2">
-                      {isPinned && <AppIcon name="pin" aria-label="Nota fijada" className="mt-0.5 h-4 w-4 shrink-0 text-[#4F46E5] dark:text-[#A5A0FF]" />}
-                      {p.title && <button type="button" onClick={() => handleStartEdit(p)} className="min-w-0 flex-1 text-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--blue)]" aria-label={`Abrir nota ${p.title}`}><h3 className="font-semibold text-base leading-snug tracking-[-0.01em] text-[var(--text)] break-words">{p.title}</h3></button>}
-                    </div>
-                    <div className="relative shrink-0" data-note-menu onBlur={(event) => {
-                      if (!event.currentTarget.contains(event.relatedTarget)) setOpenNoteMenuId(null);
-                    }}>
-                      <button id={`note-menu-trigger-${p.id}`} type="button" onClick={() => setOpenNoteMenuId(openNoteMenuId === p.id ? null : p.id)} aria-label={`Acciones de la nota ${p.title || p.text.slice(0, 45)}`} aria-haspopup="menu" aria-expanded={openNoteMenuId === p.id} className="flex h-10 w-10 items-center justify-center rounded-lg text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--blue)] cursor-pointer"><svg aria-hidden="true" viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
-                      {openNoteMenuId === p.id && (
-                        <div role="menu" aria-label="Acciones de nota" onKeyDown={(event) => {
-                          if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-                          event.preventDefault();
-                          const items = Array.from(event.currentTarget.querySelectorAll('[role="menuitem"]')) as HTMLButtonElement[];
-                          const current = items.indexOf(document.activeElement as HTMLButtonElement);
-                          const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : event.key === 'ArrowDown' ? (current + 1) % items.length : (current - 1 + items.length) % items.length;
-                          items[next]?.focus();
-                        }} className="absolute right-0 top-full z-30 mt-1 w-48 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1.5 shadow-lg">
-                          <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleStartEdit(p); }} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer">Editar</button>
-                          <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleTogglePin(p.id, isPinned); }} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer">{isPinned ? 'Desfijar' : 'Fijar'}</button>
-                          <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleConvertToTask(p.id); }} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer">Convertir a tarea</button>
-                          {GYM_NOTE_PLACEMENTS_ENABLED && (currentPlacements.some((placement) => placement.noteId === p.id) ? (
-                            <>
-                              <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); onOpenGym(); }} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer">Ver en Gimnasio</button>
-                              <button role="menuitem" type="button" onClick={() => handleRemoveFromGym(p.id)} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer">Retirar de Gimnasio</button>
-                            </>
-                          ) : <button role="menuitem" type="button" onClick={() => handlePlaceInGym(p.id)} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer">Colocar en… Gimnasio</button>)}
-                          <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleToggleArchive(p.id, isArchived); }} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer">{isArchived ? 'Restaurar' : 'Archivar'}</button>
-                          <button role="menuitem" type="button" onClick={() => handleDeletePostit(p.id)} className="block w-full rounded-lg px-3 py-2.5 text-left text-sm text-rose-600 hover:bg-[var(--surface-muted)] cursor-pointer">Eliminar</button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+            {(state.goals || []).length === 0 ? (
+              <SurfaceCard className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+                <Target size={22} strokeWidth={1.75} className="text-slate-400 dark:text-slate-500" aria-hidden="true" />
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Todavía no creaste objetivos.</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Definí un valor inicial y una meta para seguir tu avance manual o automáticamente.
+                </p>
+              </SurfaceCard>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                {(state.goals || []).map((g) => {
+                  const cur = goalCurrentValue(state, g);
+                  const pct = goalProgressPct(g, cur);
+                  const isFinancial = g.linked === 'available' || g.linked === 'net_worth' || g.linked === 'resale_profit';
 
-                  <button type="button" onClick={() => handleStartEdit(p)} className="min-w-0 text-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--blue)]" aria-label={`Abrir contenido de la nota ${p.title || p.text.slice(0, 45)}`}>
-                    <span className="line-clamp-5 text-[var(--text)] text-sm leading-6 whitespace-pre-wrap break-words">{p.text}</span>
-                  </button>
+                  const fmtVal = (val: number) => {
+                    if (!Number.isFinite(val)) return 'No comparable';
+                    if (isFinancial) return fmtMoney(val);
+                    if (g.linked === 'study_hours') return `${Number(val).toFixed(1)}h`;
+                    if (g.linked === 'weight') return `${Number(val).toFixed(1)} kg`;
+                    if (g.linked === 'gym_sessions') return `${Math.round(val)}`;
+                    return Number(val).toFixed(1);
+                  };
 
-                  {/* Footer: Tags and Relative Date */}
-                  <div className="pt-3 border-t border-[var(--border)]/60 flex flex-wrap items-end justify-between gap-2 text-xs">
-                    {p.tags && p.tags.length > 0 ? (
-                      <div className="flex flex-wrap items-center gap-1">
-                        {p.tags.map((tag) => (
-                          <button
-                            key={tag}
-                            type="button"
-                            onClick={() => setNoteSearch(tag)}
-                            className="min-h-8 px-2 rounded-lg font-medium bg-[var(--surface-muted)] hover:bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)] border border-[var(--border)] transition cursor-pointer"
-                            title={`Filtrar por #${tag}`}
-                          >
-                            #{tag}
-                          </button>
-                        ))}
+                  const getBadge = () => {
+                    switch (g.linked) {
+                      case 'weight': return 'Peso';
+                      case 'available': return 'Disponible';
+                      case 'net_worth': return 'Patrimonio';
+                      case 'gym_sessions': return 'Gimnasio';
+                      case 'study_hours': return 'Estudio';
+                      case 'resale_profit': return 'Reventa';
+                      default: return 'Manual';
+                    }
+                  };
+
+                  return (
+                    <SurfaceCard key={g.id} className={`p-4 space-y-3 ${isFinancial ? 'privacy-sensitive' : ''}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-sm font-semibold text-slate-900 dark:text-slate-100 break-words">{g.name}</span>
+                        <button
+                          type="button"
+                          aria-label={`Eliminar objetivo ${g.name}`}
+                          onClick={() => handleDeleteGoal(g.id)}
+                          className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
+                        >
+                          <X size={15} strokeWidth={1.75} aria-hidden="true" />
+                        </button>
                       </div>
-                    ) : (
-                      <div />
-                    )}
 
-                    <div className="flex items-center gap-1.5 tabular-nums text-[var(--text-faint)] shrink-0 ml-auto">
-                      {isPinned && <span className="font-medium text-[#4F46E5] dark:text-[#A5A0FF]">Fijada ·</span>}
-                      {isArchived && (
-                        <span className="px-2 py-1 rounded bg-[var(--surface-muted)] text-[11px] font-sans font-semibold">
-                          Archivada
+                      <div className="tabular-nums text-2xl font-bold text-slate-900 dark:text-slate-100">
+                        {fmtVal(cur)}
+                        <span className="ml-1 text-xs font-normal text-slate-500 dark:text-slate-400">
+                          / {fmtVal(g.target)}
                         </span>
-                      )}
-                      <span className="text-xs" title={p.updatedAt ? `Modificada: ${p.updatedAt}` : `Creada: ${p.date}`}>
-                        {relative}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-        {renderedNotes.length < displayedNotes.length && <div className="flex flex-wrap items-center justify-center gap-3 pt-4">
-          <span role="status" className="text-sm text-[var(--text-soft)]">Mostrando {renderedNotes.length} de {displayedNotes.length} notas</span>
-          <button type="button" aria-controls="notes-grid" onClick={() => expandNotes(visibleNoteCount + 50)} className="min-h-11 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 text-sm font-semibold text-[var(--text)]">Cargar 50 más</button>
-          <button type="button" aria-controls="notes-grid" onClick={() => expandNotes(displayedNotes.length)} className="min-h-11 rounded-xl px-3 text-sm font-semibold text-[var(--text-soft)] underline">Ver todas</button>
-        </div>}
-      </div>
+                      </div>
 
-      {/* Edit Note Modal */}
-      {editingNote && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div ref={editorRef} role="dialog" aria-modal="true" aria-labelledby="note-editor-title"
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') { event.stopPropagation(); closeEditor(); }
-              if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); editorRef.current?.querySelector('form')?.requestSubmit(); }
-              if (event.key === 'Tab') {
-                const controls = Array.from(editorRef.current?.querySelectorAll('button:not(:disabled), input, textarea, select') || []) as HTMLElement[];
-                const first = controls[0], last = controls[controls.length - 1];
-                if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
-                if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
-              }
-            }} className="w-full max-w-3xl max-h-[90dvh] overflow-y-auto rounded-2xl bg-[var(--card)] border border-[var(--border)] p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 id="note-editor-title" className="text-base font-semibold text-[var(--text)]">Editar nota</h3>
-              <button
-                type="button"
-                onClick={closeEditor}
-                aria-label="Cerrar editor de nota"
-                className="p-1 rounded-lg text-[var(--text-faint)] hover:text-[var(--text)] transition cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-white/[0.06]">
+                        <div className="h-full rounded-full bg-[#4F46E5] transition-all duration-300" style={{ width: `${pct}%` }} />
+                      </div>
 
-            <form onSubmit={handleSaveEdit} className="space-y-3">
-              {noteError && <p role="alert" className="text-sm text-rose-600">{noteError}</p>}
-              <p className="text-xs text-[var(--text-soft)]">Guardado manual · Ctrl+Enter para guardar</p>
-              <div>
-                <label className="text-xs font-semibold text-[var(--text-soft)] block mb-1.5">
-                  Título (opcional)
-                </label>
-                <input
-                  type="text"
-                  aria-label="Título de la nota"
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  placeholder="Título de la nota..."
-                  className="w-full px-3 py-2.5 text-sm font-semibold rounded-xl bg-[var(--bg)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)]"
-                />
+                      <div className="flex items-center justify-between gap-2 pt-1 text-xs">
+                        <span className="rounded-md bg-[#4F46E5]/10 px-2 py-0.5 font-semibold text-[#4F46E5] dark:text-indigo-300">
+                          {getBadge()}
+                        </span>
+                        {!g.linked && (
+                          <button
+                            type="button"
+                            onClick={() => handleUpdateGoal(g)}
+                            className="min-h-10 rounded-lg border border-slate-200/80 px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:bg-white/[0.04] cursor-pointer"
+                          >
+                            Actualizar
+                          </button>
+                        )}
+                      </div>
+                    </SurfaceCard>
+                  );
+                })}
               </div>
-
-              <div>
-                <label className="text-xs font-semibold text-[var(--text-soft)] block mb-1.5">
-                  Contenido
-                </label>
-                <textarea
-                  aria-label="Contenido de la nota"
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  rows={12}
-                  className="w-full px-3 py-3 text-sm leading-6 rounded-xl bg-[var(--bg)] border border-[var(--border)] focus:border-[var(--blue)] outline-none text-[var(--text)] resize-y"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-[var(--text-soft)] block mb-1.5">
-                  Etiquetas
-                </label>
-                <TagEditor value={editTags} onChange={setEditTags} />
-              </div>
-
-              <div className="flex items-center gap-4 pt-1">
-                <label className="flex items-center gap-1.5 text-xs text-[var(--text-soft)] cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={editPinned}
-                    onChange={(e) => setEditPinned(e.target.checked)}
-                    className="rounded accent-amber-500"
-                  />
-                  <span>📌 Fijar arriba</span>
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-[var(--text-soft)] cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={editArchived}
-                    onChange={(e) => setEditArchived(e.target.checked)}
-                    className="rounded accent-[var(--blue)]"
-                  />
-                  <span>📥 Archivada</span>
-                </label>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border)]">
-                <button
-                  type="button"
-                  onClick={closeEditor}
-                  className="px-3.5 py-1.5 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] rounded-xl border border-[var(--border)] cursor-pointer"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={!editText.trim()}
-                  className="px-4 py-1.5 bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold rounded-xl disabled:opacity-40 cursor-pointer shadow-2xs"
-                >
-                  Guardar cambios
-                </button>
-              </div>
-            </form>
+            )}
           </div>
         </div>
       )}
 
-    </div>
-  )}
+      {/* Tab: Notas & Personal */}
+      {activeTab === 'notas' && (
+        <div className="space-y-4">
+          {/* Quick Add / Form */}
+          {showAddForm && (
+            <SurfaceCard as="div" className="p-4 sm:p-5">
+              <form onSubmit={handleAddPostit} className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Nueva nota</span>
+                  <label className="inline-flex min-h-10 items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={notePinned}
+                      onChange={(e) => setNotePinned(e.target.checked)}
+                      className="h-4 w-4 rounded accent-[#4F46E5]"
+                    />
+                    <Pin size={13} strokeWidth={1.75} aria-hidden="true" />
+                    <span>Fijar arriba</span>
+                  </label>
+                </div>
+
+                <input
+                  type="text"
+                  aria-label="Título de la nueva nota"
+                  value={noteTitle}
+                  onChange={(e) => setNoteTitle(e.target.value)}
+                  placeholder="Título (opcional)..."
+                  className={`${fieldClass} font-semibold`}
+                />
+
+                <textarea
+                  aria-label="Contenido de la nueva nota"
+                  autoFocus
+                  value={noteContent}
+                  onChange={(e) => setNoteContent(e.target.value)}
+                  placeholder="Escribí el contenido de la nota..."
+                  rows={3}
+                  className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm leading-6 text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 resize-y"
+                  required
+                />
+
+                <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="w-full sm:flex-1"><TagEditor value={noteTags} onChange={setNoteTags} /></div>
+                  <div className="flex items-center justify-end gap-2">
+                    <button type="button" onClick={() => setShowAddForm(false)} className={secondaryBtnClass}>
+                      Cancelar
+                    </button>
+                    <button type="submit" disabled={!noteContent.trim()} className={primaryBtnClass}>
+                      Guardar nota
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </SurfaceCard>
+          )}
+
+          {/* Search & Filter Bar */}
+          <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">
+            <div className="relative flex-1 max-w-md">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">
+                <Search size={15} strokeWidth={1.75} aria-hidden="true" />
+              </span>
+              <input
+                type="text"
+                value={noteSearch}
+                onChange={(e) => setNoteSearch(e.target.value)}
+                aria-label="Buscar notas"
+                placeholder="Buscar por título, texto o etiqueta"
+                className="w-full min-h-10 rounded-xl border border-slate-200/80 bg-white pl-9 pr-10 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-[#0D111A] dark:text-slate-100"
+              />
+              {noteSearch && (
+                <button
+                  type="button"
+                  onClick={() => setNoteSearch('')}
+                  aria-label="Limpiar búsqueda"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                  title="Limpiar búsqueda"
+                >
+                  <X size={14} strokeWidth={1.75} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-slate-200/80 bg-slate-50/80 p-1 text-xs font-semibold dark:border-white/[0.08] dark:bg-white/[0.03]">
+              <button
+                type="button"
+                onClick={() => setNoteFilter('activas')}
+                className={`min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 transition-colors cursor-pointer ${
+                  noteFilter === 'activas'
+                    ? 'bg-white text-[#4F46E5] dark:bg-[#0D111A] dark:text-indigo-300'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+                }`}
+              >
+                Activas ({totalActiveNotes})
+              </button>
+              <button
+                type="button"
+                onClick={() => setNoteFilter('fijadas')}
+                className={`inline-flex min-h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-3 py-1.5 transition-colors cursor-pointer ${
+                  noteFilter === 'fijadas'
+                    ? 'bg-white text-[#4F46E5] dark:bg-[#0D111A] dark:text-indigo-300'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+                }`}
+              >
+                <Pin size={13} strokeWidth={1.75} aria-hidden="true" />
+                <span>Fijadas ({totalPinnedNotes})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setNoteFilter('archivadas')}
+                className={`min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 transition-colors cursor-pointer ${
+                  noteFilter === 'archivadas'
+                    ? 'bg-white text-[#4F46E5] dark:bg-[#0D111A] dark:text-indigo-300'
+                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+                }`}
+              >
+                Archivadas ({totalArchivedNotes})
+              </button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+            <span role="status">{displayedNotes.length} {displayedNotes.length === 1 ? 'nota' : 'notas'}{noteSearch ? ' encontradas' : ''}</span>
+            <label className="flex items-center gap-2">
+              <span>Ordenar</span>
+              <select aria-label="Ordenar notas" value={noteOrder} onChange={(event) => setNoteOrder(event.target.value as 'recent' | 'pinned')} className="min-h-10 rounded-xl border border-slate-200/80 bg-white px-2.5 text-sm text-slate-900 dark:border-white/[0.08] dark:bg-[#0D111A] dark:text-slate-100">
+                <option value="recent">Más recientes</option>
+                <option value="pinned">Fijadas primero</option>
+              </select>
+            </label>
+          </div>
+
+          {/* Notes Grid */}
+          <div id="notes-grid" className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            {displayedNotes.length === 0 ? (
+              <SurfaceCard className="col-span-full flex flex-col items-center justify-center gap-3 px-4 py-10 text-center">
+                <StickyNote size={24} strokeWidth={1.75} className="text-slate-400 dark:text-slate-500" aria-hidden="true" />
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  {noteSearch.trim()
+                    ? `No se encontraron notas para "${noteSearch}".`
+                    : noteFilter === 'fijadas'
+                    ? 'No tenés notas fijadas. Fijá una nota importante para verla arriba.'
+                    : noteFilter === 'archivadas'
+                    ? 'No hay notas archivadas.'
+                    : 'No tenés notas guardadas. Creá una nota para comenzar.'}
+                </p>
+                {!showAddForm && !noteSearch.trim() && noteFilter === 'activas' && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddForm(true)}
+                    className={primaryBtnClass}
+                  >
+                    <Plus size={15} strokeWidth={1.75} aria-hidden="true" />
+                    <span>Crear primera nota</span>
+                  </button>
+                )}
+              </SurfaceCard>
+            ) : (
+              renderedNotes.map((p) => {
+                const relative = formatRelativeTime(p.updatedAt || p.date);
+                const isPinned = Boolean(p.pinned);
+                const isArchived = Boolean(p.archived);
+
+                return (
+                  <SurfaceCard
+                    as="div"
+                    key={p.id}
+                    id={`note-${p.id}`}
+                    className={`relative flex flex-col gap-3 p-4 sm:p-5 transition-colors ${openNoteMenuId === p.id ? 'z-20' : ''} ${
+                      isPinned
+                        ? 'border-[#4F46E5]/35 bg-[#4F46E5]/[0.04] dark:border-indigo-400/35 dark:bg-indigo-500/[0.08]'
+                        : isArchived
+                        ? 'opacity-85'
+                        : 'hover:border-[#4F46E5]/30'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex min-w-0 flex-1 items-start gap-2">
+                        {isPinned && <Pin size={15} strokeWidth={1.75} aria-label="Nota fijada" className="mt-1 shrink-0 text-[#4F46E5] dark:text-indigo-400" />}
+                        {p.title && (
+                          <button type="button" onClick={() => handleStartEdit(p)} className="min-w-0 flex-1 text-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#4F46E5]" aria-label={`Abrir nota ${p.title}`}>
+                            <h3 className="text-[15px] font-semibold leading-snug tracking-[-0.015em] text-slate-900 dark:text-slate-100 break-words">{p.title}</h3>
+                          </button>
+                        )}
+                      </div>
+                      <div className="relative shrink-0" data-note-menu onBlur={(event) => {
+                        if (!event.currentTarget.contains(event.relatedTarget)) setOpenNoteMenuId(null);
+                      }}>
+                        <button
+                          id={`note-menu-trigger-${p.id}`}
+                          type="button"
+                          onClick={() => setOpenNoteMenuId(openNoteMenuId === p.id ? null : p.id)}
+                          aria-label={`Acciones de la nota ${p.title || p.text.slice(0, 45)}`}
+                          aria-haspopup="menu"
+                          aria-expanded={openNoteMenuId === p.id}
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#4F46E5] dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
+                        >
+                          <MoreHorizontal size={18} strokeWidth={1.75} aria-hidden="true" />
+                        </button>
+                        {openNoteMenuId === p.id && (
+                          <div
+                            role="menu"
+                            aria-label="Acciones de nota"
+                            onKeyDown={(event) => {
+                              if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+                              event.preventDefault();
+                              const items = Array.from(event.currentTarget.querySelectorAll('[role="menuitem"]')) as HTMLButtonElement[];
+                              const current = items.indexOf(document.activeElement as HTMLButtonElement);
+                              const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : event.key === 'ArrowDown' ? (current + 1) % items.length : (current - 1 + items.length) % items.length;
+                              items[next]?.focus();
+                            }}
+                            className="absolute right-0 top-full z-30 mt-1 w-48 rounded-xl border border-slate-200/80 bg-white p-1.5 shadow-lg dark:border-white/[0.08] dark:bg-[#0D111A]"
+                          >
+                            <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleStartEdit(p); }} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">Editar</button>
+                            <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleTogglePin(p.id, isPinned); }} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">{isPinned ? 'Desfijar' : 'Fijar'}</button>
+                            <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleConvertToTask(p.id); }} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">Convertir a tarea</button>
+                            {GYM_NOTE_PLACEMENTS_ENABLED && (currentPlacements.some((placement) => placement.noteId === p.id) ? (
+                              <>
+                                <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); onOpenGym(); }} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">Ver en Gimnasio</button>
+                                <button role="menuitem" type="button" onClick={() => handleRemoveFromGym(p.id)} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">Retirar de Gimnasio</button>
+                              </>
+                            ) : <button role="menuitem" type="button" onClick={() => handlePlaceInGym(p.id)} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">Colocar en… Gimnasio</button>)}
+                            <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleToggleArchive(p.id, isArchived); }} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">{isArchived ? 'Restaurar' : 'Archivar'}</button>
+                            <button role="menuitem" type="button" onClick={() => handleDeletePostit(p.id)} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-500/10 dark:text-rose-400 cursor-pointer">Eliminar</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <button type="button" onClick={() => handleStartEdit(p)} className="min-w-0 text-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#4F46E5]" aria-label={`Abrir contenido de la nota ${p.title || p.text.slice(0, 45)}`}>
+                      <span className="line-clamp-5 text-sm leading-6 text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words">{p.text}</span>
+                    </button>
+
+                    {/* Footer: Tags and Relative Date */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs dark:border-white/[0.06]">
+                      {p.tags && p.tags.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {p.tags.map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() => setNoteSearch(tag)}
+                              className="min-h-10 rounded-lg border border-slate-200/80 bg-slate-50 px-2.5 text-xs font-medium text-slate-600 hover:border-[#4F46E5] hover:text-[#4F46E5] dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-indigo-300 cursor-pointer"
+                              title={`Filtrar por #${tag}`}
+                            >
+                              #{tag}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <div />
+                      )}
+
+                      <div className="ml-auto flex shrink-0 items-center gap-1.5 tabular-nums text-slate-400 dark:text-slate-500">
+                        {isPinned && <span className="font-medium text-[#4F46E5] dark:text-indigo-400">Fijada ·</span>}
+                        {isArchived && (
+                          <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-white/[0.06] dark:text-slate-400">
+                            Archivada
+                          </span>
+                        )}
+                        <span title={p.updatedAt ? `Modificada: ${p.updatedAt}` : `Creada: ${p.date}`}>
+                          {relative}
+                        </span>
+                      </div>
+                    </div>
+                  </SurfaceCard>
+                );
+              })
+            )}
+          </div>
+
+          {renderedNotes.length < displayedNotes.length && (
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-4">
+              <span role="status" className="text-sm text-slate-500 dark:text-slate-400">Mostrando {renderedNotes.length} de {displayedNotes.length} notas</span>
+              <button type="button" aria-controls="notes-grid" onClick={() => expandNotes(visibleNoteCount + 50)} className={secondaryBtnClass}>Cargar 50 más</button>
+              <button type="button" aria-controls="notes-grid" onClick={() => expandNotes(displayedNotes.length)} className="min-h-10 rounded-xl px-3 text-sm font-semibold text-[#4F46E5] hover:underline dark:text-indigo-400 cursor-pointer">Ver todas</button>
+            </div>
+          )}
+
+          {/* Edit Note Modal */}
+          {editingNote && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+              <div
+                ref={editorRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="note-editor-title"
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') { event.stopPropagation(); closeEditor(); }
+                  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); editorRef.current?.querySelector('form')?.requestSubmit(); }
+                  if (event.key === 'Tab') {
+                    const controls = Array.from(editorRef.current?.querySelectorAll('button:not(:disabled), input, textarea, select') || []) as HTMLElement[];
+                    const first = controls[0], last = controls[controls.length - 1];
+                    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+                    if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+                  }
+                }}
+                className="w-full max-w-3xl max-h-[90dvh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xl dark:border-white/[0.07] dark:bg-[#0D111A]"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <h3 id="note-editor-title" className="text-base font-semibold text-slate-900 dark:text-slate-100">Editar nota</h3>
+                  <button
+                    type="button"
+                    onClick={closeEditor}
+                    aria-label="Cerrar editor de nota"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
+                  >
+                    <X size={17} strokeWidth={1.75} aria-hidden="true" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleSaveEdit} className="space-y-3">
+                  {noteError && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{noteError}</p>}
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Guardado manual · Ctrl+Enter para guardar</p>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                      Título (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      aria-label="Título de la nota"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      placeholder="Título de la nota..."
+                      className={`${fieldClass} font-semibold`}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                      Contenido
+                    </label>
+                    <textarea
+                      aria-label="Contenido de la nota"
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      rows={10}
+                      className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-3 text-sm leading-6 text-slate-900 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 resize-y"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
+                      Etiquetas
+                    </label>
+                    <TagEditor value={editTags} onChange={setEditTags} />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-4 pt-1">
+                    <label className="inline-flex min-h-10 items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={editPinned}
+                        onChange={(e) => setEditPinned(e.target.checked)}
+                        className="h-4 w-4 rounded accent-[#4F46E5]"
+                      />
+                      <Pin size={13} strokeWidth={1.75} aria-hidden="true" />
+                      <span>Fijar arriba</span>
+                    </label>
+                    <label className="inline-flex min-h-10 items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={editArchived}
+                        onChange={(e) => setEditArchived(e.target.checked)}
+                        className="h-4 w-4 rounded accent-[#4F46E5]"
+                      />
+                      <Archive size={13} strokeWidth={1.75} aria-hidden="true" />
+                      <span>Archivada</span>
+                    </label>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
+                    <button type="button" onClick={closeEditor} className={secondaryBtnClass}>
+                      Cancelar
+                    </button>
+                    <button type="submit" disabled={!editText.trim()} className={primaryBtnClass}>
+                      Guardar cambios
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Mis cosas */}
       {activeTab === 'cosas' && (
-      <section className="space-y-3 pt-4 border-t border-[var(--border)]">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-bold text-[var(--text)]">Objetos y regalos</h2>
-            <p className="text-xs text-[var(--text-soft)]">Guardá dónde está cada objeto y los detalles que quieras recordar.</p>
-          </div>
-          {(state.notes?.possessions || []).length > 4 && (
-            <input
-              value={possessionSearch}
-              onChange={(event) => setPossessionSearch(event.target.value)}
-              placeholder="Buscar en mis cosas…"
-              className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs"
-            />
-          )}
-        </div>
-        <form onSubmit={handleAddPossession} className="grid gap-2 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg)] p-3 sm:grid-cols-2 lg:grid-cols-[1.3fr_110px_1fr_135px_auto]">
-          <input aria-label="Objeto o regalo" value={possessionName} onChange={(event) => setPossessionName(event.target.value)} placeholder="Qué recibiste o querés recordar" className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />
-          <input aria-label="Categoría" value={possessionCategory} onChange={(event) => setPossessionCategory(event.target.value)} placeholder="Categoría" className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />
-          <input aria-label="Ubicación (opcional)" value={possessionLocation} onChange={(event) => setPossessionLocation(event.target.value)} placeholder="Dónde está (opcional)" className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />
-          <input type="date" max={todayISO()} aria-label="Fecha del objeto" value={possessionDate} onChange={(event) => setPossessionDate(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs" />
-          <button className="rounded-xl bg-[var(--blue)] px-4 py-2 text-xs font-extrabold text-white cursor-pointer">Guardar</button>
-          <textarea aria-label="Detalles del objeto" value={possessionNote} onChange={(event) => setPossessionNote(event.target.value)} placeholder="Qué te gusta, quién te lo regaló o por qué lo valorás…" rows={2} className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs sm:col-span-2 lg:col-span-5" />
-        </form>
-        {visiblePossessions.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-[var(--border)] p-5 text-center text-xs text-[var(--text-faint)]">
-            {(state.notes?.possessions || []).length ? 'No encontré coincidencias.' : 'Agregá un objeto o regalo con el formulario.'}
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {visiblePossessions.map((item) => (
-              <article key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <span className="text-[9px] font-black uppercase tracking-widest text-[var(--blue)]">{item.category}</span>
-                    <h3 className="font-extrabold text-[var(--text)]">{item.name}</h3>
-                  </div>
-                  <button
-                    onClick={() => saveToolChange((draft) => {
-                      if (!draft.notes?.possessions) return;
-                      draft.notes.possessions = draft.notes.possessions.filter((candidate) => candidate.id !== item.id);
-                    })}
-                    aria-label={`Eliminar ${item.name}`}
-                    className="text-xs text-[var(--text-faint)] hover:text-rose-500 cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                </div>
-                {item.note && <p className="mt-2 whitespace-pre-wrap text-xs text-[var(--text-soft)]">{item.note}</p>}
-                <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-[var(--text-faint)]">
-                  {item.location && <span>📍 {item.location}</span>}
-                  {item.receivedAt && <span>🎁 {fmtDate(item.receivedAt)}</span>}
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-      )}
+        <div className="space-y-4">
+          <SurfaceCard className="p-4 sm:p-5 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <SectionHeader
+                  icon={<Gift size={16} strokeWidth={1.75} />}
+                  title="Objetos y regalos"
+                  count={(state.notes?.possessions || []).length > 0 ? (state.notes?.possessions || []).length : null}
+                />
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  Guardá dónde está cada objeto y los detalles que quieras recordar.
+                </p>
+              </div>
+              {(state.notes?.possessions || []).length > 4 && (
+                <input
+                  value={possessionSearch}
+                  onChange={(event) => setPossessionSearch(event.target.value)}
+                  placeholder="Buscar en mis cosas…"
+                  className="min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 text-sm text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100"
+                />
+              )}
+            </div>
 
-      {/* Shopping list and useful links keep their existing forms and records. */}
-      {(activeTab === 'compras' || activeTab === 'links') && (
-      <div className="pt-4 border-t border-[var(--border)]">
-        {/* Shopping List */}
-        {activeTab === 'compras' && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-[var(--text)]">Lista de compras</h2>
-            {pendingShopCount > 0 && (
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                {pendingShopCount} pendientes
-              </span>
-            )}
-          </div>
-          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
-            <form onSubmit={handleAddShop} className="flex gap-2">
-              <input
-                type="text"
-                aria-label="Artículo para comprar" value={shopItem}
-                onChange={(e) => setShopItem(e.target.value)}
-                placeholder="Ej: Leche, avena..."
-                className="flex-1 px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
-              />
-              <button
-                type="submit"
-                className="px-3 py-1.5 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold rounded-lg cursor-pointer"
-              >
-                Agregar
-              </button>
+            <form onSubmit={handleAddPossession} className="grid grid-cols-1 gap-2.5 border-t border-slate-100 pt-3.5 sm:grid-cols-2 lg:grid-cols-[1.3fr_120px_1fr_145px_auto] dark:border-white/[0.06]">
+              <input aria-label="Objeto o regalo" value={possessionName} onChange={(event) => setPossessionName(event.target.value)} placeholder="Qué recibiste o querés recordar" className={fieldClass} />
+              <input aria-label="Categoría" value={possessionCategory} onChange={(event) => setPossessionCategory(event.target.value)} placeholder="Categoría" className={fieldClass} />
+              <input aria-label="Ubicación (opcional)" value={possessionLocation} onChange={(event) => setPossessionLocation(event.target.value)} placeholder="Dónde está (opcional)" className={fieldClass} />
+              <input type="date" max={todayISO()} aria-label="Fecha del objeto" value={possessionDate} onChange={(event) => setPossessionDate(event.target.value)} className={fieldClass} />
+              <button type="submit" className={`${primaryBtnClass} sm:col-span-2 lg:col-span-1`}>Guardar</button>
+              <textarea aria-label="Detalles del objeto" value={possessionNote} onChange={(event) => setPossessionNote(event.target.value)} placeholder="Qué te gusta, quién te lo regaló o por qué lo valorás…" rows={2} className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 sm:col-span-2 lg:col-span-5" />
             </form>
+          </SurfaceCard>
 
-            <div className="divide-y divide-[var(--border)] max-h-60 overflow-y-auto">
-              {(state.notes?.shopping || []).length === 0 ? (
-                <p className="text-center py-4 text-xs text-[var(--text-faint)]">Lista vacía.</p>
-              ) : (
-                (state.notes?.shopping || []).map((s) => (
-                  <div key={s.id} className="py-2 flex items-center gap-3 text-xs">
+          {visiblePossessions.length === 0 ? (
+            <SurfaceCard className="flex flex-col items-center justify-center gap-2 px-4 py-10 text-center">
+              <Gift size={22} strokeWidth={1.75} className="text-slate-400 dark:text-slate-500" aria-hidden="true" />
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                {(state.notes?.possessions || []).length ? 'No encontré coincidencias.' : 'Agregá un objeto o regalo con el formulario.'}
+              </p>
+            </SurfaceCard>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {visiblePossessions.map((item) => (
+                <SurfaceCard as="div" key={item.id} className="p-4 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <span className="text-xs font-semibold text-[#4F46E5] dark:text-indigo-400">{item.category}</span>
+                      <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 break-words">{item.name}</h3>
+                    </div>
                     <button
                       type="button"
-                      aria-label={`${s.done ? 'Marcar pendiente' : 'Marcar comprado'}: ${s.text}`} aria-pressed={s.done} onClick={() => handleToggleShop(s.id)}
-                      className={`w-4 h-4 rounded-md border flex items-center justify-center text-[10px] cursor-pointer ${
-                        s.done
-                          ? 'bg-emerald-500 border-emerald-500 text-white'
-                          : 'border-[var(--border)] bg-[var(--bg-elevated)] text-transparent'
-                      }`}
+                      onClick={() => saveToolChange((draft) => {
+                        if (!draft.notes?.possessions) return;
+                        draft.notes.possessions = draft.notes.possessions.filter((candidate) => candidate.id !== item.id);
+                      })}
+                      aria-label={`Eliminar ${item.name}`}
+                      className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
                     >
-                      ✓
-                    </button>
-                    <span className={`flex-1 ${s.done ? 'line-through text-[var(--text-faint)]' : 'text-[var(--text)]'}`}>
-                      {s.text}
-                    </span>
-                    <button
-                      aria-label={`Eliminar ${s.text}`} onClick={() => handleDeleteShop(s.id)}
-                      className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1 cursor-pointer"
-                    >
-                      ✕
+                      <X size={15} strokeWidth={1.75} aria-hidden="true" />
                     </button>
                   </div>
-                ))
-              )}
+                  {item.note && <p className="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-400">{item.note}</p>}
+                  {(item.location || item.receivedAt) && (
+                    <div className="flex flex-wrap items-center gap-3 pt-1 text-xs text-slate-500 dark:text-slate-400">
+                      {item.location && (
+                        <span className="inline-flex items-center gap-1">
+                          <MapPin size={13} strokeWidth={1.75} aria-hidden="true" />
+                          <span>{item.location}</span>
+                        </span>
+                      )}
+                      {item.receivedAt && (
+                        <span className="inline-flex items-center gap-1">
+                          <Gift size={13} strokeWidth={1.75} aria-hidden="true" />
+                          <span>{fmtDate(item.receivedAt)}</span>
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </SurfaceCard>
+              ))}
             </div>
-          </div>
+          )}
         </div>
-
-        )}
-        {/* Useful Links */}
-        {activeTab === 'links' && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-bold text-[var(--text)]">Enlaces</h2>
-          <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 space-y-3">
-            <form onSubmit={handleAddLink} className="flex flex-wrap gap-2">
-              <input
-                type="text"
-                aria-label="Nombre del enlace" value={linkName}
-                onChange={(e) => setLinkName(e.target.value)}
-                placeholder="Nombre (ej: Campus)"
-                className="w-32 px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
-              />
-              <input
-                type="text"
-                aria-label="Dirección del enlace" value={linkUrl}
-                onChange={(e) => setLinkUrl(e.target.value)}
-                placeholder="https://..."
-                className="flex-1 min-w-[140px] px-3 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
-              />
-              <button
-                type="submit"
-                className="px-3 py-1.5 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold rounded-lg cursor-pointer"
-              >
-                Agregar
-              </button>
-            </form>
-
-            <div className="divide-y divide-[var(--border)] max-h-60 overflow-y-auto">
-              {(state.notes?.links || []).length === 0 ? (
-                <p className="text-center py-4 text-xs text-[var(--text-faint)]">Guardá un enlace con su nombre y dirección.</p>
-              ) : (
-                (state.notes?.links || []).map((l) => (
-                  <div key={l.id} className="py-2 flex items-center justify-between text-xs">
-                    <a
-                      href={l.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="min-w-0 break-words text-[var(--blue)] font-bold hover:underline"
-                    >
-                      {l.name}
-                    </a>
-                    <button
-                      aria-label={`Eliminar enlace ${l.name}`} onClick={() => handleDeleteLink(l.id)}
-                      className="text-[var(--text-faint)] hover:text-red-500 text-xs px-1 cursor-pointer"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-        )}
-      </div>
       )}
 
-  {/* Tab: Streaming & Contenido */}
-  {activeTab === 'streaming' && (
-    <div className="space-y-4">
-      <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-extrabold text-[var(--text)]">
-              {status.live ? `En directo hoy (${status.hours} h)` : 'Sin directo registrado hoy'}
-            </h3>
-            <p className="text-xs text-[var(--text-faint)]">Sesiones del mes y contenido en preparación.</p>
-          </div>
-          <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
-            {streamCount}/{streamGoal} este mes
-          </span>
-        </div>
-
-        <div className="w-full h-2 rounded-full bg-[var(--bg)] overflow-hidden">
-          <div className="h-full bg-amber-500 rounded-full transition-all duration-300" style={{ width: `${streamPct}%` }} />
-        </div>
-
-        <form onSubmit={handleAddStream} className="flex flex-wrap items-end gap-2 p-3 bg-[var(--bg)] border border-[var(--border)] rounded-xl">
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Fecha</label>
+      {/* Shopping list */}
+      {activeTab === 'compras' && (
+        <SurfaceCard className="p-4 sm:p-5 space-y-4">
+          <SectionHeader
+            icon={<ShoppingCart size={16} strokeWidth={1.75} />}
+            title="Lista de compras"
+            count={pendingShopCount > 0 ? `${pendingShopCount} pendientes` : null}
+          />
+          <form onSubmit={handleAddShop} className="flex flex-col gap-2 sm:flex-row">
             <input
-              type="date"
-              aria-label="Fecha del directo" value={streamDate}
-              onChange={(e) => setStreamDate(e.target.value)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
+              type="text"
+              aria-label="Artículo para comprar"
+              value={shopItem}
+              onChange={(e) => setShopItem(e.target.value)}
+              placeholder="Ej: Leche, avena..."
+              className={`${fieldClass} flex-1`}
             />
-          </div>
-          <div>
-            <label className="text-[10px] font-bold text-[var(--text-faint)] uppercase tracking-wider block mb-1">Horas</label>
-            <input
-              type="number"
-              step="0.1"
-              aria-label="Horas del directo" value={streamHours}
-              onChange={(e) => setStreamHours(e.target.value)}
-              placeholder="2.5"
-              className="w-20 px-2.5 py-1.5 text-xs tabular-nums rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)]"
-            />
-          </div>
-          <button
-            type="submit"
-            className="px-3.5 py-1.5 bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-semibold rounded-lg hover:opacity-90 cursor-pointer"
-          >
-            ＋ Registrar horas
-          </button>
-        </form>
+            <button type="submit" className={`${primaryBtnClass} shrink-0`}>Agregar</button>
+          </form>
 
-        <div className="grid gap-4 border-t border-[var(--border)] pt-4 lg:grid-cols-[0.8fr_1.2fr]">
-          <section className="rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <h3 className="text-xs font-extrabold text-[var(--text)]">Antes del directo</h3>
-                <p className="text-[10px] text-[var(--text-faint)]">Marcá cada control y reiniciá la lista para el próximo directo.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => saveToolChange((draft) => (draft.streaming?.preStreamChecklist || []).forEach((item) => { item.done = false; }))}
-                className="rounded-lg border border-[var(--border)] px-2 py-1 text-[10px] font-bold text-[var(--blue)] cursor-pointer"
-              >
-                Reiniciar
-              </button>
+          {(state.notes?.shopping || []).length === 0 ? (
+            <div className="border-t border-slate-100 py-6 text-center dark:border-white/[0.06]">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Lista vacía.</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Sumá artículos arriba para tacharlos cuando compres.</p>
             </div>
-            <div className="mt-2 space-y-1.5">
-              {(state.streaming?.preStreamChecklist || []).map((item) => (
-                <div key={item.id} className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${item.done ? 'border-emerald-500/25 bg-emerald-500/10 opacity-70' : 'border-[var(--border)] bg-[var(--card)]'}`}>
+          ) : (
+            <ListDivider className="border-t border-slate-100 dark:border-white/[0.06]">
+              {(state.notes?.shopping || []).map((s) => (
+                <div key={s.id} className="flex items-center gap-2 py-2">
                   <button
                     type="button"
-                    onClick={() => saveToolChange((draft) => { const target = (draft.streaming?.preStreamChecklist || []).find((candidate) => candidate.id === item.id); if (target) target.done = !target.done; })}
-                    className={`flex h-6 w-6 items-center justify-center rounded-md border-2 text-xs cursor-pointer ${item.done ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-[var(--border)] text-transparent'}`}
+                    aria-label={`${s.done ? 'Marcar pendiente' : 'Marcar comprado'}: ${s.text}`}
+                    aria-pressed={s.done}
+                    onClick={() => handleToggleShop(s.id)}
+                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg cursor-pointer"
                   >
-                    ✓
+                    <span className={`flex h-5 w-5 items-center justify-center rounded-md border transition-colors ${
+                      s.done
+                        ? 'border-[#4F46E5] bg-[#4F46E5] text-white'
+                        : 'border-slate-300 bg-white text-transparent dark:border-white/20 dark:bg-transparent'
+                    }`}>
+                      <Check size={13} strokeWidth={2.25} aria-hidden="true" />
+                    </span>
                   </button>
-                  <span className={`min-w-0 flex-1 text-xs font-semibold ${item.done ? 'line-through' : ''}`}>{item.label}</span>
+                  <span className={`min-w-0 flex-1 text-sm break-words ${s.done ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}>
+                    {s.text}
+                  </span>
                   <button
                     type="button"
-                    onClick={() => saveToolChange((draft) => { if (draft.streaming?.preStreamChecklist) draft.streaming.preStreamChecklist = draft.streaming.preStreamChecklist.filter((candidate) => candidate.id !== item.id); })}
-                    className="text-[10px] text-[var(--text-faint)] hover:text-rose-500 cursor-pointer"
+                    aria-label={`Eliminar ${s.text}`}
+                    onClick={() => handleDeleteShop(s.id)}
+                    className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
                   >
-                    ✕
+                    <X size={15} strokeWidth={1.75} aria-hidden="true" />
                   </button>
                 </div>
               ))}
-            </div>
-            <form onSubmit={handleAddChecklistItem} className="mt-2 flex gap-1.5">
-              <input
-                aria-label="Control antes del directo" value={checklistLabel}
-                onChange={(event) => setChecklistLabel(event.target.value)}
-                placeholder="Nuevo control…"
-                className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs"
-              />
-              <button aria-label="Agregar control" className="rounded-lg bg-[var(--text)] px-2.5 text-xs font-bold text-[var(--bg)] cursor-pointer">Agregar</button>
-            </form>
-          </section>
+            </ListDivider>
+          )}
+        </SurfaceCard>
+      )}
 
-          <section className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3">
-            <div>
-              <h3 className="text-xs font-extrabold text-[var(--text)]">Contenido en preparación</h3>
-              <p className="text-[10px] text-[var(--text-faint)]">Mové cada contenido según su avance.</p>
+      {/* Useful Links */}
+      {activeTab === 'links' && (
+        <SurfaceCard className="p-4 sm:p-5 space-y-4">
+          <SectionHeader
+            icon={<Link2 size={16} strokeWidth={1.75} />}
+            title="Enlaces"
+            count={(state.notes?.links || []).length > 0 ? (state.notes?.links || []).length : null}
+          />
+          <form onSubmit={handleAddLink} className="grid grid-cols-1 gap-2 sm:grid-cols-[0.8fr_1.4fr_auto]">
+            <input
+              type="text"
+              aria-label="Nombre del enlace"
+              value={linkName}
+              onChange={(e) => setLinkName(e.target.value)}
+              placeholder="Nombre (ej: Campus)"
+              className={fieldClass}
+            />
+            <input
+              type="text"
+              aria-label="Dirección del enlace"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="https://..."
+              className={fieldClass}
+            />
+            <button type="submit" className={primaryBtnClass}>Agregar</button>
+          </form>
+
+          {(state.notes?.links || []).length === 0 ? (
+            <div className="border-t border-slate-100 py-6 text-center dark:border-white/[0.06]">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Guardá un enlace con su nombre y dirección.</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Tené a mano accesos frecuentes de estudio, trabajo o trámites.</p>
             </div>
-            <form onSubmit={handleAddContent} className="mt-2 flex gap-1.5">
-              <input
-                aria-label="Título del contenido" value={contentTitle}
-                onChange={(event) => setContentTitle(event.target.value)}
-                placeholder="Nueva idea de contenido…"
-                className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-xs"
-              />
-              <button className="rounded-lg bg-amber-500 px-3 text-xs font-extrabold text-white cursor-pointer">Agregar</button>
+          ) : (
+            <ListDivider className="border-t border-slate-100 dark:border-white/[0.06]">
+              {(state.notes?.links || []).map((l) => (
+                <div key={l.id} className="flex items-center justify-between gap-2 py-2">
+                  <a
+                    href={l.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex min-h-10 min-w-0 flex-1 items-center gap-1.5 text-sm font-semibold text-[#4F46E5] hover:underline dark:text-indigo-400 break-words"
+                  >
+                    <span className="truncate">{l.name}</span>
+                    <ExternalLink size={14} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+                  </a>
+                  <button
+                    type="button"
+                    aria-label={`Eliminar enlace ${l.name}`}
+                    onClick={() => handleDeleteLink(l.id)}
+                    className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
+                  >
+                    <X size={15} strokeWidth={1.75} aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+            </ListDivider>
+          )}
+        </SurfaceCard>
+      )}
+
+      {/* Tab: Streaming & Contenido (flattened to depth = 1 sibling SurfaceCards) */}
+      {activeTab === 'streaming' && (
+        <div className="space-y-4">
+          <SurfaceCard className="p-4 sm:p-5 space-y-4">
+            <SectionHeader
+              icon={<Radio size={16} strokeWidth={1.75} />}
+              title={status.live ? `En directo hoy (${status.hours} h)` : 'Sin directo registrado hoy'}
+              action={
+                <span className="rounded-lg bg-[#4F46E5]/10 px-2.5 py-1 text-xs font-semibold tabular-nums text-[#4F46E5] dark:text-indigo-300">
+                  {streamCount}/{streamGoal} este mes
+                </span>
+              }
+            />
+            <p className="text-sm text-slate-500 dark:text-slate-400">Sesiones del mes y contenido en preparación.</p>
+
+            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-white/[0.06]">
+              <div className="h-full rounded-full bg-[#4F46E5] transition-all duration-300" style={{ width: `${streamPct}%` }} />
+            </div>
+
+            <form onSubmit={handleAddStream} className="grid grid-cols-1 gap-2.5 border-t border-slate-100 pt-3.5 sm:grid-cols-[1fr_110px_auto] sm:items-end dark:border-white/[0.06]">
+              <div className="min-w-0">
+                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Fecha</label>
+                <input
+                  type="date"
+                  aria-label="Fecha del directo"
+                  value={streamDate}
+                  onChange={(e) => setStreamDate(e.target.value)}
+                  className={fieldClass}
+                />
+              </div>
+              <div className="min-w-0">
+                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Horas</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  aria-label="Horas del directo"
+                  value={streamHours}
+                  onChange={(e) => setStreamHours(e.target.value)}
+                  placeholder="2.5"
+                  className={`${fieldClass} tabular-nums`}
+                />
+              </div>
+              <button type="submit" className={primaryBtnClass}>
+                <Plus size={15} strokeWidth={1.75} aria-hidden="true" />
+                <span>Registrar horas</span>
+              </button>
             </form>
-            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-              {pipelineStages.map((stage) => {
-                const cards = (state.streaming?.contentPipeline || []).filter((item) => item.status === stage.id);
-                return (
-                  <div key={stage.id} className="w-[160px] shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] p-2">
-                    <div className="mb-2 flex items-center justify-between">
-                      <strong className="text-[10px] uppercase tracking-wider text-[var(--text-soft)]">{stage.label}</strong>
-                      <span className="rounded-md bg-[var(--bg)] px-1.5 text-[9px] font-bold">{cards.length}</span>
+          </SurfaceCard>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.85fr_1.15fr]">
+            <SurfaceCard className="p-4 sm:p-5 space-y-3.5">
+              <SectionHeader
+                title="Antes del directo"
+                action={
+                  <button
+                    type="button"
+                    onClick={() => saveToolChange((draft) => (draft.streaming?.preStreamChecklist || []).forEach((item) => { item.done = false; }))}
+                    className="inline-flex min-h-10 items-center rounded-lg px-2.5 text-xs font-semibold text-[#4F46E5] hover:bg-[#4F46E5]/10 dark:text-indigo-400 cursor-pointer"
+                  >
+                    Reiniciar
+                  </button>
+                }
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400">Marcá cada control y reiniciá la lista para el próximo directo.</p>
+
+              {(state.streaming?.preStreamChecklist || []).length === 0 ? (
+                <p className="border-t border-slate-100 py-4 text-center text-xs text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
+                  Agregá controles previos (micrófono, escenas, iluminación) para no olvidar nada.
+                </p>
+              ) : (
+                <ListDivider className="border-t border-slate-100 dark:border-white/[0.06]">
+                  {(state.streaming?.preStreamChecklist || []).map((item) => (
+                    <div key={item.id} className="flex items-center gap-2 py-2">
+                      <button
+                        type="button"
+                        aria-label={`${item.done ? 'Desmarcar' : 'Marcar'} ${item.label}`}
+                        onClick={() => saveToolChange((draft) => { const target = (draft.streaming?.preStreamChecklist || []).find((candidate) => candidate.id === item.id); if (target) target.done = !target.done; })}
+                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg cursor-pointer"
+                      >
+                        <span className={`flex h-5 w-5 items-center justify-center rounded-md border transition-colors ${
+                          item.done
+                            ? 'border-[#4F46E5] bg-[#4F46E5] text-white'
+                            : 'border-slate-300 bg-white text-transparent dark:border-white/20 dark:bg-transparent'
+                        }`}>
+                          <Check size={13} strokeWidth={2.25} aria-hidden="true" />
+                        </span>
+                      </button>
+                      <span className={`min-w-0 flex-1 text-sm break-words ${item.done ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}>{item.label}</span>
+                      <button
+                        type="button"
+                        aria-label={`Eliminar control ${item.label}`}
+                        onClick={() => saveToolChange((draft) => { if (draft.streaming?.preStreamChecklist) draft.streaming.preStreamChecklist = draft.streaming.preStreamChecklist.filter((candidate) => candidate.id !== item.id); })}
+                        className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
+                      >
+                        <X size={15} strokeWidth={1.75} aria-hidden="true" />
+                      </button>
                     </div>
-                    <div className="space-y-1.5">
-                      {cards.map((item) => (
-                        <article key={item.id} className="rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2">
-                          <p className="text-[11px] font-bold text-[var(--text)]">{item.title}</p>
-                          <div className="mt-1.5 flex gap-1">
-                            <select
-                              aria-label={`Estado de ${item.title}`}
-                              value={item.status}
-                              onChange={(event) => saveToolChange((draft) => { const target = (draft.streaming?.contentPipeline || []).find((candidate) => candidate.id === item.id); if (target) { target.status = event.target.value as typeof item.status; target.updatedAt = new Date().toISOString(); } })}
-                              className="min-w-0 flex-1 rounded-md border border-[var(--border)] bg-[var(--card)] px-1 py-1 text-[9px]"
-                            >
-                              {pipelineStages.map((option) => (
-                                <option key={option.id} value={option.id}>{option.label}</option>
-                              ))}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={() => saveToolChange((draft) => { if (draft.streaming?.contentPipeline) draft.streaming.contentPipeline = draft.streaming.contentPipeline.filter((candidate) => candidate.id !== item.id); })}
-                              className="px-1 text-[10px] text-rose-500 cursor-pointer"
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        </article>
-                      ))}
-                      {!cards.length && <p className="py-3 text-center text-[9px] text-[var(--text-faint)]">Vacío</p>}
+                  ))}
+                </ListDivider>
+              )}
+
+              <form onSubmit={handleAddChecklistItem} className="flex flex-col gap-2 pt-1 sm:flex-row">
+                <input
+                  aria-label="Control antes del directo"
+                  value={checklistLabel}
+                  onChange={(event) => setChecklistLabel(event.target.value)}
+                  placeholder="Nuevo control…"
+                  className={`${fieldClass} flex-1`}
+                />
+                <button type="submit" aria-label="Agregar control" className={`${primaryBtnClass} shrink-0`}>Agregar</button>
+              </form>
+            </SurfaceCard>
+
+            <SurfaceCard className="min-w-0 p-4 sm:p-5 space-y-3.5">
+              <div>
+                <SectionHeader title="Contenido en preparación" />
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Mové cada contenido según su avance.</p>
+              </div>
+              <form onSubmit={handleAddContent} className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  aria-label="Título del contenido"
+                  value={contentTitle}
+                  onChange={(event) => setContentTitle(event.target.value)}
+                  placeholder="Nueva idea de contenido…"
+                  className={`${fieldClass} flex-1`}
+                />
+                <button type="submit" className={`${primaryBtnClass} shrink-0`}>Agregar</button>
+              </form>
+
+              <div className="flex gap-3 overflow-x-auto border-t border-slate-100 pt-3 pb-1 dark:border-white/[0.06]">
+                {pipelineStages.map((stage) => {
+                  const cards = (state.streaming?.contentPipeline || []).filter((item) => item.status === stage.id);
+                  return (
+                    <div key={stage.id} className="w-[172px] shrink-0 space-y-2 border-r border-slate-100 pr-3 last:border-r-0 last:pr-0 dark:border-white/[0.06]">
+                      <div className="flex items-center justify-between">
+                        <strong className="text-xs font-semibold text-slate-700 dark:text-slate-300">{stage.label}</strong>
+                        <span className="text-xs font-medium tabular-nums text-slate-400 dark:text-slate-500">{cards.length}</span>
+                      </div>
+                      <ListDivider>
+                        {cards.map((item) => (
+                          <article key={item.id} className="py-2 space-y-1.5">
+                            <p className="text-xs font-medium text-slate-900 dark:text-slate-100 break-words">{item.title}</p>
+                            <div className="flex items-center gap-1">
+                              <select
+                                aria-label={`Estado de ${item.title}`}
+                                value={item.status}
+                                onChange={(event) => saveToolChange((draft) => { const target = (draft.streaming?.contentPipeline || []).find((candidate) => candidate.id === item.id); if (target) { target.status = event.target.value as typeof item.status; target.updatedAt = new Date().toISOString(); } })}
+                                className="min-h-10 min-w-0 flex-1 rounded-lg border border-slate-200/80 bg-white px-1.5 text-xs text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200"
+                              >
+                                {pipelineStages.map((option) => (
+                                  <option key={option.id} value={option.id}>{option.label}</option>
+                                ))}
+                              </select>
+                              <button
+                                type="button"
+                                aria-label={`Eliminar ${item.title}`}
+                                onClick={() => saveToolChange((draft) => { if (draft.streaming?.contentPipeline) draft.streaming.contentPipeline = draft.streaming.contentPipeline.filter((candidate) => candidate.id !== item.id); })}
+                                className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
+                              >
+                                <X size={14} strokeWidth={1.75} aria-hidden="true" />
+                              </button>
+                            </div>
+                          </article>
+                        ))}
+                        {!cards.length && <p className="py-3 text-center text-xs text-slate-400 dark:text-slate-500">Sin elementos</p>}
+                      </ListDivider>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
+                  );
+                })}
+              </div>
+            </SurfaceCard>
+          </div>
         </div>
-      </div>
+      )}
     </div>
-  )}
-</div>
-);
+  );
 };
