@@ -1,11 +1,38 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import type { GymSession } from '../types';
-import type { NewPRRecord } from '../lib/gymMetrics';
-import { calculateSessionDuration, getCompletedGymSets, getPerformedGymVolume } from '../lib/gymMetrics';
+import type { NewPRRecord, SessionExercisePR } from '../lib/gymMetrics';
+import {
+  calculateSessionDuration,
+  getCompletedGymSets,
+  getPerformedGymVolume,
+  groupSessionPRsByExercise,
+} from '../lib/gymMetrics';
 import { AppIcon } from './AppIcon';
 import { fmtDate } from '../lib/storage';
 import { LifeOSLottie } from './visual/LifeOSLottie';
 import { useDialogFocus } from '../hooks/useDialogFocus';
+
+const PR_BADGE_ORDER: NewPRRecord['type'][] = ['maxWeight', 'maxE1RM', 'maxVolume', 'maxReps'];
+const PR_BADGE_LABELS: Record<NewPRRecord['type'], string> = {
+  maxWeight: 'Peso',
+  maxE1RM: '1RM',
+  maxVolume: 'Volumen',
+  maxReps: 'Reps',
+};
+
+function formatExercisePRBestSet(entry: SessionExercisePR): string {
+  if (entry.bestSet) {
+    if (entry.bestSet.weight > 0) {
+      return `${entry.bestSet.weight} kg × ${entry.bestSet.reps}`;
+    }
+    return `${entry.bestSet.reps} reps`;
+  }
+  const withWeight = entry.records.find((r) => (r.weight || 0) > 0 && (r.reps || 0) > 0);
+  if (withWeight) return `${withWeight.weight} kg × ${withWeight.reps}`;
+  const withReps = entry.records.find((r) => (r.reps || 0) > 0);
+  if (withReps) return `${withReps.reps} reps`;
+  return entry.records[0]?.label || '';
+}
 
 interface WorkoutSummaryModalProps {
   session: GymSession;
@@ -34,8 +61,13 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
   const totalSets = session.exercises.reduce((acc, ex) => acc + (ex.sets || []).length, 0);
   const totalVolume = getPerformedGymVolume(session);
 
-  // Mostrar destacados o todos los PRs para evitar listas gigantes que rompan el viewport
-  const displayedPRs = showAllPRs ? newPRs : newPRs.slice(0, 4);
+  const groupedPRs = useMemo(
+    () => groupSessionPRsByExercise(session, newPRs),
+    [session, newPRs]
+  );
+
+  // Mostrar hasta 4 ejercicios inicialmente para evitar listas gigantes que rompan el viewport
+  const displayedPRs = showAllPRs ? groupedPRs : groupedPRs.slice(0, 4);
 
   return (
     <div
@@ -105,8 +137,8 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
             </div>
           </div>
 
-          {/* Sección de Récords Personales (Estructurada y escalable) */}
-          {newPRs.length > 0 ? (
+          {/* Sección de Récords Personales (1 fila por ejercicio único) */}
+          {groupedPRs.length > 0 ? (
             <div className="gym-pr-celebration rounded-2xl sm:rounded-3xl border border-amber-500/30 bg-amber-500/10 p-3.5 sm:p-4 space-y-3">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2.5">
@@ -118,49 +150,57 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
                       Récords Personales
                     </span>
                     <h3 className="text-base sm:text-lg font-black tracking-tight text-[var(--text)]">
-                      {newPRs.length === 1 ? '¡1 nuevo PR!' : `¡${newPRs.length} nuevos PRs!`}
+                      {groupedPRs.length === 1 ? '¡1 nuevo PR!' : `¡${groupedPRs.length} nuevos PRs!`}
                     </h3>
                   </div>
                 </div>
 
-                {newPRs.length > 4 && (
+                {groupedPRs.length > 4 && (
                   <button
                     type="button"
                     onClick={() => setShowAllPRs((prev) => !prev)}
-                    className="text-[11px] font-bold text-amber-800 dark:text-amber-200 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 transition-colors"
+                    className="text-[11px] font-bold text-amber-800 dark:text-amber-200 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 transition-colors cursor-pointer"
                   >
-                    {showAllPRs ? 'Ver menos' : `Ver todos (${newPRs.length})`}
+                    {showAllPRs ? 'Ver menos' : `Ver todos (${groupedPRs.length})`}
                   </button>
                 )}
               </div>
 
-              {/* Lista limpia sin scroll anidado */}
+              {/* Lista agrupada: 1 fila por ejercicio */}
               <div className="space-y-1.5">
-                {displayedPRs.map((pr, idx) => (
-                  <div
-                    key={`${pr.exerciseName}-${pr.type}-${idx}`}
-                    className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[var(--card)] border border-amber-500/20 text-xs shadow-xs"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <span className="font-extrabold text-[var(--text)] block truncate">
-                        {pr.exerciseName}
-                      </span>
-                      <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
-                        {pr.typeLabel}
-                      </span>
-                    </div>
-                    <div className="text-right shrink-0 tabular-nums">
-                      <span className="font-extrabold text-[var(--text)] text-xs block">
-                        {pr.label}
-                      </span>
-                      {pr.previousValue !== undefined && pr.previousValue > 0 && (
-                        <span className="text-[10px] text-[var(--text-faint)]">
-                          Ant: {pr.previousValue}
+                {displayedPRs.map((entry) => {
+                  const typesSet = new Set(entry.records.map((r) => r.type));
+                  const badges = PR_BADGE_ORDER.filter((type) => typesSet.has(type));
+                  const bestLabel = formatExercisePRBestSet(entry);
+                  return (
+                    <div
+                      key={entry.exerciseKey}
+                      data-pr-exercise-row={entry.exerciseKey}
+                      className="p-2.5 rounded-xl bg-[var(--card)] border border-amber-500/20 text-xs shadow-xs space-y-1.5"
+                    >
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="font-extrabold text-[var(--text)] min-w-0 truncate">
+                          {entry.exerciseName}
                         </span>
-                      )}
+                        {bestLabel && (
+                          <span className="font-extrabold text-[var(--text)] tabular-nums shrink-0">
+                            {bestLabel}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {badges.map((type) => (
+                          <span
+                            key={type}
+                            className="inline-flex items-center rounded-md border border-amber-500/25 bg-amber-500/12 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-700 dark:text-amber-300"
+                          >
+                            {PR_BADGE_LABELS[type]}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           ) : (

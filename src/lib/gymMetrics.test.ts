@@ -8,6 +8,7 @@ import {
   applyHistoryToTemplateExercises,
   calcDetailedPRs,
   detectSessionPRs,
+  getSessionExercisePRs,
   getExerciseHistory,
   calculateSessionDuration,
   isLogicalTimeRangeValid,
@@ -984,7 +985,16 @@ test('detectSessionPRs: no genera 24 PRs falsos cuando el historial tiene distin
 });
 
 test('detectSessionPRs: agrupa múltiples instancias del mismo ejercicio en la sesión sin duplicar PRs', () => {
-  const historicalPRs = calcDetailedPRs([]);
+  const historicalPRs = calcDetailedPRs([
+    {
+      id: 'sess-prev',
+      date: '2026-10-20',
+      status: 'completed',
+      exercises: [
+        { id: 'ex-prev', name: 'Sentadilla', sets: [{ id: 'p1', weight: 80, reps: 5, completed: true }] },
+      ],
+    },
+  ]);
   const sessionWithDuplicates: GymSession = {
     id: 'sess-dup',
     date: '2026-10-28',
@@ -1010,6 +1020,18 @@ test('nowTimeHHmm: genera hora en formato HH:mm de 24 horas', () => {
 });
 
 test('detectSessionPRs y calcDetailedPRs: ignora PRs en 0 kg para carga externa pero conserva PRs en corporal y carga > 0', () => {
+  const priorBaselineSession: GymSession = {
+    id: 'sess-prior-baseline',
+    date: '2026-10-20',
+    status: 'completed',
+    exercises: [
+      { id: 'prev-bar', name: 'Press banca', equipment: 'barra', sets: [{ id: 'pb1', weight: 40, reps: 8, completed: true }] },
+      { id: 'prev-db', name: 'Curl bíceps', equipment: 'mancuerna', sets: [{ id: 'pd1', weight: 10, reps: 10, completed: true }] },
+      { id: 'prev-bw', name: 'Dominadas', equipment: 'corporal', sets: [{ id: 'pbw1', weight: 0, reps: 10, completed: true }] },
+      { id: 'prev-valid', name: 'Remo con barra', equipment: 'barra', sets: [{ id: 'pv1', weight: 50, reps: 8, completed: true }] },
+    ],
+  };
+
   const zeroWeightSession: GymSession = {
     id: 'sess-zero-external',
     date: '2026-10-29',
@@ -1057,8 +1079,9 @@ test('detectSessionPRs y calcDetailedPRs: ignora PRs en 0 kg para carga externa 
   assert.equal(detailedPRs['remo con barra']?.maxWeight?.value, 60);
   assert.equal(detailedPRs['remo con barra']?.maxReps?.value, 10);
 
-  // detectSessionPRs contra historial vacío
-  const newPRs = detectSessionPRs(zeroWeightSession, {});
+  // detectSessionPRs contra sesión previa inferior
+  const priorPRs = calcDetailedPRs([priorBaselineSession]);
+  const newPRs = detectSessionPRs(zeroWeightSession, priorPRs);
   assert.equal(newPRs.some((pr) => pr.exerciseName === 'Press banca'), false);
   assert.equal(newPRs.some((pr) => pr.exerciseName === 'Curl bíceps'), false);
   assert.equal(
@@ -1069,4 +1092,124 @@ test('detectSessionPRs y calcDetailedPRs: ignora PRs en 0 kg para carga externa 
     newPRs.some((pr) => pr.exerciseName === 'Remo con barra' && pr.type === 'maxWeight' && pr.value === 60),
     true
   );
+});
+
+// ── 9. Bloque 9: PR real solo al superar sesión previa, desempates y agrupamiento ──
+
+test('Bloque 9: la primera sesión de un ejercicio fija marca base y devuelve 0 PRs', () => {
+  const firstSession: GymSession = {
+    id: 'sess-first',
+    date: '2026-11-01',
+    status: 'completed',
+    exercises: [
+      {
+        id: 'ex-1',
+        name: 'Press banca',
+        equipment: 'barra',
+        sets: [
+          { id: 's1', weight: 80, reps: 8, completed: true },
+          { id: 's2', weight: 80, reps: 8, completed: true },
+        ],
+      },
+      {
+        id: 'ex-2',
+        name: 'Dominadas',
+        equipment: 'corporal',
+        sets: [{ id: 's3', weight: 0, reps: 10, completed: true }],
+      },
+    ],
+  };
+
+  assert.equal(detectSessionPRs(firstSession, {}).length, 0);
+  assert.equal(getSessionExercisePRs(firstSession, [firstSession]).length, 0);
+});
+
+test('Bloque 9: desempate en Reps Máximas y Peso Máximo elige la serie superior', () => {
+  const priorSession: GymSession = {
+    id: 'sess-prior-tie',
+    date: '2026-11-01',
+    status: 'completed',
+    exercises: [
+      {
+        id: 'ex-1',
+        name: 'Curl con mancuernas',
+        equipment: 'mancuerna',
+        sets: [{ id: 'p1', weight: 15, reps: 10, completed: true }],
+      },
+    ],
+  };
+
+  const currentSession: GymSession = {
+    id: 'sess-current-tie',
+    date: '2026-11-08',
+    status: 'completed',
+    exercises: [
+      {
+        id: 'ex-1',
+        name: 'Curl con mancuernas',
+        equipment: 'mancuerna',
+        sets: [
+          { id: 'c1', weight: 7.5, reps: 12, completed: true },
+          { id: 'c2', weight: 17.5, reps: 10, completed: true },
+          { id: 'c3', weight: 17.5, reps: 12, completed: true },
+        ],
+      },
+    ],
+  };
+
+  const prs = detectSessionPRs(currentSession, calcDetailedPRs([priorSession]));
+  const maxRepsPR = prs.find((pr) => pr.type === 'maxReps');
+  const maxWeightPR = prs.find((pr) => pr.type === 'maxWeight');
+
+  assert.ok(maxRepsPR, 'Debe detectar PR de Reps Máximas');
+  assert.equal(maxRepsPR.value, 12);
+  assert.equal(maxRepsPR.weight, 17.5, 'Ante empate en 12 reps debe elegir 17.5 kg sobre 7.5 kg');
+  assert.equal(maxRepsPR.label, '12 reps (@ 17.5 kg)');
+
+  assert.ok(maxWeightPR, 'Debe detectar PR de Peso Máximo');
+  assert.equal(maxWeightPR.value, 17.5);
+  assert.equal(maxWeightPR.reps, 12, 'Ante empate en 17.5 kg debe elegir 12 reps sobre 10 reps');
+});
+
+test('Bloque 9: getSessionExercisePRs agrupa categorías por ejercicio único e ignora sesiones futuras', () => {
+  const s1: GymSession = {
+    id: 's1',
+    date: '2026-11-01',
+    status: 'completed',
+    exercises: [
+      { id: 'e1', name: 'Press banca', equipment: 'barra', sets: [{ id: '1', weight: 80, reps: 8, completed: true }] },
+      { id: 'e2', name: 'Remo', equipment: 'barra', sets: [{ id: '2', weight: 60, reps: 10, completed: true }] },
+    ],
+  };
+  const s2: GymSession = {
+    id: 's2',
+    date: '2026-11-08',
+    status: 'completed',
+    exercises: [
+      {
+        id: 'e1',
+        name: 'Press banca',
+        equipment: 'barra',
+        sets: [
+          { id: '3', weight: 85, reps: 10, completed: true },
+          { id: '4', weight: 85, reps: 10, completed: true },
+        ],
+      },
+      { id: 'e2', name: 'Remo', equipment: 'barra', sets: [{ id: '5', weight: 60, reps: 10, completed: true }] }, // empate
+    ],
+  };
+  const s3Future: GymSession = {
+    id: 's3',
+    date: '2026-11-15',
+    status: 'completed',
+    exercises: [
+      { id: 'e1', name: 'Press banca', equipment: 'barra', sets: [{ id: '6', weight: 95, reps: 10, completed: true }] },
+    ],
+  };
+
+  const grouped = getSessionExercisePRs(s2, [s1, s2, s3Future]);
+  assert.equal(grouped.length, 1, 'Solo Press banca superó su marca previa (Remo empató)');
+  assert.equal(grouped[0].exerciseName, 'Press banca');
+  assert.deepEqual(grouped[0].bestSet, { setId: '3', weight: 85, reps: 10, e1RM: 113.3 });
+  assert.equal(grouped[0].records.length, 4, 'Agrupa las 4 categorías superadas bajo 1 ejercicio');
 });

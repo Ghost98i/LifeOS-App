@@ -46,9 +46,8 @@ import {
 } from '../lib/storage';
 import {
   getExerciseGhostValues,
-  calcDetailedPRs,
-  detectSessionPRs,
   getExerciseHistory,
+  getSessionExercisePRs,
   getUnifiedGymProgressMetrics,
   calculateSessionDuration,
   NewPRRecord,
@@ -516,7 +515,6 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     }
     if (!saved || result?.status !== 'completed' || !sessionToFinish) return;
 
-    const historicalPRs = calcDetailedPRs(state.gym.sessions, sessionId);
     const finishedSnapshot: GymSession = {
       ...sessionToFinish,
       status: 'completed',
@@ -524,7 +522,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     };
     const summaryPayload = {
       session: finishedSnapshot,
-      newPRs: detectSessionPRs(finishedSnapshot, historicalPRs),
+      newPRs: getSessionExercisePRs(finishedSnapshot, state.gym.sessions).flatMap((entry) => entry.records),
       streakIncrease: currentStreak > previousStreak
         ? { previous: previousStreak, current: currentStreak }
         : null,

@@ -3,13 +3,15 @@ import test from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { defaultState, todayISO } from '../lib/storage';
-import { calcDetailedPRs, detectSessionPRs } from '../lib/gymMetrics';
+import { calcDetailedPRs, detectSessionPRs, getSessionExercisePRs } from '../lib/gymMetrics';
+import { buildGymSessionPresentation } from '../lib/gymIdlePresentation';
 import type { GymSession } from '../types';
 import { ConfigView } from './ConfigView';
 import { PrivacySecuritySection } from './PrivacySecuritySection';
 import { IAView } from './IAView';
 import { GimnasioView } from './GimnasioView';
 import { GymActivityCalendar } from './GymActivityCalendar';
+import { WorkoutSummaryModal } from './WorkoutSummaryModal';
 
 test('Block 8: ConfigView y PrivacySecuritySection eliminan sobretexto y ContextualHelp redundantes conservando avisos obligatorios', () => {
   const state = defaultState();
@@ -188,8 +190,8 @@ test('Block 8: GymActivityCalendar con 1 sesión oculta "1 sesión registrada" y
   assert.match(html, /Remo con barra/);
   assert.match(html, /Ver sesión completa/);
   assert.match(html, /data-open-calendar-session="sess-today-1"/);
-  // 2 ejercicios únicos con PR (no 8 subcategorías)
-  assert.match(html, />2 PRs</);
+  // Primera sesión sin historial previo: no celebra PRs falsos
+  assert.doesNotMatch(html, /gym-activity-pr-badge/);
 });
 
 test('Block 8: GymActivityCalendar cuenta ejercicios únicos con PR y 1RM Estimado usa "kg ×"', () => {
@@ -285,4 +287,80 @@ test('Block 8: GymActivityCalendar con 2 sesiones en el mismo día muestra "2 se
   assert.match(html, /data-open-calendar-session="sess-am"/);
   assert.match(html, /data-open-calendar-session="sess-pm"/);
   assert.doesNotMatch(html, /data-activity-single-session/);
+});
+
+test('Block 9: WorkoutSummaryModal agrupa 1 fila por ejercicio y coincide 1:1 con buildGymSessionPresentation y GymActivityCalendar', () => {
+  const today = todayISO();
+  const priorSession: GymSession = {
+    id: 'sess-b9-prior',
+    date: '2026-10-01',
+    weekLabel: 'Torso',
+    status: 'completed',
+    exercises: [
+      { id: 'ex-1', name: 'Curl martillo', equipment: 'mancuerna', sets: [{ id: 'p1', weight: 15, reps: 10, completed: true }] },
+      { id: 'ex-2', name: 'Press banca', equipment: 'barra', sets: [{ id: 'p2', weight: 80, reps: 8, completed: true }] },
+    ],
+  };
+  const todaySession: GymSession = {
+    id: 'sess-b9-today',
+    date: today,
+    weekLabel: 'Torso',
+    status: 'completed',
+    startedAt: '18:00',
+    finishedAt: '18:45',
+    exercises: [
+      {
+        id: 'ex-1',
+        name: 'Curl martillo',
+        equipment: 'mancuerna',
+        sets: [
+          { id: 'c1', weight: 7.5, reps: 12, completed: true },
+          { id: 'c2', weight: 17.5, reps: 12, completed: true },
+        ],
+      },
+      {
+        id: 'ex-2',
+        name: 'Press banca',
+        equipment: 'barra',
+        sets: [{ id: 'c3', weight: 80, reps: 8, completed: true }], // empate -> no es PR
+      },
+    ],
+  };
+
+  const allSessions = [priorSession, todaySession];
+  const grouped = getSessionExercisePRs(todaySession, allSessions);
+  const flatRecords = grouped.flatMap((entry) => entry.records);
+  const presentation = buildGymSessionPresentation(todaySession, allSessions);
+
+  // Mismo número de ejercicios con PR en el motor y en buildGymSessionPresentation
+  assert.equal(grouped.length, 1);
+  assert.ok(flatRecords.length > 1, 'El ejercicio rompió múltiples categorías');
+  assert.equal(presentation.prExerciseCount, 1);
+
+  // GymActivityCalendar muestra el mismo 1 PR
+  const calendarHtml = renderToStaticMarkup(
+    <GymActivityCalendar sessions={allSessions} restDates={[]} onOpenSession={() => {}} />
+  );
+  assert.match(calendarHtml, />1 PR</);
+
+  // WorkoutSummaryModal muestra 1 fila por ejercicio con mejor serie y badges discretos
+  const modalHtml = renderToStaticMarkup(
+    <WorkoutSummaryModal session={todaySession} newPRs={flatRecords} onClose={() => {}} />
+  );
+  assert.match(modalHtml, /¡1 nuevo PR!/);
+  assert.equal((modalHtml.match(/data-pr-exercise-row=/g) || []).length, 1);
+  assert.match(modalHtml, /Curl martillo/);
+  assert.match(modalHtml, /17\.5 kg × 12/);
+  assert.match(modalHtml, />Peso</);
+  assert.match(modalHtml, />1RM</);
+  assert.match(modalHtml, />Volumen</);
+  assert.match(modalHtml, />Reps</);
+  assert.doesNotMatch(modalHtml, /Press banca/);
+
+  // Con 0 PRs (ej. primera sesión), el modal oculta el bloque dorado de celebración
+  const zeroPrModalHtml = renderToStaticMarkup(
+    <WorkoutSummaryModal session={priorSession} newPRs={[]} onClose={() => {}} />
+  );
+  assert.doesNotMatch(zeroPrModalHtml, /gym-pr-celebration/);
+  assert.doesNotMatch(zeroPrModalHtml, /nuevo PR|nuevos PRs/);
 });

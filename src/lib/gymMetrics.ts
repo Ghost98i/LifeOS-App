@@ -712,12 +712,12 @@ export function detectSessionPRs(
       // En ejercicios con carga externa (equipment !== 'corporal'), ignorar series en 0 kg
       if (!isBodyweight && w <= 0) continue;
 
-      if (w > sessionMaxWeight) {
+      if (w > sessionMaxWeight || (w === sessionMaxWeight && r > sessionMaxWeightReps)) {
         sessionMaxWeight = w;
         sessionMaxWeightReps = r;
       }
 
-      if (r > sessionMaxReps) {
+      if (r > sessionMaxReps || (r === sessionMaxReps && w > sessionMaxRepsWeight)) {
         sessionMaxReps = r;
         sessionMaxRepsWeight = w;
       }
@@ -734,10 +734,10 @@ export function detectSessionPRs(
       sessionVolumeTotal += w * r;
     }
 
-    // 1. Max Weight (estrictamente superior)
+    // 1. Max Weight (estrictamente superior a una marca previa existente)
     if (sessionMaxWeight > 0) {
       const prev = oldPR.maxWeight?.value;
-      if (prev === undefined || sessionMaxWeight > prev) {
+      if (prev !== undefined && sessionMaxWeight > prev) {
         newPRs.push({
           exerciseName,
           type: 'maxWeight',
@@ -751,10 +751,10 @@ export function detectSessionPRs(
       }
     }
 
-    // 2. Max Reps (estrictamente superior)
+    // 2. Max Reps (estrictamente superior a una marca previa existente)
     if (sessionMaxReps > 0) {
       const prev = oldPR.maxReps?.value;
-      if (prev === undefined || sessionMaxReps > prev) {
+      if (prev !== undefined && sessionMaxReps > prev) {
         newPRs.push({
           exerciseName,
           type: 'maxReps',
@@ -768,10 +768,10 @@ export function detectSessionPRs(
       }
     }
 
-    // 3. Max e1RM (estrictamente superior)
+    // 3. Max e1RM (estrictamente superior a una marca previa existente)
     if (sessionMaxE1RM > 0) {
       const prev = oldPR.maxE1RM?.value;
-      if (prev === undefined || sessionMaxE1RM > prev) {
+      if (prev !== undefined && sessionMaxE1RM > prev) {
         newPRs.push({
           exerciseName,
           type: 'maxE1RM',
@@ -785,10 +785,10 @@ export function detectSessionPRs(
       }
     }
 
-    // 4. Max Volume (estrictamente superior)
+    // 4. Max Volume (estrictamente superior a una marca previa existente)
     if (sessionVolumeTotal > 0) {
       const prev = oldPR.maxVolume?.value;
-      if (prev === undefined || sessionVolumeTotal > prev) {
+      if (prev !== undefined && sessionVolumeTotal > prev) {
         newPRs.push({
           exerciseName,
           type: 'maxVolume',
@@ -802,6 +802,93 @@ export function detectSessionPRs(
   }
 
   return newPRs;
+}
+
+export interface SessionExercisePR {
+  exerciseKey: string;
+  exerciseName: string;
+  bestSet: PerformedSetMetric | null;
+  records: NewPRRecord[];
+}
+
+function isSessionStrictlyPrior(candidate: GymSession, target: GymSession): boolean {
+  if (!candidate || candidate.id === target.id) return false;
+  if (!isPerformedGymSession(candidate)) return false;
+  if (!candidate.date || !target.date) return false;
+  if (candidate.date < target.date) return true;
+  if (candidate.date > target.date) return false;
+
+  const candMin = parseLocalMinutesOfDay(candidate.startedAt) ?? parseLocalMinutesOfDay(candidate.finishedAt);
+  const targetMin = parseLocalMinutesOfDay(target.startedAt) ?? parseLocalMinutesOfDay(target.finishedAt);
+  if (candMin !== null && targetMin !== null && candMin !== targetMin) {
+    return candMin < targetMin;
+  }
+
+  const candStamp = candidate.finishedAt || candidate.startedAt || '';
+  const targetStamp = target.finishedAt || target.startedAt || '';
+  return Boolean(candStamp && targetStamp && candStamp < targetStamp);
+}
+
+/**
+ * Agrupa un arreglo plano de NewPRRecord por ejercicio único, adjuntando la mejor
+ * serie efectiva realizada en la sesión para cada ejercicio.
+ */
+export function groupSessionPRsByExercise(
+  session: GymSession,
+  newPRs: NewPRRecord[]
+): SessionExercisePR[] {
+  if (!newPRs || newPRs.length === 0) return [];
+
+  const setsByKey = new Map<string, GymSet[]>();
+  for (const ex of session.exercises || []) {
+    const key = getExercisePRKey(ex);
+    if (!key) continue;
+    const performed = getPerformedExerciseSets(session, ex);
+    if (performed.length === 0) continue;
+    const existing = setsByKey.get(key);
+    if (existing) {
+      existing.push(...performed);
+    } else {
+      setsByKey.set(key, [...performed]);
+    }
+  }
+
+  const grouped = new Map<string, SessionExercisePR>();
+  for (const record of newPRs) {
+    const key = normalizeExerciseName(record.exerciseName) || record.exerciseName;
+    if (!key) continue;
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.records.push(record);
+    } else {
+      const sets = setsByKey.get(key) || [];
+      const bestSet = sets.length > 0 ? selectBestPerformedSet(sets) : null;
+      grouped.set(key, {
+        exerciseKey: key,
+        exerciseName: record.exerciseName,
+        bestSet,
+        records: [record],
+      });
+    }
+  }
+
+  return [...grouped.values()];
+}
+
+/**
+ * Fuente única de verdad para PRs reales de una sesión agrupados por ejercicio único.
+ * Compara estrictamente contra sesiones anteriores a `session` (por fecha y hora en mismo día).
+ */
+export function getSessionExercisePRs(
+  session: GymSession,
+  allSessions: GymSession[]
+): SessionExercisePR[] {
+  if (!isPerformedGymSession(session)) return [];
+  const priorSessions = (allSessions || []).filter((candidate) => isSessionStrictlyPrior(candidate, session));
+  if (priorSessions.length === 0) return [];
+  const priorPRs = calcDetailedPRs(priorSessions, session.id, session.date);
+  const newPRs = detectSessionPRs(session, priorPRs);
+  return groupSessionPRsByExercise(session, newPRs);
 }
 
 export interface ExerciseSessionHistoryPoint {
@@ -861,12 +948,19 @@ export function getExerciseHistory(
   // Process chronologically (oldest -> newest) first to compute accurate all-time PRs in a single fast pass
   for (let i = executions.length - 1; i >= 0; i--) {
     const execution = executions[i];
+    const sourceSession = sessionMap.get(execution.sessionId);
+    const sourceExercise = sourceSession?.exercises.find((exercise) =>
+      (execution.exerciseId && exercise.id === execution.exerciseId) ||
+      normalizeExerciseName(exercise.name) === normalizeExerciseName(execution.exerciseName)
+    );
+    const isBodyweight = sourceExercise?.equipment === 'corporal';
     let sessionExVolume = 0;
     for (const set of execution.sets) {
       if (isWarmupSet(set)) continue;
       const w = Number(set.weight) || 0;
       const r = Number(set.reps) || 0;
       if (w <= 0 && r <= 0) continue;
+      if (!isBodyweight && w <= 0) continue;
 
       if (w > 0) {
         if (!prs.maxWeight || w > prs.maxWeight.value || (w === prs.maxWeight.value && r > (prs.maxWeight.reps || 0))) {

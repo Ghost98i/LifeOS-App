@@ -3,12 +3,11 @@ import { Award } from 'lucide-react';
 import type { GymSession } from '../types';
 import { todayISO } from '../lib/storage';
 import {
-  calcDetailedPRs,
   calculateSessionDuration,
-  detectSessionPRs,
   getCompletedGymSets,
   getPerformedExerciseSets,
   getPerformedGymVolume,
+  getSessionExercisePRs,
   isEffectiveSet,
   selectBestPerformedSet,
 } from '../lib/gymMetrics';
@@ -93,8 +92,7 @@ export const GymActivityCalendar: React.FC<GymActivityCalendarProps> = React.mem
         };
       })
       .filter((item): item is NonNullable<typeof item> => item !== null);
-    const historicalPRs = calcDetailedPRs(sessions, session.id, session.date);
-    const prCount = new Set(detectSessionPRs(session, historicalPRs).map((pr) => pr.exerciseName)).size;
+    const prCount = getSessionExercisePRs(session, sessions).length;
     return {
       session,
       time,

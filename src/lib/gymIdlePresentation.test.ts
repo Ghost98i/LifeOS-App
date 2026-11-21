@@ -42,10 +42,10 @@ test('resume una sesión completada con métricas de trabajo real', () => {
   assert.equal(result.volumeKg, 1660);
   assert.equal(result.durationLabel, '48 min');
   assert.deepEqual(result.bestSet, { exerciseName: 'Press banca', weight: 70, reps: 8 });
-  assert.equal(result.prExerciseCount, 2);
+  assert.equal(result.prExerciseCount, 0, 'La primera sesión fija marca base y no dispara PRs');
 });
 
-test('sólo marca PR si la sesión conserva un récord real frente al historial', () => {
+test('sólo marca PR cuando la sesión supera una marca previa real y no lo pierde con sesiones futuras', () => {
   const strongerSession: GymSession = {
     ...session,
     id: 'stronger',
@@ -55,8 +55,18 @@ test('sólo marca PR si la sesión conserva un récord real frente al historial'
       sets: exercise.sets.map((set) => ({ ...set, weight: Number(set.weight) + 20 })),
     })),
   };
+  const futureStrongerSession: GymSession = {
+    ...session,
+    id: 'future-stronger',
+    date: '2026-10-15',
+    exercises: session.exercises.map((exercise) => ({
+      ...exercise,
+      sets: exercise.sets.map((set) => ({ ...set, weight: Number(set.weight) + 30 })),
+    })),
+  };
 
   assert.equal(buildGymSessionPresentation(session, [session, strongerSession]).prExerciseCount, 0);
+  assert.equal(buildGymSessionPresentation(strongerSession, [session, strongerSession, futureStrongerSession]).prExerciseCount, 2);
 });
 
 test('la mejor serie anterior usa el máximo efectivo, no la sugerencia inicial', () => {
@@ -88,7 +98,16 @@ test('cuenta sesiones realizadas por semana y mes calendario y muestra la hora r
 
 test('el idle completado prioriza lectura y mantiene un único CTA de inicio', () => {
   const state = defaultState();
-  state.gym.sessions = [{ ...session, date: todayISO() }];
+  const priorSession: GymSession = {
+    ...session,
+    id: 'prior-baseline',
+    date: '2026-10-01',
+    exercises: session.exercises.map((exercise) => ({
+      ...exercise,
+      sets: exercise.sets.map((set) => ({ ...set, weight: Math.max(10, Number(set.weight) - 10) })),
+    })),
+  };
+  state.gym.sessions = [priorSession, { ...session, date: todayISO() }];
   const html = renderToStaticMarkup(
     React.createElement(GimnasioView, { state, onUpdateState: () => undefined })
   );
