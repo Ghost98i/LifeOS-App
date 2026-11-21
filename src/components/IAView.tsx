@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Briefcase,
   Check,
@@ -7,12 +7,14 @@ import {
   FileJson,
   Lightbulb,
   Plus,
+  RotateCcw,
   ShoppingBag,
   Sparkles,
   X,
 } from 'lucide-react';
 import { LifeOSState } from '../types';
 import { computeResaleMarginPct, computeResalePriority } from '../lib/calculations';
+import { isModuleEnabled } from '../lib/moduleVisibility';
 import { fmtMoney, todayISO, uid } from '../lib/storage';
 import {
   AIImportPreview,
@@ -34,13 +36,25 @@ interface IAViewProps {
   onOpenBusiness?: () => void;
 }
 
-const AI_PROMPT = `Actuá como mi motor de oportunidades. Buscá:
-1. Empleos junior o de soporte técnico con requisitos claros y una fuente verificable.
-2. Hardware o tecnología usada con margen de reventa atractivo.
-3. Becas, descuentos o ideas realistas para generar ingresos.
-
-Respondé ÚNICAMENTE con JSON válido, sin explicaciones ni bloques Markdown:
+export const AI_JSON_CONTRACT = `Respondé ÚNICAMENTE con JSON válido, sin explicaciones ni bloques Markdown:
 {"empleo":[{"empresa":"","puesto":"","rating":1,"link":"","nota":""}],"reventa":[{"item":"","buyPrice":0,"marketPrice":0,"nota":""}],"ideas":[""]}`;
+
+export function buildDefaultAIInstructions(state: LifeOSState): string {
+  const jobsVisible = isModuleEnabled(state, 'trabajo');
+  const resaleVisible = isModuleEnabled(state, 'reventa');
+  const items: string[] = [];
+
+  if (jobsVisible) {
+    items.push('Oportunidades laborales o proyectos acordes a mi perfil, con requisitos claros y fuente verificable.');
+  }
+  if (resaleVisible) {
+    items.push('Productos o insumos con buen margen para mi negocio o reventa, indicando precio de compra y referencia de mercado.');
+  }
+  items.push('Becas, cursos, descuentos o ideas realistas para generar ingresos o mejorar mi productividad.');
+
+  const numbered = items.map((line, index) => `${index + 1}. ${line}`).join('\n');
+  return `Actuá como mi asistente de oportunidades. Buscá:\n${numbered}`;
+}
 
 const AI_SCHEMA = `{
   "empleo": [{
@@ -60,10 +74,26 @@ const AI_SCHEMA = `{
 }`;
 
 export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState, onOpenBusiness }) => {
+  const defaultInstructions = buildDefaultAIInstructions(state);
+  const savedCustomInstructions = typeof state.settings?.aiCustomInstructions === 'string'
+    ? state.settings.aiCustomInstructions
+    : '';
+  const hasCustomInstructions = savedCustomInstructions.trim().length > 0;
+
+  const [instructionsDraft, setInstructionsDraft] = useState(
+    hasCustomInstructions ? savedCustomInstructions : defaultInstructions
+  );
   const [rawImport, setRawImport] = useState('');
   const [preview, setPreview] = useState<AIImportPreview | null>(null);
   const [message, setMessage] = useState('');
   const [copied, setCopied] = useState<'prompt' | 'schema' | null>(null);
+
+  useEffect(() => {
+    setInstructionsDraft(hasCustomInstructions ? savedCustomInstructions : defaultInstructions);
+  }, [hasCustomInstructions, savedCustomInstructions, defaultInstructions]);
+
+  const effectiveInstructions = instructionsDraft.trim() || defaultInstructions;
+  const fullPromptToCopy = `${effectiveInstructions}\n\n${AI_JSON_CONTRACT}`;
 
   const [jobCompany, setJobCompany] = useState('');
   const [jobRole, setJobRole] = useState('');
@@ -113,6 +143,24 @@ export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState, onOpenBusi
     catch { /* Keep imported data and manual drafts on a failed save. */ }
     setMessage('No se pudo guardar. El contenido sigue disponible para reintentar.');
     return false;
+  };
+
+  const handleSaveInstructions = (value: string) => {
+    const trimmed = value.trim();
+    const nextStored = trimmed && trimmed !== defaultInstructions.trim() ? value : null;
+    if ((state.settings?.aiCustomInstructions ?? null) === nextStored) return;
+    saveAIChange((draft) => {
+      if (!draft.settings) draft.settings = { darkMode: false, hiddenTabs: [] } as any;
+      draft.settings.aiCustomInstructions = nextStored;
+    });
+  };
+
+  const handleResetInstructions = () => {
+    setInstructionsDraft(defaultInstructions);
+    saveAIChange((draft) => {
+      if (!draft.settings) draft.settings = { darkMode: false, hiddenTabs: [] } as any;
+      draft.settings.aiCustomInstructions = null;
+    });
   };
 
   const handlePreview = () => {
@@ -251,25 +299,42 @@ export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState, onOpenBusi
             title="1. Prepará la búsqueda"
           />
           <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-            Buscá empleos, posibles compras para reventa e ideas. Copiá las instrucciones en la IA que uses; Celestian no le envía tus datos.
+            Personalizá qué querés buscar y copiá las instrucciones en la IA que uses; Celestian no le envía tus datos.
           </p>
+          <label className="block space-y-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+            <span>Criterios de búsqueda (editables)</span>
+            <textarea
+              aria-label="Instrucciones para la IA externa"
+              value={instructionsDraft}
+              onChange={(event) => setInstructionsDraft(event.target.value)}
+              onBlur={(event) => handleSaveInstructions(event.target.value)}
+              rows={5}
+              className="block w-full rounded-xl border border-slate-200/80 bg-white p-3 font-mono text-xs text-slate-800 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200"
+            />
+          </label>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" onClick={() => copyText('prompt', AI_PROMPT)} className={primaryBtnClass}>
+            <button type="button" onClick={() => copyText('prompt', fullPromptToCopy)} className={primaryBtnClass}>
               {copied === 'prompt' ? <Check size={15} strokeWidth={1.75} aria-hidden="true" /> : <Copy size={15} strokeWidth={1.75} aria-hidden="true" />}
               <span>{copied === 'prompt' ? 'Copiado' : 'Copiar instrucciones'}</span>
             </button>
+            {(hasCustomInstructions || instructionsDraft.trim() !== defaultInstructions.trim()) && (
+              <button type="button" onClick={handleResetInstructions} className={secondaryBtnClass}>
+                <RotateCcw size={14} strokeWidth={1.75} aria-hidden="true" />
+                <span>Restablecer por defecto</span>
+              </button>
+            )}
           </div>
           <details className="border-t border-slate-100 pt-2.5 text-sm text-slate-600 dark:border-white/[0.06] dark:text-slate-400">
             <summary className="flex min-h-10 cursor-pointer items-center font-medium text-slate-700 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100">
-              Ver instrucciones y formato de respuesta
+              Ver contrato JSON fijo (se adjunta automáticamente)
             </summary>
             <div className="space-y-3 pt-2">
               <label className="block space-y-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-                <span>Instrucciones</span>
-                <textarea aria-label="Instrucciones para la IA externa" readOnly value={AI_PROMPT} rows={6} className="block w-full rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 font-mono text-xs text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200" />
+                <span>Contrato JSON (no editable)</span>
+                <textarea aria-label="Contrato JSON fijo" readOnly value={AI_JSON_CONTRACT} rows={3} className="block w-full rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 font-mono text-xs text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200" />
               </label>
               <label className="block space-y-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-                <span>Formato JSON</span>
+                <span>Formato JSON de ejemplo</span>
                 <textarea aria-label="Formato JSON" readOnly value={AI_SCHEMA} rows={6} className="block w-full rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 font-mono text-xs text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200" />
               </label>
               <button type="button" onClick={() => copyText('schema', AI_SCHEMA)} className={secondaryBtnClass}>

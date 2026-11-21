@@ -41,6 +41,7 @@ import {
   formatRelativeTime,
 } from '../lib/notesFlows';
 import { showToast } from '../lib/toast';
+import { isStreamingEnabled } from '../lib/moduleVisibility';
 import { ProjectsManager } from './ProjectsManager';
 import { ListDivider, SectionHeader, SurfaceCard } from './ui/SurfacePrimitives';
 import { addGymPlacement, GYM_NOTE_PLACEMENTS_ENABLED, loadPlacements, placementStorageKey, removePlacement, savePlacements } from '../lib/notePlacements';
@@ -95,7 +96,10 @@ export const NotasView: React.FC<NotasViewProps> = ({
 }) => {
   const initialNote = initialNoteId ? (state.notes?.postits || []).find((note) => note.id === initialNoteId) || null : null;
   type NotesSection = 'notas' | 'herramientas' | 'proyectos' | 'streaming' | 'cosas' | 'compras' | 'links';
-  const [activeTab, setActiveTab] = useState<NotesSection>(initialTab || 'notas');
+  const streamingEnabled = isStreamingEnabled(state);
+  const resolvedInitialTab: NotesSection =
+    initialTab === 'streaming' && !streamingEnabled ? 'proyectos' : (initialTab || 'notas');
+  const [activeTab, setActiveTab] = useState<NotesSection>(resolvedInitialTab);
   const [toolMessage, setToolMessage] = useState('');
   const [projectView, setProjectView] = useState<'projects' | 'goals'>('projects');
   const [openNoteMenuId, setOpenNoteMenuId] = useState<string | null>(null);
@@ -132,10 +136,17 @@ export const NotasView: React.FC<NotasViewProps> = ({
 
   React.useEffect(() => {
     if (initialTab) {
-      setActiveTab(initialTab);
-      if (initialTab === 'proyectos') setProjectView('projects');
+      const nextTab = initialTab === 'streaming' && !streamingEnabled ? 'proyectos' : initialTab;
+      setActiveTab(nextTab);
+      if (nextTab === 'proyectos') setProjectView('projects');
     }
-  }, [initialTab, focusNonce]);
+  }, [initialTab, focusNonce, streamingEnabled]);
+
+  React.useEffect(() => {
+    if (activeTab === 'streaming' && !streamingEnabled) {
+      setActiveTab('proyectos');
+    }
+  }, [activeTab, streamingEnabled]);
   const [streamDate, setStreamDate] = useState(todayISO());
   const [streamHours, setStreamHours] = useState('');
   const [checklistLabel, setChecklistLabel] = useState('');
@@ -614,7 +625,13 @@ export const NotasView: React.FC<NotasViewProps> = ({
       {inTools && toolMessage && <p role="status" className="text-sm font-medium text-slate-700 dark:text-slate-300">{toolMessage}</p>}
       {inTools && (
         <nav aria-label="Herramientas personales" className="flex items-center gap-1.5 overflow-x-auto p-0.5 pb-1">
-          {([['proyectos', 'Proyectos y objetivos'], ['streaming', 'Streaming y contenido'], ['cosas', 'Objetos y regalos'], ['compras', 'Lista de compras'], ['links', 'Enlaces']] as const).map(([section, label]) => (
+          {([
+            ['proyectos', 'Proyectos y objetivos'],
+            ...(streamingEnabled ? ([['streaming', 'Streaming y contenido']] as const) : []),
+            ['cosas', 'Objetos y regalos'],
+            ['compras', 'Lista de compras'],
+            ['links', 'Enlaces'],
+          ] as const).map(([section, label]) => (
             <button
               key={section}
               type="button"
@@ -1420,7 +1437,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
       )}
 
       {/* Tab: Streaming & Contenido (flattened to depth = 1 sibling SurfaceCards) */}
-      {activeTab === 'streaming' && (
+      {activeTab === 'streaming' && streamingEnabled && (
         <div className="space-y-4">
           <SurfaceCard className="p-4 sm:p-5 space-y-4">
             <SectionHeader

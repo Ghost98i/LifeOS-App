@@ -1053,65 +1053,16 @@ button:active {
   to { opacity: 1; }
 }
 
-/* Subtle, chroma-preserving bottom veil:
-   Uses the natural mid-sky hue of each period so the bottom edge never looks gray, muddy, or patched */
+/* Scrim sutil localizado únicamente detrás de las zonas de texto inferior */
 .hero-scrim {
   background:
-    linear-gradient(
-      180deg,
-      transparent 50%,
-      rgb(22 52 96 / 0.15) 75%,
-      rgb(16 40 78 / 0.34) 100%
-    );
+    linear-gradient(0deg, rgba(7, 11, 22, 0.52) 0%, rgba(7, 11, 22, 0.14) 44%, rgba(7, 11, 22, 0) 75%),
+    radial-gradient(ellipse 52% 65% at 14% 92%, rgba(7, 11, 22, 0.34) 0%, rgba(7, 11, 22, 0) 72%),
+    radial-gradient(ellipse 46% 62% at 88% 92%, rgba(7, 11, 22, 0.30) 0%, rgba(7, 11, 22, 0) 72%);
 }
 
-.hero-scrim-predawn {
-  background:
-    linear-gradient(
-      180deg,
-      transparent 48%,
-      rgb(52 62 108 / 0.18) 74%,
-      rgb(38 46 86 / 0.38) 100%
-    );
-}
-
-.hero-scrim-morning {
-  background:
-    linear-gradient(
-      180deg,
-      transparent 48%,
-      rgb(102 68 36 / 0.17) 74%,
-      rgb(76 48 22 / 0.36) 100%
-    );
-}
-
-.hero-scrim-day {
-  background:
-    linear-gradient(
-      180deg,
-      transparent 48%,
-      rgb(28 82 148 / 0.16) 74%,
-      rgb(18 58 112 / 0.35) 100%
-    );
-}
-
-.hero-scrim-sunset {
-  background:
-    linear-gradient(
-      180deg,
-      transparent 50%,
-      rgb(76 44 54 / 0.15) 75%,
-      rgb(54 30 40 / 0.34) 100%
-    );
-}
-
-.hero-scrim-night {
-  background:
-    linear-gradient(
-      180deg,
-      transparent 60%,
-      rgb(4 9 18 / 0.26) 100%
-    );
+.hero-text-shadow {
+  text-shadow: 0 1px 16px rgba(7, 11, 22, 0.34);
 }
 
 /* ===========================================================================

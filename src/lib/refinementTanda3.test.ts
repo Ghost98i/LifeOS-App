@@ -28,9 +28,15 @@ test('notes retain progressive rendering and historical data while tools get pee
   const html = renderToStaticMarkup(React.createElement(NotasView, { state, onUpdateState: () => true, storageUserId: null, onOpenGym: () => {}, initialTab: 'proyectos' }));
   assert.match(html, /aria-label="Herramientas personales"/);
   const plainText = html.replace(/<[^>]+>/g, '');
-  for (const label of ['Streaming y contenido', 'Objetos y regalos', 'Lista de compras', 'Enlaces', 'Objetivos · avance numérico']) assert.ok(plainText.includes(label));
+  assert.ok(!plainText.includes('Streaming y contenido'), 'Streaming oculto por defecto en cuentas nuevas');
+  for (const label of ['Objetos y regalos', 'Lista de compras', 'Enlaces', 'Objetivos · avance numérico']) assert.ok(plainText.includes(label));
   assert.doesNotMatch(html, /Metas Cuantificables/);
   assert.deepEqual(state, original);
+
+  const streamingState = defaultState();
+  streamingState.settings.streamingEnabled = true;
+  const streamingHtml = renderToStaticMarkup(React.createElement(NotasView, { state: streamingState, onUpdateState: () => true, storageUserId: null, onOpenGym: () => {}, initialTab: 'proyectos' }));
+  assert.ok(streamingHtml.replace(/<[^>]+>/g, '').includes('Streaming y contenido'), 'Streaming visible cuando streamingEnabled es true');
 });
 
 test('study audio stays opt-in on rendering and never edits academic history', () => {

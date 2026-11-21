@@ -1002,6 +1002,8 @@ export interface Settings {
   dismissedAttentionKeys?: string[];
   attentionDismissals?: Record<string, AttentionDismissalRecord>;
   motivosPrioridadesVisibles?: boolean;
+  aiCustomInstructions?: string | null;
+  streamingEnabled?: boolean;
 }
 
 export interface CheckoutLogDay {

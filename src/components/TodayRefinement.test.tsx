@@ -175,7 +175,8 @@ test('Hoy V3: renderiza hero integrado con mini sparkline, Spotlight reactivo, T
   assert.match(html, />Historial</);
   assert.match(html, /50 min/);
   assert.match(html, /1 hecho/);
-  assert.doesNotMatch(html, /role="progressbar"/);
+  const bodyAfterHero = html.split('</header>')[1] || '';
+  assert.doesNotMatch(bodyAfterHero, /role="progressbar"/);
   assert.doesNotMatch(html, /Pulso de hoy/);
 
   // Simetría de columnas (items-stretch)

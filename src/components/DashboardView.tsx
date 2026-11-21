@@ -718,125 +718,137 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return <Bell className={cls} strokeWidth={1.75} aria-hidden="true" />;
   };
 
+  const dayProgress = Math.max(0, Math.min(1, (now.getHours() * 60 + now.getMinutes()) / 1440));
+  const dayProgressPct = Math.round(dayProgress * 100);
+
   return (
     <div className="today-shell relative mx-auto flex w-full flex-col gap-5 sm:gap-6">
-      {/* 1. Hero alpino integrado con degradado lateral + mini sparkline de Estado */}
+      {/* 1. Hero generativo Horizonte y Lago */}
       <header
         data-hero-period={dayPeriod}
-        className="today-hero relative isolate min-h-[144px] overflow-hidden rounded-2xl border border-slate-900/10 bg-[var(--hero-bg)] px-4 py-4 sm:px-6 sm:py-5 dark:border-white/[0.08]"
+        className="today-hero relative isolate min-h-[195px] sm:h-[230px] overflow-hidden rounded-2xl border border-slate-900/10 bg-[var(--hero-bg)] dark:border-white/[0.09] select-none"
       >
         <AlpineDayCycleBackdrop forcePeriod={dayPeriod} compact />
 
-        {/* Smooth left-to-right gradient + subtle bottom scrim over the alpine photo (no floating dark box) */}
-        <div
-          aria-hidden="true"
-          data-hero-gradient="true"
-          className="pointer-events-none absolute inset-0 z-[1]"
-          style={{
-            background:
-              'linear-gradient(90deg, rgba(9,12,20,0.88) 0%, rgba(9,12,20,0.52) 52%, rgba(9,12,20,0.12) 100%), linear-gradient(to top, rgba(9,12,20,0.64) 0%, rgba(9,12,20,0.14) 48%, transparent 100%)',
-          }}
-        />
-
-        <div className="relative z-10 flex flex-col gap-3.5">
-          {/* Row 1: Time/Date on left + compact Cerrar el día on top-right (aligned even at 389px) */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-medium text-white/85">
-              <time dateTime={`${localDateIso}T${formattedTime}`} className="font-semibold tabular-nums text-white">
-                {formattedTime}
-              </time>
-              <span aria-hidden="true" className="text-white/50">·</span>
-              <time dateTime={localDateIso} className="truncate">
-                {formattedFullDate}
-              </time>
-            </div>
-
+        <div className="relative z-10 flex h-full min-h-[195px] sm:min-h-0 flex-col justify-between px-5 py-4 sm:px-8 sm:py-6">
+          {/* Top-right: acción discreta de cierre del día */}
+          <div className="flex items-center justify-end">
             {!dayClosed ? (
               <button
                 type="button"
                 onClick={() => onNavigate('checkout')}
                 aria-label="Cerrar el día"
-                className="inline-flex min-h-10 sm:min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/20 bg-slate-950/50 px-3.5 py-1.5 sm:px-3 sm:py-1 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/70 cursor-pointer"
+                className="inline-flex min-h-10 sm:min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/20 bg-slate-950/35 px-3.5 py-1.5 sm:px-3 sm:py-1 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/55 cursor-pointer"
               >
                 <Moon className="h-3.5 w-3.5 text-white/80" strokeWidth={1.75} aria-hidden="true" />
                 <span>Cerrar el día</span>
               </button>
             ) : (
-              <span className="inline-flex min-h-10 sm:min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/15 bg-slate-950/45 px-3.5 py-1.5 sm:px-3 sm:py-1 text-xs font-medium text-white/90 backdrop-blur-md">
+              <span className="inline-flex min-h-10 sm:min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/15 bg-slate-950/35 px-3.5 py-1.5 sm:px-3 sm:py-1 text-xs font-medium text-white/90 backdrop-blur-md">
                 <Check className="h-3.5 w-3.5 text-white/80" strokeWidth={1.75} aria-hidden="true" />
                 <span>Día cerrado</span>
               </span>
             )}
           </div>
 
-          {/* Row 2: Greeting directly over the gradient */}
-          <h1 className="text-xl font-bold tracking-[-0.025em] text-white sm:text-2xl">
-            {getLocalGreeting(now, state.profile?.name || '')}
-          </h1>
+          {/* Bottom row: saludo + fecha + estado a la izquierda | reloj protagonista + barra 24h a la derecha */}
+          <div className="mt-4 flex flex-col gap-3 sm:mt-0 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
+            {/* Abajo a la izquierda */}
+            <div className="min-w-0 space-y-1.5">
+              <h1 className="text-[26px] sm:text-[34px] font-semibold tracking-[-0.025em] text-white leading-[1.08] hero-text-shadow">
+                {getLocalGreeting(now, state.profile?.name || '')}
+              </h1>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <time dateTime={localDateIso} className="text-sm sm:text-[15px] font-normal text-white/80 hero-text-shadow">
+                  {formattedFullDate}
+                </time>
 
-          {/* Row 3: Daily Status — single button if empty, or single compact pill + 56×20 inline sparkline */}
-          <div className="flex items-center">
-            {!hasAnyTodayStatus ? (
-              <button
-                type="button"
-                onClick={() => setIsStatusModalOpen(true)}
-                aria-label="Registrar estado de hoy y ver evolución de 7 días"
-                className="inline-flex min-h-10 sm:min-h-8 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/20 bg-slate-950/55 px-3.5 py-1.5 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/75 cursor-pointer"
-              >
-                <Plus className="h-3.5 w-3.5 text-white/80" strokeWidth={1.75} aria-hidden="true" />
-                <span>Registrar estado de hoy</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setIsStatusModalOpen(true)}
-                aria-label={`Estado de hoy: ${compactStatusText}. Abrir editor y evolución de 7 días`}
-                className="inline-flex min-h-11 sm:min-h-9 items-center gap-3 rounded-full border border-white/20 bg-slate-950/55 px-3.5 py-1.5 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/75 cursor-pointer"
-              >
-                <span className="tabular-nums tracking-[-0.01em] text-white/95">
-                  {compactStatusText}
-                </span>
-                {sparkline.hasAnySeries && (
-                  <svg
-                    width="56"
-                    height="20"
-                    viewBox="0 0 56 20"
-                    fill="none"
-                    aria-hidden="true"
-                    data-status-sparkline="true"
-                    className="shrink-0 overflow-visible"
+                {!hasAnyTodayStatus ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsStatusModalOpen(true)}
+                    aria-label="Registrar estado de hoy y ver evolución de 7 días"
+                    className="inline-flex min-h-9 sm:min-h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/20 bg-slate-950/35 px-3 py-1 text-xs font-medium text-white/95 backdrop-blur-md transition hover:bg-slate-950/55 cursor-pointer"
                   >
-                    {sparkline.sleepPath && (
-                      <path
-                        d={sparkline.sleepPath}
-                        stroke="rgba(125,211,252,0.9)"
-                        strokeWidth={1.6}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
+                    <Plus className="h-3.5 w-3.5 text-white/80" strokeWidth={1.75} aria-hidden="true" />
+                    <span>Registrar estado de hoy</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setIsStatusModalOpen(true)}
+                    aria-label={`Estado de hoy: ${compactStatusText}. Abrir editor y evolución de 7 días`}
+                    className="inline-flex min-h-10 sm:min-h-8 items-center gap-2.5 rounded-full border border-white/20 bg-slate-950/35 px-3 py-1 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/55 cursor-pointer"
+                  >
+                    <span className="tabular-nums tracking-[-0.01em] text-white/95">
+                      {compactStatusText}
+                    </span>
+                    {sparkline.hasAnySeries && (
+                      <svg
+                        width="56"
+                        height="20"
+                        viewBox="0 0 56 20"
+                        fill="none"
+                        aria-hidden="true"
+                        data-status-sparkline="true"
+                        className="shrink-0 overflow-visible"
+                      >
+                        {sparkline.sleepPath && (
+                          <path
+                            d={sparkline.sleepPath}
+                            stroke="rgba(125,211,252,0.9)"
+                            strokeWidth={1.6}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        )}
+                        {sparkline.energyPath && (
+                          <path
+                            d={sparkline.energyPath}
+                            stroke="rgba(165,180,252,0.95)"
+                            strokeWidth={1.6}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        )}
+                        {sparkline.moodPath && (
+                          <path
+                            d={sparkline.moodPath}
+                            stroke="rgba(255,255,255,0.9)"
+                            strokeWidth={1.6}
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        )}
+                      </svg>
                     )}
-                    {sparkline.energyPath && (
-                      <path
-                        d={sparkline.energyPath}
-                        stroke="rgba(165,180,252,0.95)"
-                        strokeWidth={1.6}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    )}
-                    {sparkline.moodPath && (
-                      <path
-                        d={sparkline.moodPath}
-                        stroke="rgba(255,255,255,0.9)"
-                        strokeWidth={1.6}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    )}
-                  </svg>
+                  </button>
                 )}
-              </button>
-            )}
+              </div>
+            </div>
+
+            {/* Abajo a la derecha: reloj protagonista tabular + barra de progreso 24h */}
+            <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:shrink-0 sm:flex-col sm:items-end sm:gap-0">
+              <time
+                dateTime={`${localDateIso}T${formattedTime}`}
+                className="text-[34px] sm:text-[48px] font-light tracking-[-0.035em] text-white leading-none tabular-nums hero-text-shadow"
+              >
+                {formattedTime}
+              </time>
+              <div
+                className="sm:mt-2.5 w-24 sm:w-28 h-[3px] rounded-full bg-white/20 overflow-hidden"
+                role="progressbar"
+                aria-label="Progreso del día"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={dayProgressPct}
+              >
+                <div
+                  className="h-full rounded-full bg-white/85 transition-[width] duration-700 ease-out"
+                  style={{ width: `${(dayProgress * 100).toFixed(1)}%` }}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </header>

@@ -2,7 +2,7 @@ import type { LifeOSState, ViewType } from '../types';
 import type { AppIconName } from '../components/AppIcon';
 import { formatMoney } from './storage';
 import { getCategoryName } from './financeCategories';
-import { isModuleEnabled } from './moduleVisibility';
+import { isModuleEnabled, isStreamingEnabled } from './moduleVisibility';
 import { getJobApplicationType, getJobStageLabel } from './jobApplications';
 import { resolveTransactionCurrency } from './calculations';
 import { confirmedFinancialCurrency } from './financeCurrencyPolicy';
@@ -668,12 +668,14 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
     );
   }
 
-  (state.streaming?.sessions || []).forEach((item) =>
-    consider(
-      { id: `stream-${item.id}`, icon: '🎙️', iconName: 'flame', title: `${item.hours} h de stream`, subtitle: item.date, view: 'dashboard', category: 'other' },
-      ['stream', 'streaming', item.date]
-    )
-  );
+  if (isStreamingEnabled(state)) {
+    (state.streaming?.sessions || []).forEach((item) =>
+      consider(
+        { id: `stream-${item.id}`, icon: '🎙️', iconName: 'flame', title: `${item.hours} h de stream`, subtitle: item.date, view: 'dashboard', category: 'other' },
+        ['stream', 'streaming', item.date]
+      )
+    );
+  }
 
   // Sorting by relevance score descending, preserving stable presentation
   candidates.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));

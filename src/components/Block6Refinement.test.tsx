@@ -107,8 +107,10 @@ test('NotasView y ProjectsManager: lenguaje plano sin card-ception, sin emojis d
   assert.match(notesHtml, /id="notes-grid"/);
   assert.match(notesHtml, /id="note-n1"/);
 
+  const streamingState = defaultState();
+  streamingState.settings.streamingEnabled = true;
   const toolsHtml = renderToStaticMarkup(
-    <NotasView state={state} onUpdateState={() => true} storageUserId={null} onOpenGym={() => {}} initialTab="streaming" />
+    <NotasView state={streamingState} onUpdateState={() => true} storageUserId={null} onOpenGym={() => {}} initialTab="streaming" />
   );
   assert.match(toolsHtml, /aria-label="Herramientas personales"[^>]*overflow-x-auto/);
   assert.doesNotMatch(toolsHtml, /bg-amber-500/, 'Streaming unificado a índigo #4F46E5');

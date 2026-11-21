@@ -7,6 +7,7 @@ import {
   Dumbbell,
   HardDrive,
   Info,
+  Radio,
   RotateCcw,
   Search,
   Shield,
@@ -18,7 +19,7 @@ import {
 } from 'lucide-react';
 import { LifeOSState } from '../types';
 import { NAV_ITEMS } from './Sidebar';
-import { isModuleHidden } from '../lib/moduleVisibility';
+import { isModuleHidden, isStreamingEnabled } from '../lib/moduleVisibility';
 import {
   CURRENT_SCHEMA_VERSION,
   defaultState,
@@ -298,18 +299,29 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
     showToast(`✅ Se recalcularon ${corrected} cuenta(s) según el libro mayor cerrado. Copia anterior guardada en recuperación.`);
   };
 
+  const streamingEnabled = isStreamingEnabled(state);
+
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     const saved = onUpdateState((draft) => {
       if (!draft.profile) draft.profile = { name: '', height: 170, bodyCompositionSex: null };
-      if (!draft.streaming) draft.streaming = { sessions: [], monthlyGoal: 12, preStreamChecklist: [], contentPipeline: [] };
       draft.profile.name = profileName.trim();
       draft.profile.height = Number(profileHeight) || 170;
       draft.profile.bodyCompositionSex = profileBodySex || null;
-      draft.streaming.monthlyGoal = Number(streamGoal) || 12;
+      if (streamingEnabled) {
+        if (!draft.streaming) draft.streaming = { sessions: [], monthlyGoal: 12, preStreamChecklist: [], contentPipeline: [] };
+        draft.streaming.monthlyGoal = Number(streamGoal) || 12;
+      }
     });
     if (saved === false) return;
     showToast('Configuración guardada.');
+  };
+
+  const handleToggleStreaming = () => {
+    onUpdateState((draft) => {
+      if (!draft.settings) draft.settings = { hiddenTabs: [] } as any;
+      draft.settings.streamingEnabled = !streamingEnabled;
+    });
   };
 
   const handleToggleTab = (tabId: string) => {
@@ -742,19 +754,21 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Se guarda en tu perfil y se usa para fórmulas como RFM.</p>
                 </div>
 
-                <div className="min-w-0">
-                  <label htmlFor="config-stream-goal" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Transmisiones por mes
-                  </label>
-                  <input
-                    id="config-stream-goal"
-                    type="number"
-                    value={streamGoal}
-                    onChange={(e) => setStreamGoal(e.target.value)}
-                    placeholder="12"
-                    className={`${fieldClass} tabular-nums`}
-                  />
-                </div>
+                {streamingEnabled && (
+                  <div className="min-w-0">
+                    <label htmlFor="config-stream-goal" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Transmisiones por mes
+                    </label>
+                    <input
+                      id="config-stream-goal"
+                      type="number"
+                      value={streamGoal}
+                      onChange={(e) => setStreamGoal(e.target.value)}
+                      placeholder="12"
+                      className={`${fieldClass} tabular-nums`}
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end border-t border-slate-100 pt-3 dark:border-white/[0.06]">
@@ -809,6 +823,41 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                   </button>
                 );
               })}
+            </div>
+
+            <div className="border-t border-slate-100 pt-3.5 space-y-2 dark:border-white/[0.06]">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                Herramientas opcionales en Notas
+              </p>
+              <button
+                type="button"
+                onClick={handleToggleStreaming}
+                aria-pressed={streamingEnabled}
+                className={`flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left text-sm font-medium transition-colors sm:w-auto sm:min-w-[260px] cursor-pointer ${
+                  streamingEnabled
+                    ? 'border-[#4F46E5]/40 bg-[#4F46E5]/[0.05] text-slate-900 dark:border-indigo-400/40 dark:bg-indigo-500/10 dark:text-slate-100'
+                    : 'border-slate-200/80 bg-transparent text-slate-500 hover:border-slate-300 dark:border-white/[0.08] dark:text-slate-400 dark:hover:border-white/[0.15]'
+                }`}
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <Radio
+                    size={16}
+                    strokeWidth={1.75}
+                    aria-hidden="true"
+                    className={`shrink-0 ${streamingEnabled ? 'text-[#4F46E5] dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}
+                  />
+                  <span className="truncate">Streaming y contenido</span>
+                </div>
+                <span
+                  className={`shrink-0 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-semibold ${
+                    streamingEnabled
+                      ? 'border-[#4F46E5]/20 bg-[#4F46E5]/10 text-[#4F46E5] dark:text-indigo-300'
+                      : 'border-slate-200/80 bg-slate-50 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400'
+                  }`}
+                >
+                  {streamingEnabled ? 'Activo' : 'Oculto'}
+                </span>
+              </button>
             </div>
           </SurfaceCard>
 
@@ -1306,10 +1355,9 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
               <div className="border-t border-slate-100 pt-3 space-y-1 dark:border-white/[0.06]">
                 <h4 className="font-semibold text-slate-900 dark:text-slate-100">Créditos y licencias</h4>
-                <p>Iconos por <a href="https://icons8.com" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-[#4F46E5]">Icons8</a>.</p>
-                <p>Fotografía panorámica del Hero adaptada de una obra de Andrew Bossi.</p>
+                <p>Iconos de interfaz por Lucide (licencia ISC) e iconos de gimnasio propios de Celestian.</p>
                 <a href="/creditos.html" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center text-xs font-semibold text-[#4F46E5] underline underline-offset-2 hover:text-[#4338CA] dark:text-indigo-400">
-                  Ver atribución, modificaciones y licencia (nueva pestaña)
+                  Ver atribución y licencias (nueva pestaña)
                 </a>
               </div>
             </div>

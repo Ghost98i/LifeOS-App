@@ -206,7 +206,7 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
       }`}>
         <form onSubmit={handleSubmit} className="flex flex-col gap-2">
           <div className="flex items-center gap-2.5">
-            {/* Quick Capture / Icons8 Square Plus */}
+            {/* Quick Capture / Square Plus */}
             <div className="relative flex items-center justify-center text-blue-600 dark:text-blue-400 shrink-0 h-8 w-8">
               <AppIcon name="squarePlus" className="h-6 w-6 text-[#4F46E5] dark:text-indigo-400 transition-transform duration-200" />
             </div>

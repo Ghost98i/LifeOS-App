@@ -283,3 +283,24 @@ export function getMobileNavSlots(
     slot4: chosenSlot4 ? MODULE_NAV_METADATA[chosenSlot4] : null,
   };
 }
+
+/**
+ * Determines whether the optional "Streaming y contenido" tool should be shown.
+ * - Explicit boolean in `settings.streamingEnabled` always wins.
+ * - Otherwise (`undefined`), existing accounts with prior streaming data remain enabled,
+ *   while fresh accounts default to `false`.
+ */
+export function isStreamingEnabled(state: Partial<LifeOSState> | null | undefined): boolean {
+  if (!state) return false;
+  if (typeof state.settings?.streamingEnabled === 'boolean') {
+    return state.settings.streamingEnabled;
+  }
+  const streaming = state.streaming;
+  if (!streaming) return false;
+  return (
+    (streaming.sessions?.length ?? 0) > 0 ||
+    (streaming.preStreamChecklist?.length ?? 0) > 0 ||
+    (streaming.contentPipeline?.length ?? 0) > 0 ||
+    (streaming.monthlyGoal !== undefined && streaming.monthlyGoal !== 12)
+  );
+}
