@@ -12,6 +12,8 @@ import { confirmSandboxSaleAdjustment, confirmSandboxPurchaseAdjustment, type Sa
 import { confirmSandboxMoneyEvent, sandboxMoneySummary, sandboxSaleBalance, type SandboxMoneyRequest } from '../lib/commercialMoneySandbox';
 import { CommercialMoneySandbox } from './CommercialMoneySandbox';
 import { ContextualHelp } from './ContextualHelp';
+import { AppIcon } from './AppIcon';
+import { SurfaceCard, SectionHeader, ListDivider } from './ui/SurfacePrimitives';
 import { advanceCommercialPilot, COMMERCIAL_PILOT_CURRENCY, loadCommercialPilot, saveCommercialPilot,
   type CommercialPilotLoad, type CommercialPilotSnapshot } from '../lib/commercialPilot';
 import type { SandboxRecipe } from '../lib/commercialRecipeSandbox';
@@ -23,10 +25,10 @@ const COMMERCIAL_PILOT_REVISION_KEY = 'celestea:dev-commercial-pilot:emulator-re
 type ItemAction = 'receipt' | 'consumption' | 'waste';
 const units: StockUnit[] = ['unit', 'kg', 'g'];
 const unitLabel: Record<StockUnit, string> = { unit: 'unid.', kg: 'kg', g: 'g' };
-const actionPrimary = 'rounded-lg bg-[var(--blue)] px-3 py-2 text-sm font-bold text-white hover:bg-[var(--blue-hover)] transition-colors';
-const actionSecondary = 'rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-bold text-[var(--text)] hover:bg-[var(--surface-muted)] transition-colors';
-const fieldClass = 'min-w-0 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)]';
-const labelClass = 'space-y-1 text-sm font-semibold text-[var(--text-soft)]';
+const actionPrimary = 'inline-flex min-h-10 items-center justify-center rounded-xl bg-[#4F46E5] px-3.5 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] transition-colors cursor-pointer';
+const actionSecondary = 'inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-[var(--text)] hover:border-[#4F46E5] transition-colors dark:border-white/[0.08] dark:bg-transparent cursor-pointer';
+const fieldClass = 'min-h-11 min-w-0 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)]';
+const labelClass = 'min-w-0 space-y-1 text-sm font-semibold text-[var(--text-soft)]';
 const formatQuantity = (value: number) => new Intl.NumberFormat('es-UY', { maximumFractionDigits: 3 }).format(value);
 
 function parseNumber(text: string): number {
@@ -374,101 +376,127 @@ export const CommercialInventorySandbox: React.FC<{ onClose: () => void; pilotEn
     <button type="button" onClick={onClose} className={actionSecondary}>{production ? 'Volver' : 'Cerrar prueba'}</button>
   </section>;
 
-  return <section id="commercial-inventory-sandbox" className={production ? 'space-y-5' : 'space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5'} aria-label={production ? 'Inventario comercial' : 'Inventario de prueba'}>
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        {!production && <p className="text-sm font-bold text-amber-600">{pilotEnabled ? 'Piloto local · guardado solo en esta pestaña · sin Finanzas ni nube' : 'Modo de prueba · los datos no se guardan'}</p>}
-        <h2 className="text-base font-bold text-[var(--text)]">{production ? 'Inventario' : 'Inventario de prueba'}{production && <span className="ml-3 text-sm font-normal text-[var(--text-soft)]">UYU</span>}</h2>
+  return <section id="commercial-inventory-sandbox" className="space-y-5" aria-label={production ? 'Inventario comercial' : 'Inventario de prueba'}>
+    <SurfaceCard as="div" className="overflow-hidden">
+      <div className="border-b border-slate-100 px-4 py-3.5 dark:border-white/[0.06] sm:px-5">
+        {!production && <p className="mb-1 text-xs font-semibold text-amber-600 dark:text-amber-400">{pilotEnabled ? 'Piloto local · guardado solo en esta pestaña · sin Finanzas ni nube' : 'Modo de prueba · los datos no se guardan'}</p>}
+        <SectionHeader
+          icon={<AppIcon name="product" className="h-4 w-4" />}
+          title={production ? 'Inventario' : 'Inventario de prueba'}
+          count={production ? 'UYU' : null}
+          action={
+            <div className="flex items-center gap-2">
+              {inventory.items.length > 0 && !showNew && (
+                <button
+                  type="button"
+                  onClick={() => { setShowNew(true); setActive(null); setError(''); setEntryTiming('later'); setEntryAccount(''); entrySubmitted.current = false; }}
+                  className={actionSecondary}
+                >
+                  Agregar otro artículo
+                </button>
+              )}
+              {!production && (
+                <button type="button" onClick={onClose} className={actionSecondary}>
+                  Cerrar prueba
+                </button>
+              )}
+            </div>
+          }
+        />
       </div>
-      {inventory.items.length > 0 && !showNew && <button type="button" onClick={() => { setShowNew(true); setActive(null); setError(''); setEntryTiming('later'); setEntryAccount(''); entrySubmitted.current = false; }} className="min-h-11 rounded-xl border border-[var(--border)] px-3 py-2 text-sm font-bold text-[var(--text)]">Agregar otro artículo</button>}
-      {!production && <button type="button" onClick={onClose} className="min-h-10 rounded-xl border border-[var(--border)] px-3 text-sm font-bold text-[var(--text-soft)]">Cerrar prueba</button>}
-    </div>
 
-    {pilotError && <p role="alert" className="text-sm font-semibold text-rose-700 dark:text-rose-400">No se confirmó la operación: {pilotError}</p>}
-    {pilotSyncEnabled && <section className="space-y-2 rounded-xl border border-[var(--border)] p-3" aria-label="Sincronización con emuladores de prueba">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div><h3 className="text-sm font-bold text-[var(--text)]">Emulador Firebase · demo-lifeos</h3><p className="text-sm text-[var(--text-soft)]">Solo datos de prueba. Abrí otra pestaña para simular el segundo cliente.</p></div>
-        <div className="flex flex-wrap gap-2">
-          {!emulatorClient && <button type="button" disabled={emulatorBusy || !pilotSetup?.storage || pilotSetup.load.status === 'blocked'} onClick={() => void connectEmulator()} className={actionSecondary}>{emulatorBusy ? 'Conectando…' : 'Conectar cliente'}</button>}
-          {emulatorClient && <><button type="button" disabled={emulatorBusy} onClick={() => void refreshFromEmulator()} className={actionSecondary}>{emulatorBusy ? 'Consultando…' : 'Actualizar desde emulador'}</button><button type="button" disabled={emulatorBusy || baseRevision === undefined || remoteChanged} onClick={() => void publishToEmulator()} className={actionPrimary}>{emulatorBusy ? 'Publicando…' : 'Publicar en emulador'}</button></>}
-        </div>
-      </div>
-      {emulatorMessage && <p role="status" className="text-sm text-[var(--text-soft)]">{emulatorMessage}</p>}
-      {remoteChanged && <p role="alert" className="text-sm font-semibold text-amber-700 dark:text-amber-400">La revisión remota cambió o requiere recuperación. Se conserva esta copia local; no se fusionan operaciones automáticamente.</p>}
-    </section>}
-    {(pendingMoney.receivableCents > 0 || pendingMoney.payableCents > 0 || pendingMoney.refundableCents > 0) && <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-[var(--border)] pb-3 text-sm text-[var(--text)]">
-      <span>{pendingMoney.receivableCents > 0 && <>Por cobrar <strong className="tabular-nums">{fmtMoney(pendingMoney.receivableCents / 100)}</strong></>}{pendingMoney.receivableCents > 0 && (pendingMoney.payableCents > 0 || pendingMoney.refundableCents > 0) && ' · '}{pendingMoney.payableCents > 0 && <>Por pagar <strong className="tabular-nums">{fmtMoney(pendingMoney.payableCents / 100)}</strong></>}{pendingMoney.payableCents > 0 && pendingMoney.refundableCents > 0 && ' · '}{pendingMoney.refundableCents > 0 && <>Por reembolsar <strong className="tabular-nums">{fmtMoney(pendingMoney.refundableCents / 100)}</strong></>}</span>
-      <a href="#commercial-money-sandbox" className="font-bold text-[var(--blue)] underline-offset-2 hover:underline">Ir a cobros y pagos</a>
-    </div>}
+      <div className="space-y-4 p-4 sm:p-5">
+        {pilotError && <p role="alert" className="text-sm font-semibold text-rose-700 dark:text-rose-400">No se confirmó la operación: {pilotError}</p>}
+        {pilotSyncEnabled && <section className="space-y-2 border-b border-slate-100 pb-4 dark:border-white/[0.06]" aria-label="Sincronización con emuladores de prueba">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div><h3 className="text-sm font-semibold text-[var(--text)]">Emulador Firebase · demo-lifeos</h3><p className="text-sm text-[var(--text-soft)]">Solo datos de prueba. Abrí otra pestaña para simular el segundo cliente.</p></div>
+            <div className="flex flex-wrap gap-2">
+              {!emulatorClient && <button type="button" disabled={emulatorBusy || !pilotSetup?.storage || pilotSetup.load.status === 'blocked'} onClick={() => void connectEmulator()} className={actionSecondary}>{emulatorBusy ? 'Conectando…' : 'Conectar cliente'}</button>}
+              {emulatorClient && <><button type="button" disabled={emulatorBusy} onClick={() => void refreshFromEmulator()} className={actionSecondary}>{emulatorBusy ? 'Consultando…' : 'Actualizar desde emulador'}</button><button type="button" disabled={emulatorBusy || baseRevision === undefined || remoteChanged} onClick={() => void publishToEmulator()} className={actionPrimary}>{emulatorBusy ? 'Publicando…' : 'Publicar en emulador'}</button></>}
+            </div>
+          </div>
+          {emulatorMessage && <p role="status" className="text-sm text-[var(--text-soft)]">{emulatorMessage}</p>}
+          {remoteChanged && <p role="alert" className="text-sm font-semibold text-amber-700 dark:text-amber-400">La revisión remota cambió o requiere recuperación. Se conserva esta copia local; no se fusionan operaciones automáticamente.</p>}
+        </section>}
+        {(pendingMoney.receivableCents > 0 || pendingMoney.payableCents > 0 || pendingMoney.refundableCents > 0) && <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-slate-100 pb-3 text-sm text-[var(--text)] dark:border-white/[0.06]">
+          <span>{pendingMoney.receivableCents > 0 && <>Por cobrar <strong className="tabular-nums">{fmtMoney(pendingMoney.receivableCents / 100)}</strong></>}{pendingMoney.receivableCents > 0 && (pendingMoney.payableCents > 0 || pendingMoney.refundableCents > 0) && ' · '}{pendingMoney.payableCents > 0 && <>Por pagar <strong className="tabular-nums">{fmtMoney(pendingMoney.payableCents / 100)}</strong></>}{pendingMoney.payableCents > 0 && pendingMoney.refundableCents > 0 && ' · '}{pendingMoney.refundableCents > 0 && <>Por reembolsar <strong className="tabular-nums">{fmtMoney(pendingMoney.refundableCents / 100)}</strong></>}</span>
+          <a href="#commercial-money-sandbox" className="inline-flex min-h-10 items-center font-semibold text-[#4F46E5] underline-offset-2 hover:underline dark:text-indigo-300">Ir a cobros y pagos</a>
+        </div>}
 
-    {inventory.items.length === 0 && !showNew && <div className="flex flex-col items-start justify-between gap-3 rounded-xl border border-[var(--blue)]/25 bg-[var(--blue)]/5 p-4 sm:flex-row sm:items-center">
-      <div><h3 className="text-base font-bold text-[var(--text)]">Sin artículos registrados</h3><p className="mt-1 text-sm text-[var(--text-soft)]">Agregá un artículo o insumo con su cantidad y costo de compra.</p></div>
-      <button type="button" onClick={() => { setShowNew(true); setActive(null); setError(''); setEntryTiming('later'); setEntryAccount(''); entrySubmitted.current = false; }} className="min-h-10 w-full shrink-0 rounded-xl bg-[var(--blue)] px-4 py-2.5 text-sm font-bold text-white sm:w-auto">Agregar artículo o insumo</button>
-    </div>}
-    {showNew && <form onSubmit={createItem} className="grid grid-cols-2 gap-2.5 rounded-xl bg-[var(--bg-elevated)] p-3 sm:grid-cols-4">
-      <label className={`${labelClass} col-span-full sm:col-span-1`}>Artículo o insumo<input autoFocus required value={name} onChange={(event) => setName(event.target.value)} placeholder="Ej.: panes" className={fieldClass} /></label>
-      <label className={labelClass}>Cantidad que ingresa<input required type="number" min="0" step="any" value={newQuantity} onChange={(event) => setNewQuantity(event.target.value)} className={fieldClass} /></label>
-      <label className={labelClass}>Unidad<select value={newUnit} onChange={(event) => setNewUnit(event.target.value as StockUnit)} className={fieldClass}>{units.map((candidate) => <option key={candidate} value={candidate}>{unitLabel[candidate]}</option>)}</select></label>
-      <label className={`${labelClass} col-span-full sm:col-span-1`}>Costo total ($U)<input required type="number" min="0" step="0.01" value={newCost} onChange={(event) => setNewCost(event.target.value)} className={fieldClass} /></label>
-      {entryPaymentFields}
-      <div className="col-span-full flex gap-2"><button className="rounded-xl bg-[var(--blue)] px-4 py-2 text-sm font-bold text-white">Guardar entrada</button><button type="button" onClick={() => { setShowNew(false); setError(''); }} className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-bold text-[var(--text-soft)]">Cancelar</button></div>
-    </form>}
-    {inventory.items.length > 0 && <div className="flex flex-wrap items-center justify-between gap-2">
-      <div role="group" aria-label="Ver insumos por existencias" className="flex flex-wrap gap-2">
-        <button type="button" aria-pressed={stockView === 'available'} onClick={() => setStockView('available')} className={`rounded-lg border px-3 py-2 text-sm font-bold ${stockView === 'available' ? 'border-[var(--blue)] text-[var(--blue)]' : 'border-[var(--border)] text-[var(--text-soft)]'}`}>Con stock ({availableCount})</button>
-        <button type="button" aria-pressed={stockView === 'empty'} onClick={() => setStockView('empty')} className={`rounded-lg border px-3 py-2 text-sm font-bold ${stockView === 'empty' ? 'border-[var(--blue)] text-[var(--blue)]' : 'border-[var(--border)] text-[var(--text-soft)]'}`}>Sin stock ({stockEntries.length - availableCount})</button>
+        {inventory.items.length === 0 && !showNew && <div className="flex flex-col items-center justify-center gap-3 py-6 text-center">
+          <AppIcon name="store" className="h-6 w-6 text-slate-400 dark:text-slate-500" />
+          <div><h3 className="text-base font-semibold text-[var(--text)]">Sin artículos registrados</h3><p className="mt-1 text-sm text-[var(--text-soft)]">Agregá un artículo o insumo con su cantidad y costo de compra.</p></div>
+          <button type="button" onClick={() => { setShowNew(true); setActive(null); setError(''); setEntryTiming('later'); setEntryAccount(''); entrySubmitted.current = false; }} className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] sm:w-auto cursor-pointer">
+            <AppIcon name="plus" className="h-4 w-4" />
+            <span>Agregar artículo o insumo</span>
+          </button>
+        </div>}
+        {showNew && <form onSubmit={createItem} className="grid grid-cols-1 gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06] sm:grid-cols-2 lg:grid-cols-4">
+          <label className={labelClass}>Artículo o insumo<input autoFocus required value={name} onChange={(event) => setName(event.target.value)} placeholder="Ej.: panes" className={fieldClass} /></label>
+          <label className={labelClass}>Cantidad que ingresa<input required type="number" min="0" step="any" value={newQuantity} onChange={(event) => setNewQuantity(event.target.value)} className={fieldClass} /></label>
+          <label className={labelClass}>Unidad<select value={newUnit} onChange={(event) => setNewUnit(event.target.value as StockUnit)} className={fieldClass}>{units.map((candidate) => <option key={candidate} value={candidate}>{unitLabel[candidate]}</option>)}</select></label>
+          <label className={labelClass}>Costo total ($U)<input required type="number" min="0" step="0.01" value={newCost} onChange={(event) => setNewCost(event.target.value)} className={fieldClass} /></label>
+          {entryPaymentFields}
+          <div className="col-span-full flex flex-wrap gap-2"><button className={actionPrimary}>Guardar entrada</button><button type="button" onClick={() => { setShowNew(false); setError(''); }} className={actionSecondary}>Cancelar</button></div>
+        </form>}
+        {inventory.items.length > 0 && <div className="flex flex-wrap items-center justify-between gap-2">
+          <div role="group" aria-label="Ver insumos por existencias" className="flex flex-wrap gap-2">
+            <button type="button" aria-pressed={stockView === 'available'} onClick={() => setStockView('available')} className={`min-h-10 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors cursor-pointer ${stockView === 'available' ? 'border-[#4F46E5] bg-indigo-50/70 text-[#4F46E5] dark:border-indigo-400 dark:bg-indigo-500/15 dark:text-indigo-200' : 'border-slate-200/80 text-[var(--text-soft)] dark:border-white/[0.08]'}`}>Con stock ({availableCount})</button>
+            <button type="button" aria-pressed={stockView === 'empty'} onClick={() => setStockView('empty')} className={`min-h-10 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors cursor-pointer ${stockView === 'empty' ? 'border-[#4F46E5] bg-indigo-50/70 text-[#4F46E5] dark:border-indigo-400 dark:bg-indigo-500/15 dark:text-indigo-200' : 'border-slate-200/80 text-[var(--text-soft)] dark:border-white/[0.08]'}`}>Sin stock ({stockEntries.length - availableCount})</button>
+          </div>
+        </div>}
+        {inventory.items.length > 0 && shownEntries.length === 0 && <p className="text-sm text-[var(--text-soft)]">{stockView === 'available' ? 'Sin stock disponible. Elegí «Sin stock» para reponer artículos.' : 'No hay artículos agotados.'}</p>}
+        {shownEntries.length > 0 && <ListDivider className="-mx-4 sm:-mx-5">
+          {shownEntries.map(({ item, summary }) => {
+            const isActive = active?.itemId === item.id;
+            const history = inventory.movements.filter((movement) => movement.itemId === item.id).slice().reverse();
+            return <article key={item.id} className="min-w-0 px-4 py-4 sm:px-5">
+              <div className="flex items-start justify-between gap-3"><h3 className="min-w-0 break-words text-sm font-semibold text-[var(--text)]">{item.name}</h3><span className="shrink-0 text-xs font-medium text-[var(--text-faint)]">{unitLabel[item.unit]}</span></div>
+              <div className="mt-3 grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
+                <div className="min-w-0"><span className="block text-xs font-semibold text-[var(--text-soft)]">Disponible</span><strong className="block break-words text-base tabular-nums text-[var(--text)]">{formatQuantity(summary.quantity)} {unitLabel[item.unit]}</strong></div>
+                <div className="min-w-0"><span className="flex flex-wrap items-center gap-1 text-xs font-semibold text-[var(--text-soft)]">Valor disponible<ContextualHelp label="Valor disponible">Valor estimado de la cantidad que queda, calculado con el costo promedio de las entradas. No representa dinero en caja.</ContextualHelp></span><strong className="block break-words text-sm tabular-nums text-[var(--text)]">{fmtMoney(summary.valueCents / 100)}</strong></div>
+                <div className="min-w-0"><span className="flex flex-wrap items-center gap-1 text-xs font-semibold text-[var(--text-soft)]">Costo / {unitLabel[item.unit]}<ContextualHelp label="Costo por unidad">Costo promedio actual por unidad de medida, según las entradas registradas.</ContextualHelp></span><strong className="block break-words text-sm tabular-nums text-[var(--text)]">{fmtMoney(summary.averageUnitCost)}</strong></div>
+                <div className="min-w-0 text-xs text-[var(--text-soft)]"><span className="block">Utilizado: <b className="tabular-nums text-[var(--text)]">{formatQuantity(summary.consumed)} {unitLabel[item.unit]}</b></span><span className="block">Pérdidas: <b className="tabular-nums text-[var(--text)]">{formatQuantity(summary.discarded)} {unitLabel[item.unit]}</b></span></div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" onClick={() => openAction(item.id, 'receipt', item.unit)} className={actionPrimary}>Reponer stock</button>
+                {summary.quantity > 0 && item.unit === 'unit' && <button type="button" onClick={() => { directCounter.current = Math.max(directCounter.current, maxIdSuffix(sessionRef.current.sales.map((sale) => sale.id), /^sandbox-direct-(\d+)$/)) + 1; setPendingDirect({ id: `sandbox-direct-${directCounter.current}`, itemId: item.id, unitsText: '1', priceText: '' }); setDirectTiming('later'); setDirectAccount(''); setDirectError(''); setActive(null); setShowNew(false); }} className={actionSecondary}>Vender artículo</button>}
+                {summary.quantity > 0 && <button type="button" onClick={() => openAction(item.id, 'consumption', item.unit)} className={actionSecondary}>Registrar uso</button>}
+                {summary.quantity > 0 && <button type="button" onClick={() => openAction(item.id, 'waste', item.unit)} className={actionSecondary}>Registrar pérdida</button>}
+              </div>
+              {isActive && <form onSubmit={applyAction} className="mt-3 grid grid-cols-1 gap-2.5 border-t border-slate-100 pt-3 dark:border-white/[0.06] sm:grid-cols-3">
+                <label className={labelClass}>Cantidad<input autoFocus required type="number" min="0" step="any" value={quantity} onChange={(event) => setQuantity(event.target.value)} className={fieldClass} /></label>
+                <label className={labelClass}>Unidad<select value={unit} onChange={(event) => setUnit(event.target.value as StockUnit)} className={fieldClass}>{(item.unit === 'unit' ? ['unit'] : ['kg', 'g']).map((candidate) => <option key={candidate} value={candidate}>{unitLabel[candidate as StockUnit]}</option>)}</select></label>
+                {active.kind === 'receipt' && <label className={labelClass}>Costo total ($U)<input required type="number" min="0" step="0.01" value={cost} onChange={(event) => setCost(event.target.value)} className={fieldClass} /></label>}
+                {active.kind === 'receipt' && entryPaymentFields}
+                {active.kind !== 'receipt' && <p className="col-span-full inline-flex items-center gap-1 text-sm text-[var(--text-soft)]">{active.kind === 'waste' ? 'Registrar pérdida' : 'Registrar uso'}<ContextualHelp label={active.kind === 'waste' ? 'Pérdida de insumos' : 'Uso de insumos'}>{active.kind === 'waste' ? 'Mercadería que se dañó, venció o no pudo aprovecharse.' : 'Materiales utilizados para preparar o fabricar otro producto. No registra una venta ni crea un producto terminado.'}</ContextualHelp></p>}
+                <div className="col-span-full flex flex-wrap items-end gap-2"><button className={actionPrimary}>{active.kind === 'receipt' ? 'Guardar entrada' : active.kind === 'waste' ? 'Confirmar pérdida' : 'Confirmar uso'}</button><button type="button" onClick={() => { setActive(null); setError(''); }} className={actionSecondary}>Cancelar</button></div>
+              </form>}
+              <details className="mt-3 border-t border-slate-100 pt-2.5 text-sm text-[var(--text-soft)] dark:border-white/[0.06]">
+                <summary className="cursor-pointer text-xs font-semibold">Historial de movimientos ({history.length})</summary>
+                <ol className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs">{history.map((movement) => <li key={movement.id} className="flex flex-wrap justify-between gap-x-2 border-b border-slate-100 py-1 last:border-0 dark:border-white/[0.06]"><span>{movement.kind === 'receipt' ? 'Entrada' : movement.kind === 'consumption' ? 'Uso' : movement.kind === 'waste' ? 'Pérdida' : 'Venta'} · {formatQuantity(movement.quantity)} {unitLabel[movement.unit]}</span><span className="tabular-nums">Costo histórico {fmtMoney((movement.costCents || 0) / 100)}</span></li>)}</ol>
+              </details>
+            </article>;
+          })}
+        </ListDivider>}
+        {pendingDirect && directPreview && <section className="space-y-3 border-t border-slate-100 pt-4 dark:border-white/[0.06]" aria-label="Vista previa de venta directa">
+          <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-sm font-semibold text-[var(--text)]">Venta directa · {directPreview.item?.name || 'Artículo'}</h3><p className="text-xs text-[var(--text-soft)]">Se descuenta este artículo sin receta. {production ? 'El cobro inmediato se registra en la cuenta seleccionada de Finanzas.' : 'El cobro es simulado y no modifica Finanzas.'}</p></div><button type="button" onClick={() => { setPendingDirect(null); setDirectError(''); }} className="min-h-10 px-2 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer">Cancelar</button></div>
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"><label className={labelClass}>Unidades a vender<input type="number" min="1" step="1" value={pendingDirect.unitsText} onChange={(event) => { setPendingDirect({ ...pendingDirect, unitsText: event.target.value }); setDirectError(''); }} className={fieldClass} /></label><label className={labelClass}>Precio por unidad ($U)<input type="text" inputMode="decimal" value={pendingDirect.priceText} onChange={(event) => { setPendingDirect({ ...pendingDirect, priceText: event.target.value }); setDirectError(''); }} className={fieldClass} /></label></div>
+          <fieldset className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-[var(--text)]"><legend className="mb-1 font-semibold text-[var(--text-soft)]">Cobro de esta venta</legend>
+            <label className="inline-flex min-h-10 items-center gap-1.5"><input type="radio" name="direct-collection" checked={directTiming === 'later'} onChange={() => setDirectTiming('later')} />Cobrar después</label>
+            <label className="inline-flex min-h-10 items-center gap-1.5"><input type="radio" name="direct-collection" checked={directTiming === 'now'} onChange={() => setDirectTiming('now')} />Cobrado ahora</label>
+          </fieldset>
+          {directTiming === 'now' && <label className={`${labelClass} block max-w-xs`}>{production ? 'Cuenta' : 'Cuenta simulada'}{production ? <select required value={directAccount} onChange={e => setDirectAccount(e.target.value)} className={fieldClass}><option value="">Seleccionar cuenta</option>{production.accounts.filter(a => (a.currency || 'UYU') === 'UYU').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select> : <input required value={directAccount} onChange={(event) => setDirectAccount(event.target.value)} placeholder="Ej.: caja de prueba" className={fieldClass} />}</label>}
+          {directTiming === 'now' && production?.financeFields?.()}
+          <p className="text-sm text-[var(--text-soft)]">Disponibles: {directPreview.available} · Quedarían: {directPreview.remaining == null ? '—' : directPreview.remaining}</p>
+          {directPreview.totals && <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4"><span>Venta comercial <b className="block tabular-nums">{fmtMoney(directPreview.totals.revenueCents / 100)}</b></span><span>Costo histórico <b className="block tabular-nums">{fmtMoney(directPreview.totals.totalCostCents / 100)}</b></span><span>Ganancia bruta <b className="block tabular-nums">{fmtMoney(directPreview.totals.grossProfitCents / 100)}</b></span><span>Margen bruto <b className="block tabular-nums">{directPreview.totals.grossMarginPercent.toFixed(2)} %</b></span></div>}
+          {directPreview.issues.map((issue, index) => <p key={index} className="text-sm font-semibold text-rose-600 dark:text-rose-400">{issue}</p>)}{directError && <p role="alert" className="text-sm font-semibold text-rose-600 dark:text-rose-400">{directError}</p>}
+          <button type="button" disabled={!directPreview.valid} onClick={confirmDirect} className={`${actionPrimary} disabled:opacity-50`}>Confirmar venta directa</button>
+        </section>}
+        {recentDirectSaleId && (sandboxSaleBalance(session, recentDirectSaleId)?.pendingCents ?? 0) > 0 && <p role="status" className="flex flex-wrap items-center gap-x-2 text-sm text-[var(--text-soft)]">Venta registrada · pendiente de cobro {fmtMoney(sandboxSaleBalance(session, recentDirectSaleId)!.pendingCents / 100)} <a href="#commercial-money-sandbox" className="font-semibold text-[#4F46E5] underline-offset-2 hover:underline dark:text-indigo-300">Ir al cobro</a></p>}
+        {error && <p role="alert" className="text-sm font-semibold text-rose-600 dark:text-rose-400">{error}</p>}
       </div>
-    </div>}
-    {inventory.items.length > 0 && shownEntries.length === 0 && <p className="text-sm text-[var(--text-soft)]">{stockView === 'available' ? 'Sin stock disponible. Elegí «Sin stock» para reponer artículos.' : 'No hay artículos agotados.'}</p>}
-    {shownEntries.length > 0 && <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-      {shownEntries.map(({ item, summary }) => {
-        const isActive = active?.itemId === item.id;
-        const history = inventory.movements.filter((movement) => movement.itemId === item.id).slice().reverse();
-        return <article key={item.id} className={"@container min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 " + (shownEntries.length === 1 ? "sm:col-span-2 lg:col-span-3" : "")}>
-          <div className="flex items-start justify-between gap-3"><h3 className="min-w-0 break-words text-sm font-extrabold text-[var(--text)]">{item.name}</h3><span className="shrink-0 text-sm text-[var(--text-faint)]">{unitLabel[item.unit]}</span></div>
-          <div className="mt-3 grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 @md:grid-cols-4">
-            <div className="min-w-0"><span className="block text-sm font-bold text-[var(--text-faint)]">Disponible</span><strong className="block break-words text-lg tabular-nums text-[var(--text)]">{formatQuantity(summary.quantity)} {unitLabel[item.unit]}</strong></div>
-            <div className="min-w-0"><span className="flex flex-wrap items-center gap-1 text-sm font-bold text-[var(--text-faint)]">Valor disponible<ContextualHelp label="Valor disponible">Valor estimado de la cantidad que queda, calculado con el costo promedio de las entradas. No representa dinero en caja.</ContextualHelp></span><strong className="block break-words text-sm tabular-nums text-[var(--text)]">{fmtMoney(summary.valueCents / 100)}</strong></div>
-            <div className="min-w-0"><span className="flex flex-wrap items-center gap-1 text-sm font-bold text-[var(--text-faint)]">Costo / {unitLabel[item.unit]}<ContextualHelp label="Costo por unidad">Costo promedio actual por unidad de medida, según las entradas registradas.</ContextualHelp></span><strong className="block break-words text-sm tabular-nums text-[var(--text)]">{fmtMoney(summary.averageUnitCost)}</strong></div>
-            <div className="min-w-0 text-sm text-[var(--text-soft)]"><span className="block">Utilizado: <b className="tabular-nums">{formatQuantity(summary.consumed)} {unitLabel[item.unit]}</b></span><span className="block">Pérdidas: <b className="tabular-nums">{formatQuantity(summary.discarded)} {unitLabel[item.unit]}</b></span></div>
-          </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" onClick={() => openAction(item.id, 'receipt', item.unit)} className={actionPrimary}>Reponer stock</button>
-            {summary.quantity > 0 && <button type="button" onClick={() => openAction(item.id, 'consumption', item.unit)} className={actionSecondary}>Registrar uso</button>}
-            {summary.quantity > 0 && <button type="button" onClick={() => openAction(item.id, 'waste', item.unit)} className={actionSecondary}>Registrar pérdida</button>}
-            {summary.quantity > 0 && item.unit === 'unit' && <button type="button" onClick={() => { directCounter.current = Math.max(directCounter.current, maxIdSuffix(sessionRef.current.sales.map((sale) => sale.id), /^sandbox-direct-(\d+)$/)) + 1; setPendingDirect({ id: `sandbox-direct-${directCounter.current}`, itemId: item.id, unitsText: '1', priceText: '' }); setDirectTiming('later'); setDirectAccount(''); setDirectError(''); setActive(null); setShowNew(false); }} className="rounded-lg border border-emerald-500/40 px-3 py-2 text-sm font-bold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 transition-colors">Vender artículo</button>}
-          </div>
-          {isActive && <form onSubmit={applyAction} className="mt-3 grid grid-cols-2 gap-2 border-t border-[var(--border)] pt-3 sm:grid-cols-3">
-            <label className={labelClass}>Cantidad<input autoFocus required type="number" min="0" step="any" value={quantity} onChange={(event) => setQuantity(event.target.value)} className={fieldClass} /></label>
-            <label className={labelClass}>Unidad<select value={unit} onChange={(event) => setUnit(event.target.value as StockUnit)} className={fieldClass}>{(item.unit === 'unit' ? ['unit'] : ['kg', 'g']).map((candidate) => <option key={candidate} value={candidate}>{unitLabel[candidate as StockUnit]}</option>)}</select></label>
-            {active.kind === 'receipt' && <label className={`${labelClass} col-span-full sm:col-span-1`}>Costo total ($U)<input required type="number" min="0" step="0.01" value={cost} onChange={(event) => setCost(event.target.value)} className={fieldClass} /></label>}
-            {active.kind === 'receipt' && entryPaymentFields}
-            {active.kind !== 'receipt' && <p className="col-span-full inline-flex items-center gap-1 text-sm text-[var(--text-soft)]">{active.kind === 'waste' ? 'Registrar pérdida' : 'Registrar uso'}<ContextualHelp label={active.kind === 'waste' ? 'Pérdida de insumos' : 'Uso de insumos'}>{active.kind === 'waste' ? 'Mercadería que se dañó, venció o no pudo aprovecharse.' : 'Materiales utilizados para preparar o fabricar otro producto. No registra una venta ni crea un producto terminado.'}</ContextualHelp></p>}
-            <div className="col-span-full flex items-end gap-2"><button className="rounded-xl bg-[var(--blue)] px-4 py-2 text-sm font-bold text-white">{active.kind === 'receipt' ? 'Guardar entrada' : active.kind === 'waste' ? 'Confirmar pérdida' : 'Confirmar uso'}</button><button type="button" onClick={() => { setActive(null); setError(''); }} className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-bold text-[var(--text-soft)]">Cancelar</button></div>
-          </form>}
-          <details className="mt-3 border-t border-[var(--border)] pt-3 text-sm text-[var(--text-soft)]">
-            <summary className="cursor-pointer font-bold">Historial de movimientos ({history.length})</summary>
-            <ol className="mt-2 max-h-40 space-y-1 overflow-y-auto">{history.map((movement) => <li key={movement.id} className="flex flex-wrap justify-between gap-x-2 border-b border-[var(--border)] py-1 last:border-0"><span>{movement.kind === 'receipt' ? 'Entrada' : movement.kind === 'consumption' ? 'Uso' : movement.kind === 'waste' ? 'Pérdida' : 'Venta'} · {formatQuantity(movement.quantity)} {unitLabel[movement.unit]}</span><span className="tabular-nums">Costo histórico {fmtMoney((movement.costCents || 0) / 100)}</span></li>)}</ol>
-          </details>
-        </article>;
-      })}
-    </div>}
-    {pendingDirect && directPreview && <section className="space-y-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4" aria-label="Vista previa de venta directa">
-      <div className="flex flex-wrap justify-between gap-2"><div><h3 className="text-sm font-extrabold text-[var(--text)]">Venta directa · {directPreview.item?.name || 'Artículo'}</h3><p className="text-sm text-[var(--text-soft)]">Se descuenta este artículo sin receta. {production ? 'El cobro inmediato se registra en la cuenta seleccionada de Finanzas.' : 'El cobro es simulado y no modifica Finanzas.'}</p></div><button type="button" onClick={() => { setPendingDirect(null); setDirectError(''); }} className="text-sm font-bold text-[var(--text-soft)]">Cancelar</button></div>
-      <div className="grid gap-2 sm:grid-cols-2"><label className={labelClass}>Unidades a vender<input type="number" min="1" step="1" value={pendingDirect.unitsText} onChange={(event) => { setPendingDirect({ ...pendingDirect, unitsText: event.target.value }); setDirectError(''); }} className={fieldClass} /></label><label className={labelClass}>Precio por unidad ($U)<input type="text" inputMode="decimal" value={pendingDirect.priceText} onChange={(event) => { setPendingDirect({ ...pendingDirect, priceText: event.target.value }); setDirectError(''); }} className={fieldClass} /></label></div>
-      <fieldset className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-[var(--text)]"><legend className="mb-1 font-semibold text-[var(--text-soft)]">Cobro de esta venta</legend>
-        <label className="inline-flex items-center gap-1.5"><input type="radio" name="direct-collection" checked={directTiming === 'later'} onChange={() => setDirectTiming('later')} />Cobrar después</label>
-        <label className="inline-flex items-center gap-1.5"><input type="radio" name="direct-collection" checked={directTiming === 'now'} onChange={() => setDirectTiming('now')} />Cobrado ahora</label>
-      </fieldset>
-      {directTiming === 'now' && <label className={`${labelClass} block max-w-xs`}>{production ? 'Cuenta' : 'Cuenta simulada'}{production ? <select required value={directAccount} onChange={e => setDirectAccount(e.target.value)} className={fieldClass}><option value="">Seleccionar cuenta</option>{production.accounts.filter(a => (a.currency || 'UYU') === 'UYU').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select> : <input required value={directAccount} onChange={(event) => setDirectAccount(event.target.value)} placeholder="Ej.: caja de prueba" className={fieldClass} />}</label>}
-      {directTiming === 'now' && production?.financeFields?.()}
-      <p className="text-sm text-[var(--text-soft)]">Disponibles: {directPreview.available} · Quedarían: {directPreview.remaining == null ? '—' : directPreview.remaining}</p>
-      {directPreview.totals && <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4"><span>Venta comercial <b className="block">{fmtMoney(directPreview.totals.revenueCents / 100)}</b></span><span>Costo histórico <b className="block">{fmtMoney(directPreview.totals.totalCostCents / 100)}</b></span><span>Ganancia bruta <b className="block">{fmtMoney(directPreview.totals.grossProfitCents / 100)}</b></span><span>Margen bruto <b className="block">{directPreview.totals.grossMarginPercent.toFixed(2)} %</b></span></div>}
-      {directPreview.issues.map((issue, index) => <p key={index} className="text-sm font-semibold text-rose-600">{issue}</p>)}{directError && <p role="alert" className="text-sm font-semibold text-rose-600">{directError}</p>}
-      <button type="button" disabled={!directPreview.valid} onClick={confirmDirect} className="rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">Confirmar venta directa</button>
-    </section>}
-    {recentDirectSaleId && (sandboxSaleBalance(session, recentDirectSaleId)?.pendingCents ?? 0) > 0 && <p role="status" className="flex flex-wrap items-center gap-x-2 text-sm text-[var(--text-soft)]">Venta registrada · pendiente de cobro {fmtMoney(sandboxSaleBalance(session, recentDirectSaleId)!.pendingCents / 100)} <a href="#commercial-money-sandbox" className="font-bold text-[var(--blue)] underline-offset-2 hover:underline">Ir al cobro</a></p>}
-    {error && <p role="alert" className="text-sm font-bold text-rose-600">{error}</p>}
+    </SurfaceCard>
     <CommercialMoneySandbox accounts={production?.accounts} financeFields={production?.financeFields} session={session} onConfirm={confirmMoney} onConfirmPurchaseAdjustment={confirmPurchaseAdjustment} />
     {(inventory.items.length > 0 || session.sales.length > 0 || (session.productions?.length ?? 0) > 0 || (session.finishedWastes?.length ?? 0) > 0 || (session.finished?.items.length ?? 0) > 0 || recipes.length > 0) && <CommercialRecipesSandbox production={Boolean(production)} inventory={inventory} session={session} sales={session.sales} recipes={recipes} onRecipesChange={commitRecipes} onConfirmSale={confirmSale} onConfirmProduction={confirmProduction} onConfirmPreparedSale={confirmPreparedSale} onConfirmFinishedWaste={confirmFinishedWaste} onConfirmAdjustment={confirmAdjustment} />}
   </section>;

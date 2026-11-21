@@ -15,7 +15,8 @@ import {
 } from '../lib/calculations';
 import { confirmExpectedIncome, confirmFinancialCommitment } from '../lib/financeFlows';
 import { PageHeader } from './PageHeader';
-import { AppIcon } from './AppIcon';
+import { AppIcon, type AppIconName } from './AppIcon';
+import { SurfaceCard, SectionHeader, ListDivider } from './ui/SurfacePrimitives';
 import { isModuleEnabled } from '../lib/moduleVisibility';
 import { showToast } from '../lib/toast';
 import { playSound } from '../lib/audio';
@@ -272,18 +273,50 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
       : item.id.startsWith('scheduled-extra-') ? 'Elemento programado'
       : `Acontecimiento · ${EVENT_TYPE_META[item.type as keyof typeof EVENT_TYPE_META]?.label || 'Otro'}`;
 
+  const itemIconName = (type: CalendarDisplayItem['type']): AppIconName => {
+    switch (type) {
+      case 'finanza_ingreso': return 'income';
+      case 'finanza_compromiso': return 'expense';
+      case 'examen': return 'exam';
+      case 'entrega': return 'clock';
+      case 'job_deadline': return 'briefcase';
+      case 'cumpleanos': return 'gift';
+      case 'reunion': return 'user';
+      case 'cita': return 'calendar';
+      case 'recordatorio': return 'reminder';
+      case 'viaje': return 'mapPin';
+      case 'tramite': return 'note';
+      case 'importante': return 'flame';
+      default: return 'calendarDays';
+    }
+  };
+
   const itemDot = (item: CalendarDisplayItem) =>
-    item.financialType === 'income' ? 'bg-emerald-500'
-      : item.financialType === 'commitment' || item.type === 'entrega' || item.type === 'importante' ? 'bg-rose-500'
-      : item.type === 'examen' || item.type === 'otro' ? 'bg-amber-500'
-      : item.type === 'job_deadline' || item.type === 'cita' ? 'bg-indigo-500'
-      : item.type === 'cumpleanos' ? 'bg-purple-500'
-      : item.type === 'aniversario' ? 'bg-pink-500'
-      : item.type === 'reunion' ? 'bg-cyan-500'
-      : item.type === 'tramite' ? 'bg-slate-500'
-      : item.type === 'viaje' ? 'bg-sky-500'
-      : item.type === 'recordatorio' ? 'bg-orange-500'
-      : 'bg-blue-500';
+    item.financialType === 'income'
+      ? 'bg-emerald-500'
+      : item.financialType === 'commitment'
+      ? 'bg-rose-500'
+      : item.type === 'examen' || item.type === 'entrega'
+      ? 'bg-amber-500'
+      : 'bg-[#4F46E5] dark:bg-indigo-400';
+
+  const itemIconTone = (item: CalendarDisplayItem) =>
+    item.financialType === 'income'
+      ? 'text-emerald-600 dark:text-emerald-400'
+      : item.financialType === 'commitment'
+      ? 'text-rose-600 dark:text-rose-400'
+      : item.type === 'examen' || item.type === 'entrega'
+      ? 'text-amber-600 dark:text-amber-400'
+      : 'text-[#4F46E5] dark:text-indigo-300';
+
+  const itemPillTone = (item: CalendarDisplayItem) =>
+    item.financialType === 'income'
+      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+      : item.financialType === 'commitment'
+      ? 'bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
+      : item.type === 'examen' || item.type === 'entrega'
+      ? 'bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
+      : 'bg-indigo-50 text-[#4F46E5] dark:bg-indigo-500/15 dark:text-indigo-300';
 
   const upcoming = useMemo(() => upcomingEvents(state, 6, selectedDate), [state, selectedDate]);
   const selectedItems = useMemo(() => selectedDate ? chronologicalItems(state, selectedDate) : [], [state, selectedDate]);
@@ -293,28 +326,28 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
       <PageHeader title="Calendario" />
 
       {/* Main Container: 2 columns on desktop, stacked on mobile */}
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_330px] 2xl:grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
-        {/* Left Column: Calendar Grid & Navigation */}
-        <div className="space-y-4">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px] gap-5 items-start">
+        {/* Left Column: Calendar Grid & Navigation inside a single flat SurfaceCard */}
+        <SurfaceCard className="overflow-hidden">
           {/* Navigation Bar */}
-          <div className="flex flex-wrap items-center justify-between gap-2.5">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-100 px-3.5 py-3 dark:border-white/[0.06] sm:px-5 sm:py-3.5">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <button
                 type="button"
                 onClick={() => handleNav(-1)}
-                className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] hover:border-[var(--blue)] cursor-pointer transition-colors shadow-2xs"
+                className="flex min-h-10 min-w-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white text-[var(--text)] transition-colors hover:border-[#4F46E5] hover:text-[#4F46E5] dark:border-white/[0.08] dark:bg-transparent dark:hover:border-indigo-400 dark:hover:text-indigo-300 cursor-pointer"
                 title="Mes anterior"
                 aria-label="Mes anterior"
               >
                 <AppIcon name="chevronLeft" className="h-4 w-4" />
               </button>
-              <span className="font-extrabold text-base text-[var(--text)] min-w-[150px] text-center">
+              <span className="min-w-[132px] text-center text-sm font-semibold text-[var(--text)] sm:min-w-[152px] sm:text-base">
                 {monthLabel}
               </span>
               <button
                 type="button"
                 onClick={() => handleNav(1)}
-                className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] hover:border-[var(--blue)] cursor-pointer transition-colors shadow-2xs"
+                className="flex min-h-10 min-w-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white text-[var(--text)] transition-colors hover:border-[#4F46E5] hover:text-[#4F46E5] dark:border-white/[0.08] dark:bg-transparent dark:hover:border-indigo-400 dark:hover:text-indigo-300 cursor-pointer"
                 title="Mes siguiente"
                 aria-label="Mes siguiente"
               >
@@ -323,7 +356,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
               <button
                 type="button"
                 onClick={() => handleNav('today')}
-                className="px-3 h-9 text-xs font-bold rounded-xl bg-[var(--card)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] cursor-pointer transition-colors shadow-2xs"
+                className="min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 text-xs font-semibold text-[var(--text-soft)] transition-colors hover:border-[#4F46E5] hover:text-[var(--text)] dark:border-white/[0.08] dark:bg-transparent cursor-pointer"
               >
                 Hoy
               </button>
@@ -332,129 +365,135 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
             <button
               type="button"
               onClick={() => openAddEvent()}
-              className="inline-flex items-center gap-1.5 px-3.5 h-9 rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-xs font-bold cursor-pointer transition-colors shadow-2xs"
+              className="inline-flex min-h-10 w-full items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-3.5 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] sm:w-auto cursor-pointer"
             >
-              <AppIcon name="plus" className="h-3.5 w-3.5" />
+              <AppIcon name="plus" className="h-4 w-4" />
               <span>Agregar acontecimiento</span>
             </button>
           </div>
 
-          {/* Weekday headers */}
-          <div className="grid grid-cols-7 gap-1.5 sm:gap-2 text-center text-[11px] font-bold text-[var(--text-faint)] uppercase tracking-wider">
-            <span>Lun</span>
-            <span>Mar</span>
-            <span>Mié</span>
-            <span>Jue</span>
-            <span>Vie</span>
-            <span>Sáb</span>
-            <span>Dom</span>
-          </div>
+          <div className="p-2.5 sm:p-4">
+            {/* Weekday headers */}
+            <div className="mb-1.5 grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500 sm:mb-2 sm:gap-1.5">
+              <span>Lun</span>
+              <span>Mar</span>
+              <span>Mié</span>
+              <span>Jue</span>
+              <span>Vie</span>
+              <span>Sáb</span>
+              <span>Dom</span>
+            </div>
 
-          {/* Calendar Grid */}
-          <div className="grid grid-cols-7 gap-1.5 sm:gap-2" role="grid" aria-label={`Calendario de ${monthLabel}`}>
-            {cells.map((d, idx) => {
-              if (d === null) {
-                return <div key={`empty-${idx}`} className="bg-transparent min-h-[70px] sm:min-h-[88px] xl:min-h-[118px]" aria-hidden="true" />;
-              }
+            {/* Calendar Grid */}
+            <div className="grid grid-cols-7 gap-1 sm:gap-1.5" role="grid" aria-label={`Calendario de ${monthLabel}`}>
+              {cells.map((d, idx) => {
+                if (d === null) {
+                  return <div key={`empty-${idx}`} className="min-h-[46px] bg-transparent sm:min-h-[84px] xl:min-h-[108px]" aria-hidden="true" />;
+                }
 
-              const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-              const items = chronologicalItems(state, iso);
-              const isToday = iso === todayIso;
-              const isSelected = selectedDate === iso;
+                const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const items = chronologicalItems(state, iso);
+                const isToday = iso === todayIso;
+                const isSelected = selectedDate === iso;
 
-              return (
-                <button
-                  type="button"
-                  key={iso}
-                  onClick={() => selectDate(iso)}
-                  aria-label={`${formatNaturalDate(iso, isToday)}, ${items.length} elemento${items.length === 1 ? '' : 's'}`}
-                  aria-pressed={isSelected}
-                  className={`group relative flex flex-col justify-start rounded-xl md:rounded-2xl p-1.5 sm:p-2 xl:p-2.5 min-h-[72px] sm:min-h-[88px] xl:min-h-[118px] min-w-0 text-left transition-all cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)] ${
-                    isSelected
-                      ? 'border-2 border-[var(--blue)] bg-[var(--blue-soft)]/20 shadow-xs ring-1 ring-[var(--blue)]/40'
-                      : isToday
-                      ? 'border border-[var(--blue)]/80 bg-[var(--blue-soft)]/10 shadow-2xs'
-                      : 'border border-[var(--border)] bg-[var(--card)] hover:border-[var(--border-hover)] hover:bg-[var(--surface-muted)]/40'
-                  }`}
-                >
-                  {/* Day header row */}
-                  <div className="flex w-full items-center justify-between pointer-events-none">
-                    <span className={`text-xs xl:text-sm font-bold leading-none ${isToday ? 'text-[var(--blue)] font-black' : isSelected ? 'text-[var(--text)] font-extrabold' : 'text-[var(--text-soft)]'}`}>
-                      {d}
-                    </span>
-                    {isToday && (
-                      <span className="flex items-center gap-1">
-                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-[var(--blue)]" />
-                        <span className="hidden sm:inline text-[9px] font-bold text-[var(--blue)] uppercase">Hoy</span>
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Mobile dots view */}
-                  <div className="md:hidden mt-auto pt-1 flex flex-wrap items-center justify-center gap-1 w-full pointer-events-none">
-                    {items.slice(0, 3).map((item) => (
-                      <span key={item.id} className={`h-1.5 w-1.5 rounded-full ${itemDot(item)}`} />
-                    ))}
-                    {items.length > 3 && (
-                      <span className="text-[9px] font-bold tabular-nums text-[var(--text-soft)]">
-                        +{items.length - 3}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Desktop item pills view */}
-                  <div className="hidden md:flex flex-col gap-1 mt-1.5 w-full min-w-0 pointer-events-none">
-                    {items.slice(0, 2).map((item) => (
-                      <div
-                        key={item.id}
-                        title={`${item.isDeadline ? '⏰ Vence: ' : ''}${item.time ? `${item.time} · ` : ''}${item.name}`}
-                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md truncate transition-all ${item.pill}${item.isDone ? ' opacity-40 line-through' : ''}`}
+                return (
+                  <button
+                    type="button"
+                    key={iso}
+                    onClick={() => selectDate(iso)}
+                    aria-label={`${formatNaturalDate(iso, isToday)}, ${items.length} elemento${items.length === 1 ? '' : 's'}`}
+                    aria-pressed={isSelected}
+                    className={`group relative flex min-h-[46px] min-w-0 flex-col justify-start rounded-xl p-1 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] sm:min-h-[84px] sm:p-2 xl:min-h-[108px] xl:p-2.5 cursor-pointer ${
+                      isSelected
+                        ? 'bg-indigo-50/80 dark:bg-indigo-500/15'
+                        : isToday
+                        ? 'bg-slate-50/90 dark:bg-white/[0.03]'
+                        : 'hover:bg-slate-50/70 dark:hover:bg-white/[0.03]'
+                    }`}
+                  >
+                    {/* Day header row */}
+                    <div className="pointer-events-none flex w-full items-center justify-center sm:justify-between">
+                      <span
+                        className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs tabular-nums leading-none sm:text-xs xl:text-sm ${
+                          isSelected
+                            ? 'bg-[#4F46E5] font-bold text-white'
+                            : isToday
+                            ? 'font-bold text-[#4F46E5] dark:text-indigo-300'
+                            : 'font-medium text-[var(--text-soft)]'
+                        }`}
                       >
-                        {item.icon} {item.time && `${item.time} `}{item.name}
-                      </div>
-                    ))}
-                    {items.length > 2 && (
-                      <span className="text-[10px] font-semibold text-[var(--blue)]">
-                        +{items.length - 2} más
+                        {d}
                       </span>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
+                      {isToday && !isSelected && (
+                        <span className="hidden items-center gap-1 sm:flex">
+                          <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#4F46E5] dark:bg-indigo-400" />
+                          <span className="text-[10px] font-semibold uppercase text-[#4F46E5] dark:text-indigo-300">Hoy</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Mobile dots view */}
+                    <div className="pointer-events-none mt-1 flex w-full flex-wrap items-center justify-center gap-1 md:hidden">
+                      {items.slice(0, 3).map((item) => (
+                        <span key={item.id} className={`h-1.5 w-1.5 rounded-full ${itemDot(item)}`} />
+                      ))}
+                      {items.length > 3 && (
+                        <span className="text-[9px] font-semibold tabular-nums text-[var(--text-soft)]">
+                          +{items.length - 3}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Desktop item pills view */}
+                    <div className="pointer-events-none mt-1.5 hidden w-full min-w-0 flex-col gap-1 md:flex">
+                      {items.slice(0, 2).map((item) => (
+                        <div
+                          key={item.id}
+                          title={`${item.isDeadline ? 'Vence: ' : ''}${item.time ? `${item.time} · ` : ''}${item.name}`}
+                          className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium truncate ${itemPillTone(item)}${item.isDone ? ' opacity-45 line-through' : ''}`}
+                        >
+                          <AppIcon name={itemIconName(item.type)} className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{item.time && `${item.time} `}{item.name}</span>
+                        </div>
+                      ))}
+                      {items.length > 2 && (
+                        <span className="px-1 text-[10px] font-semibold text-[#4F46E5] dark:text-indigo-300">
+                          +{items.length - 2} más
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        </SurfaceCard>
 
         {/* Right Column: Contextual Date Detail Panel & Upcoming Events */}
         <div className="space-y-4">
           {/* Selected Date Detail Panel */}
-          <section
-            aria-live="polite"
-            className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 shadow-2xs space-y-3.5"
-          >
-            <div className="flex items-center justify-between gap-2 border-b border-[var(--border)]/70 pb-3">
-              <div className="min-w-0">
-                <h2 className="text-sm sm:text-base font-bold text-[var(--text)] tracking-tight truncate">
-                  {selectedDate ? formatNaturalDate(selectedDate, selectedDate === todayIso) : 'Elegí un día'}
-                </h2>
-                <p className="text-xs text-[var(--text-soft)] tabular-nums mt-0.5">
-                  {selectedItems.length} {selectedItems.length === 1 ? 'elemento' : 'elementos'}
-                </p>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => openAddEvent(selectedDate)}
-                className="inline-flex shrink-0 items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[var(--blue-soft)] text-[var(--blue)] hover:bg-[var(--blue)] hover:text-white text-xs font-bold transition-colors cursor-pointer"
-                title="Agregar acontecimiento en esta fecha"
-              >
-                <AppIcon name="plus" className="h-3.5 w-3.5" />
-                <span>Agregar</span>
-              </button>
+          <SurfaceCard aria-live="polite" className="overflow-hidden">
+            <div className="border-b border-slate-100 px-4 py-3.5 dark:border-white/[0.06] sm:px-5">
+              <SectionHeader
+                icon={<AppIcon name="calendarDays" className="h-4 w-4" />}
+                title={selectedDate ? formatNaturalDate(selectedDate, selectedDate === todayIso) : 'Elegí un día'}
+                count={selectedItems.length > 0 ? selectedItems.length : null}
+                action={
+                  <button
+                    type="button"
+                    onClick={() => openAddEvent(selectedDate)}
+                    className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-xl bg-indigo-50 px-3 text-xs font-semibold text-[#4F46E5] transition-colors hover:bg-[#4F46E5] hover:text-white dark:bg-indigo-500/15 dark:text-indigo-300 dark:hover:bg-[#4F46E5] dark:hover:text-white cursor-pointer"
+                    title="Agregar acontecimiento en esta fecha"
+                  >
+                    <AppIcon name="plus" className="h-4 w-4" />
+                    <span>Agregar</span>
+                  </button>
+                }
+              />
             </div>
 
             {selectedItems.length > 0 ? (
-              <div className="space-y-2 max-h-[360px] overflow-y-auto pr-0.5">
+              <ListDivider className="xl:max-h-[420px] xl:overflow-y-auto">
                 {selectedItems.map((item) => {
                   const calendarEvent = (state.calendarEvents || []).find((e) => e.id === item.id);
                   const isUserCreated = Boolean(calendarEvent);
@@ -462,11 +501,9 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                   return (
                     <div
                       key={item.id}
-                      className="group flex w-full items-start gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--card-subtle)]/40 p-2.5 sm:p-3 text-left hover:border-[var(--blue)] transition-colors"
+                      className="group flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-slate-50/70 dark:hover:bg-white/[0.02] sm:px-5"
                     >
-                      <span aria-hidden="true" className="text-base shrink-0 mt-0.5">
-                        {item.icon}
-                      </span>
+                      <AppIcon name={itemIconName(item.type)} className={`h-4 w-4 shrink-0 ${itemIconTone(item)}`} />
                       <button
                         type="button"
                         onClick={() => {
@@ -478,15 +515,15 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                         }}
                         className="min-w-0 flex-1 text-left cursor-pointer"
                       >
-                        <span className={`block text-xs sm:text-sm font-semibold text-[var(--text)] leading-snug ${item.isDone ? 'line-through opacity-60' : ''}`}>
+                        <span className={`block text-sm font-medium leading-snug text-[var(--text)] ${item.isDone ? 'line-through opacity-60' : ''}`}>
                           {item.name}
                         </span>
-                        <span className="block text-[11px] text-[var(--text-soft)] mt-0.5">
-                          {item.time && <span className="font-semibold text-[var(--blue)]">{item.time} · </span>}
+                        <span className="mt-0.5 block text-xs text-[var(--text-soft)]">
+                          {item.time && <span className="font-semibold tabular-nums text-[#4F46E5] dark:text-indigo-300">{item.time} · </span>}
                           {itemOrigin(item)}
                         </span>
                         {item.financialAmount !== undefined && (
-                          <span className={`inline-block mt-1 text-[11px] font-bold tabular-nums ${item.financialType === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                          <span className={`mt-1 inline-block text-xs font-semibold tabular-nums ${item.financialType === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                             <PrivacyAmount>
                               {item.financialType === 'income' ? '+' : '−'}{formatMoney(item.financialAmount, item.financialCurrency || 'UYU')}
                             </PrivacyAmount>
@@ -494,26 +531,26 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                         )}
                       </button>
 
-                      <div className="flex shrink-0 items-center gap-1">
+                      <div className="flex shrink-0 items-center gap-0.5">
                         {isUserCreated && (
                           <>
                             <button
                               type="button"
                               onClick={() => openEditEvent(calendarEvent!)}
-                              className="p-1 rounded-lg text-[var(--text-faint)] hover:text-[var(--blue)] hover:bg-[var(--surface-muted)] transition-colors cursor-pointer"
+                              className="flex min-h-10 min-w-10 items-center justify-center rounded-xl text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[#4F46E5] dark:hover:text-indigo-300 cursor-pointer"
                               title="Editar acontecimiento"
                               aria-label={`Editar ${item.name}`}
                             >
-                              <AppIcon name="edit" className="h-3.5 w-3.5" />
+                              <AppIcon name="edit" className="h-4 w-4" />
                             </button>
                             <button
                               type="button"
                               onClick={() => handleDeleteEvent(item.id)}
-                              className="p-1 rounded-lg text-[var(--text-faint)] hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                              className="flex min-h-10 min-w-10 items-center justify-center rounded-xl text-[var(--text-faint)] transition-colors hover:bg-rose-500/10 hover:text-rose-500 cursor-pointer"
                               title="Eliminar acontecimiento"
                               aria-label={`Eliminar ${item.name}`}
                             >
-                              <AppIcon name="trash" className="h-3.5 w-3.5" />
+                              <AppIcon name="trash" className="h-4 w-4" />
                             </button>
                           </>
                         )}
@@ -521,46 +558,47 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                           <button
                             type="button"
                             onClick={() => setSelectedItem(item)}
-                            className="p-1 rounded-lg text-[var(--text-faint)] hover:text-[var(--blue)] cursor-pointer"
+                            className="flex min-h-10 min-w-10 items-center justify-center rounded-xl text-[var(--text-faint)] hover:bg-[var(--surface-muted)] hover:text-[#4F46E5] dark:hover:text-indigo-300 cursor-pointer"
                             title="Ver detalles"
                             aria-label={`Ver detalles de ${item.name}`}
                           >
-                            <AppIcon name="chevronRight" className="h-3.5 w-3.5" />
+                            <AppIcon name="chevronRight" className="h-4 w-4" />
                           </button>
                         )}
                       </div>
                     </div>
                   );
                 })}
-              </div>
+              </ListDivider>
             ) : (
-              <div className="rounded-xl border border-dashed border-[var(--border)] p-4 sm:p-5 text-center space-y-2 bg-[var(--card-subtle)]/30">
+              <div className="px-4 py-6 text-center sm:px-5">
                 <p className="text-xs text-[var(--text-soft)]">
                   No hay elementos para esta fecha.
                 </p>
                 <button
                   type="button"
                   onClick={() => openAddEvent(selectedDate)}
-                  className="inline-flex items-center gap-1 text-xs font-bold text-[var(--blue)] hover:underline cursor-pointer"
+                  className="mt-2 inline-flex min-h-10 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold text-[#4F46E5] hover:underline dark:text-indigo-300 cursor-pointer"
                 >
-                  <AppIcon name="plus" className="h-3 w-3" />
+                  <AppIcon name="plus" className="h-3.5 w-3.5" />
                   <span>Agregar acontecimiento aquí</span>
                 </button>
               </div>
             )}
-          </section>
+          </SurfaceCard>
 
           {/* Upcoming events preview */}
           {upcoming.length > 0 && (
-            <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 shadow-2xs space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-soft)]">
-                  Próximos acontecimientos
-                </h3>
-                <span className="text-[11px] text-[var(--text-faint)]" title={`Desde ${formatNaturalDate(selectedDate)}`}>Desde el día elegido</span>
+            <SurfaceCard className="overflow-hidden">
+              <div className="border-b border-slate-100 px-4 py-3.5 dark:border-white/[0.06] sm:px-5">
+                <SectionHeader
+                  icon={<AppIcon name="clock" className="h-4 w-4" />}
+                  title="Próximos acontecimientos"
+                  count={upcoming.length}
+                />
               </div>
 
-              <div className="space-y-1.5 divide-y divide-[var(--border)]/60">
+              <ListDivider>
                 {upcoming.map((e) => {
                   const isEventToday = e.occursOn === todayIso;
                   const occurrence = new Date(`${e.occursOn}T12:00:00`).toLocaleDateString('es-UY', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -568,40 +606,38 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                   return (
                     <div
                       key={e.id}
-                      className="pt-1.5 first:pt-0 flex items-center justify-between gap-2 text-xs"
+                      className="flex items-center justify-between gap-2 px-4 py-2.5 text-xs transition-colors hover:bg-slate-50/70 dark:hover:bg-white/[0.02] sm:px-5"
                     >
                       <button
                         type="button"
                         onClick={() => selectDate(e.occursOn)}
-                        className="min-w-0 flex-1 flex items-center gap-2 text-left cursor-pointer group"
+                        className="group flex min-h-10 min-w-0 flex-1 items-center gap-2 text-left cursor-pointer"
                       >
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${EVENT_TYPE_META[e.type]?.pill || ''}`}>
-                          {EVENT_TYPE_META[e.type]?.icon || '•'}
-                        </span>
-                        <span className="font-medium text-[var(--text)] truncate group-hover:text-[var(--blue)] transition-colors">
+                        <AppIcon name={itemIconName(e.type)} className="h-4 w-4 shrink-0 text-[#4F46E5] dark:text-indigo-300" />
+                        <span className="truncate text-sm font-medium text-[var(--text)] transition-colors group-hover:text-[#4F46E5] dark:group-hover:text-indigo-300">
                           {e.name}
                         </span>
                       </button>
 
-                      <div className="flex shrink-0 items-center gap-1.5">
-                        <span className={`tabular-nums text-[11px] font-semibold ${isEventToday ? 'text-[var(--blue)]' : 'text-[var(--text-soft)]'}`} title={formatNaturalDate(e.occursOn)}>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <span className={`tabular-nums text-[11px] font-semibold ${isEventToday ? 'text-[#4F46E5] dark:text-indigo-300' : 'text-[var(--text-soft)]'}`} title={formatNaturalDate(e.occursOn)}>
                           {isEventToday ? `Hoy · ${occurrence}` : occurrence}
                         </span>
                         <button
                           type="button"
                           onClick={() => handleDeleteEvent(e.id)}
-                          className="p-1 text-[var(--text-faint)] hover:text-rose-500 rounded cursor-pointer transition-colors"
+                          className="flex min-h-10 min-w-10 items-center justify-center rounded-xl text-[var(--text-faint)] transition-colors hover:bg-rose-500/10 hover:text-rose-500 cursor-pointer"
                           title="Eliminar evento"
                           aria-label={`Eliminar ${e.name}`}
                         >
-                          <AppIcon name="trash" className="h-3 w-3" />
+                          <AppIcon name="trash" className="h-4 w-4" />
                         </button>
                       </div>
                     </div>
                   );
                 })}
-              </div>
-            </section>
+              </ListDivider>
+            </SurfaceCard>
           )}
         </div>
       </div>
@@ -683,7 +719,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                       .filter(([k]) => k !== 'job_deadline')
                       .map(([k, v]) => (
                       <option key={k} value={k}>
-                        {v.icon} {v.label}
+                        {v.label}
                       </option>
                     ))}
                   </select>
@@ -754,8 +790,8 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-xl">{selectedItem.icon}</span>
-                <span className="text-xs font-bold uppercase tracking-wider text-[var(--text-faint)]">
+                <AppIcon name={itemIconName(selectedItem.type)} className={`h-4 w-4 shrink-0 ${itemIconTone(selectedItem)}`} />
+                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--text-faint)]">
                   {selectedItem.taskRef ? 'Tarea'
                     : selectedItem.financialType === 'commitment'
                     ? 'Compromiso Financiero'

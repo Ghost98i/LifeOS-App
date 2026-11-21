@@ -16,6 +16,7 @@ import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 import { ContextualHelp } from './ContextualHelp';
 import { CompletionCheckMark } from './visual/CompletionCheckMark';
+import { SurfaceCard, SectionHeader, ListDivider } from './ui/SurfacePrimitives';
 import { agendaWeek, editedWeeklyBlockTime, isCurrentWeek, parseLocalDateISO, shiftWeek, validatePunctualEvent, validateWeeklyBlock, weekDates } from '../lib/agendaWeek';
 import { isModuleEnabled } from '../lib/moduleVisibility';
 import { focusTargetElement } from '../lib/navigationFocus';
@@ -52,7 +53,11 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
   const [weekReference, setWeekReference] = useState(() => new Date());
   const [mobileDay, setMobileDay] = useState(() => (new Date().getDay() + 6) % 7);
   const [weekViewMode, setWeekViewMode] = useState<'grid' | 'focused'>('focused');
-  const [wideWeekView, setWideWeekView] = useState(() => window.matchMedia('(min-width: 640px)').matches);
+  const [wideWeekView, setWideWeekView] = useState(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(min-width: 640px)').matches
+      : false
+  );
   const [activeSection, setActiveSection] = useState<'semana' | 'rutinas'>('semana');
   const [showRoutineForm, setShowRoutineForm] = useState(false);
   const [templateAction, setTemplateAction] = useState<'load' | 'clear' | null>(null);
@@ -402,13 +407,13 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
         aria-label={completed ? `Reabrir ${taskName}` : `Completar ${taskName}`}
         aria-pressed={completed}
         title={completed ? 'Reabrir para hoy' : 'Completar para hoy'}
-        className={`lifeos-task-check agenda-completion-check relative flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] ${completed ? (showMotion ? 'is-completed is-animating' : 'is-completed') : 'is-pending'}`}
+        className={`lifeos-task-check agenda-completion-check relative -ml-2 flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer ${completed ? (showMotion ? 'is-completed is-animating' : 'is-completed') : 'is-pending'}`}
       >
         <CompletionCheckMark
           completed={completed}
           animate={showMotion}
           nonce={completionMotion?.nonce || 0}
-          size={24}
+          size={22}
         />
       </button>
     );
@@ -435,10 +440,10 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       <div
         key={entry.key}
         id={domId}
-        className="group flex min-w-0 items-start gap-2.5 rounded-xl border border-transparent p-2 hover:border-[var(--border)] hover:bg-[var(--surface-muted)] transition-all sm:items-center sm:px-3"
+        className="group flex min-w-0 items-center gap-2.5 px-3 py-2.5 transition-colors hover:bg-slate-50/70 dark:hover:bg-white/[0.02] sm:px-4"
       >
         {entry.time && (
-          <span className="shrink-0 rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-xs font-bold tabular-nums text-[var(--blue)]">
+          <span className="shrink-0 rounded-md bg-indigo-50 px-1.5 py-0.5 text-xs font-semibold tabular-nums text-[#4F46E5] dark:bg-indigo-500/15 dark:text-indigo-300">
             {entry.time}
           </span>
         )}
@@ -447,27 +452,27 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
         ) : (
           <span
             aria-hidden="true"
-            className="flex h-5 w-5 shrink-0 items-center justify-center text-[var(--text-soft)]"
+            className="flex h-5 w-5 shrink-0 items-center justify-center text-slate-400 dark:text-slate-500"
           >
             <AppIcon
               name={entry.kind === 'task' ? (completed ? 'checkCircle' : 'task') : entry.kind === 'event' ? 'calendarDays' : entry.kind === 'routine' && !entry.time ? 'list' : 'clock'}
-              className="h-3.5 w-3.5"
+              className="h-4 w-4"
             />
           </span>
         )}
         <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
           <span
-            className={`break-words [overflow-wrap:anywhere] text-xs sm:text-sm font-medium ${
+            className={`break-words [overflow-wrap:anywhere] text-sm font-medium ${
               completed ? 'text-[var(--text-soft)] line-through' : 'text-[var(--text)]'
             }`}
           >
             {entry.label}
           </span>
           <span
-            className={`text-xs sm:text-xs ${
+            className={`text-xs ${
               entry.kind === 'event'
                 ? 'font-semibold text-[#4F46E5] dark:text-indigo-300'
-                : 'text-[var(--text-soft)] dark:text-slate-300'
+                : 'text-[var(--text-soft)] dark:text-slate-400'
             }`}
           >
             {entry.kind === 'block'
@@ -483,11 +488,19 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               : 'Evento puntual · informativo'}
           </span>
         </div>
-        {entry.kind === 'task' && onNavigateToRecord && <button type="button" aria-label={`Abrir tarea: ${entry.label}`} onClick={() => {
-          const target = datedTaskDestination(entry.task); onNavigateToRecord(target.view, target.options);
-        }} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--blue)] hover:bg-[var(--surface-muted)] focus-visible:outline-2 focus-visible:outline-[#4F46E5]">
-          <AppIcon name="arrowRight" className="h-4 w-4" />
-        </button>}
+        {entry.kind === 'task' && onNavigateToRecord && (
+          <button
+            type="button"
+            aria-label={`Abrir tarea: ${entry.label}`}
+            onClick={() => {
+              const target = datedTaskDestination(entry.task);
+              onNavigateToRecord(target.view, target.options);
+            }}
+            className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-xl text-[#4F46E5] hover:bg-indigo-50 focus-visible:outline-2 focus-visible:outline-[#4F46E5] dark:text-indigo-300 dark:hover:bg-indigo-500/15 cursor-pointer"
+          >
+            <AppIcon name="arrowRight" className="h-4 w-4" />
+          </button>
+        )}
         {entry.kind === 'block' && entry.block.linkedTaskId && (
           <span
             title={
@@ -495,13 +508,13 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 ? 'Tarea vinculada'
                 : 'Vínculo a tarea que ya no existe'
             }
-            className="text-[var(--blue)] shrink-0"
+            className="shrink-0 text-[#4F46E5] dark:text-indigo-300"
           >
-            <AppIcon name="link" className="h-3.5 w-3.5" />
+            <AppIcon name="link" className="h-4 w-4" />
           </span>
         )}
         {entry.kind === 'block' && (
-          <div className="flex shrink-0 gap-0.5 opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex shrink-0 items-center gap-0.5 opacity-95 transition-opacity sm:opacity-0 group-hover:opacity-100 focus-within:opacity-100">
             <button
               type="button"
               onClick={() =>
@@ -517,17 +530,17 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 })
               }
               aria-label={`Editar ${entry.label}`}
-              className="rounded p-1 text-[var(--text-soft)] dark:text-slate-300 hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5]"
+              className="flex min-h-10 min-w-10 items-center justify-center rounded-xl text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5] dark:text-slate-400 cursor-pointer"
             >
-              <AppIcon name="edit" className="h-3.5 w-3.5" />
+              <AppIcon name="edit" className="h-4 w-4" />
             </button>
             <button
               type="button"
               onClick={() => handleDeleteBlock(item.day, entry.id)}
               aria-label={`Eliminar ${entry.label}`}
-              className="rounded p-1 text-[var(--text-soft)] dark:text-slate-300 hover:text-red-500 focus-visible:outline-2 focus-visible:outline-[#4F46E5]"
+              className="flex min-h-10 min-w-10 items-center justify-center rounded-xl text-[var(--text-soft)] hover:bg-rose-50 hover:text-rose-600 focus-visible:outline-2 focus-visible:outline-[#4F46E5] dark:text-slate-400 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 cursor-pointer"
             >
-              <AppIcon name="trash" className="h-3.5 w-3.5" />
+              <AppIcon name="trash" className="h-4 w-4" />
             </button>
           </div>
         )}
@@ -545,9 +558,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               });
             }}
             aria-label={`Editar ${entry.label}`}
-            className="rounded p-1 text-[var(--text-soft)] dark:text-slate-300 hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5] opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity"
+            className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-xl text-[var(--text-soft)] opacity-95 transition-opacity hover:bg-[var(--surface-muted)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5] sm:opacity-0 group-hover:opacity-100 focus-within:opacity-100 dark:text-slate-400 cursor-pointer"
           >
-            <AppIcon name="edit" className="h-3.5 w-3.5" />
+            <AppIcon name="edit" className="h-4 w-4" />
           </button>
         )}
       </div>
@@ -564,16 +577,16 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
     const dayIndex = days.indexOf(item);
 
     return (
-      <section
+      <SurfaceCard
         key={item.date}
         aria-label={`Actividades del ${dayLabel} ${item.date}`}
-        className={`flex flex-col rounded-2xl border transition-all ${
+        className={`flex flex-col overflow-hidden transition-colors ${
           isToday
-            ? 'border-[var(--blue)]/60 bg-[var(--card)] shadow-md ring-2 ring-[var(--blue)]/15'
-            : 'border-[var(--border)] bg-[var(--card)] shadow-2xs hover:border-[var(--border-hover)]'
+            ? 'border-[#4F46E5]/60 dark:border-indigo-400/50'
+            : ''
         } ${isGrid ? 'min-h-[220px]' : ''}`}
       >
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] p-3 sm:px-4">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-3 py-3 dark:border-white/[0.06] sm:px-4">
           <button
             type="button"
             onClick={() => {
@@ -586,11 +599,11 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             className={`min-w-0 text-left cursor-pointer group/title ${isGrid ? 'hover:opacity-80 transition-opacity' : ''}`}
           >
             <div className="flex items-center gap-1.5 flex-wrap">
-              <h3 className="text-sm sm:text-base font-bold text-[var(--text)] group-hover/title:text-[var(--blue)] transition-colors">
-                {dayLabel} <span className="tabular-nums font-extrabold">{dayDate.getDate()}</span>
+              <h3 className="text-sm font-semibold text-[var(--text)] group-hover/title:text-[#4F46E5] dark:group-hover/title:text-indigo-300 transition-colors">
+                {dayLabel} <span className="tabular-nums font-bold">{dayDate.getDate()}</span>
               </h3>
               {isToday && (
-                <span className="rounded-md bg-[var(--blue)] px-1.5 py-0.5 text-xs font-extrabold text-white">
+                <span className="rounded-md bg-[#4F46E5] px-1.5 py-0.5 text-[11px] font-semibold text-white">
                   Hoy
                 </span>
               )}
@@ -600,18 +613,18 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             </p>
           </button>
 
-          <div className="flex items-center gap-1">
-            <span className="rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-xs font-semibold tabular-nums text-[var(--text-soft)]">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-medium tabular-nums text-slate-400 dark:text-slate-500">
               {count}
             </span>
             <details className="relative">
               <summary
                 aria-label={`Agregar para ${dayLabel}`}
-                className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-lg border border-[var(--border)] text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5]"
+                className="flex min-h-10 min-w-10 cursor-pointer list-none items-center justify-center rounded-xl border border-slate-200/80 text-[var(--text-soft)] hover:bg-slate-50 hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5] dark:border-white/[0.08] dark:hover:bg-white/[0.04]"
               >
-                <AppIcon name="plus" className="h-3.5 w-3.5" />
+                <AppIcon name="plus" className="h-4 w-4" />
               </summary>
-              <div className="absolute right-0 top-full z-20 mt-1 min-w-44 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg">
+              <div className="absolute right-0 top-full z-20 mt-1 min-w-44 rounded-xl border border-slate-200/80 bg-white p-1 shadow-sm dark:border-white/[0.08] dark:bg-[#0D111A]">
                 <button
                   type="button"
                   onClick={(e) => {
@@ -619,7 +632,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                     d?.removeAttribute('open');
                     openWeeklyBlock(item.day, e.currentTarget);
                   }}
-                  className="block w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer"
+                  className="flex min-h-10 w-full items-center rounded-lg px-3 py-2 text-left text-xs font-semibold text-[var(--text)] hover:bg-slate-50 dark:hover:bg-white/[0.04] cursor-pointer"
                 >
                   Actividad semanal
                 </button>
@@ -631,7 +644,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                       d?.removeAttribute('open');
                       openNewEvent(item.date);
                     }}
-                    className="block w-full rounded-lg px-3 py-2 text-left text-xs font-semibold text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer"
+                    className="flex min-h-10 w-full items-center rounded-lg px-3 py-2 text-left text-xs font-semibold text-[var(--text)] hover:bg-slate-50 dark:hover:bg-white/[0.04] cursor-pointer"
                   >
                     Evento puntual
                   </button>
@@ -641,47 +654,47 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
           </div>
         </div>
 
-        <div className="flex-1 p-2 sm:p-3 space-y-2">
+        <div className="flex-1 divide-y divide-slate-100 dark:divide-white/[0.06]">
           {entries.length === 0 ? (
-            <p className="py-6 text-center text-xs text-[var(--text-soft)] dark:text-slate-300">
+            <p className="px-3 py-6 text-center text-xs text-[var(--text-soft)]">
               Sin actividades previstas.
             </p>
           ) : (
             <>
               {timed.length > 0 && (
-                <div>
-                  <div className="px-2 pb-1 text-xs font-bold text-[var(--text-faint)]">
+                <div className="py-1.5">
+                  <div className="px-3 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                     Con horario
                   </div>
-                  <div className="space-y-0.5">
+                  <ListDivider>
                     {timed.map((entry) => renderEntry(entry, item))}
-                  </div>
+                  </ListDivider>
                 </div>
               )}
               {untimedScheduled.length > 0 && (
-                <div className={timed.length > 0 ? 'border-t border-[var(--border)]/50 pt-1.5' : ''}>
-                  <div className="px-2 pb-1 text-xs font-bold text-[var(--text-faint)]">
+                <div className="py-1.5">
+                  <div className="px-3 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                     Sin horario
                   </div>
-                  <div className="space-y-0.5">
+                  <ListDivider>
                     {untimedScheduled.map((entry) => renderEntry(entry, item))}
-                  </div>
+                  </ListDivider>
                 </div>
               )}
               {untimedRoutines.length > 0 && (
-                <div className={timed.length > 0 || untimedScheduled.length > 0 ? 'border-t border-[var(--border)]/50 pt-1.5' : ''}>
-                  <div className="px-2 pb-1 text-xs font-bold text-[var(--text-faint)]">
+                <div className="py-1.5">
+                  <div className="px-3 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                     Rutinas · {untimedRoutines.length}
                   </div>
-                  <div className="space-y-0.5">
+                  <ListDivider>
                     {untimedRoutines.map((entry) => renderEntry(entry, item))}
-                  </div>
+                  </ListDivider>
                 </div>
               )}
             </>
           )}
         </div>
-      </section>
+      </SurfaceCard>
     );
   };
 
@@ -691,151 +704,126 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
     const isToday = item.date === todayIso;
     const dayDate = new Date(`${item.date}T12:00:00`);
     const dayLabel = DAY_LABELS[item.day];
+    const dayTitle = `${dayLabel} ${dayDate.getDate()} de ${dayDate.toLocaleDateString('es-UY', { month: 'long' }).toLocaleLowerCase('es-UY')}`;
 
     return (
-      <div className="space-y-4">
-        {/* Selected Day Header Card */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 shadow-2xs">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base sm:text-lg font-bold text-[var(--text)]">
-                {dayLabel} {dayDate.getDate()} de {dayDate.toLocaleDateString('es-UY', { month: 'long' }).toLocaleLowerCase('es-UY')}
-              </h3>
-              {isToday && (
-                <span className="rounded-md bg-[var(--blue)] px-2 py-0.5 text-xs font-extrabold text-white">
+      <SurfaceCard aria-label={`Detalle de ${dayTitle}`} className="overflow-hidden">
+        <div className="border-b border-slate-100 px-4 py-3.5 dark:border-white/[0.06] sm:px-5">
+          <SectionHeader
+            icon={<AppIcon name="calendarDays" className="h-4 w-4" />}
+            title={dayTitle}
+            count={count > 0 ? `${count} ${count === 1 ? 'actividad' : 'actividades'}` : null}
+            action={
+              isToday ? (
+                <span className="rounded-md bg-[#4F46E5] px-2 py-0.5 text-xs font-semibold text-white">
                   Hoy
                 </span>
-              )}
-              <span className="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-xs font-semibold tabular-nums text-[var(--text-soft)]">
-                {count} {count === 1 ? 'actividad' : 'actividades'}
-              </span>
-            </div>
-          </div>
-
-
+              ) : undefined
+            }
+          />
         </div>
 
-        {/* Selected Day Content: Responsive Desktop Layout */}
         {entries.length === 0 ? (
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-8 sm:p-12 text-center space-y-3 shadow-2xs">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-muted)] text-[var(--text-faint)]">
-              <AppIcon name="calendarDays" className="h-6 w-6" />
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-[var(--text)]">Sin actividades previstas para {dayLabel}</p>
-              <p className="text-xs text-[var(--text-soft)] max-w-sm mx-auto">
-                Agregá una actividad semanal o un compromiso para este día.
-              </p>
-            </div>
-          </div>
-        ) : untimedRoutines.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-start">
-            {/* Main Column (8 cols): Horarios & Compromisos */}
-            <div className="lg:col-span-8 space-y-4">
-              {timed.length > 0 && (
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-3 shadow-2xs">
-                  <div className="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <AppIcon name="clock" className="h-4 w-4 text-[var(--blue)]" />
-                      <h4 className="text-xs font-bold text-[var(--text)]">
-                        Actividades con horario ({timed.length})
-                      </h4>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    {timed.map((entry) => renderEntry(entry, item))}
-                  </div>
-                </div>
+          <div className="px-4 py-8 text-center sm:px-6 sm:py-10">
+            <AppIcon name="calendarDays" className="mx-auto h-6 w-6 text-slate-400 dark:text-slate-500" />
+            <p className="mt-3 text-sm font-semibold text-[var(--text)]">
+              Sin actividades previstas para {dayLabel}
+            </p>
+            <p className="mx-auto mt-1 max-w-sm text-xs text-[var(--text-soft)]">
+              {weeklyBlockCount === 0
+                ? 'Sumá tu primera actividad semanal o un compromiso puntual para empezar a ordenar la semana.'
+                : 'Agregá una actividad semanal o un compromiso puntual para este día.'}
+            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={(e) => openWeeklyBlock(item.day, e.currentTarget)}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer"
+              >
+                <AppIcon name="plus" className="h-4 w-4" />
+                <span>Actividad semanal</span>
+              </button>
+              {calendarEnabled && (
+                <button
+                  type="button"
+                  onClick={() => openNewEvent(item.date)}
+                  className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-4 py-2 text-xs font-semibold text-[var(--text)] transition-colors hover:border-[#4F46E5] hover:text-[#4F46E5] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] dark:border-white/[0.08] dark:bg-transparent dark:hover:border-indigo-400 dark:hover:text-indigo-300 cursor-pointer"
+                >
+                  <AppIcon name="plus" className="h-4 w-4" />
+                  <span>Compromiso puntual</span>
+                </button>
               )}
-
-              {untimedScheduled.length > 0 && (
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-3 shadow-2xs">
-                  <div className="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
-                    <div className="flex items-center gap-2">
-                      <AppIcon name="calendar" className="h-4 w-4 text-indigo-500" />
-                      <h4 className="text-xs font-bold text-[var(--text)]">
-                        Sin horario ({untimedScheduled.length})
-                      </h4>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    {untimedScheduled.map((entry) => renderEntry(entry, item))}
-                  </div>
-                </div>
+              {weeklyBlockCount === 0 && (
+                <button
+                  type="button"
+                  onClick={(e) => openTemplateAction('load', e.currentTarget)}
+                  className="inline-flex min-h-10 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-[#4F46E5] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] dark:text-indigo-300 cursor-pointer"
+                >
+                  <span>Usar plantilla sugerida</span>
+                </button>
               )}
-            </div>
-
-            {/* Right Column (4 cols): Rutinas del Día */}
-            <div className="lg:col-span-4 space-y-4">
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-3 shadow-2xs">
-                <div className="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <AppIcon name="repeat" className="h-4 w-4 text-[var(--blue)]" />
-                    <h4 className="text-xs font-bold text-[var(--text)]">
-                      Rutinas de {dayLabel}
-                    </h4>
-                  </div>
-                  <span className="text-xs font-bold px-1.5 py-0.5 rounded bg-[var(--surface-muted)] text-[var(--text-soft)]">
-                    {untimedRoutines.length}
-                  </span>
-                </div>
-                <div className="space-y-1.5">
-                  {untimedRoutines.map((entry) => renderEntry(entry, item))}
-                </div>
-              </div>
             </div>
           </div>
         ) : (
-          /* Cuando no hay rutinas en el día: la línea temporal gana amplitud y se muestra una barra discreta al pie */
-          <div className="space-y-4">
+          <div className="divide-y divide-slate-100 dark:divide-white/[0.06]">
             {timed.length > 0 && (
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-3 shadow-2xs">
-                <div className="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <AppIcon name="clock" className="h-4 w-4 text-[var(--blue)]" />
-                    <h4 className="text-xs font-bold text-[var(--text)]">
-                      Actividades con horario ({timed.length})
-                    </h4>
-                  </div>
+              <div className="py-2">
+                <div className="flex items-center gap-2 px-4 py-2 sm:px-5">
+                  <AppIcon name="clock" className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Con horario · {timed.length}
+                  </h4>
                 </div>
-                <div className="space-y-1.5">
+                <ListDivider>
                   {timed.map((entry) => renderEntry(entry, item))}
-                </div>
+                </ListDivider>
               </div>
             )}
 
             {untimedScheduled.length > 0 && (
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-3 shadow-2xs">
-                <div className="flex items-center justify-between border-b border-[var(--border)] pb-2.5">
-                  <div className="flex items-center gap-2">
-                    <AppIcon name="calendar" className="h-4 w-4 text-indigo-500" />
-                    <h4 className="text-xs font-bold text-[var(--text)]">
-                      Sin horario ({untimedScheduled.length})
-                    </h4>
-                  </div>
+              <div className="py-2">
+                <div className="flex items-center gap-2 px-4 py-2 sm:px-5">
+                  <AppIcon name="calendar" className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Sin horario · {untimedScheduled.length}
+                  </h4>
                 </div>
-                <div className="space-y-1.5">
+                <ListDivider>
                   {untimedScheduled.map((entry) => renderEntry(entry, item))}
-                </div>
+                </ListDivider>
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-3 px-4 py-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] text-xs text-[var(--text-soft)] shadow-2xs">
-              <div className="flex items-center gap-2 min-w-0">
-                <AppIcon name="repeat" className="h-4 w-4 text-[var(--text-faint)] shrink-0" />
-                <span className="truncate">Sin rutinas para {dayLabel.toLowerCase()}.</span>
+            {untimedRoutines.length > 0 ? (
+              <div className="py-2">
+                <div className="flex items-center gap-2 px-4 py-2 sm:px-5">
+                  <AppIcon name="repeat" className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Rutinas del día · {untimedRoutines.length}
+                  </h4>
+                </div>
+                <ListDivider>
+                  {untimedRoutines.map((entry) => renderEntry(entry, item))}
+                </ListDivider>
               </div>
-              <button
-                type="button"
-                onClick={() => setActiveSection('rutinas')}
-                className="shrink-0 text-xs font-semibold text-[var(--blue)] hover:text-[var(--blue-hover)] transition-colors cursor-pointer"
-              >
-                Ver rutinas →
-              </button>
-            </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs text-[var(--text-soft)] sm:px-5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <AppIcon name="repeat" className="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
+                  <span className="truncate">Sin rutinas para {dayLabel.toLowerCase()}.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setActiveSection('rutinas')}
+                  className="inline-flex min-h-10 shrink-0 items-center px-2 text-xs font-semibold text-[#4F46E5] hover:underline dark:text-indigo-300 cursor-pointer"
+                >
+                  Ver rutinas →
+                </button>
+              </div>
+            )}
           </div>
         )}
-      </div>
+      </SurfaceCard>
     );
   };
 
@@ -877,28 +865,26 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       {activeSection === 'semana' && (
         <section className="space-y-4">
           {/* Week Navigation Toolbar */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-3 sm:px-4 sm:py-3.5 shadow-2xs">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-muted)] text-[var(--blue)]">
-                <AppIcon name="calendarDays" className="h-4 w-4" />
-              </span>
-              <div>
-                <h2 className="text-sm sm:text-base font-bold text-[var(--text)]">
+          <SurfaceCard className="flex flex-wrap items-center justify-between gap-3 p-3.5 sm:px-5 sm:py-4">
+            <div className="flex min-w-0 items-center gap-2">
+              <AppIcon name="calendarDays" className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-[var(--text)] sm:text-[15px]">
                   Semana del {new Date(`${dates[0]}T12:00:00`).toLocaleDateString('es-UY', { day: 'numeric', month: 'long' })} al {new Date(`${dates[6]}T12:00:00`).toLocaleDateString('es-UY', { day: 'numeric', month: 'long', year: 'numeric' })}
                 </h2>
-                <p className="text-xs text-[var(--text-soft)]">
+                <p className="text-xs text-[var(--text-soft)] tabular-nums">
                   {days.reduce((total, d) => total + d.blocks.length + d.routines.length + d.events.length + d.tasks.length, 0)} actividades en la semana
                 </p>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-1">
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+              <div className="flex items-center gap-0.5 rounded-xl border border-slate-200/80 bg-slate-50/70 p-0.5 dark:border-white/[0.08] dark:bg-white/[0.03]">
                 <button
                   type="button"
                   onClick={() => setWeekReference(shiftWeek(weekReference, -1))}
                   aria-label="Semana anterior"
-                  className="rounded-lg p-1.5 text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5] cursor-pointer"
+                  className="flex min-h-10 min-w-10 items-center justify-center rounded-lg text-[var(--text-soft)] hover:bg-white hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5] dark:hover:bg-white/[0.06] cursor-pointer"
                 >
                   <AppIcon name="chevronLeft" className="h-4 w-4" />
                 </button>
@@ -909,7 +895,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                     setMobileDay((new Date().getDay() + 6) % 7);
                   }}
                   disabled={isCurrentWeek(weekReference)}
-                  className="rounded-lg px-2.5 py-1 text-xs font-bold text-[var(--text)] hover:bg-[var(--surface-muted)] disabled:opacity-40 cursor-pointer"
+                  className="min-h-10 rounded-lg px-2.5 text-xs font-semibold text-[var(--text)] hover:bg-white disabled:opacity-40 dark:hover:bg-white/[0.06] cursor-pointer"
                 >
                   Esta semana
                 </button>
@@ -917,7 +903,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   type="button"
                   onClick={() => setWeekReference(shiftWeek(weekReference, 1))}
                   aria-label="Semana siguiente"
-                  className="rounded-lg p-1.5 text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5] cursor-pointer"
+                  className="flex min-h-10 min-w-10 items-center justify-center rounded-lg text-[var(--text-soft)] hover:bg-white hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5] dark:hover:bg-white/[0.06] cursor-pointer"
                 >
                   <AppIcon name="chevronRight" className="h-4 w-4" />
                 </button>
@@ -927,9 +913,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 <button
                   type="button"
                   onClick={() => openNewEvent(dates[mobileDay])}
-                  className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs font-bold text-[var(--text)] hover:border-[var(--blue)] hover:text-[var(--blue)] transition-colors cursor-pointer"
+                  className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-semibold text-[var(--text)] transition-colors hover:border-[#4F46E5] hover:text-[#4F46E5] dark:border-white/[0.08] dark:bg-transparent dark:hover:border-indigo-400 dark:hover:text-indigo-300 sm:flex-none cursor-pointer"
                 >
-                  <AppIcon name="plus" className="h-3.5 w-3.5 text-[var(--blue)]" />
+                  <AppIcon name="plus" className="h-4 w-4 text-[#4F46E5] dark:text-indigo-300" />
                   <span>Compromiso puntual</span>
                 </button>
               )}
@@ -937,20 +923,20 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               <button
                 type="button"
                 onClick={(e) => openWeeklyBlock(days[mobileDay].day, e.currentTarget)}
-                className="flex items-center gap-1.5 rounded-xl bg-[var(--blue)] px-3.5 py-2 text-xs font-bold text-white hover:bg-[var(--blue-hover)] transition-all shadow-2xs cursor-pointer"
+                className="inline-flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] sm:flex-none cursor-pointer"
               >
-                <AppIcon name="plus" className="h-3.5 w-3.5" />
+                <AppIcon name="plus" className="h-4 w-4" />
                 <span>Actividad semanal</span>
               </button>
 
-              <div className="hidden sm:flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-1">
+              <div className="hidden items-center gap-0.5 rounded-xl border border-slate-200/80 bg-slate-50/70 p-0.5 dark:border-white/[0.08] dark:bg-white/[0.03] sm:flex">
                 <button
                   type="button"
                   onClick={() => setWeekViewMode('focused')}
                   aria-pressed={weekViewMode === 'focused'}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
+                  className={`min-h-9 rounded-lg px-2.5 text-xs font-semibold transition-colors cursor-pointer ${
                     weekViewMode === 'focused'
-                      ? 'bg-[var(--card)] text-[var(--blue)] shadow-xs font-bold'
+                      ? 'bg-white text-[#4F46E5] dark:bg-[#0D111A] dark:text-indigo-300'
                       : 'text-[var(--text-soft)] hover:text-[var(--text)]'
                   }`}
                 >
@@ -960,9 +946,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   type="button"
                   onClick={() => setWeekViewMode('grid')}
                   aria-pressed={weekViewMode === 'grid'}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
+                  className={`min-h-9 rounded-lg px-2.5 text-xs font-semibold transition-colors cursor-pointer ${
                     weekViewMode === 'grid'
-                      ? 'bg-[var(--card)] text-[var(--blue)] shadow-xs font-bold'
+                      ? 'bg-white text-[#4F46E5] dark:bg-[#0D111A] dark:text-indigo-300'
                       : 'text-[var(--text-soft)] hover:text-[var(--text)]'
                   }`}
                 >
@@ -970,10 +956,10 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 </button>
               </div>
             </div>
-          </div>
+          </SurfaceCard>
 
-          {/* Quick 7-Day Navigation Strip */}
-          <nav aria-label="Días de la semana" className="flex sm:grid sm:grid-cols-7 gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar pb-1 sm:pb-0">
+          {/* Quick 7-Day Navigation Strip (fits 389px without horizontal overflow) */}
+          <nav aria-label="Días de la semana" className="grid grid-cols-7 gap-1 sm:gap-2">
             {days.map((item, index) => {
               const count = item.blocks.length + item.routines.length + item.events.length + item.tasks.length;
               const isSelected = mobileDay === index;
@@ -988,25 +974,25 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   aria-pressed={isSelected}
                   aria-current={isToday ? 'date' : undefined}
                   aria-label={`${DAY_LABELS[item.day]} ${new Date(`${item.date}T12:00:00`).toLocaleDateString('es-UY', { day: 'numeric', month: 'long' })}: ${count} ${count === 1 ? 'actividad' : 'actividades'}`}
-                  className={`min-w-[4.25rem] sm:min-w-0 flex-1 rounded-xl border px-2 py-2 text-center transition-all sm:px-2.5 sm:py-2.5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer ${
+                  className={`min-h-14 min-w-0 rounded-xl border px-0.5 py-2 text-center transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] sm:px-2.5 sm:py-2.5 cursor-pointer ${
                     isSelected
-                      ? 'border-[#4F46E5] bg-[var(--blue-soft)] text-[var(--blue)] dark:text-indigo-200 shadow-2xs ring-1 ring-[#4F46E5]/40'
-                      : 'border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)] hover:border-[var(--border-hover)]'
+                      ? 'border-[#4F46E5] bg-indigo-50/70 text-[#4F46E5] dark:border-indigo-400 dark:bg-indigo-500/15 dark:text-indigo-200'
+                      : 'border-slate-200/80 bg-white text-[var(--text-soft)] hover:border-slate-300 dark:border-white/[0.07] dark:bg-[#0D111A] dark:hover:border-white/[0.15]'
                   }`}
                 >
-                  <div className="flex items-center justify-center gap-1">
-                    <span className="block truncate text-xs font-semibold sm:text-xs">
+                  <div className="flex items-center justify-center gap-0.5 sm:gap-1">
+                    <span className="block truncate text-[11px] font-semibold sm:text-xs">
                       <span className="sm:hidden">{DAY_LABELS[item.day].slice(0, 2)}</span>
                       <span className="hidden sm:inline">{DAY_LABELS[item.day].slice(0, 3)}</span>
                     </span>
                     {isToday && (
-                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--blue)]" title="Hoy" />
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#4F46E5] dark:bg-indigo-400" title="Hoy" />
                     )}
                   </div>
-                  <span className="block text-base font-bold tabular-nums sm:text-lg my-0.5">
+                  <span className="my-0.5 block text-sm font-bold tabular-nums sm:text-base">
                     {Number(item.date.slice(-2))}
                   </span>
-                  <span className="block text-xs font-semibold tabular-nums sm:text-xs">
+                  <span className="block text-[11px] font-medium tabular-nums sm:text-xs">
                     {count === 0 ? '—' : count}{' '}
                     <span className="hidden lg:inline">{count === 1 ? 'actividad' : 'actividades'}</span>
                   </span>
@@ -1169,18 +1155,18 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             role="dialog"
             aria-modal="true"
             aria-labelledby="edit-agenda-block-title"
-            className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] max-w-md w-full max-h-[90dvh] overflow-y-auto space-y-4 shadow-xl"
+            className="bg-white dark:bg-[#0D111A] border border-slate-200/80 dark:border-white/[0.08] rounded-2xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] max-w-md w-full max-h-[90dvh] overflow-y-auto space-y-4 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/[0.06] pb-3">
               <div className="flex items-center gap-2">
-                <AppIcon name="edit" className="h-4 w-4 text-[var(--blue)]" />
-                <h3 id="edit-agenda-block-title" className="text-sm font-extrabold text-[var(--text)]">Editar actividad semanal</h3>
+                <AppIcon name="edit" className="h-4 w-4 text-[#4F46E5] dark:text-indigo-300" />
+                <h3 id="edit-agenda-block-title" className="text-sm font-semibold text-[var(--text)]">Editar actividad semanal</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingBlock(null)}
-                className="text-xs text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded hover:bg-[var(--surface-muted)] cursor-pointer"
+                className="flex min-h-10 min-w-10 items-center justify-center rounded-xl text-[var(--text-faint)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] cursor-pointer"
                 aria-label="Cerrar modal"
               >
                 <AppIcon name="x" className="h-4 w-4" />
@@ -1189,7 +1175,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
 
             <form onSubmit={handleSaveEditedBlock} className="space-y-3">
               <div>
-                <label className="text-xs font-bold text-[var(--text-faint)] block mb-1">
+                <label className="text-xs font-semibold text-[var(--text-soft)] block mb-1">
                   Día de la semana
                 </label>
                 <select
@@ -1197,7 +1183,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   onChange={(e) =>
                     setEditingBlock({ ...editingBlock, newDay: e.target.value as DayKey })
                   }
-                  className="w-full px-3 py-2 text-xs font-semibold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] capitalize focus:border-[var(--blue)] outline-hidden cursor-pointer"
+                  className="min-h-11 w-full px-3 py-2 text-sm font-medium rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] capitalize focus:border-[#4F46E5] outline-hidden cursor-pointer"
                 >
                   {DAYS.map((d) => (
                     <option key={d} value={d}>
@@ -1208,14 +1194,14 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               </div>
 
               <div>
-                <label className="text-xs font-bold text-[var(--text-faint)] block mb-1">Esfuerzo mental</label>
-                <select value={editingBlock.effort} onChange={(e) => setEditingBlock({ ...editingBlock, effort: e.target.value as EffortLevel })} className="w-full px-3 py-2 text-xs font-semibold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]">
+                <label className="text-xs font-semibold text-[var(--text-soft)] block mb-1">Esfuerzo mental</label>
+                <select value={editingBlock.effort} onChange={(e) => setEditingBlock({ ...editingBlock, effort: e.target.value as EffortLevel })} className="min-h-11 w-full px-3 py-2 text-sm font-medium rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[#4F46E5] outline-hidden">
                   <option value="low">Bajo</option><option value="medium">Medio</option><option value="high">Alto</option>
                 </select>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-[var(--text-faint)] block mb-1">
+                <label className="text-xs font-semibold text-[var(--text-soft)] block mb-1">
                   Horario (HH:MM)
                 </label>
                 <input
@@ -1223,12 +1209,12 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   value={editingBlock.time}
                   onChange={(e) => setEditingBlock({ ...editingBlock, time: e.target.value })}
                   placeholder="Ej: 09:00"
-                  className="w-full px-3 py-2 text-xs tabular-nums font-bold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden"
+                  className="min-h-11 w-full px-3 py-2 text-sm tabular-nums font-medium rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[#4F46E5] outline-hidden"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-[var(--text-faint)] block mb-1">
+                <label className="text-xs font-semibold text-[var(--text-soft)] block mb-1">
                   Actividad
                 </label>
                 <input
@@ -1236,13 +1222,13 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   value={editingBlock.activity}
                   onChange={(e) => setEditingBlock({ ...editingBlock, activity: e.target.value })}
                   placeholder="Ej: Ir al Gimnasio"
-                  className="w-full px-3 py-2 text-xs font-semibold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden"
+                  className="min-h-11 w-full px-3 py-2 text-sm font-medium rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[#4F46E5] outline-hidden"
                 />
               </div>
 
               {/* Task Linking Section */}
-              <div className="border-t border-[var(--border)] pt-3 space-y-2">
-                <label className="text-xs font-bold text-[var(--text-faint)] block">
+              <div className="border-t border-slate-100 dark:border-white/[0.06] pt-3 space-y-2">
+                <label className="text-xs font-semibold text-[var(--text-soft)] block">
                   Tarea vinculada
                 </label>
 
@@ -1250,15 +1236,15 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 {editingBlock.linkedTaskId ? (() => {
                   const linked = allUnifiedTasks.find((t) => t.id === editingBlock.linkedTaskId);
                   return (
-                    <div className="flex items-center gap-2 p-2 rounded-xl bg-[var(--blue-soft)]/20 border border-[var(--blue)]/30">
-                      <AppIcon name="link" className="h-3.5 w-3.5 text-[var(--blue)] shrink-0" />
+                    <div className="flex items-center gap-2 p-2.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-500/10 border border-[#4F46E5]/30">
+                      <AppIcon name="link" className="h-4 w-4 text-[#4F46E5] dark:text-indigo-300 shrink-0" />
                       <span className="text-xs font-semibold text-[var(--text)] flex-1 truncate">
                         {linked ? linked.text : <span className="text-[var(--text-faint)] italic">Tarea ya no existe</span>}
                       </span>
                       <button
                         type="button"
                         onClick={() => setEditingBlock({ ...editingBlock, linkedTaskId: undefined, taskSearch: '' })}
-                        className="text-xs font-bold text-rose-500 hover:text-rose-600 px-2 py-0.5 rounded-lg hover:bg-rose-500/10 transition cursor-pointer shrink-0"
+                        className="min-h-10 text-xs font-semibold text-rose-600 hover:text-rose-700 px-2.5 rounded-lg hover:bg-rose-500/10 transition cursor-pointer shrink-0 dark:text-rose-400"
                         title="Quitar vínculo"
                       >
                         Quitar
@@ -1275,10 +1261,10 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   value={editingBlock.taskSearch}
                   onChange={(e) => setEditingBlock({ ...editingBlock, taskSearch: e.target.value })}
                   placeholder="Buscar tarea para vincular..."
-                  className="w-full px-3 py-2 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-faint)] focus:border-[var(--blue)] outline-hidden"
+                  className="min-h-11 w-full px-3 py-2 text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] placeholder:text-[var(--text-faint)] focus:border-[#4F46E5] outline-hidden"
                 />
                 {filteredTasks.length > 0 && (
-                  <div className="space-y-1 max-h-[120px] overflow-y-auto">
+                  <div className="space-y-1 max-h-[140px] overflow-y-auto">
                     {filteredTasks.map((t) => {
                       const isSelected = editingBlock.linkedTaskId === t.id;
                       return (
@@ -1290,13 +1276,13 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                             linkedTaskId: isSelected ? undefined : t.id,
                             taskSearch: '',
                           })}
-                          className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition cursor-pointer flex items-center gap-2 ${
+                          className={`min-h-10 w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer flex items-center gap-2 ${
                             isSelected
-                              ? 'bg-[var(--blue)]/15 border border-[var(--blue)]/40 text-[var(--text)]'
-                              : 'bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-soft)] hover:border-[var(--blue)] hover:text-[var(--text)]'
+                              ? 'bg-indigo-50/80 dark:bg-indigo-500/15 border border-[#4F46E5]/40 text-[var(--text)]'
+                              : 'bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-soft)] hover:border-[#4F46E5] hover:text-[var(--text)]'
                           }`}
                         >
-                          {isSelected && <AppIcon name="check" className="h-3 w-3 text-[var(--blue)] shrink-0" />}
+                          {isSelected && <AppIcon name="check" className="h-3.5 w-3.5 text-[#4F46E5] dark:text-indigo-300 shrink-0" />}
                           <span className="truncate">{t.projectName ? `[${t.projectName}] ${t.text}` : t.text}</span>
                         </button>
                       );
@@ -1311,17 +1297,17 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 )}
               </div>
 
-              <div className="flex justify-end gap-2 pt-2 border-t border-[var(--border)]">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100 dark:border-white/[0.06]">
                 <button
                   type="button"
                   onClick={() => setEditingBlock(null)}
-                  className="px-4 py-2 text-xs font-bold rounded-xl bg-[var(--bg)] text-[var(--text-soft)] hover:text-[var(--text)] border border-[var(--border)] cursor-pointer"
+                  className="min-h-11 px-4 py-2 text-xs font-semibold rounded-xl bg-transparent text-[var(--text-soft)] hover:text-[var(--text)] border border-[var(--border)] cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-xs font-bold rounded-xl bg-[var(--blue)] text-white hover:bg-[var(--blue-hover)] cursor-pointer shadow-xs"
+                  className="min-h-11 px-4 py-2 text-xs font-semibold rounded-xl bg-[#4F46E5] text-white hover:bg-[#4338CA] cursor-pointer"
                 >
                   Guardar cambios
                 </button>
@@ -1336,10 +1322,10 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
         <div className="space-y-4 pt-1">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-bold text-[var(--text)] flex items-center gap-2">
+              <h2 className="text-base font-semibold text-[var(--text)] flex items-center gap-2">
                 Rutinas recurrentes
                 <ContextualHelp label="Rutinas recurrentes">El círculo marca la rutina como completada para ese día. La rutina conserva su frecuencia y vuelve a aparecer cuando corresponda.</ContextualHelp>
-                <span className="text-xs font-semibold text-[var(--text-faint)] bg-[var(--surface-muted)] px-2.5 py-0.5 rounded-md border border-[var(--border)]">
+                <span className="text-xs font-medium tabular-nums text-slate-400 dark:text-slate-500">
                   {(state.tasksRecurring || []).length}
                 </span>
               </h2>
@@ -1349,193 +1335,218 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               onClick={() => setShowRoutineForm((current) => !current)}
               aria-expanded={showRoutineForm}
               aria-controls="new-routine-form"
-              className="flex items-center gap-1.5 rounded-xl bg-[#4F46E5] px-3.5 py-2 text-xs font-bold text-white shadow-2xs hover:bg-indigo-700 transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer"
+              className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer"
             >
-              <AppIcon name={showRoutineForm ? 'x' : 'plus'} className="h-3.5 w-3.5" />
+              <AppIcon name={showRoutineForm ? 'x' : 'plus'} className="h-4 w-4" />
               <span>{showRoutineForm ? 'Cerrar formulario' : 'Nueva rutina'}</span>
             </button>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-start">
-            {/* Left Column: Form + Templates */}
-            <div className="lg:col-span-5 xl:col-span-4 space-y-4">
-              {showRoutineForm && (
-                <form id="new-routine-form" onSubmit={handleAddTask} className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 shadow-2xs">
-                  <div className="flex items-center gap-2 border-b border-[var(--border)] pb-2.5">
-                    <AppIcon name="repeat" className="h-4 w-4 text-[var(--blue)]" />
-                    <h3 className="text-sm font-bold text-[var(--text)]">Nueva rutina</h3>
-                  </div>
-                  <div className="space-y-3">
-                    <div className="min-w-0">
-                      <label htmlFor="new-routine-name" className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Nombre de la rutina</label>
-                      <input
-                        id="new-routine-name"
-                        type="text"
-                        value={taskName}
-                        onChange={(e) => setTaskName(e.target.value)}
-                        placeholder="Ej: Meditar 10 min, Estirar, Leer 20 pag..."
-                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5]"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="new-routine-frequency" className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Frecuencia</label>
-                      <select
-                        id="new-routine-frequency"
-                        value={taskFreq}
-                        onChange={(e) => setTaskFreq(e.target.value as 'daily' | '2-3x' | 'weekly')}
-                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5]"
-                      >
-                        <option value="daily">Diaria</option>
-                        <option value="2-3x">2-3 veces/semana</option>
-                        <option value="weekly">Semanal</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label htmlFor="new-routine-effort" className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Esfuerzo</label>
-                      <select id="new-routine-effort" value={taskEffort} onChange={(e) => setTaskEffort(e.target.value as EffortLevel)} className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5]">
-                        <option value="low">Bajo</option><option value="medium">Medio</option><option value="high">Alto</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label htmlFor="new-routine-time" className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Hora opcional</label>
-                      <input id="new-routine-time" type="time" value={taskTime} onChange={(event) => setTaskTime(event.target.value)} className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5]" />
-                    </div>
-                  </div>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 items-start">
+            {/* Routines List (shown first on mobile so empty state / routines aren't buried below weekly template) */}
+            <div className={`lg:col-span-7 xl:col-span-8 ${showRoutineForm ? 'order-2 lg:order-2' : 'order-1 lg:order-2'}`}>
+              <SurfaceCard aria-labelledby="routine-list-title" className="overflow-hidden">
+                <div className="border-b border-slate-100 px-4 py-3.5 dark:border-white/[0.06] sm:px-5">
+                  <SectionHeader
+                    id="routine-list-title"
+                    icon={<AppIcon name="repeat" className="h-4 w-4" />}
+                    title="Tus rutinas"
+                    count={(state.tasksRecurring || []).length > 0 ? `${(state.tasksRecurring || []).length} total` : null}
+                  />
+                  {(state.tasksRecurring || []).length > 0 && (
+                    <p className="mt-1 text-xs text-[var(--text-soft)]">Hacé clic en el círculo para registrar el completado de hoy.</p>
+                  )}
+                </div>
 
-                  <fieldset>
-                    <legend className="mb-1.5 text-xs font-semibold text-[var(--text-soft)]">Días específicos (opcional)</legend>
-                    <div className="flex flex-wrap gap-1.5">
-                      {DAYS.map((d) => {
-                        const isSelected = taskDays.includes(d);
-                        return (
-                          <button
-                            key={d}
-                            type="button"
-                            onClick={() => toggleDaySelection(d, taskDays, setTaskDays)}
-                            aria-label={DAY_LABELS[d]}
-                            aria-pressed={isSelected}
-                            className={`px-2.5 py-1 text-xs font-bold rounded-lg border cursor-pointer transition-all ${
-                              isSelected
-                                ? 'bg-[var(--blue)] border-[var(--blue)] text-white'
-                                : 'bg-[var(--bg-elevated)] border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)]'
-                            }`}
-                          >
-                            {DAY_LABELS[d].slice(0, 3)}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="mt-2 text-xs text-[var(--text-soft)]" aria-live="polite">{recurrenceHint(taskFreq, taskDays)}</p>
-                  </fieldset>
-                  <div className="flex justify-end border-t border-[var(--border)] pt-3">
-                    <button type="submit" className="flex items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-bold text-white shadow-2xs hover:bg-indigo-700 transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer"><AppIcon name="plus" className="h-3.5 w-3.5" />Agregar rutina</button>
+                {(state.tasksRecurring || []).length === 0 ? (
+                  <div className="px-4 py-8 text-center sm:px-6 sm:py-10">
+                    <AppIcon name="repeat" className="mx-auto h-6 w-6 text-slate-400 dark:text-slate-500" />
+                    <p className="mt-3 text-sm font-semibold text-[var(--text)]">Todavía no hay rutinas registradas.</p>
+                    <p className="mx-auto mt-1 max-w-sm text-xs text-[var(--text-soft)]">
+                      Creá hábitos diarios o semanales para llevar seguimiento sin recargar tu agenda.
+                    </p>
+                    {!showRoutineForm && (
+                      <button
+                        type="button"
+                        onClick={() => setShowRoutineForm(true)}
+                        className="mt-4 inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer"
+                      >
+                        <AppIcon name="plus" className="h-4 w-4" />
+                        <span>Crear primera rutina</span>
+                      </button>
+                    )}
                   </div>
-                </form>
+                ) : (
+                  <div className="divide-y divide-slate-100 dark:divide-white/[0.06]">
+                    {(['daily', '2-3x', 'weekly'] as const).map((freq) => {
+                      const items = (state.tasksRecurring || []).filter((t) => t.freq === freq);
+                      if (items.length === 0) return null;
+                      return (
+                        <div key={freq} className="py-2">
+                          <div className="flex items-center justify-between px-4 py-1.5 sm:px-5">
+                            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                              {FREQ_LABELS[freq]}
+                            </h4>
+                            <span className="text-xs font-medium tabular-nums text-slate-400 dark:text-slate-500">
+                              {items.length}
+                            </span>
+                          </div>
+                          <ListDivider>
+                            {items.map((t) => {
+                              const completedToday = Boolean(state.taskLog?.[todayIso]?.[t.id]);
+                              const scheduledToday = routineScheduledFor(state, t, todayIso);
+                              return (
+                                <div key={t.id} className="flex items-center justify-between gap-2.5 px-4 py-2.5 text-sm text-[var(--text)] transition-colors hover:bg-slate-50/70 dark:hover:bg-white/[0.02] sm:px-5">
+                                  <div className="flex min-w-0 items-center gap-2.5">
+                                    {scheduledToday || completedToday ? (
+                                      todayCompletionButton(t.id, t.name, completedToday)
+                                    ) : (
+                                      <span aria-hidden="true" className="h-6 w-6 shrink-0" />
+                                    )}
+                                    <div className="min-w-0">
+                                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                        <span className={`break-words font-medium ${completedToday ? 'text-[var(--text-soft)] line-through' : ''}`}>
+                                          {t.name}
+                                        </span>
+                                        {t.time && <span className="text-xs font-semibold tabular-nums text-[#4F46E5] dark:text-indigo-300">{t.time}</span>}
+                                        {t.effort === 'low' && <span className="text-xs text-slate-500 dark:text-slate-400">Esfuerzo bajo</span>}
+                                        {t.effort === 'high' && <span className="text-xs text-rose-600 dark:text-rose-400">Esfuerzo alto</span>}
+                                      </div>
+                                      <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-[var(--text-soft)]">
+                                        {t.days && t.days.length > 0 && <span>{t.days.map((day) => DAY_LABELS[day].slice(0, 3)).join(' · ')}</span>}
+                                        {(scheduledToday || completedToday) && (
+                                          <span className={completedToday ? 'font-semibold text-emerald-700 dark:text-emerald-400' : ''}>
+                                            {completedToday ? 'Completada hoy' : 'Pendiente hoy'}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  <div className="flex shrink-0 items-center gap-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingTask(t)}
+                                      className="flex min-h-10 min-w-10 items-center justify-center gap-1 rounded-xl px-2 text-xs text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[#4F46E5] focus-visible:outline-2 focus-visible:outline-[#4F46E5] dark:hover:text-indigo-300 cursor-pointer"
+                                      aria-label={`Editar ${t.name}`}
+                                    >
+                                      <AppIcon name="edit" className="h-4 w-4" />
+                                      <span className="hidden sm:inline">Editar</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteTask(t.id)}
+                                      className="flex min-h-10 min-w-10 items-center justify-center rounded-xl text-[var(--text-soft)] hover:bg-rose-50 hover:text-rose-600 focus-visible:outline-2 focus-visible:outline-rose-500 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 cursor-pointer"
+                                      aria-label={`Eliminar ${t.name}`}
+                                    >
+                                      <AppIcon name="trash" className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </ListDivider>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </SurfaceCard>
+            </div>
+
+            {/* Secondary Column: Form + Weekly Templates */}
+            <div className={`lg:col-span-5 xl:col-span-4 space-y-4 ${showRoutineForm ? 'order-1 lg:order-1' : 'order-2 lg:order-1'}`}>
+              {showRoutineForm && (
+                <SurfaceCard as="div" className="p-4 sm:p-5">
+                  <form id="new-routine-form" onSubmit={handleAddTask} className="space-y-4">
+                    <SectionHeader
+                      icon={<AppIcon name="repeat" className="h-4 w-4" />}
+                      title="Nueva rutina"
+                      className="border-b border-slate-100 pb-3 dark:border-white/[0.06]"
+                    />
+                    <div className="space-y-3">
+                      <div className="min-w-0">
+                        <label htmlFor="new-routine-name" className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Nombre de la rutina</label>
+                        <input
+                          id="new-routine-name"
+                          type="text"
+                          value={taskName}
+                          onChange={(e) => setTaskName(e.target.value)}
+                          placeholder="Ej: Meditar 10 min, Estirar, Leer 20 pag..."
+                          className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5]"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="new-routine-frequency" className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Frecuencia</label>
+                        <select
+                          id="new-routine-frequency"
+                          value={taskFreq}
+                          onChange={(e) => setTaskFreq(e.target.value as 'daily' | '2-3x' | 'weekly')}
+                          className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5]"
+                        >
+                          <option value="daily">Diaria</option>
+                          <option value="2-3x">2-3 veces/semana</option>
+                          <option value="weekly">Semanal</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor="new-routine-effort" className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Esfuerzo</label>
+                        <select id="new-routine-effort" value={taskEffort} onChange={(e) => setTaskEffort(e.target.value as EffortLevel)} className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5]">
+                          <option value="low">Bajo</option><option value="medium">Medio</option><option value="high">Alto</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor="new-routine-time" className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Hora opcional</label>
+                        <input id="new-routine-time" type="time" value={taskTime} onChange={(event) => setTaskTime(event.target.value)} className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)] focus-visible:outline-2 focus-visible:outline-[#4F46E5]" />
+                      </div>
+                    </div>
+
+                    <fieldset>
+                      <legend className="mb-1.5 text-xs font-semibold text-[var(--text-soft)]">Días específicos (opcional)</legend>
+                      <div className="flex flex-wrap gap-1.5">
+                        {DAYS.map((d) => {
+                          const isSelected = taskDays.includes(d);
+                          return (
+                            <button
+                              key={d}
+                              type="button"
+                              onClick={() => toggleDaySelection(d, taskDays, setTaskDays)}
+                              aria-label={DAY_LABELS[d]}
+                              aria-pressed={isSelected}
+                              className={`min-h-10 min-w-10 px-2.5 py-1 text-xs font-semibold rounded-xl border cursor-pointer transition-colors ${
+                                isSelected
+                                  ? 'bg-[#4F46E5] border-[#4F46E5] text-white'
+                                  : 'bg-[var(--bg-elevated)] border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)]'
+                              }`}
+                            >
+                              {DAY_LABELS[d].slice(0, 3)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <p className="mt-2 text-xs text-[var(--text-soft)]" aria-live="polite">{recurrenceHint(taskFreq, taskDays)}</p>
+                    </fieldset>
+                    <div className="flex justify-end border-t border-slate-100 pt-3 dark:border-white/[0.06]">
+                      <button type="submit" className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer"><AppIcon name="plus" className="h-4 w-4" />Agregar rutina</button>
+                    </div>
+                  </form>
+                </SurfaceCard>
               )}
 
-              <section aria-labelledby="weekly-template-title" className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 shadow-2xs space-y-3">
-                <div className="flex items-center gap-2 border-b border-[var(--border)] pb-2.5">
-                  <AppIcon name="list" className="h-4 w-4 text-[var(--blue)]" />
-                  <h3 id="weekly-template-title" className="text-sm font-bold text-[var(--text)]">Horario semanal habitual</h3>
-                </div>
+              <SurfaceCard aria-labelledby="weekly-template-title" className="p-4 sm:p-5 space-y-3">
+                <SectionHeader
+                  id="weekly-template-title"
+                  icon={<AppIcon name="list" className="h-4 w-4" />}
+                  title="Horario semanal habitual"
+                  className="border-b border-slate-100 pb-3 dark:border-white/[0.06]"
+                />
                 <p className="text-xs text-[var(--text-soft)]">
                   Tenés <strong>{weeklyBlockCount} {weeklyBlockCount === 1 ? 'actividad guardada' : 'actividades guardadas'}</strong> en tu horario recurrente semanal.
                 </p>
                 <div className="flex flex-wrap gap-2 pt-1">
-                  <button type="button" onClick={(event) => openTemplateAction('load', event.currentTarget)} className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs font-semibold text-[var(--text)] hover:border-[#4F46E5] focus-visible:outline-2 focus-visible:outline-[#4F46E5] cursor-pointer"><AppIcon name="list" className="h-3.5 w-3.5" />Plantilla sugerida</button>
-                  <button type="button" onClick={(event) => openTemplateAction('clear', event.currentTarget)} disabled={weeklyBlockCount === 0} className="flex items-center gap-1.5 rounded-xl border border-red-500/30 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-500/10 focus-visible:outline-2 focus-visible:outline-red-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400 cursor-pointer"><AppIcon name="trash" className="h-3.5 w-3.5" />Vaciar horario recurrente</button>
+                  <button type="button" onClick={(event) => openTemplateAction('load', event.currentTarget)} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-semibold text-[var(--text)] hover:border-[#4F46E5] focus-visible:outline-2 focus-visible:outline-[#4F46E5] dark:border-white/[0.08] dark:bg-transparent cursor-pointer"><AppIcon name="list" className="h-4 w-4" />Plantilla sugerida</button>
+                  <button type="button" onClick={(event) => openTemplateAction('clear', event.currentTarget)} disabled={weeklyBlockCount === 0} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-rose-500/30 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-500/10 focus-visible:outline-2 focus-visible:outline-rose-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-rose-400 cursor-pointer"><AppIcon name="trash" className="h-4 w-4" />Vaciar horario recurrente</button>
                 </div>
-              </section>
-            </div>
-
-            {/* Right Column: Routines List */}
-            <div className="lg:col-span-7 xl:col-span-8">
-              <section aria-labelledby="routine-list-title" className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 shadow-2xs space-y-4">
-                <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-                  <div>
-                    <h3 id="routine-list-title" className="text-sm font-bold text-[var(--text)]">Tus rutinas</h3>
-                    <p className="text-xs text-[var(--text-soft)]">Hacé clic en el círculo para registrar el completado del día de hoy.</p>
-                  </div>
-                  <span className="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-xs font-semibold text-[var(--text-soft)]">
-                    {(state.tasksRecurring || []).length} total
-                  </span>
-                </div>
-
-                {(state.tasksRecurring || []).length === 0 && (
-                  <p className="py-6 text-center text-sm text-[var(--text-soft)]">Todavía no hay rutinas registradas.</p>
-                )}
-
-                {(['daily', '2-3x', 'weekly'] as const).map((freq) => {
-                  const items = (state.tasksRecurring || []).filter((t) => t.freq === freq);
-                  if (items.length === 0) return null;
-                  return (
-                    <div key={freq} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <h4 className="text-xs font-bold text-[var(--text-soft)]">
-                          {FREQ_LABELS[freq]}
-                        </h4>
-                        <span className="text-xs font-semibold text-[var(--text-faint)]">
-                          {items.length}
-                        </span>
-                      </div>
-                      <div className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] overflow-hidden">
-                        {items.map((t) => {
-                          const completedToday = Boolean(state.taskLog?.[todayIso]?.[t.id]);
-                          const scheduledToday = routineScheduledFor(state, t, todayIso);
-                          return (
-                            <div key={t.id} className="flex items-center justify-between gap-3 p-3 text-sm text-[var(--text)] hover:bg-[var(--surface-muted)] transition-colors">
-                              <div className="flex min-w-0 items-start gap-2.5">
-                                {scheduledToday || completedToday ? (
-                                  todayCompletionButton(t.id, t.name, completedToday)
-                                ) : (
-                                  <span aria-hidden="true" className="h-6 w-6 shrink-0" />
-                                )}
-                                <div className="min-w-0">
-                                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                    <span className={`break-words font-semibold ${completedToday ? 'text-[var(--text-soft)] line-through' : ''}`}>
-                                      {t.name}
-                                    </span>
-                                    {t.time && <span className="text-xs font-semibold tabular-nums text-[#4F46E5] dark:text-indigo-300">{t.time}</span>}
-                                    {t.effort === 'low' && <span className="text-xs text-emerald-700 dark:text-emerald-400">Esfuerzo bajo</span>}
-                                    {t.effort === 'high' && <span className="text-xs text-rose-700 dark:text-rose-400">Esfuerzo alto</span>}
-                                  </div>
-                                  <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-[var(--text-soft)]">
-                                    {t.days && t.days.length > 0 && <span>{t.days.map((day) => DAY_LABELS[day].slice(0, 3)).join(' · ')}</span>}
-                                    {(scheduledToday || completedToday) && (
-                                      <span className={completedToday ? 'font-semibold text-emerald-700 dark:text-emerald-400' : ''}>
-                                        {completedToday ? 'Completada hoy' : 'Pendiente hoy'}
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="ml-2 flex shrink-0 items-center gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingTask(t)}
-                                  className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs text-[var(--text-soft)] hover:text-[#4F46E5] focus-visible:outline-2 focus-visible:outline-[#4F46E5] dark:hover:text-indigo-300 cursor-pointer"
-                                  aria-label={`Editar ${t.name}`}
-                                >
-                                  <AppIcon name="edit" className="h-3.5 w-3.5" />
-                                  <span className="hidden sm:inline">Editar</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteTask(t.id)}
-                                  className="rounded-lg p-1.5 text-[var(--text-soft)] hover:text-red-600 focus-visible:outline-2 focus-visible:outline-red-500 dark:hover:text-red-400 cursor-pointer"
-                                  aria-label={`Eliminar ${t.name}`}
-                                >
-                                  <AppIcon name="trash" className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </section>
+              </SurfaceCard>
             </div>
           </div>
         </div>

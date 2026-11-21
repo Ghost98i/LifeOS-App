@@ -12,6 +12,7 @@ import { AppIcon } from './AppIcon';
 import { CommercialCostCalculator } from './CommercialCostCalculator';
 import { ContextualHelp } from './ContextualHelp';
 import { showToast } from '../lib/toast';
+import { SurfaceCard, SectionHeader, ListDivider } from './ui/SurfacePrimitives';
 
 const DevInventory = import.meta.env?.DEV ? React.lazy(() => import('./CommercialInventorySandbox').then((module) => ({ default: module.CommercialInventorySandbox }))) : null;
 const devCommercialPilot = import.meta.env?.DEV && import.meta.env.VITE_COMMERCIAL_PILOT === '1';
@@ -56,16 +57,16 @@ const SellForm: React.FC<SellFormProps> = ({ item, state, onUpdateState, onClose
     } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudo registrar.'); }
   };
   return (
-    <form onSubmit={submit} className="mt-3 grid grid-cols-2 gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3 sm:grid-cols-4">
-      <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Venta</span><input autoFocus required type="number" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="0" className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs tabular-nums" /></label>
-      <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Envío</span><input type="number" value={shippingCost} onChange={(event) => setShippingCost(event.target.value)} placeholder="0" className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs tabular-nums" /></label>
-      <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Plataforma</span><input type="number" value={platformFees} onChange={(event) => setPlatformFees(event.target.value)} placeholder="0" className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs tabular-nums" /></label>
-      <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Impuestos</span><input type="number" value={taxes} onChange={(event) => setTaxes(event.target.value)} placeholder="0" className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs tabular-nums" /></label>
-      <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Cuenta</span><select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs">{(state.finance?.accounts || []).map((account) => <option key={account.id} value={account.id}><PrivateFinancialText>{account.name}</PrivateFinancialText></option>)}</select></label>
-      <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Fecha</span><input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-2 text-xs" /></label>
-      <div className="col-span-2 rounded-lg border border-emerald-500/20 bg-[var(--card)] p-2 sm:col-span-2"><span className="flex items-center gap-1 text-xs font-bold text-[var(--text-faint)]">Ganancia estimada<ContextualHelp label="Ganancia estimada">Precio de venta menos compra y costos de venta ingresados. No incluye otros gastos del negocio.</ContextualHelp></span><strong className={`tabular-nums text-sm ${estimate !== null && estimate < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-[var(--text)]'}`}><PrivacyAmount>{estimate === null ? 'No comparable entre monedas' : fmtMoney(estimate, selectedCurrency)}</PrivacyAmount></strong></div>
-      {message && <p className="col-span-2 text-xs font-bold text-red-500 sm:col-span-4">{message}</p>}
-      <div className="col-span-2 flex gap-2 sm:col-span-4"><button className="flex-1 rounded-lg bg-emerald-600 py-2 text-xs font-extrabold text-white">Confirmar venta</button><button type="button" onClick={onClose} className="rounded-lg border border-[var(--border)] px-4 text-xs font-bold text-[var(--text-soft)]">Cancelar</button></div>
+    <form onSubmit={submit} className="mt-3 grid grid-cols-1 gap-2.5 rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/[0.08] dark:bg-white/[0.02] sm:grid-cols-2 lg:grid-cols-4">
+      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Venta</span><input autoFocus required type="number" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="0" className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm tabular-nums text-[var(--text)]" /></label>
+      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Envío</span><input type="number" value={shippingCost} onChange={(event) => setShippingCost(event.target.value)} placeholder="0" className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm tabular-nums text-[var(--text)]" /></label>
+      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Plataforma</span><input type="number" value={platformFees} onChange={(event) => setPlatformFees(event.target.value)} placeholder="0" className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm tabular-nums text-[var(--text)]" /></label>
+      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Impuestos</span><input type="number" value={taxes} onChange={(event) => setTaxes(event.target.value)} placeholder="0" className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm tabular-nums text-[var(--text)]" /></label>
+      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Cuenta</span><select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)]">{(state.finance?.accounts || []).map((account) => <option key={account.id} value={account.id}><PrivateFinancialText>{account.name}</PrivateFinancialText></option>)}</select></label>
+      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Fecha</span><input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)]" /></label>
+      <div className="min-w-0 sm:col-span-2 flex flex-col justify-center rounded-xl border border-slate-200/80 bg-white px-3 py-2 dark:border-white/[0.08] dark:bg-[#0D111A]"><span className="flex items-center gap-1 text-xs font-semibold text-[var(--text-soft)]">Ganancia estimada<ContextualHelp label="Ganancia estimada">Precio de venta menos compra y costos de venta ingresados. No incluye otros gastos del negocio.</ContextualHelp></span><strong className={`tabular-nums text-sm ${estimate !== null && estimate < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-[var(--text)]'}`}><PrivacyAmount>{estimate === null ? 'No comparable entre monedas' : fmtMoney(estimate, selectedCurrency)}</PrivacyAmount></strong></div>
+      {message && <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 sm:col-span-2 lg:col-span-4">{message}</p>}
+      <div className="flex gap-2 sm:col-span-2 lg:col-span-4"><button className="min-h-10 flex-1 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white hover:bg-[#4338CA] cursor-pointer">Confirmar venta</button><button type="button" onClick={onClose} className="min-h-10 rounded-xl border border-[var(--border)] px-4 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer">Cancelar</button></div>
     </form>
   );
 };
@@ -156,14 +157,14 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState, 
       {showCostCalculator && <CommercialCostCalculator onClose={() => setShowCostCalculator(false)} />}
 
       {hasLegacyInventory && onCommercialUpdate && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] pb-3">
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3 dark:border-white/[0.06]">
           <button
             type="button"
             onClick={() => setActiveTab('commercial')}
-            className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            className={`min-h-10 rounded-xl px-4 py-2 text-xs font-semibold transition-colors cursor-pointer ${
               activeTab === 'commercial'
-                ? 'bg-[var(--blue)] text-white shadow-2xs'
-                : 'border border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)]'
+                ? 'bg-[#4F46E5] text-white'
+                : 'border border-slate-200/80 bg-white text-[var(--text-soft)] hover:text-[var(--text)] dark:border-white/[0.08] dark:bg-[#0D111A]'
             }`}
           >
             Operaciones comerciales
@@ -171,10 +172,10 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState, 
           <button
             type="button"
             onClick={() => setActiveTab('legacy')}
-            className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+            className={`min-h-10 rounded-xl px-4 py-2 text-xs font-semibold transition-colors cursor-pointer ${
               activeTab === 'legacy'
-                ? 'bg-[var(--blue)] text-white shadow-2xs'
-                : 'border border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)]'
+                ? 'bg-[#4F46E5] text-white'
+                : 'border border-slate-200/80 bg-white text-[var(--text-soft)] hover:text-[var(--text)] dark:border-white/[0.08] dark:bg-[#0D111A]'
             }`}
           >
             Inventario histórico anterior ({inventory.length})
@@ -191,162 +192,164 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState, 
           onClose={hasLegacyInventory ? () => setActiveTab('legacy') : undefined}
         />
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {onCommercialUpdate && (
             <button
               type="button"
               onClick={() => setActiveTab('commercial')}
-              className="rounded-xl bg-[var(--blue)] px-4 py-2 text-xs font-bold text-white hover:opacity-95"
+              className="min-h-10 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white hover:bg-[#4338CA] cursor-pointer"
             >
               ← Ir a operaciones comerciales
             </button>
           )}
 
           {inventory.length > 0 && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+            <SurfaceCard className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
               <div className="flex flex-wrap gap-x-7 gap-y-2">
-                <div><span className="block text-xs font-bold text-[var(--text-faint)]">Disponibles</span><strong className="text-lg tabular-nums">{stats.stock}</strong></div>
-                <div><span className="flex items-center gap-1 text-xs font-bold text-[var(--text-faint)]">Capital en stock<ContextualHelp label="Capital en stock">Suma el precio de compra de los productos disponibles cuando comparten moneda. Es mercadería, no dinero disponible.</ContextualHelp></span><strong className="text-lg tabular-nums"><PrivacyAmount>{availableItems.length === 0 ? 'Sin stock' : stockValue === null ? 'No comparable entre monedas' : fmtMoney(stockValue, stockCurrency)}</PrivacyAmount></strong></div>
-                <div><span className="block text-xs font-bold text-[var(--text-faint)]">Vendidos</span><strong className="text-lg tabular-nums">{stats.ventas}</strong></div>
-                <div><span className="flex items-center gap-1 text-xs font-bold text-[var(--text-faint)]">Ganancia realizada<ContextualHelp label="Ganancia realizada">Ventas menos compra y costos de venta, solo si las monedas son comparables. No incluye otros gastos.</ContextualHelp></span><strong className={`text-lg tabular-nums ${stats.gananciaTotal !== null && stats.gananciaTotal < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-[var(--text)]'}`}><PrivacyAmount>{stats.gananciaTotal === null ? 'No comparable entre monedas' : fmtMoney(stats.gananciaTotal, stats.profitCurrency)}</PrivacyAmount></strong></div>
+                <div><span className="block text-xs font-semibold text-[var(--text-soft)]">Disponibles</span><strong className="text-lg tabular-nums">{stats.stock}</strong></div>
+                <div><span className="flex items-center gap-1 text-xs font-semibold text-[var(--text-soft)]">Capital en stock<ContextualHelp label="Capital en stock">Suma el precio de compra de los productos disponibles cuando comparten moneda. Es mercadería, no dinero disponible.</ContextualHelp></span><strong className="text-lg tabular-nums"><PrivacyAmount>{availableItems.length === 0 ? 'Sin stock' : stockValue === null ? 'No comparable entre monedas' : fmtMoney(stockValue, stockCurrency)}</PrivacyAmount></strong></div>
+                <div><span className="block text-xs font-semibold text-[var(--text-soft)]">Vendidos</span><strong className="text-lg tabular-nums">{stats.ventas}</strong></div>
+                <div><span className="flex items-center gap-1 text-xs font-semibold text-[var(--text-soft)]">Ganancia realizada<ContextualHelp label="Ganancia realizada">Ventas menos compra y costos de venta, solo si las monedas son comparables. No incluye otros gastos.</ContextualHelp></span><strong className={`text-lg tabular-nums ${stats.gananciaTotal !== null && stats.gananciaTotal < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-[var(--text)]'}`}><PrivacyAmount>{stats.gananciaTotal === null ? 'No comparable entre monedas' : fmtMoney(stats.gananciaTotal, stats.profitCurrency)}</PrivacyAmount></strong></div>
               </div>
-              <details className="text-xs text-[var(--text-soft)]"><summary className="cursor-pointer font-bold">Más métricas</summary><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1"><span className="inline-flex items-center gap-1">Ganancia / costo total {stats.roi === null ? 'No comparable' : `${stats.roi.toFixed(0)}%`}<ContextualHelp label="Ganancia sobre costo total">Divide la ganancia por el precio de compra más los costos de venta registrados.</ContextualHelp></span><span>Tiempo promedio de venta {stats.tiempoPromedio == null ? '—' : `${stats.tiempoPromedio.toFixed(0)} d`}</span>{stats.ranking.length > 0 && <span>Mejores ventas: {stats.ranking.map((candidate) => candidate.item).join(', ')}</span>}</div></details>
-            </div>
+              <details className="text-xs text-[var(--text-soft)]"><summary className="cursor-pointer font-semibold">Más métricas</summary><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1"><span className="inline-flex items-center gap-1">Ganancia / costo total {stats.roi === null ? 'No comparable' : `${stats.roi.toFixed(0)}%`}<ContextualHelp label="Ganancia sobre costo total">Divide la ganancia por el precio de compra más los costos de venta registrados.</ContextualHelp></span><span>Tiempo promedio de venta {stats.tiempoPromedio == null ? '—' : `${stats.tiempoPromedio.toFixed(0)} d`}</span>{stats.ranking.length > 0 && <span>Mejores ventas: {stats.ranking.map((candidate) => candidate.item).join(', ')}</span>}</div></details>
+            </SurfaceCard>
           )}
 
           {inventory.length === 0 && !showPurchaseForm && (
-            <section className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 sm:p-8">
-              <h2 className="text-base font-extrabold text-[var(--text)]">Empezá por registrar una compra</h2>
+            <SurfaceCard className="p-6 text-center sm:p-8">
+              <AppIcon name="store" className="mx-auto h-6 w-6 text-slate-400 dark:text-slate-500" />
+              <h2 className="mt-3 text-base font-semibold text-[var(--text)]">Empezá por registrar una compra</h2>
               <p className="mt-1 text-sm text-[var(--text-soft)]">Actividad disponible: compraventa y reventa.</p>
-              <button id="qa-focus-reventa" onClick={() => setShowPurchaseForm(true)} className="mt-4 rounded-xl bg-[var(--blue)] px-4 py-2.5 text-sm font-bold text-white">Registrar compra</button>
-            </section>
+              <button id="qa-focus-reventa" onClick={() => setShowPurchaseForm(true)} className="mt-4 inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] cursor-pointer">
+                <AppIcon name="plus" className="h-4 w-4" />
+                <span>Registrar compra</span>
+              </button>
+            </SurfaceCard>
           )}
 
           {inventory.length > 0 && !showPurchaseForm && (
-            <button id="qa-focus-reventa" onClick={() => setShowPurchaseForm(true)} className="rounded-xl bg-[var(--blue)] px-4 py-2.5 text-sm font-bold text-white">Registrar compra</button>
+            <button id="qa-focus-reventa" onClick={() => setShowPurchaseForm(true)} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] cursor-pointer">
+              <AppIcon name="plus" className="h-4 w-4" />
+              <span>Registrar compra</span>
+            </button>
           )}
 
           {showPurchaseForm && (
-            <section id="qa-focus-reventa" className="space-y-2">
-              <div className="flex items-center justify-between"><h2 className="text-sm font-bold text-[var(--text)]">Registrar compra</h2><button type="button" onClick={() => { setShowPurchaseForm(false); setMessage(''); }} className="text-xs font-semibold text-[var(--text-soft)]">Cerrar</button></div>
-              <form onSubmit={addPurchase} className="flex flex-wrap items-end gap-2 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-                <label className="min-w-[170px] flex-1"><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Producto</span><input required value={item} onChange={(event) => setItem(event.target.value)} placeholder="Ej.: RTX 3060" className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs text-[var(--text)]" /></label>
-                <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Compra</span><input required type="number" value={buyPrice} onChange={(event) => setBuyPrice(event.target.value)} placeholder="0" className="w-28 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs tabular-nums" /></label>
-                <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Cuenta</span><select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs">{(state.finance?.accounts || []).map((account) => <option key={account.id} value={account.id}><PrivateFinancialText>{account.name}</PrivateFinancialText></option>)}</select></label>
-                <label><span className="mb-1 block text-xs font-bold text-[var(--text-faint)]">Fecha</span><input type="date" value={buyDate} onChange={(event) => setBuyDate(event.target.value)} className="rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-xs" /></label>
-                <button className="rounded-xl bg-[var(--blue)] px-4 py-2 text-xs font-bold text-white">Comprar</button>
-              </form>{message && <p className="text-xs font-bold text-[var(--blue)]">{message}</p>}
-            </section>
+            <SurfaceCard id="qa-focus-reventa" className="p-4 sm:p-5 space-y-3">
+              <SectionHeader
+                icon={<AppIcon name="product" className="h-4 w-4" />}
+                title="Registrar compra"
+                action={
+                  <button type="button" onClick={() => { setShowPurchaseForm(false); setMessage(''); }} className="min-h-10 px-2 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer">
+                    Cerrar
+                  </button>
+                }
+              />
+              <form onSubmit={addPurchase} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 lg:items-end">
+                <label className="min-w-0 sm:col-span-2 lg:col-span-1"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Producto</span><input required value={item} onChange={(event) => setItem(event.target.value)} placeholder="Ej.: RTX 3060" className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)]" /></label>
+                <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Compra</span><input required type="number" value={buyPrice} onChange={(event) => setBuyPrice(event.target.value)} placeholder="0" className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm tabular-nums text-[var(--text)]" /></label>
+                <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Cuenta</span><select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)]">{(state.finance?.accounts || []).map((account) => <option key={account.id} value={account.id}><PrivateFinancialText>{account.name}</PrivateFinancialText></option>)}</select></label>
+                <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Fecha</span><input type="date" value={buyDate} onChange={(event) => setBuyDate(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)]" /></label>
+                <button className="min-h-11 w-full rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] cursor-pointer">Comprar</button>
+              </form>
+              {message && <p className="text-xs font-semibold text-[#4F46E5] dark:text-indigo-300">{message}</p>}
+            </SurfaceCard>
           )}
 
           {inventory.length > 0 && (
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-base font-extrabold text-[var(--text)]">Inventario disponible</h2>
-                <span className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs font-bold text-[var(--text-soft)]">{availableItems.length}</span>
+            <SurfaceCard className="overflow-hidden">
+              <div className="border-b border-slate-100 px-4 py-3.5 dark:border-white/[0.06] sm:px-5">
+                <SectionHeader
+                  icon={<AppIcon name="product" className="h-4 w-4" />}
+                  title="Inventario disponible"
+                  count={availableItems.length}
+                />
               </div>
-              {availableItems.length === 0 ? <p className="text-xs text-[var(--text-faint)]">No hay productos disponibles.</p> : (
-                <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                  {[...availableItems].sort((a, b) => b.buyDate.localeCompare(a.buyDate)).map((candidate) => {
-                    const profit = resaleProfit(candidate, state);
-                    return (
-                      <article key={candidate.id} className="lifeos-card p-4">
-                        <div className="flex items-start gap-3">
-                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-muted)] text-[var(--blue)]">
-                            <AppIcon name={candidate.status === 'vendido' ? 'checkCircle' : 'product'} className="h-5 w-5" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h3 className="truncate text-sm font-extrabold text-[var(--text)]">{candidate.item}</h3>
+              {availableItems.length === 0 ? (
+                <p className="px-4 py-6 text-center text-xs text-[var(--text-soft)]">No hay productos disponibles.</p>
+              ) : (
+                <ListDivider>
+                  {[...availableItems].sort((a, b) => b.buyDate.localeCompare(a.buyDate)).map((candidate) => (
+                    <article key={candidate.id} className="p-4 sm:px-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start gap-2.5">
+                          <AppIcon name="product" className="mt-0.5 h-4 w-4 shrink-0 text-[#4F46E5] dark:text-indigo-300" />
+                          <div className="min-w-0">
+                            <h3 className="truncate text-sm font-semibold text-[var(--text)]">{candidate.item}</h3>
                             <p className="text-xs text-[var(--text-soft)]">
                               Compra <PrivacyAmount>{fmtMoney(candidate.buyPrice, resaleItemCurrency(state, candidate, 'purchase'))}</PrivacyAmount> · {fmtDate(candidate.buyDate)}{candidate.purchaseTxId ? ' · ✓ Finanzas' : ''}
                             </p>
                           </div>
-                          <span className={`lifeos-badge ${candidate.status === 'vendido' ? 'lifeos-badge-success' : 'lifeos-badge-info'}`}>
-                            {candidate.status}
-                          </span>
                         </div>
-                        {candidate.status === 'vendido' && (
-                          <div className="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-[var(--surface-muted)] p-3 text-xs">
-                            <div>
-                              <span className="block text-xs text-[var(--text-faint)]">Cobrado</span>
-                              <strong className="tabular-nums"><PrivacyAmount>{fmtMoney(candidate.sellPrice, resaleItemCurrency(state, candidate, 'sale'))}</PrivacyAmount></strong>
-                            </div>
-                            <div>
-                              <span className="block text-xs text-[var(--text-faint)]">Costos</span>
-                              <strong className="tabular-nums"><PrivacyAmount>{fmtMoney(candidate.fees, resaleItemCurrency(state, candidate, 'sale'))}</PrivacyAmount></strong>
-                              <small className="block text-xs text-[var(--text-faint)]">envío <PrivacyAmount>{fmtMoney(candidate.shippingCost, resaleItemCurrency(state, candidate, 'sale'))}</PrivacyAmount> · plataforma <PrivacyAmount>{fmtMoney(candidate.platformFees, resaleItemCurrency(state, candidate, 'sale'))}</PrivacyAmount> · impuestos <PrivacyAmount>{fmtMoney(candidate.taxes, resaleItemCurrency(state, candidate, 'sale'))}</PrivacyAmount></small>
-                            </div>
-                            <div>
-                              <span className="block text-xs text-[var(--text-faint)]">Ganancia</span>
-                              <strong className={`tabular-nums ${profit !== null && profit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}><PrivacyAmount>{profit === null ? 'No comparable' : fmtMoney(profit, resaleItemCurrency(state, candidate, 'sale'))}</PrivacyAmount></strong>
-                              <small className="block text-xs text-[var(--text-faint)]">{profit !== null && candidate.buyPrice > 0 ? `${(profit / candidate.buyPrice * 100).toFixed(1)}% sobre compra` : '—'}</small>
-                            </div>
-                          </div>
-                        )}
-                        {sellingId === candidate.id ? (
-                          <SellForm item={candidate} state={state} onUpdateState={onUpdateState} onClose={() => setSellingId(null)} />
-                        ) : (
-                          <div className="mt-3 flex gap-2">
-                            <button
-                              onClick={() => setSellingId(candidate.id)}
-                              className={`flex-1 rounded-xl py-2 text-xs font-bold transition-all cursor-pointer ${
-                                candidate.status === 'vendido'
-                                  ? 'border border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)]'
-                                  : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs'
-                              }`}
-                            >
-                              {candidate.status === 'vendido' ? 'Editar venta' : 'Registrar venta'}
-                            </button>
-                            <button
-                              onClick={() => requestDeletion(candidate.id)}
-                              className="flex items-center gap-1 rounded-xl border border-[var(--border)] px-3 text-xs text-[var(--text-faint)] hover:text-red-500 hover:border-red-400 transition-colors cursor-pointer"
-                              title="Eliminar registro"
-                              aria-label="Eliminar registro"
-                            >
-                              <AppIcon name="trash" className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        )}
-                      </article>
-                    );
-                  })}
-                </div>
+                        <span className="shrink-0 rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-[#4F46E5] dark:bg-indigo-500/15 dark:text-indigo-300">
+                          {candidate.status}
+                        </span>
+                      </div>
+                      {sellingId === candidate.id ? (
+                        <SellForm item={candidate} state={state} onUpdateState={onUpdateState} onClose={() => setSellingId(null)} />
+                      ) : (
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            onClick={() => setSellingId(candidate.id)}
+                            className="min-h-10 flex-1 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer"
+                          >
+                            Registrar venta
+                          </button>
+                          <button
+                            onClick={() => requestDeletion(candidate.id)}
+                            className="flex min-h-10 min-w-10 items-center justify-center rounded-xl border border-slate-200/80 px-3 text-xs text-[var(--text-soft)] transition-colors hover:border-rose-400 hover:text-rose-600 dark:border-white/[0.08] dark:hover:text-rose-400 cursor-pointer"
+                            title="Eliminar registro"
+                            aria-label="Eliminar registro"
+                          >
+                            <AppIcon name="trash" className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                </ListDivider>
               )}
-            </section>
+            </SurfaceCard>
           )}
 
           {soldItems.length > 0 && (
-            <section className="space-y-3">
-              <h2 className="text-base font-extrabold text-[var(--text)]">Ventas realizadas</h2>
-              <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+            <SurfaceCard className="overflow-hidden">
+              <div className="border-b border-slate-100 px-4 py-3.5 dark:border-white/[0.06] sm:px-5">
+                <SectionHeader
+                  icon={<AppIcon name="checkCircle" className="h-4 w-4" />}
+                  title="Ventas realizadas"
+                  count={soldItems.length}
+                />
+              </div>
+              <ListDivider>
                 {soldItems.map((candidate) => {
                   const profit = resaleProfit(candidate, state);
                   const purchaseCurrency = resaleItemCurrency(state, candidate, 'purchase');
                   const saleCurrency = resaleItemCurrency(state, candidate, 'sale');
                   return (
-                    <article key={candidate.id} className="lifeos-card p-4">
+                    <article key={candidate.id} className="p-4 sm:px-5">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <h3 className="truncate text-sm font-extrabold text-[var(--text)]">{candidate.item}</h3>
+                          <h3 className="truncate text-sm font-semibold text-[var(--text)]">{candidate.item}</h3>
                           <p className="text-xs text-[var(--text-soft)]">Compra <PrivacyAmount>{fmtMoney(candidate.buyPrice, purchaseCurrency)}</PrivacyAmount> · Venta <PrivacyAmount>{fmtMoney(candidate.sellPrice, saleCurrency)}</PrivacyAmount> · {fmtDate(candidate.sellDate || candidate.buyDate)}</p>
                         </div>
-                        <span className="lifeos-badge lifeos-badge-success">Vendido</span>
+                        <span className="shrink-0 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">Vendido</span>
                       </div>
-                      <div className="mt-3 flex flex-wrap justify-between gap-2 text-xs">
-                        <span>Costos <PrivacyAmount>{fmtMoney(candidate.fees, saleCurrency)}</PrivacyAmount></span>
-                        <strong className={profit !== null && profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}>Ganancia <PrivacyAmount>{profit === null ? 'No comparable entre monedas' : fmtMoney(profit, saleCurrency)}</PrivacyAmount></strong>
+                      <div className="mt-2.5 flex flex-wrap justify-between gap-2 text-xs">
+                        <span className="text-[var(--text-soft)]">Costos <PrivacyAmount>{fmtMoney(candidate.fees, saleCurrency)}</PrivacyAmount></span>
+                        <strong className={`tabular-nums ${profit !== null && profit >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>Ganancia <PrivacyAmount>{profit === null ? 'No comparable entre monedas' : fmtMoney(profit, saleCurrency)}</PrivacyAmount></strong>
                       </div>
                       <p className="mt-1 text-xs text-[var(--text-faint)]">Envío <PrivacyAmount>{fmtMoney(candidate.shippingCost, saleCurrency)}</PrivacyAmount> · Plataforma <PrivacyAmount>{fmtMoney(candidate.platformFees, saleCurrency)}</PrivacyAmount> · Impuestos <PrivacyAmount>{fmtMoney(candidate.taxes, saleCurrency)}</PrivacyAmount> · Ganancia / compra {profit !== null && candidate.buyPrice > 0 ? `${(profit / candidate.buyPrice * 100).toFixed(1)}%` : '—'}</p>
                       <div className="mt-3 flex gap-2">
-                        <button onClick={() => setSellingId(candidate.id)} className="flex-1 rounded-xl border border-[var(--border)] py-2 text-xs font-bold">Editar venta</button>
-                        <button onClick={() => requestDeletion(candidate.id)} className="rounded-xl border border-[var(--border)] px-3 text-xs">Eliminar</button>
+                        <button onClick={() => setSellingId(candidate.id)} className="min-h-10 flex-1 rounded-xl border border-slate-200/80 py-2 text-xs font-semibold text-[var(--text)] hover:border-[#4F46E5] dark:border-white/[0.08] cursor-pointer">Editar venta</button>
+                        <button onClick={() => requestDeletion(candidate.id)} className="min-h-10 rounded-xl border border-slate-200/80 px-3 text-xs font-semibold text-[var(--text-soft)] hover:text-rose-600 dark:border-white/[0.08] cursor-pointer">Eliminar</button>
                       </div>
                       {sellingId === candidate.id && <SellForm item={candidate} state={state} onUpdateState={onUpdateState} onClose={() => setSellingId(null)} />}
                     </article>
                   );
                 })}
-              </div>
-            </section>
+              </ListDivider>
+            </SurfaceCard>
           )}
 
           {deletion && (
