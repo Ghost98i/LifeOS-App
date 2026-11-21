@@ -145,8 +145,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center">
                     <AppIcon
                       name={item.icon}
+                      strokeWidth={1.75}
                       className={`h-[18px] w-[18px] shrink-0 transition-colors ${
-                        isActive ? 'text-[var(--blue)]' : 'text-[var(--text-soft)] group-hover:text-[var(--text)]'
+                        isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-soft)] group-hover:text-[var(--text)]'
                       }`}
                     />
                   </span>
@@ -166,9 +167,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             title={state.settings.darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           >
             <div className="flex items-center gap-2.5">
-              <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[var(--surface-muted)] text-[var(--text)] group-hover:bg-[var(--blue-soft)] group-hover:text-[var(--blue)] transition-colors">
-                <AppIcon name={state.settings.darkMode ? 'moon' : 'sun'} className="h-3.5 w-3.5" />
-              </span>
+              <AppIcon
+                name={state.settings.darkMode ? 'moon' : 'sun'}
+                strokeWidth={1.75}
+                className="h-4 w-4 shrink-0 text-[var(--text-soft)] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors"
+              />
               <span>Modo {state.settings.darkMode ? 'oscuro' : 'claro'}</span>
             </div>
             <span

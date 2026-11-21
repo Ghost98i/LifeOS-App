@@ -71,6 +71,7 @@ import {
 import {
   addExerciseToGymSession,
   addSetToGymSession,
+  areAllSessionSetsCompleted,
   configureGymTemplateExercise,
   deleteGymSession,
   deleteGymSessionExercise,
@@ -633,16 +634,22 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
       const result = updateGymSessionSet(draft.gym, sessionId, { exerciseId: ex?.id, exerciseIndex }, setIndex, updates);
       if (result.updated && shouldPlayCompletionMotion(wasCompleted, Boolean(updates.completed))) {
         completedSetKey = motionItemKey(ex?.id, targetSet?.id, setIndex);
-        const nextTimer = resolveNextRestTimer(
-          draft.gym,
-          sessionId,
-          { exerciseId: ex?.id, exerciseIndex },
-          setIndex,
-          Date.now()
-        );
-        if (nextTimer) {
-          draft.gym.activeTimer = nextTimer;
-          startedTimer = nextTimer;
+        if (areAllSessionSetsCompleted(s)) {
+          if (draft.gym.activeTimer?.sessionId === sessionId) {
+            draft.gym.activeTimer = null;
+          }
+        } else {
+          const nextTimer = resolveNextRestTimer(
+            draft.gym,
+            sessionId,
+            { exerciseId: ex?.id, exerciseIndex },
+            setIndex,
+            Date.now()
+          );
+          if (nextTimer) {
+            draft.gym.activeTimer = nextTimer;
+            startedTimer = nextTimer;
+          }
         }
       }
       updatedSessionSnapshot = s ? structuredClone(s) : null;

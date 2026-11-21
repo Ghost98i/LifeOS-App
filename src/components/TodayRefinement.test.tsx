@@ -205,6 +205,9 @@ test('Hoy V3: abrir el modal de Estado muestra el editor diario y el gráfico de
   assert.match(html, /role="dialog"/);
   assert.match(html, /id="daily-status-modal-title"/);
   assert.match(html, /Estado de hoy y evolución \(7 días\)/);
+  // Sin doble encabezado ni jaula cuadrada detrás del ícono en el modal
+  assert.doesNotMatch(html, /id="today-context-title"/);
+  assert.doesNotMatch(html, /today-section-icon-state/);
   assert.match(html, /Gráfico de evolución/);
   assert.match(html, /8 h/);
 });
@@ -290,4 +293,63 @@ test('Hoy V3 cierre: con 1 solo día de estado oculta sparkline vacío, y el bot
   assert.match(openHtml, /id="recent-activity-modal-title"/);
   assert.match(openHtml, /Actividad reciente/);
   assert.match(openHtml, /Matemática/);
+});
+
+test('Bloque 3: Hoy oculta el aviso de copia de seguridad cuando el workspace está vacío y lo muestra con actividad real', () => {
+  const emptyState = defaultState();
+  const today = todayISO();
+
+  // Workspace completamente vacío: nunca muestra el aviso de copia de seguridad
+  const emptyHtml = renderToStaticMarkup(
+    <DashboardView
+      state={emptyState}
+      onUpdateState={() => true}
+      onNavigate={() => {}}
+      onExportJSON={() => {}}
+      nowOverride={new Date(`${today}T12:00:00`)}
+    />
+  );
+  assert.doesNotMatch(emptyHtml, /No hay una copia de seguridad registrada/);
+
+  // Incluso si solo tiene una plantilla inicial de gimnasio sin sesiones reales ni otros datos
+  const templateOnlyState = defaultState();
+  templateOnlyState.gym.routineTemplates.push({
+    id: 'tpl-starter',
+    name: 'Full Body A',
+    days: [],
+    exercises: [{ id: 'e1', name: 'Sentadilla', sets: [] }],
+  });
+  const templateOnlyHtml = renderToStaticMarkup(
+    <DashboardView
+      state={templateOnlyState}
+      onUpdateState={() => true}
+      onNavigate={() => {}}
+      onExportJSON={() => {}}
+      nowOverride={new Date(`${today}T12:00:00`)}
+    />
+  );
+  assert.doesNotMatch(templateOnlyHtml, /No hay una copia de seguridad registrada/);
+
+  // Al cargar actividad real (ej. un movimiento financiero), sí muestra el aviso de copia de seguridad
+  const activeState = defaultState();
+  activeState.finance.transactions.push({
+    id: 'tx-1',
+    accountId: activeState.finance.accounts[0].id,
+    amount: 1200,
+    type: 'gasto',
+    category: 'Comida',
+    date: today,
+    fixed: 'variable',
+  });
+  const activeHtml = renderToStaticMarkup(
+    <DashboardView
+      state={activeState}
+      onUpdateState={() => true}
+      onNavigate={() => {}}
+      onExportJSON={() => {}}
+      nowOverride={new Date(`${today}T12:00:00`)}
+    />
+  );
+  assert.match(activeHtml, /Copia de seguridad:/);
+  assert.match(activeHtml, /No hay una copia de seguridad registrada/);
 });

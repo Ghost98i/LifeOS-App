@@ -1065,13 +1065,10 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     Siguiente pendiente
                   </button>
                 ) : allSetsCompleted ? (
-                  <button
-                    type="button"
-                    onClick={onFinish}
-                    className="min-h-11 rounded-xl bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-500"
-                  >
-                    Finalizar
-                  </button>
+                  <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/12 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                    <AppIcon name="checkCircle" className="h-3.5 w-3.5" />
+                    Completo
+                  </span>
                 ) : null}
               </div>
 

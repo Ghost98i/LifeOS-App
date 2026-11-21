@@ -200,12 +200,12 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
         </div>
 
         {/* Footer FIJO: El botón Continuar está SIEMPRE visible y accesible */}
-        <div className="shrink-0 p-3.5 sm:p-4 border-t border-[var(--border)] bg-[var(--card)] pb-[max(0.875rem,env(safe-area-inset-bottom))] shadow-lg">
+        <div className="shrink-0 p-3.5 sm:p-4 border-t border-[var(--border)] bg-[var(--card)] pb-[max(0.875rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
             onClick={onClose}
             aria-label="Continuar en Celestian"
-            className="w-full min-h-12 py-3 px-4 rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white text-sm font-bold shadow-md transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+            className="w-full min-h-12 py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white text-sm font-bold transition-colors active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 cursor-pointer flex items-center justify-center gap-2"
           >
             <span>Continuar</span>
             <AppIcon name="arrowRight" className="h-4 w-4" />

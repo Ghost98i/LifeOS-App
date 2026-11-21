@@ -478,8 +478,7 @@
 /* Focus & Touch Floor */
 .gym-page :is(button, input, select, summary):focus-visible,
 [data-gym-rest-settings] :is(button, input):focus-visible,
-[aria-labelledby="exercise-history-title"] :is(button, input):focus-visible,
-.gym-summary-modal button:focus-visible { outline: 2px solid var(--gym-visual-accent, #4f46e5); outline-offset: 2px; }
+[aria-labelledby="exercise-history-title"] :is(button, input):focus-visible { outline: 2px solid var(--gym-visual-accent, #4f46e5); outline-offset: 2px; }
 .gym-workout-shell :is(button, input, select, summary) { scroll-margin-block: 6rem 9rem; }
 [data-gym-rest-settings] .gym-rest-switch { background: transparent; }
 .gym-rest-switch::before { content: ''; position: absolute; inset: 8px 0; border-radius: 999px; background: var(--border-strong); }

@@ -662,3 +662,61 @@ test('Gym 3.1: preferencias y override explícito persisten y sincronizan sin in
   assert.equal(restored.routineTemplates[0].exercises[0].restSecondsMode, 'custom');
   assert.equal(restored.routineTemplates[0].exercises[0].restSeconds, 180);
 });
+
+test('Bloque 3: completar la última serie pendiente de la rutina no dispara descanso y limpia un descanso previo activo', () => {
+  const session: GymSession = {
+    id: 'session-final-set',
+    date: '2026-11-21',
+    status: 'active',
+    exercises: [
+      {
+        id: 'ex-1',
+        name: 'Press banca',
+        sets: [
+          { id: 's-1', weight: 60, reps: 10, completed: true },
+          { id: 's-2', weight: 60, reps: 10, completed: true },
+        ],
+      },
+      {
+        id: 'ex-2',
+        name: 'Remo con barra',
+        sets: [
+          { id: 's-3', weight: 50, reps: 10, completed: true },
+          { id: 's-4', weight: 50, reps: 10, completed: false },
+        ],
+      },
+    ],
+  };
+
+  const gym: Gym = {
+    weight: [],
+    measurements: [],
+    sessions: [session],
+    routineTemplates: [],
+    activeTimer: {
+      endsAt: 2_000_000,
+      durationSeconds: 90,
+      sessionId: session.id,
+      exerciseId: 'ex-2',
+      setId: 's-3',
+      kind: 'set',
+      exerciseIndex: 1,
+    },
+    settings: {
+      autoTimerEnabled: true,
+      restBetweenSetsSeconds: 90,
+      restBetweenExercisesSeconds: 150,
+    },
+  };
+
+  // Completar la última serie (4/4 = 100%)
+  const result = updateGymSessionSet(gym, session.id, { exerciseId: 'ex-2', exerciseIndex: 1 }, 1, { completed: true });
+  assert.equal(result.updated, true);
+  assert.equal(result.justCompleted, true);
+  // Debe haber limpiado el timer previo de la serie 3/4
+  assert.equal(gym.activeTimer, null);
+
+  // resolveNextRestTimer tampoco debe disparar un nuevo descanso al 100%
+  const nextTimer = resolveNextRestTimer(gym, session.id, { exerciseId: 'ex-2', exerciseIndex: 1 }, 1, 2_005_000);
+  assert.equal(nextTimer, null);
+});

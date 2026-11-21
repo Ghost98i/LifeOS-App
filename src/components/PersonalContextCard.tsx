@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Activity } from 'lucide-react';
 import type {
   ContextOptionalFactorKey,
   DailyContextEntry,
@@ -32,6 +33,8 @@ interface PersonalContextCardProps {
   onUpdateState: (updater: (draft: LifeOSState) => void) => boolean;
   onNavigate?: (view: ViewType) => void;
   className?: string;
+  /** When rendered inside DailyStatusModal, omits the outer card shell and redundant heading. */
+  embedded?: boolean;
 }
 
 type Metric = 'energy' | 'sleep' | 'mood';
@@ -230,6 +233,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
   onUpdateState,
   onNavigate,
   className = '',
+  embedded = false,
 }) => {
   const today = todayISO();
   const weekDates = useMemo(() => Array.from({ length: 7 }, (_, index) => shiftISO(today, index - 6)), [today]);
@@ -426,70 +430,88 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
     setIsEditing(false);
   };
 
+  const Wrapper = embedded ? 'div' : 'section';
+  const showToolbar = !embedded || selectedDate !== today || saved || !showCheckinInvite;
+
   return (
-    <section
-      className={`today-state-surface flex flex-col rounded-2xl border border-[var(--border)] p-3.5 sm:p-4 ${className}`}
-      aria-labelledby="today-context-title"
+    <Wrapper
+      className={
+        embedded
+          ? `flex flex-col ${className}`
+          : `flex flex-col rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:border-white/[0.07] dark:bg-[#0D111A] dark:shadow-none ${className}`
+      }
+      aria-labelledby={embedded ? undefined : 'today-context-title'}
     >
       <div>
-        {/* Card Header */}
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="today-section-icon today-section-icon-state">
-              <AppIcon name="activity" className="h-4 w-4" />
-            </span>
-            <h2 id="today-context-title" className="text-base font-bold tracking-[-0.025em] text-[var(--text)]">
-              {isEditing && selectedDate === today
-                ? 'Registrar estado'
-                : isEditing
-                  ? `Editar · ${dayLabel(selectedDate, true)}`
-                  : selectedDate === today
-                    ? 'Estado'
-                    : `Estado · ${dayLabel(selectedDate, true)}`}
-            </h2>
-            <span
-              data-testid="today-state-date-badge"
-              className="rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[12px] font-semibold text-[var(--text-soft)]"
-            >
-              {selectedDate === today ? 'Hoy' : 'Historial'}
-            </span>
-            {selectedDate !== today && (
-              <button
-                type="button"
-                onClick={() => handleSelectDate(today)}
-                className="inline-flex items-center gap-1 rounded-md bg-[var(--blue-soft)]/50 px-2 py-0.5 text-[12px] font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--blue-soft)]"
-              >
-                <span aria-hidden="true">←</span>
-                <span>Volver a hoy</span>
-              </button>
-            )}
+        {/* Card Header (standalone) or Compact Context Bar (embedded in DailyStatusModal) */}
+        {showToolbar && (
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              {!embedded && (
+                <>
+                  <Activity
+                    className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500"
+                    strokeWidth={1.75}
+                    aria-hidden="true"
+                  />
+                  <h2 id="today-context-title" className="text-[15px] font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100">
+                    {isEditing && selectedDate === today
+                      ? 'Registrar estado'
+                      : isEditing
+                        ? `Editar · ${dayLabel(selectedDate, true)}`
+                        : selectedDate === today
+                          ? 'Estado'
+                          : `Estado · ${dayLabel(selectedDate, true)}`}
+                  </h2>
+                </>
+              )}
+              {embedded && selectedDate !== today && (
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  {dayLabel(selectedDate, true)}
+                </span>
+              )}
+              {(!embedded || selectedDate !== today) && (
+                <span
+                  data-testid="today-state-date-badge"
+                  className="rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 dark:bg-white/[0.06] dark:text-slate-300"
+                >
+                  {selectedDate === today ? 'Hoy' : 'Historial'}
+                </span>
+              )}
+              {selectedDate !== today && (
+                <button
+                  type="button"
+                  onClick={() => handleSelectDate(today)}
+                  className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold text-indigo-600 transition-colors hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-500/10 cursor-pointer"
+                >
+                  <span aria-hidden="true">←</span>
+                  <span>Volver a hoy</span>
+                </button>
+              )}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {saved && (
+                <span role="status" className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                  Guardado
+                </span>
+              )}
+              {!showCheckinInvite && (
+                <button
+                  type="button"
+                  onClick={isEditing ? handleCancelEdit : handleStartEdit}
+                  className="rounded-lg border border-slate-200/80 bg-transparent px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-slate-100 cursor-pointer"
+                >
+                  {isEditing ? 'Cancelar' : hasContext(current) ? 'Editar' : 'Registrar'}
+                </button>
+              )}
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            {saved && (
-              <span role="status" className="text-[12px] font-semibold text-emerald-700 dark:text-emerald-300">
-                Guardado
-              </span>
-            )}
-            {!showCheckinInvite && (
-              <button
-                type="button"
-                onClick={isEditing ? handleCancelEdit : handleStartEdit}
-                className="rounded-lg border border-[var(--border)] bg-[var(--card-subtle)] px-3 py-1.5 text-[12px] font-semibold text-[var(--text-soft)] transition-colors hover:border-[var(--border-hover)] hover:text-[var(--text)]"
-              >
-                {isEditing ? 'Cancelar' : hasContext(current) ? 'Editar' : 'Registrar'}
-              </button>
-            )}
-          </div>
-        </div>
+        )}
 
         {isEditing ? (
-          <div className="space-y-3.5 border-t border-[var(--border)] pt-3" data-testid="today-state-edit-form">
-            <div className="flex items-center justify-end">
-              <span className="text-[11px] text-[var(--text-faint)]">Opcional</span>
-            </div>
-
+          <div className="divide-y divide-slate-100 dark:divide-white/[0.06]" data-testid="today-state-edit-form">
             {/* Sueño (Familia lavanda / índigo #A69AFF) */}
-            <div className="space-y-2 rounded-xl border border-[var(--border)]/70 bg-[var(--card-subtle)]/35 p-3">
+            <div className="space-y-2.5 pb-4">
               <div className="flex items-baseline justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   <span
@@ -594,7 +616,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
             </div>
 
             {/* Energía (Familia ámbar / dorado #F2B454) */}
-            <div className="rounded-xl border border-[var(--border)]/70 bg-[var(--card-subtle)]/35 p-3">
+            <div className="py-4">
               <MetricScale
                 label="Energía"
                 sublabel="1 = Muy baja (agotado) · 5 = Muy alta (pleno)"
@@ -608,7 +630,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
             </div>
 
             {/* Ánimo (Familia turquesa / verde agua #53CCAD) */}
-            <div className="rounded-xl border border-[var(--border)]/70 bg-[var(--card-subtle)]/35 p-3">
+            <div className="py-4">
               <MetricScale
                 label="Ánimo"
                 sublabel="1 = Muy bajo · 3 = Estable · 5 = Muy bueno"
@@ -622,7 +644,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
             </div>
 
             {/* Factores opcionales colapsables controlados por el usuario */}
-            <div className="rounded-xl border border-[var(--border)]/70 bg-[var(--card-subtle)]/35 p-2.5">
+            <div className="py-3.5">
               <button
                 type="button"
                 onClick={() => setIsOptionalContextExpanded(!isOptionalContextExpanded)}
@@ -829,18 +851,18 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2">
+            <div className="flex items-center justify-end gap-2.5 pt-4">
               <button
                 type="button"
                 onClick={handleCancelEdit}
-                className="min-h-9 rounded-lg border border-[var(--border)] px-4 py-1.5 text-xs font-medium text-[var(--text-soft)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+                className="min-h-9 rounded-lg border border-slate-200/80 px-4 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-slate-300 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-white/[0.16] dark:hover:text-slate-100 cursor-pointer"
               >
                 Cancelar
               </button>
               <button
                 type="button"
                 onClick={save}
-                className="min-h-9 rounded-lg bg-[var(--blue)] px-5 py-1.5 text-xs font-semibold text-white shadow-2xs transition-colors hover:bg-[var(--blue-hover)]"
+                className="min-h-9 rounded-lg bg-indigo-600 px-5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:bg-indigo-500 dark:hover:bg-indigo-400 cursor-pointer"
               >
                 Guardar estado
               </button>
@@ -852,25 +874,25 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
             {showCheckinInvite && (
               <div
                 data-testid="today-state-checkin-invite"
-                className="today-state-checkin-invite mb-3 rounded-xl border border-[var(--state-sleep-border)] bg-[var(--state-sleep-soft)]/40 p-3 text-sm"
+                className="today-state-checkin-invite mb-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 text-sm dark:border-white/[0.07] dark:bg-white/[0.03]"
               >
                 <div className="today-state-invite-content">
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-[var(--text)]">¿Cómo estás hoy?</p>
-                    <p className="mt-1 text-[12px] leading-relaxed text-[var(--text-soft)]">Sueño, energía y ánimo.</p>
+                    <p className="font-semibold text-slate-900 dark:text-slate-100">¿Cómo estás hoy?</p>
+                    <p className="mt-0.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">Sueño, energía y ánimo.</p>
                   </div>
                   <div className="today-state-invite-actions">
                     <button
                       type="button"
                       onClick={() => setIsInviteSkipped(true)}
-                      className="rounded-lg px-2.5 py-1 text-[12px] font-medium text-[var(--text-soft)] transition-colors hover:text-[var(--text)]"
+                      className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-500 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 cursor-pointer"
                     >
                       Ahora no
                     </button>
                     <button
                       type="button"
                       onClick={handleStartEdit}
-                      className="rounded-lg bg-[var(--blue)] px-3 py-1 text-[12px] font-semibold text-white transition-colors hover:bg-[var(--blue-hover)]"
+                      className="rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:bg-indigo-500 dark:hover:bg-indigo-400 cursor-pointer"
                     >
                       Registrar
                     </button>
@@ -885,7 +907,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
             {hasContext(current) && <>
             {/* Valores del día seleccionado: los ceros son registros, no ausencias. */}
             <div
-              className="today-state-kpi-strip grid grid-cols-3 divide-x divide-[var(--border)]/75 rounded-xl border border-[var(--border)]/80 bg-[var(--card-subtle)]/75 px-1 py-2 sm:py-2.5 shadow-2xs"
+              className="today-state-kpi-strip grid grid-cols-3 divide-x divide-slate-100 py-1 dark:divide-white/[0.06]"
               aria-label={`Valores registrados para ${selectedDate === today ? 'hoy' : dayLabel(selectedDate, true)}`}
             >
               {/* Sueño */}
@@ -1212,7 +1234,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
           </>
         )}
       </div>
-    </section>
+    </Wrapper>
   );
 };
 

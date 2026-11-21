@@ -650,6 +650,8 @@ test('Cockpit 13: Al completar el 100% de las series la sesión sigue abierta co
   assert.match(html, /data-workout-all-completed/);
   assert.match(html, /Todas las series completadas \(5\/5\)/);
   assert.match(html, /Finalizar entrenamiento/);
+  // Un único botón verde de cierre (sin botón verde competidor "Finalizar" en el resumen)
+  assert.doesNotMatch(html, /bg-emerald-600[^>]*>Finalizar<\/button>/);
   // Controls to add extra sets and exercises remain available
   assert.match(html, /aria-label="Agregar serie"/);
   assert.match(html, /Agregar ejercicio a la sesión/);

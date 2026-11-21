@@ -292,9 +292,11 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
       <PageHeader
         title="Trabajo y empleo"
         actions={
-          <button id="qa-focus-trabajo" type="button" onClick={() => openCreateForm()} className="flex min-h-11 items-center gap-2 rounded-xl bg-[var(--blue)] px-4 py-2 text-sm font-bold text-white shadow-xs transition-colors hover:bg-[var(--blue-hover)] cursor-pointer">
-            <AppIcon name="plus" className="h-4 w-4" /> Nueva postulación
-          </button>
+          applications.length > 0 ? (
+            <button id="qa-focus-trabajo" type="button" onClick={() => openCreateForm()} className="flex min-h-11 items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white shadow-xs transition-colors hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 cursor-pointer">
+              <AppIcon name="plus" className="h-4 w-4" /> Nueva postulación
+            </button>
+          ) : undefined
         }
       />
 
@@ -573,6 +575,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
               <button
+                id="qa-focus-trabajo"
                 type="button"
                 onClick={() => openCreateForm('convencional')}
                 className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 cursor-pointer"

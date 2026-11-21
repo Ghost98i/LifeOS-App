@@ -75,6 +75,67 @@ interface DashboardViewProps {
   initialSkippedKeys?: string[];
 }
 
+export function hasMeaningfulWorkspaceActivity(state: LifeOSState): boolean {
+  const finance = state.finance;
+  const hasFinanceData =
+    (finance?.transactions?.length || 0) > 0 ||
+    (finance?.transfers?.length || 0) > 0 ||
+    (finance?.reconciliations?.length || 0) > 0 ||
+    (finance?.debts?.length || 0) > 0 ||
+    (finance?.investments?.length || 0) > 0 ||
+    (finance?.subscriptions?.length || 0) > 0 ||
+    (finance?.expectedIncomes?.length || 0) > 0 ||
+    (finance?.commitments?.length || 0) > 0 ||
+    (finance?.agreements?.length || 0) > 0 ||
+    Object.values(finance?.budgets || {}).some((amount) => Number(amount) > 0) ||
+    (finance?.accounts || []).some(
+      (account) =>
+        Number(account.balance) !== 0 ||
+        Number(account.initialBalance || 0) !== 0 ||
+        Boolean(account.lastReconciledAt)
+    );
+
+  const hasGymData =
+    (state.gym?.sessions?.length || 0) > 0 ||
+    (state.gym?.weight?.length || 0) > 0 ||
+    (state.gym?.measurements?.length || 0) > 0 ||
+    (state.gym?.restDays?.length || 0) > 0;
+
+  const hasNotesData =
+    (state.projects?.length || 0) > 0 ||
+    (state.inbox?.length || 0) > 0 ||
+    (state.ideas?.length || 0) > 0 ||
+    Object.values(state.notes || {}).some((items) => Array.isArray(items) && items.length > 0);
+
+  const hasStudyData =
+    (state.study?.subjects?.length || 0) > 0 ||
+    (state.study?.exams?.length || 0) > 0 ||
+    (state.study?.studyLog?.length || 0) > 0;
+
+  const hasJobsData =
+    (state.jobs?.applications?.length || 0) > 0 ||
+    (state.jobs?.opportunities?.length || 0) > 0;
+
+  const hasResaleData =
+    (state.resale?.inventory?.length || 0) > 0 ||
+    (state.resale?.opportunities?.length || 0) > 0;
+
+  const hasPlanningData =
+    (state.todayExtras?.length || 0) > 0 ||
+    (state.calendarEvents?.length || 0) > 0 ||
+    Object.values(state.agenda || {}).some((blocks) => Array.isArray(blocks) && blocks.length > 0);
+
+  return (
+    hasFinanceData ||
+    hasGymData ||
+    hasNotesData ||
+    hasStudyData ||
+    hasJobsData ||
+    hasResaleData ||
+    hasPlanningData
+  );
+}
+
 export const DashboardView: React.FC<DashboardViewProps> = ({
   state,
   onUpdateState,
@@ -234,6 +295,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return state.todayExtras.find((task) => task.id === id);
   }, [initialFocusId, state.todayExtras, agendaEntries, pastPendingExtras, futureScheduledExtras]);
 
+  const hasRealBackupActivity = useMemo(() => hasMeaningfulWorkspaceActivity(state), [state]);
+
   // At most 1 consolidated discreet administrative notice (excluding items already in Radar)
   const topAdminNotice = useMemo(() => {
     const filtered = getTodayAttentionItems(state, { todayIso, backupDismissed, now }).filter(
@@ -241,10 +304,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         item.signalKind !== 'financial_commitment_due' &&
         item.signalKind !== 'financial_agreement_due' &&
         item.signalKind !== 'exam_upcoming' &&
-        item.signalKind !== 'job_deadline_upcoming'
+        item.signalKind !== 'job_deadline_upcoming' &&
+        !(item.signalKind === 'backup_urgent' && !hasRealBackupActivity)
     );
     return filtered[0] ?? null;
-  }, [state, todayIso, backupDismissed, now]);
+  }, [state, todayIso, backupDismissed, now, hasRealBackupActivity]);
 
   const dismissedAttentionItems = useMemo(
     () => getDismissedAttentionItems(state, { todayIso, backupDismissed, now }),

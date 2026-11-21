@@ -26,6 +26,7 @@ test('Trabajo vacío muestra bienvenida limpia, oculta filtros redundantes y mé
   assert.match(html, /CV enviado → Entrevista → Oferta \/ Rechazado/);
   assert.match(html, /Registrar postulación privada/);
   assert.match(html, /Registrar concurso público/);
+  assert.doesNotMatch(html, /Nueva postulación/);
   assert.doesNotMatch(html, /Lista \/ Tabla/);
   assert.doesNotMatch(html, /Filtrar por tipo de proceso/);
   assert.doesNotMatch(html, /Sin postulaciones/);

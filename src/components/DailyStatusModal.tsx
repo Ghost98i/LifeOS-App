@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { X } from 'lucide-react';
+import { Activity, X } from 'lucide-react';
 import type { LifeOSState, ViewType } from '../types';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import { PersonalContextCard } from './PersonalContextCard';
@@ -37,28 +37,33 @@ export const DailyStatusModal: React.FC<DailyStatusModalProps> = ({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-3xl bg-[var(--card)] shadow-2xl sm:rounded-3xl"
+        className="relative flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-slate-200/80 bg-white shadow-xl dark:border-white/[0.07] dark:bg-[#0D111A] dark:shadow-none sm:rounded-2xl"
       >
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)]/60 px-5 py-4 sm:px-6">
-          <div className="min-w-0">
-            <h2 id="daily-status-modal-title" className="text-base font-bold tracking-[-0.02em] text-[var(--text)]">
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5 dark:border-white/[0.06] sm:px-6">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <Activity
+              className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400"
+              strokeWidth={1.75}
+              aria-hidden="true"
+            />
+            <h2
+              id="daily-status-modal-title"
+              className="truncate text-[15px] font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100"
+            >
               Estado de hoy y evolución (7 días)
             </h2>
-            <p className="mt-0.5 text-xs text-[var(--text-soft)]">
-              Registrá sueño, energía y ánimo, o revisá tu tendencia semanal.
-            </p>
           </div>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar estado diario"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--text-soft)] transition hover:bg-[var(--surface-muted)] hover:text-[var(--text)] cursor-pointer"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 dark:text-slate-500 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 cursor-pointer"
           >
             <X className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 sm:py-5">
           <PersonalContextCard
             state={state}
             onUpdateState={onUpdateState}
@@ -66,7 +71,7 @@ export const DailyStatusModal: React.FC<DailyStatusModalProps> = ({
               onClose();
               onNavigate?.(view);
             }}
-            className="border-0 shadow-none"
+            embedded={true}
           />
         </div>
       </div>

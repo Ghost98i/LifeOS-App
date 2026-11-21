@@ -150,7 +150,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
           aria-current={currentView === 'dashboard' ? 'page' : undefined}
         >
           <span className={iconPillClass(currentView === 'dashboard')}>
-            <AppIcon name="home" className="h-[19px] w-[19px]" />
+            <AppIcon name="home" strokeWidth={1.75} className="h-[18px] w-[18px]" />
           </span>
           <span>Hoy</span>
         </button>
@@ -163,7 +163,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
             aria-current={currentView === slot2.id ? 'page' : undefined}
           >
             <span className={iconPillClass(currentView === slot2.id)}>
-              <AppIcon name={slot2.icon} className="h-[19px] w-[19px]" />
+              <AppIcon name={slot2.icon} strokeWidth={1.75} className="h-[18px] w-[18px]" />
             </span>
             <span className="truncate max-w-[68px]">{slot2.label}</span>
           </button>
@@ -176,7 +176,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
           className="relative mx-2 -mt-4 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white shadow-md active:scale-95 transition-all cursor-pointer border border-white/15"
           aria-label="Captura rápida"
         >
-          <AppIcon name="squarePlus" className="h-6 w-6 text-white" />
+          <AppIcon name="squarePlus" strokeWidth={1.75} className="h-5 w-5 text-white" />
           {inboxCount > 0 && (
             <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-amber-400 px-1 text-[10px] font-black text-slate-900 border-2 border-[var(--card)]">
               {inboxCount}
@@ -192,7 +192,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
             aria-current={currentView === slot4.id ? 'page' : undefined}
           >
             <span className={iconPillClass(currentView === slot4.id)}>
-              <AppIcon name={slot4.icon} className="h-[19px] w-[19px]" />
+              <AppIcon name={slot4.icon} strokeWidth={1.75} className="h-[18px] w-[18px]" />
             </span>
             <span className="truncate max-w-[68px]">{slot4.label}</span>
           </button>
@@ -207,7 +207,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
           aria-current={moreActive ? 'page' : undefined}
         >
           <span className={iconPillClass(moreActive)}>
-            <AppIcon name="more" className="h-[19px] w-[19px]" />
+            <AppIcon name="more" strokeWidth={1.75} className="h-[18px] w-[18px]" />
           </span>
           <span>Más</span>
         </button>

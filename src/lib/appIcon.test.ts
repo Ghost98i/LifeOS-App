@@ -3,16 +3,19 @@ import test from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AppIcon } from '../components/AppIcon';
+import { NAV_ITEMS } from '../components/Sidebar';
 
-test('Icons8 icons retain dynamic color, original proportions and requested dimensions', () => {
+test('AppIcon renders unified Lucide stroke icons with strokeWidth 1.75 and requested dimensions', () => {
   const html = renderToStaticMarkup(React.createElement(AppIcon, {
     name: 'touchpad', className: 'h-6 w-6 text-white',
   }));
-  assert.match(html, /viewBox="0 0 50 50"/);
-  assert.match(html, /fill="currentColor"/);
-  assert.match(html, /class="h-6 w-6 text-white"/);
-  assert.match(html, /<path /);
-  assert.doesNotMatch(html, /width="50px"|fill="#/);
+  assert.match(html, /viewBox="0 0 24 24"/);
+  assert.match(html, /fill="none"/);
+  assert.match(html, /stroke="currentColor"/);
+  assert.match(html, /stroke-width="1\.75"/);
+  assert.match(html, /class="[^"]*h-6 w-6 text-white[^"]*"/);
+  assert.match(html, /data-app-icon="touchpad"/);
+  assert.doesNotMatch(html, /fill="#|stroke="#/);
 });
 
 test('labelled icons are exposed and decorative icons stay hidden', () => {
@@ -27,10 +30,11 @@ test('labelled icons are exposed and decorative icons stay hidden', () => {
   assert.match(decorative, /focusable="false"/);
 });
 
-test('existing fallback icons keep their stroke rendering', () => {
-  const html = renderToStaticMarkup(React.createElement(AppIcon, { name: 'x' }));
-  assert.match(html, /viewBox="0 0 24 24"/);
-  assert.match(html, /fill="none"/);
-  assert.match(html, /stroke="currentColor"/);
-  assert.match(html, /<path /);
+test('all Sidebar NAV_ITEMS icons share unified Lucide strokeWidth 1.75 rendering', () => {
+  for (const item of NAV_ITEMS) {
+    const html = renderToStaticMarkup(React.createElement(AppIcon, { name: item.icon, className: 'h-[18px] w-[18px]' }));
+    assert.match(html, /viewBox="0 0 24 24"/, `Expected 24x24 viewBox for ${item.label}`);
+    assert.match(html, /stroke-width="1\.75"/, `Expected stroke-width 1.75 for ${item.label}`);
+    assert.match(html, /fill="none"/, `Expected stroke icon for ${item.label}`);
+  }
 });

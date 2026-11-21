@@ -441,7 +441,12 @@ export function updateGymSessionSet(
   const justCompleted = set.completed !== true && updates.completed === true;
   Object.assign(set, updates);
   if (updates.weight != null) exercise.weight = updates.weight;
-  if (justCompleted) set.completedAt = completedAt;
+  if (justCompleted) {
+    set.completedAt = completedAt;
+    if (areAllSessionSetsCompleted(session) && gym.activeTimer?.sessionId === sessionId) {
+      gym.activeTimer = null;
+    }
+  }
   if (updates.completed === false) {
     set.completedAt = null;
     if (gym.activeTimer?.sessionId === sessionId && gym.activeTimer?.setId === set.id) {
@@ -644,7 +649,7 @@ export function resolveNextRestTimer(
   now = Date.now()
 ): GymActiveTimer | null {
   const session = gym.sessions.find((s) => s.id === sessionId);
-  if (!session || session.status === 'completed') return null;
+  if (!session || session.status === 'completed' || areAllSessionSetsCompleted(session)) return null;
 
   const found = findSessionExercise(session, exerciseTarget);
   const exercise = found?.exercise;
