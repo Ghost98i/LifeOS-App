@@ -13,11 +13,8 @@
 :is(.study-refinement, .notes-refinement, .ai-refinement) .uppercase { text-transform: none; letter-spacing: normal; }
 :is(.study-refinement, .notes-refinement, .ai-refinement) :is(input, select, textarea) { min-width: 0; }
 :is(.study-refinement, .notes-refinement, .ai-refinement) :is(button, summary) { cursor: pointer; }
-:is(.study-refinement, .notes-refinement, .ai-refinement) button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-.notes-refinement [aria-pressed="true"] { border-color: var(--blue); }
-.notes-refinement :is(.bg-purple-500, .bg-blue-500) { background-color: var(--blue); }
-.notes-refinement :is(.text-purple-600, .text-blue-600) { color: var(--blue); }
-.dark :is(.study-refinement, .notes-refinement, .ai-refinement) :is(.text-\[var\(--blue\)\], .text-purple-600, .text-blue-600) { color: #A5A0FF; }
+:is(.study-refinement, .notes-refinement, .ai-refinement) button:focus-visible:not([class*="focus-visible:ring"]) { outline: 2px solid var(--blue); outline-offset: 2px; }
+.dark :is(.study-refinement, .notes-refinement, .ai-refinement) .text-\[var\(--blue\)\] { color: #A5A0FF; }
 .study-refinement :is(.bg-indigo-600, .bg-indigo-500) { background-color: var(--blue); }
 .study-refinement { font-variant-numeric: tabular-nums; }
 .study-refinement button[aria-controls="manual-study-form"] { border-color: var(--blue); color: var(--blue); background: var(--card); }

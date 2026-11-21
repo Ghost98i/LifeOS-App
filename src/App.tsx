@@ -94,12 +94,11 @@ import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 
 import { DashboardView, DashboardSkeleton } from './components/DashboardView';
-import { MobileQuickCapture, type CaptureKind } from './components/MobileQuickCapture';
+import type { CaptureKind } from './components/MobileQuickCapture';
 import { MobileNav } from './components/MobileNav';
 import { ToastViewport } from './components/ToastViewport';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
-import { GymRestOverlay } from './components/GymRestOverlay';
-import { StudyActiveOverlay } from './components/StudyActiveOverlay';
+import { syncDocumentThemeColor } from './lib/pwaRecovery';
 import { showToast } from './lib/toast';
 import { addRemoteResaleVersion, includeResaleConflictModules, loadResaleConflict, saveResaleConflict, type ResaleConflictRecord } from './lib/resaleConflictRecovery';
 import {
@@ -110,6 +109,9 @@ import {
 } from './lib/resaleConflictResolution';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
+const MobileQuickCapture = lazy(() => import('./components/MobileQuickCapture').then((module) => ({ default: module.MobileQuickCapture })));
+const GymRestOverlay = lazy(() => import('./components/GymRestOverlay').then((module) => ({ default: module.GymRestOverlay })));
+const StudyActiveOverlay = lazy(() => import('./components/StudyActiveOverlay').then((module) => ({ default: module.StudyActiveOverlay })));
 const AgendaView = lazy(() => import('./components/AgendaView').then((module) => ({ default: module.AgendaView })));
 const CalendarioView = lazy(() => import('./components/CalendarioView').then((module) => ({ default: module.CalendarioView })));
 const TrabajoView = lazy(() => import('./components/TrabajoView').then((module) => ({ default: module.TrabajoView })));
@@ -126,7 +128,13 @@ const CloudConflictModal = lazy(() => import('./components/CloudConflictModal').
 const OnboardingView = lazy(() => import('./components/OnboardingView').then(module => ({ default: module.OnboardingView })));
 const UnlockDeviceModal = lazy(() => import('./components/UnlockDeviceModal').then(module => ({ default: module.UnlockDeviceModal })));
 
-const dialogLoading = (label: string) => <div role="status" className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-4 text-sm"><span className="rounded-2xl bg-[var(--card)] p-5 text-[var(--text)]">{label}</span></div>;
+const dialogLoading = (label: string) => (
+  <div role="status" className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-4 text-sm">
+    <span className="rounded-2xl border border-slate-200/80 bg-white px-5 py-4 font-medium text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:border-white/[0.07] dark:bg-[#0D111A] dark:text-slate-100 dark:shadow-none">
+      {label}
+    </span>
+  </div>
+);
 
 export default function App() {
   const [{ state, storageBackend }, setStateObj] = useState(() => {
@@ -2120,13 +2128,15 @@ export default function App() {
     else setSyncStatus(navigator.onLine ? 'synced' : 'offline');
   };
 
-  // Sync dark mode class to html document
+  // Sync dark mode class and browser theme-color meta to html document
   useEffect(() => {
-    if (state.settings.darkMode) {
+    const isDark = Boolean(state.settings.darkMode);
+    if (isDark) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
+    syncDocumentThemeColor(isDark);
   }, [state.settings.darkMode]);
 
   useEffect(() => {
@@ -2778,14 +2788,18 @@ export default function App() {
         state={state}
       />
 
-      <MobileQuickCapture
-        state={state}
-        open={isQuickCaptureOpen}
-        initialKind={quickCaptureKind}
-        onClose={() => setIsQuickCaptureOpen(false)}
-        onUpdateState={updateState}
-        onNavigate={handleNavigate}
-      />
+      {isQuickCaptureOpen && (
+        <Suspense fallback={dialogLoading('Abriendo captura rápida…')}>
+          <MobileQuickCapture
+            state={state}
+            open={isQuickCaptureOpen}
+            initialKind={quickCaptureKind}
+            onClose={() => setIsQuickCaptureOpen(false)}
+            onUpdateState={updateState}
+            onNavigate={handleNavigate}
+          />
+        </Suspense>
+      )}
 
       {cloudConflict && !cloudConflict.modules.includes('resale') && !resaleWriteBlockedRef.current && (
         <Suspense fallback={dialogLoading('Hay un conflicto pendiente. Cargando opciones…')}><CloudConflictModal
@@ -2989,16 +3003,22 @@ export default function App() {
         onTogglePrivacy={handleTogglePrivacy}
       /></Suspense>}
       <ToastViewport />
-      {isModuleEnabled(state, 'gimnasio') && currentView !== 'gimnasio' && (
-        <GymRestOverlay state={state} onUpdateState={updateState} onOpenGym={() => handleNavigate('gimnasio')} />
+      {isGymOverlayActive && (
+        <Suspense fallback={null}>
+          <GymRestOverlay state={state} onUpdateState={updateState} onOpenGym={() => handleNavigate('gimnasio')} />
+        </Suspense>
       )}
-      <StudyActiveOverlay
-        state={state}
-        onUpdateState={updateState}
-        onOpenStudies={() => handleNavigate('estudios')}
-        currentView={currentView}
-        isCoexisting={isGymOverlayActive}
-      />
+      {isStudyOverlayActive && (
+        <Suspense fallback={null}>
+          <StudyActiveOverlay
+            state={state}
+            onUpdateState={updateState}
+            onOpenStudies={() => handleNavigate('estudios')}
+            currentView={currentView}
+            isCoexisting={isGymOverlayActive}
+          />
+        </Suspense>
+      )}
       {isCryptoUnlockOpen && (
         <Suspense fallback={dialogLoading('Preparando desbloqueo…')}>
           <UnlockDeviceModal

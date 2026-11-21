@@ -334,17 +334,19 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
           title="Proyectos"
           count={projects.length > 0 ? projects.length : null}
           action={
-            <button
-              type="button"
-              onClick={() => {
-                if (showCreateForm) resetForm();
-                else setShowCreateForm(true);
-              }}
-              className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer"
-            >
-              {showCreateForm ? <X size={15} strokeWidth={1.75} aria-hidden="true" /> : <Plus size={15} strokeWidth={1.75} aria-hidden="true" />}
-              <span>{showCreateForm ? 'Cerrar' : 'Nuevo proyecto'}</span>
-            </button>
+            (projects.length > 0 || showCreateForm) ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (showCreateForm) resetForm();
+                  else setShowCreateForm(true);
+                }}
+                className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer"
+              >
+                {showCreateForm ? <X size={15} strokeWidth={1.75} aria-hidden="true" /> : <Plus size={15} strokeWidth={1.75} aria-hidden="true" />}
+                <span>{showCreateForm ? 'Cerrar' : 'Nuevo proyecto'}</span>
+              </button>
+            ) : undefined
           }
         />
         <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">

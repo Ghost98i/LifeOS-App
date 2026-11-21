@@ -597,7 +597,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
           {activeTab === 'notas' && <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{totalActiveNotes} {totalActiveNotes === 1 ? 'nota activa' : 'notas activas'}</p>}
         </div>
         <div className="flex items-center">
-          {activeTab === 'notas' && (
+          {activeTab === 'notas' && (totalActiveNotes > 0 || showAddForm || Boolean(noteSearch.trim()) || noteFilter !== 'activas') && (
             <button type="button" onClick={() => setShowAddForm(!showAddForm)} className={primaryBtnClass}>
               {showAddForm ? <X size={16} strokeWidth={1.75} aria-hidden="true" /> : <Plus size={16} strokeWidth={1.75} aria-hidden="true" />}
               <span>{showAddForm ? 'Cerrar' : 'Nueva nota'}</span>
@@ -607,20 +607,20 @@ export const NotasView: React.FC<NotasViewProps> = ({
       </div>
 
       <nav aria-label="Secciones de Notas" className="flex gap-1 border-b border-slate-200/80 dark:border-white/[0.08]">
-        <button type="button" onClick={() => setActiveTab('notas')} aria-current={!inTools ? 'page' : undefined} className={`min-h-11 border-b-2 px-4 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#4F46E5] cursor-pointer ${!inTools ? 'border-[#4F46E5] text-slate-900 dark:text-slate-100' : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'}`}>Mis notas</button>
-        <button type="button" onClick={() => setActiveTab('proyectos')} aria-current={inTools ? 'page' : undefined} className={`min-h-11 border-b-2 px-4 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#4F46E5] cursor-pointer ${inTools ? 'border-[#4F46E5] text-slate-900 dark:text-slate-100' : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'}`}>Herramientas<span className="hidden sm:inline font-normal ml-2 text-slate-400 dark:text-slate-500">Proyectos, listas y enlaces</span></button>
+        <button type="button" onClick={() => setActiveTab('notas')} aria-current={!inTools ? 'page' : undefined} className={`min-h-11 border-b-2 px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/50 cursor-pointer ${!inTools ? 'border-[#4F46E5] text-slate-900 dark:text-slate-100' : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'}`}>Mis notas</button>
+        <button type="button" onClick={() => setActiveTab('proyectos')} aria-current={inTools ? 'page' : undefined} className={`min-h-11 border-b-2 px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/50 cursor-pointer ${inTools ? 'border-[#4F46E5] text-slate-900 dark:text-slate-100' : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'}`}>Herramientas<span className="hidden sm:inline font-normal ml-2 text-slate-400 dark:text-slate-500">Proyectos, listas y enlaces</span></button>
       </nav>
 
       {inTools && toolMessage && <p role="status" className="text-sm font-medium text-slate-700 dark:text-slate-300">{toolMessage}</p>}
       {inTools && (
-        <nav aria-label="Herramientas personales" className="flex items-center gap-1.5 overflow-x-auto pb-1">
+        <nav aria-label="Herramientas personales" className="flex items-center gap-1.5 overflow-x-auto p-0.5 pb-1">
           {([['proyectos', 'Proyectos y objetivos'], ['streaming', 'Streaming y contenido'], ['cosas', 'Objetos y regalos'], ['compras', 'Lista de compras'], ['links', 'Enlaces']] as const).map(([section, label]) => (
             <button
               key={section}
               type="button"
               aria-current={activeTab === section ? 'page' : undefined}
               onClick={() => setActiveTab(section)}
-              className={`min-h-10 shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-sm font-semibold transition-colors cursor-pointer ${
+              className={`min-h-10 shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/50 cursor-pointer ${
                 activeTab === section
                   ? 'border-[#4F46E5] bg-[#4F46E5]/10 text-[#4F46E5] dark:border-indigo-400 dark:bg-indigo-500/15 dark:text-indigo-300'
                   : 'border-slate-200/80 text-slate-600 hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-400 dark:hover:bg-white/[0.04]'
@@ -635,30 +635,30 @@ export const NotasView: React.FC<NotasViewProps> = ({
       {/* Tab: Proyectos & Metas */}
       {activeTab === 'proyectos' && (
         <div className="space-y-5">
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1" role="group" aria-label="Tipo de seguimiento">
+          <div className="flex items-center gap-1.5 overflow-x-auto p-0.5 pb-1" role="group" aria-label="Tipo de seguimiento">
             <button
               type="button"
               aria-pressed={projectView === 'projects'}
               onClick={() => setProjectView('projects')}
-              className={`min-h-10 shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-sm font-medium transition-colors cursor-pointer ${
+              className={`min-h-10 shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/50 cursor-pointer ${
                 projectView === 'projects'
                   ? 'border-[#4F46E5] bg-[#4F46E5]/10 text-[#4F46E5] dark:border-indigo-400 dark:text-indigo-300'
                   : 'border-slate-200/80 text-slate-600 dark:border-white/[0.08] dark:text-slate-400'
               }`}
             >
-              Proyectos · tareas y próximo paso
+              Proyectos<span className="hidden sm:inline"> · tareas y próximo paso</span>
             </button>
             <button
               type="button"
               aria-pressed={projectView === 'goals'}
               onClick={() => setProjectView('goals')}
-              className={`min-h-10 shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-sm font-medium transition-colors cursor-pointer ${
+              className={`min-h-10 shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/50 cursor-pointer ${
                 projectView === 'goals'
                   ? 'border-[#4F46E5] bg-[#4F46E5]/10 text-[#4F46E5] dark:border-indigo-400 dark:text-indigo-300'
                   : 'border-slate-200/80 text-slate-600 dark:border-white/[0.08] dark:text-slate-400'
               }`}
             >
-              Objetivos · avance numérico
+              Objetivos<span className="hidden sm:inline"> · avance numérico</span>
             </button>
           </div>
 

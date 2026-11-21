@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useState } from 'react';
 import type { LifeOSState, ViewType } from '../types';
 import { isWeeklyReviewDue, weeklyReviewExceptions } from '../lib/review';
 import { todayISO } from '../lib/storage';
 import { AppIcon } from './AppIcon';
 import { playSound } from '../lib/audio';
-import { GuidedWeeklyReviewModal } from './GuidedWeeklyReviewModal';
+
+const GuidedWeeklyReviewModal = lazy(() =>
+  import('./GuidedWeeklyReviewModal').then((module) => ({ default: module.GuidedWeeklyReviewModal }))
+);
 
 interface WeeklyReviewCardProps {
   state: LifeOSState;
@@ -63,13 +66,17 @@ export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ state, onUpd
         </div>
       </section>
 
-      <GuidedWeeklyReviewModal
-        state={state}
-        open={isGuidedReviewOpen}
-        onClose={() => setIsGuidedReviewOpen(false)}
-        onUpdateState={onUpdateState}
-        onNavigate={onNavigate}
-      />
+      {isGuidedReviewOpen && (
+        <Suspense fallback={null}>
+          <GuidedWeeklyReviewModal
+            state={state}
+            open={isGuidedReviewOpen}
+            onClose={() => setIsGuidedReviewOpen(false)}
+            onUpdateState={onUpdateState}
+            onNavigate={onNavigate}
+          />
+        </Suspense>
+      )}
     </>
   );
 };

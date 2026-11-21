@@ -1,19 +1,47 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 import { AppIcon } from './AppIcon';
 
+const SW_UPDATE_THROTTLE_MS = 10 * 60 * 1000;
+
 export const PwaUpdatePrompt: React.FC = () => {
+  const swRegistrationRef = useRef<ServiceWorkerRegistration | null>(null);
+  const lastUpdateCheckRef = useRef<number>(0);
+
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     offlineReady: [offlineReady, setOfflineReady],
     updateServiceWorker: updateSW,
   } = useRegisterSW({
+    onRegisteredSW(_swUrl, registration) {
+      if (registration) {
+        swRegistrationRef.current = registration;
+        lastUpdateCheckRef.current = Date.now();
+      }
+    },
     onNeedRefresh() {
       // Notifica disponibilidad de nueva versión en modo prompt
     },
     onOfflineReady() {
     },
   });
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      const registration = swRegistrationRef.current;
+      if (!registration) return;
+      const now = Date.now();
+      if (now - lastUpdateCheckRef.current < SW_UPDATE_THROTTLE_MS) return;
+      lastUpdateCheckRef.current = now;
+      void registration.update().catch(() => {});
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   const [alreadyAcked, setAlreadyAcked] = useState(() => {
     try {

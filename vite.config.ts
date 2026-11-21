@@ -54,9 +54,9 @@ export default defineConfig(({ mode }) => {
             workbox: {
               // Keep the actual interface available offline, including local fonts
               // and the existing gym/completion artwork. The five Cervino panoramas
-              // are large photographic scenes: they stay out of the install-time
-              // precache and are cached on demand by the runtime rule below.
-              globPatterns: ['**/*.{js,css,html,wasm,woff2,png,webp,svg,lottie,json}'],
+              // and dotLottie WASM runtime are large assets: they stay out of the
+              // install-time precache and are cached on demand by runtimeCaching below.
+              globPatterns: ['**/*.{js,css,html,woff2,png,webp,svg,lottie,json}'],
               // Digital Asset Links must never be served from a stale precache or
               // swallowed by the SPA navigation fallback.
               globIgnores: ['**/.well-known/**', '**/cervino-panorama-*.webp'],
@@ -74,6 +74,18 @@ export default defineConfig(({ mode }) => {
                     cacheName: 'lifeos-hero-scenes-v1',
                     expiration: {
                       maxEntries: 8,
+                      maxAgeSeconds: 60 * 60 * 24 * 60,
+                    },
+                    cacheableResponse: { statuses: [0, 200] },
+                  },
+                },
+                {
+                  urlPattern: /\.wasm$/i,
+                  handler: 'CacheFirst',
+                  options: {
+                    cacheName: 'lifeos-wasm-runtime-v1',
+                    expiration: {
+                      maxEntries: 4,
                       maxAgeSeconds: 60 * 60 * 24 * 60,
                     },
                     cacheableResponse: { statuses: [0, 200] },

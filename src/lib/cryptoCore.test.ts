@@ -489,7 +489,7 @@ test('Seguridad & Hosting — Validación estática de CSP y Permissions-Policy 
   const effectiveHeaders = (resource: string) => Object.fromEntries(rules
     .filter(rule => new RegExp(rule.regex).test(new URL(resource, 'https://local.invalid').pathname))
     .flatMap(rule => rule.headers.map(header => [header.key.toLowerCase(), header.value])));
-  const documents = ['/', '/index.html', '/creditos.html', '/privacidad.html', '/eliminar-cuenta.html', '/manifest.webmanifest',
+  const documents = ['/', '/index.html', '/creditos.html', '/privacidad.html', '/eliminar-cuenta.html',
     '/agenda', '/trabajo', '/reventa', '/finanzas', '/config', '/config/recuperacion',
     '/finanzas?mes=2026-10', '/ruta-profunda/inexistente'];
   for (const resource of documents) {
@@ -522,11 +522,11 @@ test('Seguridad & Hosting — Validación estática de CSP y Permissions-Policy 
     const rewrite = content.hosting.rewrites.find((rule: { regex?: string }) => typeof rule.regex === 'string' && new RegExp(rule.regex).test(resource));
     assert.equal(rewrite?.destination, '/index.html', `${resource}: conserva la entrada SPA`);
   }
-  for (const resource of ['/sw.js', '/registerSW.js']) {
+  for (const resource of ['/sw.js', '/registerSW.js', '/manifest.webmanifest']) {
     assert.equal(effectiveHeaders(resource)['cache-control'], 'no-cache', resource);
     assert.equal(effectiveHeaders(resource)['x-frame-options'], 'DENY', resource);
   }
-  for (const resource of ['/assets/app.hash.js', '/assets/nested/app.hash.css']) {
+  for (const resource of ['/assets/app.hash.js', '/assets/nested/app.hash.css', '/workbox-35e397ac.js']) {
     assert.equal(effectiveHeaders(resource)['cache-control'], 'public, max-age=31536000, immutable', resource);
     assert.ok(effectiveHeaders(resource)['content-security-policy'], resource);
   }

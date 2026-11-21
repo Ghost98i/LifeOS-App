@@ -27,7 +27,8 @@ test('notes retain progressive rendering and historical data while tools get pee
   const state = defaultState(); const original = structuredClone(state);
   const html = renderToStaticMarkup(React.createElement(NotasView, { state, onUpdateState: () => true, storageUserId: null, onOpenGym: () => {}, initialTab: 'proyectos' }));
   assert.match(html, /aria-label="Herramientas personales"/);
-  for (const label of ['Streaming y contenido', 'Objetos y regalos', 'Lista de compras', 'Enlaces', 'Objetivos · avance numérico']) assert.ok(html.includes(label));
+  const plainText = html.replace(/<[^>]+>/g, '');
+  for (const label of ['Streaming y contenido', 'Objetos y regalos', 'Lista de compras', 'Enlaces', 'Objetivos · avance numérico']) assert.ok(plainText.includes(label));
   assert.doesNotMatch(html, /Metas Cuantificables/);
   assert.deepEqual(state, original);
 });
