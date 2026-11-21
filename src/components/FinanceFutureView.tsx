@@ -171,9 +171,6 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                 {statusBadge.label}
               </span>
             </div>
-            <p className="text-xs text-[var(--finance-text-muted)] mt-0.5">
-              Saldo estimado con cobros y pagos previstos
-            </p>
           </div>
 
           {/* Selectors: Currency (if multiple) & Horizon (30d default) */}

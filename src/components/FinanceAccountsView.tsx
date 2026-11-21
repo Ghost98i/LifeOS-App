@@ -171,9 +171,6 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                 {accounts.length}
               </span>
             </div>
-            <p className="text-xs text-[var(--finance-text-muted)] mt-0.5">
-              Cuentas bancarias, billeteras y efectivo
-            </p>
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">

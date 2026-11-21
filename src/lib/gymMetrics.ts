@@ -776,7 +776,7 @@ export function detectSessionPRs(
           exerciseName,
           type: 'maxE1RM',
           typeLabel: '1RM Estimado',
-          label: `~${sessionMaxE1RM} kg (${sessionMaxE1RMWeight}k × ${sessionMaxE1RMReps})`,
+          label: `~${sessionMaxE1RM} kg (${sessionMaxE1RMWeight} kg × ${sessionMaxE1RMReps})`,
           value: sessionMaxE1RM,
           previousValue: prev,
           weight: sessionMaxE1RMWeight,

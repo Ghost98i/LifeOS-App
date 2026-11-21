@@ -3,7 +3,6 @@ import { calculateUnitCost, type CalculatorComponent, type CalculatorExtraCost }
 import type { StockUnit } from '../lib/commercialInventory';
 import { fmtMoney, fromCents } from '../lib/storage';
 import { PrivacyAmount } from './PrivacyAmount';
-import { ContextualHelp } from './ContextualHelp';
 import { AppIcon } from './AppIcon';
 import { SurfaceCard, SectionHeader } from './ui/SurfacePrimitives';
 
@@ -101,7 +100,7 @@ export function CommercialCostCalculator({ onClose }: { onClose: () => void }) {
       <div aria-live="polite" className="min-w-0 border-l-2 border-[#4F46E5] py-1 pl-3 dark:border-indigo-400">
         {error ? <p className="text-sm font-semibold text-rose-600 dark:text-rose-400">{error}</p> : estimate ? <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
           <div>
-            <span className="flex items-center gap-1 text-xs font-semibold text-[var(--text-soft)]">{estimate.marginCents == null ? 'Costo estimado por unidad' : 'Ganancia bruta por unidad'}{estimate.marginCents != null && <ContextualHelp label="Ganancia bruta estimada">Precio de venta menos los costos informados por unidad.</ContextualHelp>}</span>
+            <span className="flex items-center gap-1 text-xs font-semibold text-[var(--text-soft)]">{estimate.marginCents == null ? 'Costo estimado por unidad' : 'Ganancia bruta por unidad'}</span>
             <strong className={`block text-2xl font-bold tabular-nums ${estimate.marginCents != null && estimate.marginCents < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-[var(--text)]'}`}><PrivacyAmount>{fmtMoney(fromCents(estimate.marginCents ?? estimate.unitCostCents))}</PrivacyAmount></strong>
           </div>
           {estimate.marginCents != null ? <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-[var(--text-soft)]">

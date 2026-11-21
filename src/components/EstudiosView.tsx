@@ -1223,9 +1223,6 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                   {scopedSubjects.length}
                 </span>
               </h2>
-              <p className="text-xs text-[var(--text-soft)] mt-0.5">
-                Cursos y áreas de estudio.
-              </p>
             </div>
             <div className="flex items-center gap-1.5">
               {programs.length === 0 && (
@@ -1460,9 +1457,6 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                   {displayedExams.length}
                 </span>
               </h2>
-              <p className="text-xs text-[var(--text-soft)] mt-0.5">
-                Exámenes, entregas y pruebas.
-              </p>
             </div>
             <button
               type="button"
@@ -1737,9 +1731,6 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--border)]/60 pb-3">
           <div>
             <h2 className="text-sm font-bold text-[var(--text)]">Historial de estudio</h2>
-            <p className="text-xs text-[var(--text-soft)] mt-0.5">
-              Sesiones de concentración y registros manuales.
-            </p>
           </div>
           <button
             type="button"

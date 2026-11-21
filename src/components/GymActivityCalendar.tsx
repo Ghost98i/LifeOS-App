@@ -1,7 +1,17 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Award } from 'lucide-react';
 import type { GymSession } from '../types';
 import { todayISO } from '../lib/storage';
-import { getCompletedGymSets } from '../lib/gymMetrics';
+import {
+  calcDetailedPRs,
+  calculateSessionDuration,
+  detectSessionPRs,
+  getCompletedGymSets,
+  getPerformedExerciseSets,
+  getPerformedGymVolume,
+  isEffectiveSet,
+  selectBestPerformedSet,
+} from '../lib/gymMetrics';
 import { buildGymActivityIndex, buildGymActivityMonth, gymActivityKeyboardDate, isGymActivityDate, selectGymActivityMonth, shiftGymActivityMonth } from '../lib/gymActivityCalendar';
 import { AppIcon } from './AppIcon';
 
@@ -35,7 +45,12 @@ const fullDate = (date: string) => {
   }
   return formatted;
 };
+const NUMBER_FORMATTER = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 1 });
+const MAX_VISIBLE_EXERCISES = 5;
 const nameOf = (session: GymSession) => session.weekLabel?.trim() || session.exercises?.[0]?.name?.trim() || 'Entrenamiento';
+const formatVolumeKg = (volume: number) => `${NUMBER_FORMATTER.format(volume)} kg`;
+const formatBestSet = (weight: number, reps: number) =>
+  weight > 0 ? `${NUMBER_FORMATTER.format(weight)} kg × ${reps}` : `${reps} reps`;
 
 interface GymActivityCalendarProps {
   sessions: GymSession[];
@@ -54,7 +69,42 @@ export const GymActivityCalendar: React.FC<GymActivityCalendarProps> = React.mem
   const headingId = useId();
   const selectedHeadingId = useId();
   const monthLabel = useMemo(() => MONTH_FORMATTER.format(new Date(`${month}-01T12:00:00`)), [month]);
-  const selectedSessions = index.byDate.get(selected) || [];
+  const selectedSessions = useMemo(() => index.byDate.get(selected) || [], [index.byDate, selected]);
+  const singleSessionSummary = useMemo(() => {
+    if (selectedSessions.length !== 1) return null;
+    const session = selectedSessions[0];
+    const time = session.startedAt?.match(/^([01]\d|2[0-3]):[0-5]\d$/)?.[0] ?? null;
+    const duration = calculateSessionDuration(session.startedAt, session.finishedAt, session);
+    const completedSets = getCompletedGymSets(session);
+    const effectiveSets = completedSets.filter(isEffectiveSet).length;
+    const setsCount = effectiveSets > 0 ? effectiveSets : completedSets.length;
+    const volumeKg = getPerformedGymVolume(session);
+    const performedExercises = (session.exercises || [])
+      .map((exercise) => {
+        const performed = getPerformedExerciseSets(session, exercise);
+        if (performed.length === 0) return null;
+        const effective = performed.filter(isEffectiveSet);
+        const best = selectBestPerformedSet(performed);
+        return {
+          id: exercise.id,
+          name: exercise.name?.trim() || 'Ejercicio',
+          setsCount: effective.length > 0 ? effective.length : performed.length,
+          bestLabel: best ? formatBestSet(best.weight, best.reps) : null,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null);
+    const historicalPRs = calcDetailedPRs(sessions, session.id, session.date);
+    const prCount = new Set(detectSessionPRs(session, historicalPRs).map((pr) => pr.exerciseName)).size;
+    return {
+      session,
+      time,
+      durationLabel: duration.minutes > 0 ? duration.formatted : null,
+      setsCount,
+      volumeKg,
+      performedExercises,
+      prCount,
+    };
+  }, [selectedSessions, sessions]);
   const changeMonth = (next: string) => {
     const date = selectGymActivityMonth(next, selected);
     if (date) { setMonth(next); setSelected(date); }
@@ -70,12 +120,6 @@ export const GymActivityCalendar: React.FC<GymActivityCalendarProps> = React.mem
         <h2 id={headingId}>Actividad</h2>
         <div className="gym-activity-week-row">
           <p className="gym-activity-week">Esta semana: <strong>{index.weekDays} {index.weekDays === 1 ? 'día entrenado' : 'días entrenados'}</strong></p>
-          <details className="gym-activity-help" onBlur={event => { event.currentTarget.open = false; }} onKeyDown={event => {
-            if (event.key === 'Escape') { event.preventDefault(); event.currentTarget.open = false; event.currentTarget.querySelector('summary')?.focus(); }
-          }}>
-            <summary aria-label="Ayuda: cómo se cuenta la actividad">Ayuda</summary>
-            <p>Se cuentan los días con entrenamientos finalizados. Varias sesiones en un mismo día cuentan como uno. Los descansos no suman.</p>
-          </details>
         </div>
       </div>
     </header>
@@ -114,9 +158,76 @@ export const GymActivityCalendar: React.FC<GymActivityCalendarProps> = React.mem
       <div className="gym-activity-selection" aria-labelledby={selectedHeadingId}>
         <div aria-live="polite" aria-atomic="true">
           <h3 id={selectedHeadingId}>{fullDate(selected)}</h3>
-          {selectedSessions.length > 0 && <p>{selectedSessions.length} {selectedSessions.length === 1 ? 'sesión registrada' : 'sesiones registradas'}</p>}
+          {selectedSessions.length > 1 && <p>{selectedSessions.length} sesiones registradas</p>}
         </div>
-        {selectedSessions.length ? <ul>{selectedSessions.map((session, position) => {
+        {singleSessionSummary ? (
+          <div className="gym-activity-single-card" data-activity-single-session={singleSessionSummary.session.id}>
+            <div className="gym-activity-single-header">
+              <div className="min-w-0">
+                <strong className="gym-activity-single-title">{nameOf(singleSessionSummary.session)}</strong>
+                {(singleSessionSummary.time || singleSessionSummary.durationLabel) && (
+                  <p className="gym-activity-single-meta">
+                    {[singleSessionSummary.time, singleSessionSummary.durationLabel].filter(Boolean).join(' · ')}
+                  </p>
+                )}
+              </div>
+              {singleSessionSummary.prCount > 0 && (
+                <span className="gym-activity-pr-badge">
+                  <Award size={13} strokeWidth={1.75} aria-hidden="true" />
+                  <span>{singleSessionSummary.prCount} {singleSessionSummary.prCount === 1 ? 'PR' : 'PRs'}</span>
+                </span>
+              )}
+            </div>
+
+            <dl className="gym-activity-single-metrics">
+              <div>
+                <dt>Series efectivas</dt>
+                <dd>{singleSessionSummary.setsCount}</dd>
+              </div>
+              {singleSessionSummary.volumeKg > 0 && (
+                <div>
+                  <dt>Volumen</dt>
+                  <dd>{formatVolumeKg(singleSessionSummary.volumeKg)}</dd>
+                </div>
+              )}
+              <div>
+                <dt>Ejercicios</dt>
+                <dd>{singleSessionSummary.performedExercises.length}</dd>
+              </div>
+            </dl>
+
+            {singleSessionSummary.performedExercises.length > 0 && (
+              <ul className="gym-activity-exercise-list" aria-label="Ejercicios realizados">
+                {singleSessionSummary.performedExercises.slice(0, MAX_VISIBLE_EXERCISES).map((exercise) => (
+                  <li key={exercise.id} className="gym-activity-exercise-row">
+                    <span className="gym-activity-exercise-name">{exercise.name}</span>
+                    <span className="gym-activity-exercise-detail">
+                      {exercise.setsCount} {exercise.setsCount === 1 ? 'serie' : 'series'}
+                      {exercise.bestLabel ? ` · ${exercise.bestLabel}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {singleSessionSummary.performedExercises.length > MAX_VISIBLE_EXERCISES && (
+              <p className="gym-activity-more-exercises">
+                +{singleSessionSummary.performedExercises.length - MAX_VISIBLE_EXERCISES}{' '}
+                {singleSessionSummary.performedExercises.length - MAX_VISIBLE_EXERCISES === 1 ? 'ejercicio más' : 'ejercicios más'}
+              </p>
+            )}
+
+            <button
+              type="button"
+              data-open-calendar-session={singleSessionSummary.session.id}
+              onClick={() => onOpenSession(singleSessionSummary.session.id)}
+              className="gym-activity-open-btn"
+            >
+              <span>Ver sesión completa</span>
+              <AppIcon name="chevronRight" className="h-4 w-4" />
+            </button>
+          </div>
+        ) : selectedSessions.length > 1 ? <ul className="gym-activity-multi-list">{selectedSessions.map((session, position) => {
           const time = session.startedAt?.match(/^([01]\d|2[0-3]):[0-5]\d$/)?.[0];
           const count = getCompletedGymSets(session).length;
           return <li key={`${session.id}-${position}`}><button type="button" data-open-calendar-session={session.id} onClick={() => onOpenSession(session.id)}>

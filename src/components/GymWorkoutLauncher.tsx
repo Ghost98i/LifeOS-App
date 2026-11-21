@@ -25,6 +25,7 @@ export function GymWorkoutLauncher({ plan, routines, completed, onSelect, onStar
     : plan.explicitRest ? 'Hoy tenés un descanso registrado. Podés entrenar de todos modos; se te pedirá confirmación.'
     : plan.applicable.length > 1 ? `${plan.applicable.length} rutinas asignadas para hoy.${plan.templateId === null ? ' Elegí cuál iniciar o entrená libre.' : ''}`
     : plan.applicable.length === 1 ? `${DAY_LABELS[plan.day]} · rutina de hoy`
+    : completed ? null
     : 'Sin rutina asignada para hoy.';
   const value = plan.templateId === null ? '' : plan.templateId ? `routine:${plan.templateId}` : 'free';
   const otherRoutines = routines.filter(routine => !plan.applicable.some(today => today.id === routine.id));
@@ -36,7 +37,7 @@ export function GymWorkoutLauncher({ plan, routines, completed, onSelect, onStar
       {alternative ? <p className="gym-launcher-context gym-launcher-alternative">
         <span>Rutina de hoy: {alternative.name}</span><span aria-hidden="true">·</span>
         <button type="button" className="gym-launcher-use" aria-label={`Usar rutina de hoy: ${alternative.name}`} onClick={() => { onSelect(alternative.id); choiceRef.current?.focus(); }}>Usar</button>
-      </p> : <p className={`gym-launcher-context${plan.explicitRest ? ' gym-launcher-rest' : ''}`} aria-live="polite">{context}</p>}
+      </p> : context ? <p className={`gym-launcher-context${plan.explicitRest ? ' gym-launcher-rest' : ''}`} aria-live="polite">{context}</p> : null}
       {completed && <dl className="gym-launcher-metrics">
         {completed.volumeKg > 0 && <div><dt>Volumen total</dt><dd>{completed.volumeKg.toLocaleString('es-UY')} <span>kg</span></dd></div>}
         <div><dt>Ejercicios</dt><dd>{completed.exerciseCount}</dd></div>

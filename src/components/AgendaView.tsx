@@ -14,7 +14,6 @@ import { shouldPlayCompletionMotion } from '../lib/motion';
 import { playSound } from '../lib/audio';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
-import { ContextualHelp } from './ContextualHelp';
 import { CompletionCheckMark } from './visual/CompletionCheckMark';
 import { SurfaceCard, SectionHeader, ListDivider } from './ui/SurfacePrimitives';
 import { agendaWeek, editedWeeklyBlockTime, isCurrentWeek, parseLocalDateISO, shiftWeek, validatePunctualEvent, validateWeeklyBlock, weekDates } from '../lib/agendaWeek';
@@ -1324,7 +1323,6 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             <div>
               <h2 className="text-base font-semibold text-[var(--text)] flex items-center gap-2">
                 Rutinas recurrentes
-                <ContextualHelp label="Rutinas recurrentes">El círculo marca la rutina como completada para ese día. La rutina conserva su frecuencia y vuelve a aparecer cuando corresponda.</ContextualHelp>
                 <span className="text-xs font-medium tabular-nums text-slate-400 dark:text-slate-500">
                   {(state.tasksRecurring || []).length}
                 </span>
@@ -1353,9 +1351,6 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                     title="Tus rutinas"
                     count={(state.tasksRecurring || []).length > 0 ? `${(state.tasksRecurring || []).length} total` : null}
                   />
-                  {(state.tasksRecurring || []).length > 0 && (
-                    <p className="mt-1 text-xs text-[var(--text-soft)]">Hacé clic en el círculo para registrar el completado de hoy.</p>
-                  )}
                 </div>
 
                 {(state.tasksRecurring || []).length === 0 ? (
@@ -1537,11 +1532,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   id="weekly-template-title"
                   icon={<AppIcon name="list" className="h-4 w-4" />}
                   title="Horario semanal habitual"
+                  count={weeklyBlockCount}
                   className="border-b border-slate-100 pb-3 dark:border-white/[0.06]"
                 />
-                <p className="text-xs text-[var(--text-soft)]">
-                  Tenés <strong>{weeklyBlockCount} {weeklyBlockCount === 1 ? 'actividad guardada' : 'actividades guardadas'}</strong> en tu horario recurrente semanal.
-                </p>
                 <div className="flex flex-wrap gap-2 pt-1">
                   <button type="button" onClick={(event) => openTemplateAction('load', event.currentTarget)} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-semibold text-[var(--text)] hover:border-[#4F46E5] focus-visible:outline-2 focus-visible:outline-[#4F46E5] dark:border-white/[0.08] dark:bg-transparent cursor-pointer"><AppIcon name="list" className="h-4 w-4" />Plantilla sugerida</button>
                   <button type="button" onClick={(event) => openTemplateAction('clear', event.currentTarget)} disabled={weeklyBlockCount === 0} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-rose-500/30 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-500/10 focus-visible:outline-2 focus-visible:outline-rose-500 disabled:cursor-not-allowed disabled:opacity-50 dark:text-rose-400 cursor-pointer"><AppIcon name="trash" className="h-4 w-4" />Vaciar horario recurrente</button>

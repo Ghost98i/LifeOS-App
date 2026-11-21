@@ -242,7 +242,7 @@ export const IAView: React.FC<IAViewProps> = ({ state, onUpdateState, onOpenBusi
 
   return (
     <div className="ai-refinement space-y-5 sm:space-y-6">
-      <PageHeader title="IA · Oportunidades e ideas" subtitle="Usá una IA externa para investigar y traé los resultados para revisarlos acá." />
+      <PageHeader title="IA · Oportunidades e ideas" />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <SurfaceCard className="p-4 sm:p-5 space-y-3.5" aria-label="Preparar búsqueda externa">

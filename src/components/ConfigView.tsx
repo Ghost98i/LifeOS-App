@@ -36,7 +36,6 @@ import { compareMaterializedBalanceShadow } from '../lib/financeLedger';
 import { showToast } from '../lib/toast';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
-import { ContextualHelp } from './ContextualHelp';
 import { PrivacyAmount } from './PrivacyAmount';
 import { PrivacySecuritySection } from './PrivacySecuritySection';
 import { getDismissedAttentionItems, nextAttentionDismissalTimestamp, type AttentionItem } from '../lib/todayAttention';
@@ -519,20 +518,10 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
         <div role="tabpanel" aria-label="Cuenta y Seguridad" className="grid grid-cols-1 gap-5">
           {/* Mi cuenta */}
           <SurfaceCard id="config-account" className="p-4 sm:p-5 space-y-4">
-            <div className="space-y-1">
-              <SectionHeader
-                icon={<Cloud size={16} strokeWidth={1.75} />}
-                title="Mi cuenta"
-                action={
-                  <ContextualHelp label="Sincronización con Google">
-                    Iniciar sesión y sincronizar no demuestran por sí solos que los datos estén cifrados. Consultá el estado del cifrado en Privacidad y seguridad.
-                  </ContextualHelp>
-                }
-              />
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Tu cuenta de Google y el estado de sincronización.
-              </p>
-            </div>
+            <SectionHeader
+              icon={<Cloud size={16} strokeWidth={1.75} />}
+              title="Mi cuenta"
+            />
 
             {cloudConfigured ? (
               cloudUser ? (
@@ -584,7 +573,6 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                       </button>
                     )}
                   </div>
-                  {onCloudSignOut && <p className="text-sm text-slate-500 dark:text-slate-400">Cerrar sesión detiene la sincronización en este navegador.</p>}
                 </div>
               ) : (
                 <div className="space-y-3 border-t border-slate-100 pt-3.5 dark:border-white/[0.06]">
@@ -628,14 +616,9 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               <SectionHeader
                 icon={<HardDrive size={16} strokeWidth={1.75} />}
                 title="Copias de seguridad"
-                action={
-                  <ContextualHelp label="Copias de respaldo">
-                    Las copias locales son archivos JSON descargables a tu equipo. Son independientes de la sincronización y del cifrado E2EE en la nube.
-                  </ContextualHelp>
-                }
               />
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Guardá un archivo JSON fuera de este dispositivo. Esta copia no queda cifrada por la sincronización.
+                Archivo JSON local; no queda cifrado por la sincronización.
               </p>
               {state.settings?.lastBackupAt && (
                 <p className="pt-0.5 text-xs font-medium tabular-nums text-[#4F46E5] dark:text-indigo-400">
@@ -711,12 +694,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
         <section id="config-preferences" role="tabpanel" aria-label="Preferencias" className="space-y-4">
           {/* Formulario de Perfil y Metas */}
           <SurfaceCard className="p-4 sm:p-5 space-y-4">
-            <div className="space-y-1">
-              <SectionHeader icon={<User size={16} strokeWidth={1.75} />} title="Perfil y objetivos" />
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Datos personales utilizados para estimaciones corporales y objetivos mensuales.
-              </p>
-            </div>
+            <SectionHeader icon={<User size={16} strokeWidth={1.75} />} title="Perfil y objetivos" />
             <form onSubmit={handleSaveProfile} className="space-y-4 border-t border-slate-100 pt-3.5 dark:border-white/[0.06]">
               <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
                 <div className="min-w-0">
@@ -792,7 +770,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
             <div className="space-y-1">
               <SectionHeader icon={<Sliders size={16} strokeWidth={1.75} />} title="Módulos visibles" />
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                Elegí qué módulos mostrar en la barra lateral. Ocultar un módulo no borra sus datos.
+                Ocultar un módulo no borra sus datos.
               </p>
             </div>
 
@@ -868,7 +846,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           <SurfaceCard id="config-diagnostics" className="p-4 sm:p-5 space-y-5">
             <div>
               <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                Diagnóstico de datos <span className="ml-2 text-sm font-normal text-slate-500 dark:text-slate-400">Saldos y almacenamiento</span>
+                Diagnóstico de datos
               </h2>
             </div>
 

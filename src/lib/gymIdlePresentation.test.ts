@@ -172,7 +172,7 @@ test('rutinas presenta inicio como acción principal y editor explícito', () =>
 
   assert.match(html, /data-gym-routines/);
   assert.match(html, /data-gym-routine-editor/);
-  assert.match(html, /Planes guardados · las sesiones ejecutadas están en Historial/);
+  assert.doesNotMatch(html, /Planes guardados · las sesiones ejecutadas están en Historial/);
   assert.match(html, /Ejercicios y objetivos/);
   assert.match(html, /1 series · 8 reps · 70 kg/);
   assert.match(html, />Iniciar</);

@@ -141,9 +141,9 @@ export const CommercialMoneySandbox: React.FC<{
   ];
   const moneyItems: Array<[string, number, string?]> = [
     ['Cobrado', summary.receivedCents],
-    ['Pendiente de cobro', summary.receivableCents, 'Parte de las ventas vigentes que todavía no se recibió.'],
+    ['Pendiente de cobro', summary.receivableCents],
     ['Pagado', summary.paidCents],
-    ['Compras pendientes', summary.payableCents, 'Parte de las compras que todavía no se pagó.'],
+    ['Compras pendientes', summary.payableCents],
   ];
   const visibleMoneyItems = moneyItems.filter(([name]) => name === 'Cobrado' || name === 'Pendiente de cobro' ? hasSales : hasPurchases);
   const adjustmentItems: Array<[string, number, string?]> = [
@@ -302,7 +302,7 @@ export const CommercialMoneySandbox: React.FC<{
         {(hasPurchases || hasSales || hasMoneyEvents) && <section aria-label="Estado de cobros y pagos" className="space-y-2.5">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Estado de cobros y pagos</h4>
-            <span className="text-xs text-[var(--text-soft)]">{accounts ? 'Dinero registrado y montos pendientes' : 'Dinero simulado y montos por cobrar o pagar'}</span>
+            {!accounts && <span className="text-xs text-[var(--text-soft)]">Dinero simulado y montos por cobrar o pagar</span>}
           </div>
           <div className={`grid grid-cols-2 gap-3 border-y border-slate-100 py-3 dark:border-white/[0.06] ${visibleMoneyItems.length > 2 ? 'sm:grid-cols-4' : ''}`}>
             {visibleMoneyItems.map(([name, cents, help]) => <div key={name} className="min-w-0">
@@ -312,7 +312,7 @@ export const CommercialMoneySandbox: React.FC<{
           </div>
           {hasMoneyEvents && <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 py-1 text-sm">
             <span className="inline-flex items-center gap-1 font-semibold text-[var(--text-soft)]">Flujo monetario<ContextualHelp label="Flujo monetario">Suma los cobros y resta los reembolsos y pagos registrados. No incluye el saldo inicial ni todos los movimientos de una cuenta.</ContextualHelp></span>
-            <span><b className="tabular-nums text-[var(--text)]">{money(summary.simulatedCashFlowCents)}</b><span className="ml-2 text-xs text-[var(--text-soft)]">No es un saldo de cuenta.</span></span>
+            <b className="tabular-nums text-[var(--text)]">{money(summary.simulatedCashFlowCents)}</b>
           </div>}
         </section>}
 
@@ -381,7 +381,7 @@ export const CommercialMoneySandbox: React.FC<{
         <label className="min-w-0 space-y-1 text-sm text-[var(--text-soft)]">{accounts ? 'Cuenta' : 'Cuenta simulada'}{accounts ? <select aria-label="Cuenta financiera" required disabled={Boolean(draft.reversalOf)} value={accountRef} onChange={e => setAccountRef(e.target.value)} className={field}><option value="">Seleccionar cuenta</option>{accounts.filter(a => (a.currency || 'UYU') === 'UYU').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select> : <input required disabled={Boolean(draft.reversalOf)} value={accountRef} onChange={(event) => setAccountRef(event.target.value)} placeholder="Ej.: caja de prueba" className={field} />}</label>
         {financeFields?.(Boolean(draft.reversalOf) || draft.purpose === 'customer_refund' || draft.purpose === 'supplier_refund')}
         {!accounts && !draft.reversalOf && <label className="min-w-0 space-y-1 text-sm text-[var(--text-soft)]">¿Ya lo registraste en Finanzas?<select value={mode} onChange={(event) => setMode(event.target.value as 'new' | 'existing')} className={field}><option value="new">No, queda pendiente</option><option value="existing">Sí, vincular movimiento</option></select></label>}
-        {mode === 'existing' && <label htmlFor={existingIdInput} className="min-w-0 space-y-1 text-sm text-[var(--text-soft)]">Referencia del movimiento en Finanzas<ContextualHelp label="Referencia del movimiento">Copiá el identificador del movimiento ya registrado. En esta prueba el vínculo queda pendiente de verificación; no se crea otro movimiento.</ContextualHelp><input id={existingIdInput} required value={existingId} onChange={(event) => setExistingId(event.target.value)} className={field} /></label>}
+        {mode === 'existing' && <label htmlFor={existingIdInput} className="min-w-0 space-y-1 text-sm text-[var(--text-soft)]">Referencia del movimiento en Finanzas<input id={existingIdInput} required value={existingId} onChange={(event) => setExistingId(event.target.value)} className={field} /></label>}
         {mode === 'existing' && <p className="text-xs text-amber-700 dark:text-amber-400 sm:col-span-2">Referencia solo declarada: su importe, cuenta y tipo deberán verificarse antes de una integración real. No se planifica otra transacción.</p>}
         {error && <p role="alert" className="text-sm font-semibold text-rose-600 dark:text-rose-400 sm:col-span-2">{error}</p>}
         <div className="flex flex-wrap gap-2 sm:col-span-2"><button className="min-h-10 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] cursor-pointer">{accounts ? (draft.reversalOf ? 'Confirmar reversión' : 'Guardar movimiento') : 'Confirmar simulación'}</button><button type="button" onClick={() => setDraft(null)} className="min-h-10 rounded-xl border border-slate-200/80 px-4 py-2 text-sm font-semibold text-[var(--text-soft)] hover:text-[var(--text)] dark:border-white/[0.08] cursor-pointer">Cancelar</button></div>

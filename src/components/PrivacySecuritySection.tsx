@@ -13,7 +13,6 @@ import {
   X,
 } from 'lucide-react';
 import type { LifeOSState } from '../types';
-import { ContextualHelp } from './ContextualHelp';
 import { UnlockDeviceModal } from './UnlockDeviceModal';
 import { SurfaceCard } from './ui/SurfacePrimitives';
 import { useDialogFocus } from '../hooks/useDialogFocus';
@@ -442,17 +441,9 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
   return (
     <SurfaceCard className="p-4 sm:p-5 space-y-4">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Lock size={16} strokeWidth={1.75} className="shrink-0 text-slate-400 dark:text-slate-500" aria-hidden="true" />
-            <h2 className="text-[15px] font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100">Privacidad y seguridad</h2>
-            <ContextualHelp label="Protección de extremo a extremo">
-              Cuando activás la protección, tus módulos se cifran en este navegador antes de sincronizarse. Los metadatos y las copias históricas sin cifrar tienen un alcance diferente, explicado más abajo.
-            </ContextualHelp>
-          </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            Cifrado de la sincronización y recuperación de acceso.
-          </p>
+        <div className="flex items-center gap-2">
+          <Lock size={16} strokeWidth={1.75} className="shrink-0 text-slate-400 dark:text-slate-500" aria-hidden="true" />
+          <h2 className="text-[15px] font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100">Privacidad y seguridad</h2>
         </div>
 
         {/* State Badge */}

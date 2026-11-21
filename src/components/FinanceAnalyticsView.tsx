@@ -531,9 +531,6 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
             <h3 className="text-sm font-extrabold text-[var(--finance-text-primary)]">
               Presupuesto por categoría
             </h3>
-            <p className="text-xs text-[var(--finance-text-muted)] mt-0.5">
-              Gastos y límites de {formatMonthTitle(selectedMonth)}
-            </p>
           </div>
 
           {/* Secondary Controls & View Toggles */}
@@ -951,9 +948,6 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
               <h4 className="text-xs font-bold text-[var(--finance-text-primary)]">
                 Histórico acumulado por categoría
               </h4>
-              <p className="text-[11px] text-[var(--finance-text-muted)]">
-                Todo el gasto acumulado en el libro diario
-              </p>
             </div>
             <span className="text-xs text-[var(--finance-text-muted)] font-bold">
               {showAllTimeCategories ? 'Ocultar ▴' : 'Ver detalle ▾'}

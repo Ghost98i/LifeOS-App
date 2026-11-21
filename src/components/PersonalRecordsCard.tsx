@@ -81,7 +81,7 @@ export const PersonalRecordsCard: React.FC<PersonalRecordsCardProps> = React.mem
                 </span>
               )}
               <ContextualHelp label="Qué muestra Récords Personales">
-                Un récord por cada ejercicio único que realizaste: toma tu serie efectiva con mayor peso levantado y calcula su 1RM estimado (fórmula de Epley hasta 12 repeticiones). Tocá cualquier tarjeta para abrir su ficha completa.
+                Un récord por cada ejercicio único que realizaste: toma tu serie efectiva con mayor peso levantado y calcula su 1RM estimado (fórmula de Epley hasta 12 repeticiones).
               </ContextualHelp>
             </div>
           </div>

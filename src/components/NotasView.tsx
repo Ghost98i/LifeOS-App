@@ -1482,7 +1482,6 @@ export const NotasView: React.FC<NotasViewProps> = ({
                   </button>
                 }
               />
-              <p className="text-xs text-slate-500 dark:text-slate-400">Marcá cada control y reiniciá la lista para el próximo directo.</p>
 
               {(state.streaming?.preStreamChecklist || []).length === 0 ? (
                 <p className="border-t border-slate-100 py-4 text-center text-xs text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
@@ -1533,10 +1532,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
             </SurfaceCard>
 
             <SurfaceCard className="min-w-0 p-4 sm:p-5 space-y-3.5">
-              <div>
-                <SectionHeader title="Contenido en preparación" />
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Mové cada contenido según su avance.</p>
-              </div>
+              <SectionHeader title="Contenido en preparación" />
               <form onSubmit={handleAddContent} className="flex flex-col gap-2 sm:flex-row">
                 <input
                   aria-label="Título del contenido"

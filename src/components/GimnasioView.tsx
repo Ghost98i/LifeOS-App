@@ -32,7 +32,6 @@ import { WorkoutSummaryModal } from './WorkoutSummaryModal';
 import { ExerciseHistoryModal } from './ExerciseHistoryModal';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
-import { ContextualHelp } from './ContextualHelp';
 import { GymExerciseArtwork } from './visual/GymExerciseArtwork';
 import { GymIcon } from './visual/GymIcon';
 import { PrivacyAmount, usePrivacyMode } from './PrivacyAmount';
@@ -1433,13 +1432,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                 <div className="flex flex-col gap-3 px-1 sm:flex-row sm:items-end sm:justify-between">
                   <div className="flex min-w-0 items-center gap-3">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-1">
-                        <h2 className="text-lg font-black tracking-tight text-[var(--text)]">Rutinas</h2>
-                        <ContextualHelp label="Cómo funcionan las rutinas">
-                          Acá armás tus planes semanales con ejercicios, series y cargas objetivo. Los entrenamientos realizados se guardan aparte en Historial.
-                        </ContextualHelp>
-                      </div>
-                      <p className="mt-0.5 text-xs text-[var(--text-soft)]">Planes guardados · las sesiones ejecutadas están en Historial.</p>
+                      <h2 className="text-lg font-black tracking-tight text-[var(--text)]">Rutinas</h2>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:justify-end">
@@ -2366,12 +2359,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                     <AppIcon name="activity" className="h-4.5 w-4.5" />
                   </span>
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1">
-                      <h2 className="text-sm font-bold text-[var(--text)]">Evolución por ejercicio</h2>
-                      <ContextualHelp label="Cómo se evalúa la evolución por ejercicio">
-                        Compara tus sesiones recientes de este ejercicio frente a tus registros anteriores para indicar si la marca está mejorando o estable, e integra el historial completo de carga máxima por sesión.
-                      </ContextualHelp>
-                    </div>
+                    <h2 className="text-sm font-bold text-[var(--text)]">Evolución por ejercicio</h2>
                     <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--text-soft)]">
                       <span className="font-semibold text-[var(--text)]">{activeExerciseMetric.exerciseName}</span>
                       <span>·</span>
@@ -3644,7 +3632,6 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps & { initiallyExpand
         <div className="flex items-center justify-between gap-3 rounded-xl bg-[var(--surface-muted)] px-3 py-2">
           <div>
             <p className="text-sm font-bold text-[var(--text)]">Editando sesión</p>
-            <p className="text-xs text-[var(--text-soft)]">Los cambios se guardan en el historial.</p>
           </div>
           <div className="flex items-center gap-1">
             <button
