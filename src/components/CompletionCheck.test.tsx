@@ -313,10 +313,13 @@ test('Hoy: Tu día y HÁBITOS DE HOY unifican CompletionCheck y el atenuado de c
   assert.doesNotMatch(html, /bg-indigo-600\/80/);
   assert.doesNotMatch(html, /dark:bg-indigo-500\/80/);
 
-  // CSS keyframes & prefers-reduced-motion guard exist in src/index.css
+  // CSS keyframes, Bloque 13 timings & prefers-reduced-motion guard exist in src/index.css
   const css = await readFile(new URL('../index.css', import.meta.url), 'utf8');
-  assert.match(css, /@keyframes check-pop/);
+  assert.match(css, /@keyframes check-pop[\s\S]*scale\(0\.82\)[\s\S]*scale\(1\.12\)/);
+  assert.match(css, /animation:\s*check-pop 340ms cubic-bezier\(0\.34, 1\.56, 0\.64, 1\) both/);
   assert.match(css, /@keyframes check-draw/);
-  assert.match(css, /@keyframes check-halo/);
+  assert.match(css, /animation:\s*check-draw 280ms ease-out 60ms both/);
+  assert.match(css, /@keyframes check-halo[\s\S]*opacity:\s*0\.45[\s\S]*scale\(1\.65\)/);
+  assert.match(css, /animation:\s*check-halo 440ms ease-out forwards/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.completion-check--animate/);
 });

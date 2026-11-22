@@ -450,9 +450,9 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
   }, [initialFocusId, focusNonce, pastPendingTasks, futureScheduledTasks, selectedExtra]);
 
   return (
-    <div ref={sectionRef} className={`flex h-full min-w-0 flex-col ${className || ''}`}>
+    <div ref={sectionRef} className={`flex min-w-0 flex-col ${className || ''}`}>
       {/* Main card: Tu día + Hábitos integrados abajo con divisor 1px */}
-      <SurfaceCard as="section" aria-labelledby="today-agenda-title" className="flex h-full flex-col p-5 sm:p-6">
+      <SurfaceCard as="section" aria-labelledby="today-agenda-title" className="flex flex-col p-5 sm:p-6">
         <SectionHeader
           id="today-agenda-title"
           icon={<CalendarDays className="h-4 w-4" strokeWidth={1.75} />}
@@ -472,7 +472,7 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
           className="pb-3"
         />
 
-        <div className="min-h-0 flex-1 space-y-3">
+        <div className="min-h-0 space-y-3">
           {selectedExtra && (
             <div
               id={`today-extra-${selectedExtra.id}`}

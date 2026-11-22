@@ -2291,10 +2291,10 @@ button:active {
 /* Unified CompletionCheck micro-animation (pure CSS + SVG, zero external libs) */
 @keyframes check-pop {
   0% {
-    transform: scale(0.84);
+    transform: scale(0.82);
   }
   55% {
-    transform: scale(1.08);
+    transform: scale(1.12);
   }
   100% {
     transform: scale(1);
@@ -2318,10 +2318,10 @@ button:active {
 @keyframes check-halo {
   0% {
     transform: scale(1);
-    opacity: 0.35;
+    opacity: 0.45;
   }
   100% {
-    transform: scale(1.5);
+    transform: scale(1.65);
     opacity: 0;
   }
 }
@@ -2334,7 +2334,7 @@ button:active {
 }
 
 .completion-check--animate {
-  animation: check-pop 220ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  animation: check-pop 340ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 
 .completion-check-tick {
@@ -2343,12 +2343,12 @@ button:active {
 }
 
 .completion-check-tick--animate {
-  animation: check-draw 180ms ease-out both;
+  animation: check-draw 280ms ease-out 60ms both;
 }
 
 .completion-check-halo {
   border: 2px solid #4F46E5;
-  animation: check-halo 300ms ease-out forwards;
+  animation: check-halo 440ms ease-out forwards;
 }
 
 .lifeos-task-check:has(.completion-check):hover {

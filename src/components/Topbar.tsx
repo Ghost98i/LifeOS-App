@@ -162,7 +162,8 @@ export const Topbar: React.FC<TopbarProps> = ({
   })();
 
   return (
-    <header className="sticky top-0 z-30 flex min-h-16 items-center gap-1.5 sm:gap-2 lg:gap-3 border-b border-[var(--border)] bg-[var(--topbar)] px-3 py-2.5 shadow-[var(--chrome-shadow)] backdrop-blur-xl sm:px-4 sm:py-3 lg:px-7">
+    <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--topbar)] shadow-[var(--chrome-shadow)] backdrop-blur-xl">
+      <div className="mx-auto flex min-h-16 w-full max-w-[1360px] items-center gap-1.5 px-4 py-2.5 sm:gap-2 sm:px-6 sm:py-3 lg:gap-3 lg:px-8">
       <button
         onClick={onOpenMobileNav}
         className="flex h-10 w-10 min-h-[40px] min-w-[40px] sm:h-9 sm:w-9 sm:min-h-0 sm:min-w-0 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--text)] lg:hidden cursor-pointer"
@@ -355,6 +356,7 @@ export const Topbar: React.FC<TopbarProps> = ({
             <AppIcon name={soundOn ? 'volume' : 'volumeOff'} className="h-4 w-4" />
           </button>
         </div>
+      </div>
       </div>
     </header>
   );

@@ -21,7 +21,7 @@ const SIZE_CLASSES: Record<CompletionCheckSize, { circle: string; icon: string }
   },
 };
 
-const ANIMATION_RESET_MS = 340;
+const ANIMATION_RESET_MS = 480;
 
 /**
  * Unified circular completion indicator with pure-CSS + SVG micro-animation.

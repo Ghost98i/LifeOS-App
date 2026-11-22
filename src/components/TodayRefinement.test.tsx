@@ -9,6 +9,7 @@ import { PersonalContextCard } from './PersonalContextCard';
 import { DismissedAttentionModal } from './DismissedAttentionModal';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
 import { TodayFocus } from './TodayFocus';
+import { Topbar } from './Topbar';
 
 test('Estado vacío mantiene registro y siete fechas sin montar indicadores ni gráfico vacíos', () => {
   const html = renderToStaticMarkup(<PersonalContextCard state={defaultState()} onUpdateState={() => true} />);
@@ -179,8 +180,8 @@ test('Hoy V3: renderiza hero integrado con mini sparkline, Spotlight reactivo, T
   assert.doesNotMatch(bodyAfterHero, /role="progressbar"/);
   assert.doesNotMatch(html, /Pulso de hoy/);
 
-  // Simetría de columnas (items-stretch)
-  assert.match(html, /items-stretch/);
+  // Flujo natural de columnas sin hueco estirado (items-start)
+  assert.match(html, /items-start/);
 
   // Modal de Estado/Evolución cerrado por defecto
   assert.doesNotMatch(html, /id="daily-status-modal-title"/);
@@ -353,4 +354,102 @@ test('Bloque 3: Hoy oculta el aviso de copia de seguridad cuando el workspace es
   );
   assert.match(activeHtml, /Copia de seguridad:/);
   assert.match(activeHtml, /No hay una copia de seguridad registrada/);
+});
+
+test('Bloque 13: elimina doble botón Cerrar el día, alinea Registro de hoy, protege Radar, adapta Fijadas y alinea Topbar', () => {
+  const today = todayISO();
+  const dayKey = dayKeyFromDate(new Date(`${today}T12:00:00`));
+  const tomorrowDate = new Date(`${today}T12:00:00`);
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrowIso = `${tomorrowDate.getFullYear()}-${String(tomorrowDate.getMonth() + 1).padStart(2, '0')}-${String(tomorrowDate.getDate()).padStart(2, '0')}`;
+
+  // 1) Noche con banner "Momento de cerrar el día" visible -> oculta la pastilla redundante del Hero
+  const closingState = defaultState();
+  closingState.agenda[dayKey] = [{ id: 'blk-1', time: '09:00', activity: 'Revisión matinal' }];
+  closingState.taskLog[today] = { 'blk-1': true };
+  closingState.study.subjects.push({
+    id: 'sub-arch',
+    name: 'Arquitectura de Computadoras y Sistemas Operativos Distribuidos',
+  });
+  closingState.study.exams.push({
+    id: 'ex-long',
+    title: 'Parcial Arquitectura de Computadoras y Sistemas Operativos Distribuidos',
+    subjectId: 'sub-arch',
+    date: tomorrowIso,
+    status: 'pendiente',
+  });
+  closingState.notes.postits = [
+    { id: 'n1', title: 'Única nota fijada', text: 'Contenido principal', date: today, pinned: true },
+  ];
+
+  const closingHtml = renderToStaticMarkup(
+    <DashboardView
+      state={closingState}
+      onUpdateState={() => true}
+      onNavigate={() => {}}
+      onExportJSON={() => {}}
+      onOpenQuickNote={() => {}}
+      nowOverride={new Date(`${today}T21:30:00`)}
+    />
+  );
+
+  assert.match(closingHtml, /Momento de cerrar el día/);
+  assert.equal((closingHtml.match(/>Cerrar el día</g) || []).length, 1, 'Solo debe renderizarse un botón Cerrar el día cuando el banner de cierre está visible');
+  assert.doesNotMatch(closingHtml, /aria-label="Cerrar el día"/, 'La pastilla redundante del Hero debe ocultarse');
+
+  // Registro de hoy: 4 slots derechos w-4 para alinear valores verticalmente (2 chevrons + 2 espaciadores)
+  assert.equal((closingHtml.match(/h-4 w-4 shrink-0/g) || []).length >= 4, true);
+
+  // Radar: gap-4 firme entre título truncable y badge de plazo
+  assert.match(closingHtml, /data-radar-urgency="soon"[^>]*justify-between gap-4/);
+
+  // Fijadas: gap-4 entre acciones y 1 columna limpia cuando hay exactamente 1 nota fijada
+  const pinnedSectionOne = closingHtml.split('id="today-pinned-notes-title"')[1] || '';
+  assert.match(pinnedSectionOne, /flex items-center gap-4/);
+  assert.match(pinnedSectionOne, /mt-4 grid gap-3 grid-cols-1"/);
+  assert.doesNotMatch(pinnedSectionOne, /sm:grid-cols-2/);
+
+  // 2) Más temprano en el día (sin banner de cierre) -> mantiene acceso Cerrar el día en el Hero; con 2 notas fijadas usa 2 columnas
+  const daytimeState = defaultState();
+  daytimeState.agenda[dayKey] = [{ id: 'blk-2', time: '11:00', activity: 'Bloque de mañana' }];
+  daytimeState.notes.postits = [
+    { id: 'n1', title: 'Nota 1', text: 'Texto 1', date: today, pinned: true },
+    { id: 'n2', title: 'Nota 2', text: 'Texto 2', date: today, pinned: true },
+  ];
+
+  const daytimeHtml = renderToStaticMarkup(
+    <DashboardView
+      state={daytimeState}
+      onUpdateState={() => true}
+      onNavigate={() => {}}
+      onExportJSON={() => {}}
+      onOpenQuickNote={() => {}}
+      nowOverride={new Date(`${today}T10:30:00`)}
+    />
+  );
+
+  assert.doesNotMatch(daytimeHtml, /Momento de cerrar el día/);
+  assert.match(daytimeHtml, /aria-label="Cerrar el día"/);
+  const pinnedSectionTwo = daytimeHtml.split('id="today-pinned-notes-title"')[1] || '';
+  assert.match(pinnedSectionTwo, /grid-cols-1 sm:grid-cols-2/);
+
+  // 3) Topbar alineada con max-w-[1360px] y paddings horizontales del contenido principal
+  const topbarHtml = renderToStaticMarkup(
+    <Topbar
+      currentView="dashboard"
+      state={daytimeState}
+      onOpenMobileNav={() => {}}
+      onQuickAction={() => {}}
+      onSearch={() => {}}
+      onOpenSearch={() => {}}
+      onOpenCapture={() => {}}
+      onTogglePrivacy={() => {}}
+      cloudConfigured={false}
+      cloudUser={null}
+      syncStatus="local"
+      onCloudSignIn={() => {}}
+      onCloudSignOut={() => {}}
+    />
+  );
+  assert.match(topbarHtml, /mx-auto flex min-h-16 w-full max-w-\[1360px\] items-center gap-1\.5 px-4 py-2\.5 sm:gap-2 sm:px-6 sm:py-3 lg:gap-3 lg:px-8/);
 });

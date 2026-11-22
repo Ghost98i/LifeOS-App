@@ -731,18 +731,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <AlpineDayCycleBackdrop forcePeriod={dayPeriod} compact />
 
         <div className="relative z-10 flex h-full min-h-[195px] sm:min-h-0 flex-col justify-between px-5 py-4 sm:px-8 sm:py-6">
-          {/* Top-right: acción discreta de cierre del día */}
-          <div className="flex items-center justify-end">
+          {/* Top-right: acción discreta de cierre del día (oculta si ya está visible el banner de cierre) */}
+          <div className="flex min-h-8 items-center justify-end">
             {!dayClosed ? (
-              <button
-                type="button"
-                onClick={() => onNavigate('checkout')}
-                aria-label="Cerrar el día"
-                className="inline-flex min-h-10 sm:min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/20 bg-slate-950/35 px-3.5 py-1.5 sm:px-3 sm:py-1 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/55 cursor-pointer"
-              >
-                <Moon className="h-3.5 w-3.5 text-white/80" strokeWidth={1.75} aria-hidden="true" />
-                <span>Cerrar el día</span>
-              </button>
+              spotlight.mode !== 'closing' && (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('checkout')}
+                  aria-label="Cerrar el día"
+                  className="inline-flex min-h-10 sm:min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/20 bg-slate-950/35 px-3.5 py-1.5 sm:px-3 sm:py-1 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/55 cursor-pointer"
+                >
+                  <Moon className="h-3.5 w-3.5 text-white/80" strokeWidth={1.75} aria-hidden="true" />
+                  <span>Cerrar el día</span>
+                </button>
+              )
             ) : (
               <span className="inline-flex min-h-10 sm:min-h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/15 bg-slate-950/35 px-3.5 py-1.5 sm:px-3 sm:py-1 text-xs font-medium text-white/90 backdrop-blur-md">
                 <Check className="h-3.5 w-3.5 text-white/80" strokeWidth={1.75} aria-hidden="true" />
@@ -928,8 +930,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </SurfaceCard>
       )}
 
-      {/* 4. Grilla principal de 2 columnas simétricas (items-stretch) */}
-      <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(300px,1fr)] lg:gap-6">
+      {/* 4. Grilla principal de 2 columnas con flujo natural (sin huecos estirados) */}
+      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(300px,1fr)] lg:gap-6">
         <TodayAgendaSection
           entries={agendaEntries}
           timedBlocks={agendaPartition.timedBlocks}
@@ -984,7 +986,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             title="Fijadas"
             count={pinnedNotes.length}
             action={
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4">
                 {onOpenQuickNote && (
                   <button
                     type="button"
@@ -1006,7 +1008,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             }
           />
 
-          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div
+            className={`mt-4 grid gap-3 ${
+              pinnedNotes.length === 1 ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'
+            }`}
+          >
             {pinnedNotes.map((note) => {
               const title = note.title?.trim() || note.text.trim().split('\n')[0] || 'Nota sin título';
               const excerpt = note.title?.trim() ? note.text.trim() : note.text.trim().split('\n').slice(1).join(' ').trim();

@@ -48,7 +48,7 @@ export const TodayRadarSection: React.FC<TodayRadarSectionProps> = ({
   className = '',
 }) => {
   return (
-    <aside className={`flex h-full min-w-0 flex-col gap-5 ${className}`} aria-label="Radar y registro de hoy">
+    <aside className={`flex min-w-0 flex-col gap-5 ${className}`} aria-label="Radar y registro de hoy">
       {/* 1. Radar: Próximos hitos reales */}
       <SurfaceCard as="section" aria-labelledby="today-radar-title" className="p-5 sm:p-6">
         <SectionHeader
@@ -91,27 +91,29 @@ export const TodayRadarSection: React.FC<TodayRadarSectionProps> = ({
                     onClick={() => onOpenMilestone(item)}
                     title={item.amountTooltip}
                     data-radar-urgency={item.urgency}
-                    className={`group flex w-full items-center gap-3 py-3 text-left transition cursor-pointer first:pt-1 last:pb-0 ${
+                    className={`group -mx-2 flex w-[calc(100%+1rem)] items-center justify-between gap-4 rounded-xl px-2 py-3 text-left transition cursor-pointer first:pt-1 last:pb-0 ${
                       isOverdue
-                        ? '-mx-2 rounded-xl bg-rose-500/[0.05] px-2 hover:bg-rose-500/[0.09]'
-                        : '-mx-2 rounded-xl px-2 hover:bg-slate-50/80 dark:hover:bg-white/[0.03]'
+                        ? 'bg-rose-500/[0.05] hover:bg-rose-500/[0.09]'
+                        : 'hover:bg-slate-50/80 dark:hover:bg-white/[0.03]'
                     }`}
                   >
-                    {renderModuleIcon(
-                      item.module,
-                      `h-4 w-4 shrink-0 ${
-                        isOverdue
-                          ? 'text-rose-500 dark:text-rose-400'
-                          : 'text-slate-400 dark:text-slate-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400'
-                      }`
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-slate-900 group-hover:text-indigo-600 dark:text-slate-100 dark:group-hover:text-indigo-400">
-                        {item.title}
-                      </p>
-                      <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-                        {item.moduleLabel} · {item.detail}
-                      </p>
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      {renderModuleIcon(
+                        item.module,
+                        `h-4 w-4 shrink-0 ${
+                          isOverdue
+                            ? 'text-rose-500 dark:text-rose-400'
+                            : 'text-slate-400 dark:text-slate-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-400'
+                        }`
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-slate-900 group-hover:text-indigo-600 dark:text-slate-100 dark:group-hover:text-indigo-400">
+                          {item.title}
+                        </p>
+                        <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                          {item.moduleLabel} · {item.detail}
+                        </p>
+                      </div>
                     </div>
                     <span
                       className={`shrink-0 whitespace-nowrap text-xs font-semibold tabular-nums ${
@@ -132,8 +134,8 @@ export const TodayRadarSection: React.FC<TodayRadarSectionProps> = ({
         </div>
       </SurfaceCard>
 
-      {/* 2. Registro de hoy — flex-1 para simetría exacta con la columna izquierda + acceso discreto a Historial */}
-      <SurfaceCard as="section" aria-labelledby="today-record-title" className="flex flex-1 flex-col p-5 sm:p-6">
+      {/* 2. Registro de hoy — acceso discreto a Historial y valores alineados en columna */}
+      <SurfaceCard as="section" aria-labelledby="today-record-title" className="flex flex-col p-5 sm:p-6">
         <SectionHeader
           id="today-record-title"
           icon={<Activity className="h-4 w-4" strokeWidth={1.75} />}
@@ -170,7 +172,9 @@ export const TodayRadarSection: React.FC<TodayRadarSectionProps> = ({
                   </span>
                 )}
                 <span>{pulse.studyMinutesToday > 0 ? pulse.studyFormatted : 'Sin sesiones'}</span>
-                <ChevronRight className="h-3.5 w-3.5 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-indigo-500 dark:text-slate-600" strokeWidth={1.75} aria-hidden="true" />
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden="true">
+                  <ChevronRight className="h-3.5 w-3.5 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-indigo-500 dark:text-slate-600" strokeWidth={1.75} />
+                </span>
               </span>
             </button>
           )}
@@ -197,7 +201,9 @@ export const TodayRadarSection: React.FC<TodayRadarSectionProps> = ({
                 >
                   {pulse.gymLabel}
                 </span>
-                <ChevronRight className="h-3.5 w-3.5 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-indigo-500 dark:text-slate-600" strokeWidth={1.75} aria-hidden="true" />
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden="true">
+                  <ChevronRight className="h-3.5 w-3.5 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-indigo-500 dark:text-slate-600" strokeWidth={1.75} />
+                </span>
               </span>
             </button>
           )}
@@ -207,8 +213,9 @@ export const TodayRadarSection: React.FC<TodayRadarSectionProps> = ({
               <CheckCircle2 className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" strokeWidth={1.75} aria-hidden="true" />
               <span className="truncate">Bloques completados</span>
             </span>
-            <span className="shrink-0 text-xs font-semibold tabular-nums text-slate-900 dark:text-slate-100 whitespace-nowrap">
-              {formatCompletedCount(pulse.blocksCompleted)}
+            <span className="flex shrink-0 items-center gap-1.5 text-xs font-semibold tabular-nums text-slate-900 dark:text-slate-100 whitespace-nowrap">
+              <span>{formatCompletedCount(pulse.blocksCompleted)}</span>
+              <span className="h-4 w-4 shrink-0" aria-hidden="true" />
             </span>
           </div>
 
@@ -217,8 +224,9 @@ export const TodayRadarSection: React.FC<TodayRadarSectionProps> = ({
               <Repeat className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" strokeWidth={1.75} aria-hidden="true" />
               <span className="truncate">Hábitos</span>
             </span>
-            <span className="shrink-0 text-xs font-semibold tabular-nums text-slate-900 dark:text-slate-100 whitespace-nowrap">
-              {formatCompletedCount(pulse.habitsCompleted)}
+            <span className="flex shrink-0 items-center gap-1.5 text-xs font-semibold tabular-nums text-slate-900 dark:text-slate-100 whitespace-nowrap">
+              <span>{formatCompletedCount(pulse.habitsCompleted)}</span>
+              <span className="h-4 w-4 shrink-0" aria-hidden="true" />
             </span>
           </div>
         </ListDivider>
