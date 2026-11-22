@@ -3,7 +3,6 @@ import {
   ArrowRight,
   Briefcase,
   CalendarDays,
-  Check,
   ChevronDown,
   ChevronUp,
   Clock,
@@ -21,7 +20,7 @@ import type { TodayAgendaEntry } from '../lib/todayOverview';
 import { formatMinutesUntil, type TodayControlBlock } from '../lib/todayControlCenter';
 import type { TodayExtra } from '../types';
 import { fmtDate, todayISO } from '../lib/storage';
-import { CompletionCheckMark, prewarmCompletionCheckAsset } from './visual/CompletionCheckMark';
+import { CompletionCheck } from './ui/CompletionCheck';
 import { focusTargetElement } from '../lib/navigationFocus';
 import { ListDivider, SectionHeader, SurfaceCard } from './ui/SurfacePrimitives';
 
@@ -76,7 +75,6 @@ const AgendaBlockRow: React.FC<{
   onToggleSkipToday?: (entry: TodayAgendaEntry) => void;
   onMoveToTomorrow?: (entry: TodayAgendaEntry) => void;
   onRemoveFromToday?: (entry: TodayAgendaEntry) => void;
-  completionMotion?: { taskId: string; nonce: number } | null;
 }> = ({
   block,
   isNextUpcoming,
@@ -88,15 +86,14 @@ const AgendaBlockRow: React.FC<{
   onToggleSkipToday,
   onMoveToTomorrow,
   onRemoveFromToday,
-  completionMotion,
 }) => {
   const { entry, temporalStatus, gymFusion, minutesUntil, skipped } = block;
-  const animateCompletion = Boolean(entry.done && completionMotion?.taskId === entry.key);
   const rowId = entry.todayItem?.kind === 'toggle-extra-today' ? `today-extra-${entry.id}` : undefined;
   const isSkipped = Boolean(skipped);
   const isCurrent = temporalStatus === 'current' && !entry.done && !isSkipped;
   const isPast = temporalStatus === 'past' && !entry.done && !isSkipped;
   const isMuted = entry.done || isSkipped;
+  const mutedMetaClass = isMuted ? 'opacity-70 transition-opacity group-hover/row:opacity-95' : '';
 
   const canMoveTomorrow = Boolean(onMoveToTomorrow && (entry.source === 'extra' || entry.source === 'priority'));
   const canRemoveToday = Boolean(
@@ -167,16 +164,14 @@ const AgendaBlockRow: React.FC<{
       id={rowId}
       data-temporal-status={isSkipped ? 'skipped' : temporalStatus}
       data-skipped={isSkipped ? 'true' : 'false'}
-      className={`today-agenda-entry group relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-3.5 transition-colors sm:grid-cols-[3.75rem_auto_minmax(0,1fr)_auto] ${
+      className={`today-agenda-entry group/row relative grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-3.5 transition-colors sm:grid-cols-[3.75rem_auto_minmax(0,1fr)_auto] ${
         isCurrent
           ? '-mx-2 rounded-xl bg-indigo-50/70 px-2 dark:bg-indigo-500/[0.08]'
-          : isMuted
-            ? 'opacity-70 hover:opacity-95'
-            : ''
+          : ''
       }`}
     >
       {/* Time column (desktop) */}
-      <div className="hidden items-center sm:flex">
+      <div className={`hidden items-center sm:flex ${mutedMetaClass}`}>
         <span
           className={`text-[13px] font-medium tabular-nums ${
             isCurrent
@@ -195,19 +190,14 @@ const AgendaBlockRow: React.FC<{
           onClick={() => onToggle(entry)}
           aria-label={entry.done ? `Marcar como pendiente: ${entry.label}` : `Completar: ${entry.label}`}
           aria-pressed={entry.done}
-          className={`lifeos-task-check relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 cursor-pointer ${
+          className={`lifeos-task-check group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 cursor-pointer ${
             entry.done ? 'is-completed' : 'is-pending'
           }`}
         >
-          <CompletionCheckMark
-            completed={entry.done}
-            animate={animateCompletion}
-            nonce={completionMotion?.nonce || 0}
-            size={22}
-          />
+          <CompletionCheck checked={entry.done} size="md" />
         </button>
       ) : (
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center" title="Evento informativo">
+        <span className={`flex h-10 w-10 shrink-0 items-center justify-center ${mutedMetaClass}`} title="Evento informativo">
           {renderEntryIcon(entry)}
         </span>
       )}
@@ -216,7 +206,7 @@ const AgendaBlockRow: React.FC<{
       <button
         type="button"
         onClick={() => onOpenEntry(entry)}
-        className="min-w-0 text-left cursor-pointer"
+        className={`min-w-0 text-left cursor-pointer ${mutedMetaClass}`}
       >
         <span
           className={`block text-[14px] leading-snug break-words ${
@@ -266,7 +256,7 @@ const AgendaBlockRow: React.FC<{
       <div className="relative flex shrink-0 items-center gap-1.5">
         {statusDisplay && (
           <span
-            className={`inline-flex items-center gap-1.5 whitespace-nowrap text-xs tabular-nums ${statusDisplay.className}`}
+            className={`inline-flex items-center gap-1.5 whitespace-nowrap text-xs tabular-nums ${statusDisplay.className} ${mutedMetaClass}`}
           >
             {statusDisplay.dot && (
               <span className="h-1.5 w-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400" aria-hidden="true" />
@@ -287,7 +277,7 @@ const AgendaBlockRow: React.FC<{
           className={`flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 focus-visible:opacity-100 dark:text-slate-500 dark:hover:bg-white/[0.06] dark:hover:text-slate-200 cursor-pointer ${
             menuOpen
               ? 'opacity-100 bg-slate-100 text-slate-700 dark:bg-white/[0.06] dark:text-slate-200'
-              : 'opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100'
+              : 'opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100 sm:group-focus-within/row:opacity-100'
           }`}
         >
           <MoreHorizontal className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
@@ -387,7 +377,6 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
   initialFocusId,
   focusNonce,
   openLabel = 'Abrir Agenda',
-  completionMotion,
   className,
   todayIso,
 }) => {
@@ -428,16 +417,6 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
 
   const totalMainItems = resolvedTimed.length + resolvedUntimed.length;
   const completedHabitsCount = resolvedHabits.filter((h) => h.done).length;
-
-  useEffect(() => {
-    if (
-      entries.some((entry) => entry.completable) ||
-      pastPendingTasks.length > 0 ||
-      futureScheduledTasks.length > 0
-    ) {
-      prewarmCompletionCheckAsset();
-    }
-  }, [entries, pastPendingTasks, futureScheduledTasks]);
 
   useEffect(() => {
     if (!openMenuKey) return;
@@ -548,10 +527,10 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
                         <button
                           type="button"
                           onClick={() => onToggleExtra?.(task.id)}
-                          className="lifeos-task-check relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full is-pending cursor-pointer"
+                          className="lifeos-task-check group relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full is-pending cursor-pointer"
                           aria-label={`Completar: ${task.text}`}
                         >
-                          <CompletionCheckMark completed={false} size={20} />
+                          <CompletionCheck checked={Boolean(task.done)} size="md" />
                         </button>
                         <div className="min-w-0">
                           <p className="text-xs font-medium text-slate-900 dark:text-slate-100 break-words">{task.text}</p>
@@ -647,7 +626,6 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
                       onToggleSkipToday={onToggleSkipToday}
                       onMoveToTomorrow={onMoveToTomorrow}
                       onRemoveFromToday={onRemoveFromToday}
-                      completionMotion={completionMotion}
                     />
                   ))}
                 </ListDivider>
@@ -673,7 +651,6 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
                         onToggleSkipToday={onToggleSkipToday}
                         onMoveToTomorrow={onMoveToTomorrow}
                         onRemoveFromToday={onRemoveFromToday}
-                        completionMotion={completionMotion}
                       />
                     ))}
                   </ListDivider>
@@ -709,10 +686,10 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
                       <button
                         type="button"
                         onClick={() => onToggleExtra?.(task.id)}
-                        className="lifeos-task-check relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full is-pending cursor-pointer"
+                        className="lifeos-task-check group relative flex h-5 w-5 shrink-0 items-center justify-center rounded-full is-pending cursor-pointer"
                         aria-label={`Completar: ${task.text}`}
                       >
-                        <CompletionCheckMark completed={false} size={20} />
+                        <CompletionCheck checked={Boolean(task.done)} size="md" />
                       </button>
                       <div className="min-w-0">
                         <p className="text-xs font-medium text-slate-900 dark:text-slate-100 break-words">{task.text}</p>
@@ -766,21 +743,13 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
                   type="button"
                   onClick={() => onToggle(habit)}
                   aria-pressed={habit.done}
-                  className={`inline-flex min-h-9 items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition cursor-pointer ${
+                  className={`group inline-flex min-h-9 items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition cursor-pointer ${
                     habit.done
                       ? 'border-slate-200/70 bg-slate-50 text-slate-500 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-slate-400'
                       : 'border-slate-200/90 bg-white text-slate-800 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/[0.09] dark:bg-white/[0.02] dark:text-slate-200 dark:hover:border-indigo-500/40 dark:hover:text-indigo-400'
                   }`}
                 >
-                  <span
-                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition ${
-                      habit.done
-                        ? 'bg-indigo-600/80 text-white dark:bg-indigo-500/80'
-                        : 'border border-slate-300 dark:border-slate-600'
-                    }`}
-                  >
-                    {habit.done && <Check className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden="true" />}
-                  </span>
+                  <CompletionCheck checked={habit.done} size="sm" />
                   <span className={habit.done ? 'line-through' : ''}>{habit.label}</span>
                 </button>
               ))}
