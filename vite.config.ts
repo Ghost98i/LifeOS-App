@@ -27,7 +27,7 @@ export default defineConfig(({ mode }) => {
             disable: portable,
             registerType: 'prompt',
             injectRegister: false,
-            includeAssets: ['lifeos-icon-16.png', 'lifeos-icon-32.png', 'lifeos-icon-180.png', 'lifeos-icon-192.png', 'lifeos-icon-512.png', 'icon-512-maskable.png'],
+            includeAssets: ['favicon.svg', 'lifeos-icon-16.png', 'lifeos-icon-32.png', 'lifeos-icon-180.png', 'lifeos-icon-192.png', 'lifeos-icon-512.png', 'icon-512-maskable.png'],
             manifest: {
               id: '/',
               name: 'Celestian LifeOS',

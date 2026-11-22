@@ -1,3 +1,5 @@
+export { CelestianMark } from './CelestianMark';
+export type { CelestianMarkProps } from './CelestianMark';
 export { TodayAtmosphereBackdrop } from './TodayAtmosphereBackdrop';
 export { AlpineDayCycleBackdrop } from './AlpineDayCycleBackdrop';
 export { FocusAtmosphere } from './FocusAtmosphere';

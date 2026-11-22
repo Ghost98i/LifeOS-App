@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { ViewType, LifeOSState } from '../types';
-import lifeOSIcon from '../assets/lifeos-icon.png';
+import { CelestianMark } from './visual/CelestianMark';
 import { AppIcon, type AppIconName } from './AppIcon';
 import { isModuleEnabled } from '../lib/moduleVisibility';
 
@@ -89,14 +89,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         <div className="flex items-center justify-between px-2 pb-5 pt-1">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="relative p-0.5 rounded-xl bg-gradient-to-tr from-indigo-500/30 via-blue-500/20 to-transparent shrink-0 shadow-2xs">
-              <img src={lifeOSIcon} alt="" className="h-7 w-7 rounded-[10px] object-cover" />
-            </div>
+            <CelestianMark size={32} className="shrink-0" />
             <div className="flex flex-col min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm font-black leading-none tracking-tight text-[var(--text)] truncate">Celestian LifeOS</span>
-                <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
-              </div>
+              <span className="text-sm font-black leading-none tracking-tight text-[var(--text)] truncate">Celestian LifeOS</span>
               <span className="mt-1 text-[10px] font-semibold text-[var(--text-faint)] truncate tracking-wide">Workspace Personal</span>
             </div>
           </div>

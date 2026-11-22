@@ -22,7 +22,7 @@ import {
   ONBOARDING_MODULES,
 } from '../lib/moduleVisibility';
 import { SurfaceCard } from './ui/SurfacePrimitives';
-import lifeosIcon from '../assets/lifeos-icon.png';
+import { CelestianMark } from './visual/CelestianMark';
 import { playSound } from '../lib/audio';
 
 const MODULE_ICONS: Partial<Record<ViewType, LucideIcon>> = {
@@ -124,11 +124,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({
         {/* Header */}
         <header className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <img
-              src={lifeosIcon}
-              alt=""
-              className="h-9 w-9 shrink-0 rounded-xl"
-            />
+            <CelestianMark size={40} className="shrink-0" />
             <div className="min-w-0">
               <span className="block text-[11px] font-semibold tracking-wider uppercase text-slate-400 dark:text-slate-500">
                 Celestian LifeOS

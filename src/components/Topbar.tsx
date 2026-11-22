@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ViewType, LifeOSState } from '../types';
 import { isSoundEnabled, setSoundEnabled, playSound } from '../lib/audio';
 import type { CloudSyncStatus, CloudUser } from '../lib/cloudSync';
-import lifeOSIcon from '../assets/lifeos-icon.png';
+import { CelestianMark } from './visual/CelestianMark';
 import { AppIcon, type AppIconName } from './AppIcon';
 import { isModuleEnabled } from '../lib/moduleVisibility';
 
@@ -187,8 +187,8 @@ export const Topbar: React.FC<TopbarProps> = ({
         </kbd>
       </button>
 
-      <div className="flex min-w-0 flex-1 items-center gap-1.5 sm:hidden">
-        <img src={lifeOSIcon} alt="" className="h-6 w-6 shrink-0 rounded-lg sm:h-7 sm:w-7" />
+      <div className="flex min-w-0 flex-1 items-center gap-2 sm:hidden">
+        <CelestianMark className="h-7 w-7 shrink-0" />
         <span className="min-w-0 truncate text-sm font-bold tracking-tight text-[var(--text)]" title={currentMeta[currentView].label}>
           {currentMeta[currentView].label}
         </span>
