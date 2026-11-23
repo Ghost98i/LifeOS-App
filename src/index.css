@@ -340,14 +340,27 @@
 }
 
 .finance-tab-active {
-  color: var(--accent);
-  background: var(--finance-surface-raised);
-  border-color: var(--finance-border);
-  box-shadow: var(--finance-shadow);
+  color: #FFFFFF;
+  background: #4F46E5;
+  border-color: #4F46E5;
+  box-shadow: 0 1px 2px rgb(79 70 229 / 0.25);
+}
+
+.finance-tab-active:hover {
+  color: #FFFFFF;
+  background: #4338CA;
 }
 
 .dark .finance-tab-active {
-  color: #F8FAFC;
+  color: #FFFFFF;
+  background: #4F46E5;
+  border-color: rgb(129 140 248 / 0.45);
+  box-shadow: 0 1px 6px rgb(79 70 229 / 0.35);
+}
+
+.dark .finance-tab-active:hover {
+  color: #FFFFFF;
+  background: #4338CA;
 }
 
 body {

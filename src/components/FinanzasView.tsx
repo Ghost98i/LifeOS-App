@@ -8,7 +8,7 @@ import {
   FinancialCommitment,
   FinancialCommitmentFrequency,
 } from '../types';
-import { playSound } from '../lib/audio';
+import { playExpenseLogged, playSound } from '../lib/audio';
 import { confirmedFinancialCurrency, formatPlannedAmount, requireFinancialCurrency } from '../lib/financeCurrencyPolicy';
 import {
   todayISO,
@@ -348,7 +348,11 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
           addTransaction(draft, input);
         }
       }) === false) return;
-      playSound('coins');
+      if (data.type === 'ingreso') {
+        playSound('success');
+      } else {
+        playExpenseLogged();
+      }
       setIsTxModalOpen(false);
       setEditingTx(null);
       showToast(editingTx ? 'Movimiento actualizado.' : `${data.type === 'ingreso' ? 'Ingreso' : 'Gasto'} guardado.`);
@@ -811,7 +815,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       });
       wasNewlyCreated = draft.finance.transactions.length > initialTxCount;
     }) === false) return false;
-    playSound('coins');
+    playExpenseLogged();
     if (wasNewlyCreated) {
       const toastMsg = state.settings?.privacyMode
         ? 'Pago registrado y compromiso actualizado.'
@@ -1040,7 +1044,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
           targetCycle,
         });
       }) === false) return;
-      playSound('coins');
+      playSound('success');
       showToast('Previsión vinculada al movimiento existente sin duplicar saldo.');
     } else {
       let wasNewlyCreated = false;
@@ -1057,7 +1061,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
           });
           wasNewlyCreated = draft.finance.transactions.length > initialTxCount;
         }) === false) return;
-        playSound('coins');
+        playSound('success');
         if (wasNewlyCreated) {
           const toastMsg = state.settings?.privacyMode
             ? 'Ingreso real registrado.'
@@ -1178,62 +1182,86 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       )}
 
       {/* 3. Segmented Navigation Bar (4 Conceptual Areas) */}
-      <div className="finance-tabs grid grid-cols-2 sm:flex items-center gap-1 rounded-2xl p-1">
+      <div
+        role="tablist"
+        aria-label="Secciones de Finanzas"
+        className="finance-tabs grid grid-cols-2 sm:flex items-center gap-1 rounded-2xl p-1"
+      >
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'movimientos'}
           onClick={() => setActiveTab('movimientos')}
-          className={`finance-tab min-h-11 sm:min-h-0 flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`finance-tab min-h-11 sm:min-h-0 flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
             activeTab === 'movimientos'
-              ? 'finance-tab-active'
+              ? 'finance-tab-active bg-[#4F46E5] text-white shadow-xs'
               : ''
           }`}
         >
-          <AppIcon name="wallet" className="h-4 w-4" />
+          <AppIcon name="wallet" className="h-4 w-4 shrink-0" />
           <span>Movimientos</span>
         </button>
 
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'cuentas'}
           onClick={() => setActiveTab('cuentas')}
-          className={`finance-tab min-h-11 sm:min-h-0 flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`finance-tab min-h-11 sm:min-h-0 flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
             activeTab === 'cuentas'
-              ? 'finance-tab-active'
+              ? 'finance-tab-active bg-[#4F46E5] text-white shadow-xs'
               : ''
           }`}
         >
-          <AppIcon name="repeat" className="h-4 w-4" />
+          <AppIcon name="repeat" className="h-4 w-4 shrink-0" />
           <span>Cuentas</span>
-          <span className="finance-surface-subtle hidden sm:inline-block rounded-full px-2 py-0.5 tabular-nums text-[10px] text-[var(--finance-text-secondary)]">
+          <span
+            className={`hidden sm:inline-block rounded-full px-2 py-0.5 tabular-nums text-[10px] ${
+              activeTab === 'cuentas'
+                ? 'bg-white/20 text-white'
+                : 'finance-surface-subtle text-[var(--finance-text-secondary)]'
+            }`}
+          >
             {state.finance.accounts.length}
           </span>
         </button>
 
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'analisis'}
           onClick={() => setActiveTab('analisis')}
-          className={`finance-tab min-h-11 sm:min-h-0 flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`finance-tab min-h-11 sm:min-h-0 flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
             activeTab === 'analisis'
-              ? 'finance-tab-active'
+              ? 'finance-tab-active bg-[#4F46E5] text-white shadow-xs'
               : ''
           }`}
         >
-          <AppIcon name="chart" className="h-4 w-4" />
+          <AppIcon name="chart" className="h-4 w-4 shrink-0" />
           <span>Análisis</span>
         </button>
 
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'proyeccion'}
           onClick={() => setActiveTab('proyeccion')}
-          className={`finance-tab min-h-11 sm:min-h-0 flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 ${
+          className={`finance-tab min-h-11 sm:min-h-0 flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
             activeTab === 'proyeccion'
-              ? 'finance-tab-active'
+              ? 'finance-tab-active bg-[#4F46E5] text-white shadow-xs'
               : ''
           }`}
         >
-          <AppIcon name="trendingUp" className="h-4 w-4" />
+          <AppIcon name="trendingUp" className="h-4 w-4 shrink-0" />
           <span>Futuro</span>
           {(state.finance.expectedIncomes?.length || 0) + (state.finance.commitments?.length || 0) + (state.finance.subscriptions?.length || 0) > 0 && (
-            <span className="finance-surface-subtle hidden sm:inline-block rounded-full px-2 py-0.5 tabular-nums text-[10px] text-[var(--finance-text-secondary)]">
+            <span
+              className={`hidden sm:inline-block rounded-full px-2 py-0.5 tabular-nums text-[10px] ${
+                activeTab === 'proyeccion'
+                  ? 'bg-white/20 text-white'
+                  : 'finance-surface-subtle text-[var(--finance-text-secondary)]'
+              }`}
+            >
               {(state.finance.expectedIncomes?.length || 0) + (state.finance.commitments?.length || 0) + (state.finance.subscriptions?.length || 0)}
             </span>
           )}

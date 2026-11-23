@@ -83,7 +83,32 @@
   box-shadow: none;
 }
 
-.finance-refinement button:focus-visible {
+.finance-refinement button:focus-visible:not([class*="focus-visible:ring"]) {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
+}
+
+/* Clean fintech amount inputs: single indigo focus treatment without double browser outline or spinners */
+.finance-amount-input {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.finance-amount-input::-webkit-inner-spin-button,
+.finance-amount-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.finance-amount-input:focus,
+.finance-amount-input:focus-visible {
+  outline: none !important;
+  border-color: #4F46E5;
+  box-shadow: 0 0 0 3px rgb(79 70 229 / 0.18);
+}
+
+.dark .finance-amount-input:focus,
+.dark .finance-amount-input:focus-visible {
+  border-color: #818CF8;
+  box-shadow: 0 0 0 3px rgb(99 102 241 / 0.24);
 }

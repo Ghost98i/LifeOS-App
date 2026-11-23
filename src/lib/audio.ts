@@ -67,7 +67,7 @@ export function setSoundEnabled(enabled: boolean): void {
   }
 }
 
-export type SoundType = 'success' | 'coins' | 'beep' | 'night' | 'click' | 'restComplete';
+export type SoundType = 'success' | 'coins' | 'beep' | 'night' | 'click' | 'restComplete' | 'financeTap';
 
 export function playSound(type: SoundType): void {
   if (!isSoundEnabled()) return;
@@ -173,6 +173,27 @@ export function playSound(type: SoundType): void {
         oscS.stop(t0 + n.dur + 0.02);
         oscT.stop(t0 + n.dur + 0.02);
       });
+    } else if (type === 'financeTap') {
+      // Minimal, sober tactile pulse for confirming saved expenses & transfers:
+      // Smooth sine 440 Hz -> 392 Hz, peak gain 0.14, ~55 ms decay through master compressor chain.
+      const fxOut = getFxOutputNode(ctx);
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const dur = 0.055;
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.exponentialRampToValueAtTime(392, now + dur);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(0.14, now + 0.004);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+      osc.connect(gain);
+      gain.connect(fxOut);
+
+      osc.start(now);
+      osc.stop(now + dur + 0.015);
     } else if (type === 'coins') {
       // Metallic coins sound
       const freqs = [987.77, 1318.51, 1567.98];
@@ -222,6 +243,10 @@ export function playSound(type: SoundType): void {
   } catch (err) {
     console.error('Error playing sound:', err);
   }
+}
+
+export function playExpenseLogged(): void {
+  playSound('financeTap');
 }
 
 export function playTimerCountdownTone(secondsLeft: number): void {

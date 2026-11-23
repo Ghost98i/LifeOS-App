@@ -3,7 +3,7 @@ import { useDialogFocus } from '../hooks/useDialogFocus';
 import type { LifeOSState } from '../types';
 import { addTransfer, deleteTransfer } from '../lib/financeFlows';
 import { fmtDate, formatMoney, parseDecimalInput, todayISO } from '../lib/storage';
-import { playSound } from '../lib/audio';
+import { playExpenseLogged } from '../lib/audio';
 import { showToast } from '../lib/toast';
 import { AppIcon } from './AppIcon';
 import { PrivateFinancialText, PrivacyInput, PrivacyAmount } from './PrivacyAmount';
@@ -15,6 +15,9 @@ interface FinanceTransferModalProps {
   onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
   preselectedFromId?: string;
 }
+
+const CLEAN_FOCUS_RING =
+  'outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
 
 export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
   open,
@@ -35,9 +38,10 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
 
   useEffect(() => {
     if (open) {
-      const initialFrom = preselectedFromId && accounts.some((a) => a.id === preselectedFromId)
-        ? preselectedFromId
-        : accounts[0]?.id || '';
+      const initialFrom =
+        preselectedFromId && accounts.some((a) => a.id === preselectedFromId)
+          ? preselectedFromId
+          : accounts[0]?.id || '';
       setFromId(initialFrom);
       const initialTo = accounts.find((a) => a.id !== initialFrom)?.id || initialFrom;
       setToId(initialTo);
@@ -68,6 +72,8 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
   const toAccount = accounts.find((a) => a.id === toId);
   const fromCurrency = (fromAccount?.currency || 'UYU').toUpperCase();
   const toCurrency = (toAccount?.currency || 'UYU').toUpperCase();
+  const fromCurrencyPrefix =
+    fromCurrency === 'USD' ? 'US$' : fromCurrency === 'UYU' ? '$U' : fromCurrency;
   const isCrossCurrency = Boolean(fromAccount && toAccount && fromCurrency !== toCurrency);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -102,7 +108,7 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
         });
       });
       if (saved === false) return;
-      playSound('coins');
+      playExpenseLogged();
       showToast('Transferencia guardada sin alterar ingresos ni gastos.');
       onClose();
     } catch (error) {
@@ -136,16 +142,16 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="finance-transfer-title"
-        className="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 max-w-md w-full space-y-5 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
+        className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 max-w-md w-full space-y-5 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-xs shrink-0">
-              <AppIcon name="repeat" className="h-4 w-4" />
+        {/* Header — Unified transfer icon with Hero button */}
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="h-9 w-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
+              <AppIcon name="transfer" className="h-4 w-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h3 id="finance-transfer-title" className="font-extrabold text-sm text-[var(--text)]">
                 Transferir entre cuentas
               </h3>
@@ -157,10 +163,11 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-xl text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer transition-colors"
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer transition-colors ${CLEAN_FOCUS_RING}`}
+            aria-label="Cerrar"
             title="Cerrar"
           >
-            ✕
+            <AppIcon name="x" className="h-4 w-4" />
           </button>
         </div>
 
@@ -173,14 +180,14 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
             {/* Accounts selector with Swap button */}
             <div className="grid grid-cols-1 sm:grid-cols-[1fr,auto,1fr] gap-2 items-center">
               <div>
-                <label htmlFor="finance-transfer-from" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
+                <label htmlFor="finance-transfer-from" className="text-xs font-semibold text-[var(--text-soft)] block mb-1">
                   Origen
                 </label>
                 <select
                   id="finance-transfer-from"
                   value={fromId}
                   onChange={(e) => setFromId(e.target.value)}
-                  className="w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500 font-medium"
+                  className="w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500 font-medium cursor-pointer"
                 >
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
@@ -189,32 +196,33 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
                   ))}
                 </select>
                 {fromAccount && (
-                  <span className="text-[10px] text-[var(--text-soft)] mt-1 block truncate">
+                  <span className="text-xs text-[var(--text-soft)] mt-1 block truncate">
                     Saldo: <PrivacyAmount as="span">{formatMoney(fromAccount.balance, fromCurrency)}</PrivacyAmount>
                   </span>
                 )}
               </div>
 
-              <div className="flex justify-center pt-3 sm:pt-4">
+              <div className="flex justify-center pt-1 sm:pt-4">
                 <button
                   type="button"
                   onClick={handleSwap}
-                  className="p-2 rounded-xl bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text)] cursor-pointer transition-all active:scale-95"
+                  className={`p-2 rounded-xl bg-[var(--surface-muted)] hover:bg-[var(--surface-hover)] border border-[var(--border)] text-[var(--text)] cursor-pointer transition-all active:scale-95 ${CLEAN_FOCUS_RING}`}
                   title="Intercambiar cuentas"
+                  aria-label="Intercambiar cuentas"
                 >
-                  <AppIcon name="repeat" className="h-4 w-4" />
+                  <AppIcon name="transfer" className="h-4 w-4" />
                 </button>
               </div>
 
               <div>
-                <label htmlFor="finance-transfer-to" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
+                <label htmlFor="finance-transfer-to" className="text-xs font-semibold text-[var(--text-soft)] block mb-1">
                   Destino
                 </label>
                 <select
                   id="finance-transfer-to"
                   value={toId}
                   onChange={(e) => setToId(e.target.value)}
-                  className="w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500 font-medium"
+                  className="w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500 font-medium cursor-pointer"
                 >
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
@@ -223,7 +231,7 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
                   ))}
                 </select>
                 {toAccount && (
-                  <span className="text-[10px] text-[var(--text-soft)] mt-1 block truncate">
+                  <span className="text-xs text-[var(--text-soft)] mt-1 block truncate">
                     Saldo: <PrivacyAmount as="span">{formatMoney(toAccount.balance, toCurrency)}</PrivacyAmount>
                   </span>
                 )}
@@ -236,34 +244,42 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
                 <AppIcon name="shield" className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
                 <div className="space-y-0.5">
                   <p className="font-bold">Transferencia entre monedas distintas no permitida</p>
-                  <p className="text-[11px] opacity-90">
+                  <p className="text-xs opacity-90">
                     No es posible transferir directamente entre cuentas con monedas distintas ({fromCurrency} → {toCurrency}). Celestian LifeOS no convierte monedas automáticamente.
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Amount & Date */}
+            {/* Amount (with currency prefix & clean focus) & Date */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label htmlFor="finance-transfer-amount" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
-                  Monto a transferir
+                <label htmlFor="finance-transfer-amount" className="text-xs font-semibold text-[var(--text-soft)] block mb-1">
+                  Monto a transferir ({fromCurrency})
                 </label>
-                <PrivacyInput
-                  id="finance-transfer-amount"
-                  required
-                  autoFocus
-                  type="text"
-                  inputMode="decimal"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0,00"
-                  className="w-full p-2.5 text-sm font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
-                />
+                <div className="relative">
+                  <span
+                    data-transfer-currency-prefix={fromCurrencyPrefix}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 font-semibold text-xs sm:text-sm text-[var(--text-faint)] select-none pointer-events-none"
+                  >
+                    {fromCurrencyPrefix}
+                  </span>
+                  <PrivacyInput
+                    id="finance-transfer-amount"
+                    required
+                    autoFocus
+                    type="text"
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0,00"
+                    className="finance-amount-input w-full pl-11 pr-3 py-2.5 text-sm font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
+                  />
+                </div>
               </div>
 
               <div>
-                <label htmlFor="finance-transfer-date" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
+                <label htmlFor="finance-transfer-date" className="text-xs font-semibold text-[var(--text-soft)] block mb-1">
                   Fecha
                 </label>
                 <input
@@ -278,10 +294,11 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
 
             {/* Note */}
             <div>
-              <label htmlFor="finance-transfer-note" className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
+              <label htmlFor="finance-transfer-note" className="text-xs font-semibold text-[var(--text-soft)] block mb-1">
                 Nota opcional
               </label>
-              <PrivacyInput maskText
+              <PrivacyInput
+                maskText
                 id="finance-transfer-note"
                 type="text"
                 value={note}
@@ -295,23 +312,27 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
             <button
               type="submit"
               disabled={isCrossCurrency}
-              className="w-full py-3 px-4 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white cursor-pointer shadow-xs active:scale-98 transition-all min-h-[44px]"
+              className={`w-full py-3 px-4 text-xs font-bold rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] disabled:opacity-50 disabled:cursor-not-allowed text-white cursor-pointer shadow-xs transition-all min-h-[44px] ${CLEAN_FOCUS_RING}`}
             >
               Confirmar transferencia
             </button>
           </form>
         )}
 
-        {/* Recent transfers drawer */}
+        {/* Recent transfers drawer — Lucide ChevronDown */}
         {recentTransfers.length > 0 && (
           <div className="pt-2 border-t border-[var(--border)]">
             <button
               type="button"
+              aria-expanded={showRecent}
               onClick={() => setShowRecent(!showRecent)}
-              className="w-full flex items-center justify-between text-left text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer py-1"
+              className={`w-full flex items-center justify-between text-left text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer py-1.5 rounded-lg ${CLEAN_FOCUS_RING}`}
             >
               <span>Transferencias recientes ({state.finance.transfers.length})</span>
-              <span>{showRecent ? '▴' : '▾'}</span>
+              <AppIcon
+                name="chevronDown"
+                className={`h-4 w-4 shrink-0 transition-transform duration-150 ${showRecent ? 'rotate-180' : ''}`}
+              />
             </button>
 
             {showRecent && (
@@ -325,7 +346,7 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
                         <span className="font-semibold text-[var(--text)] block truncate">
                           {fromAcc?.name || 'Cuenta'} → {toAcc?.name || 'Cuenta'}
                         </span>
-                        <span className="text-[10px] text-[var(--text-faint)]">
+                        <span className="text-xs text-[var(--text-faint)]">
                           {fmtDate(t.date)} <PrivateFinancialText>{t.note ? `· ${t.note}` : ''}</PrivateFinancialText>
                         </span>
                       </div>
@@ -336,10 +357,11 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
                         <button
                           type="button"
                           onClick={() => handleDeleteTransfer(t.id)}
-                          className="text-[var(--text-faint)] hover:text-rose-500 p-1 cursor-pointer transition-colors"
+                          className={`h-7 w-7 inline-flex items-center justify-center rounded-lg text-[var(--text-faint)] hover:text-rose-500 hover:bg-rose-500/10 cursor-pointer transition-colors ${CLEAN_FOCUS_RING}`}
+                          aria-label="Eliminar transferencia"
                           title="Eliminar transferencia"
                         >
-                          ✕
+                          <AppIcon name="trash" className="h-3.5 w-3.5" />
                         </button>
                       </div>
                     </div>

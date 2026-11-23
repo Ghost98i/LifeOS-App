@@ -91,7 +91,7 @@ export type AppIconName =
   | 'trophy' | 'play' | 'pause' | 'rotateCcw' | 'filter' | 'kanban' | 'list' | 'arrowRight' | 'arrowUp' | 'trash' | 'edit' | 'flame' | 'trendingUp'
   | 'eye' | 'eyeOff' | 'target' | 'zap' | 'bell' | 'chevronDown' | 'chevronUp' | 'x' | 'checkCircle' | 'activity'
   | 'lock' | 'unlock' | 'link'
-  | 'alertTriangle' | 'alertCircle' | 'mic' | 'mapPin' | 'externalLink' | 'arrowUpRight' | 'arrowDownRight' | 'download' | 'key' | 'user'
+  | 'alertTriangle' | 'alertCircle' | 'mic' | 'mapPin' | 'externalLink' | 'arrowUpRight' | 'arrowDownLeft' | 'arrowDownRight' | 'download' | 'key' | 'user'
   | 'store' | 'inbox' | 'lightbulb' | 'touchpad' | 'graduation' | 'ai' | 'task' | 'expense' | 'reminder' | 'pin' | 'history' | 'transfer' | 'income' | 'exam' | 'project' | 'gift' | 'stopwatch' | 'product';
 
 interface AppIconProps extends React.SVGProps<SVGSVGElement> {
@@ -159,6 +159,7 @@ const LUCIDE_ICONS: Record<AppIconName, LucideIcon> = {
   mapPin: MapPin,
   externalLink: ExternalLink,
   arrowUpRight: ArrowUpRight,
+  arrowDownLeft: ArrowDownLeft,
   arrowDownRight: ArrowDownRight,
   download: Download,
   key: KeyRound,
@@ -170,12 +171,12 @@ const LUCIDE_ICONS: Record<AppIconName, LucideIcon> = {
   graduation: GraduationCap,
   ai: Sparkles,
   task: CheckSquare,
-  expense: ArrowDownLeft,
+  expense: ArrowUpRight,
   reminder: BellRing,
   pin: Pin,
   history: History,
   transfer: ArrowLeftRight,
-  income: ArrowUpRight,
+  income: ArrowDownLeft,
   exam: ClipboardCheck,
   project: FolderKanban,
   gift: Gift,

@@ -1,11 +1,13 @@
 import { maskFinancialText } from '../lib/financialPrivacy';
 import React, { useState, useMemo } from 'react';
+import { Pencil, SlidersHorizontal, Store, Trash2 } from 'lucide-react';
 import { Transaction, Account, FinanceCategoryInput } from '../types';
 import type { CommercialSet } from '../lib/commercialContract';
 import { resolveCommercialTransactionPresentation } from '../lib/commercialFinanceBridge';
 import { fmtDate, formatMoney, sumMoney, diffMoney } from '../lib/storage';
 import { resolveTransactionCurrency } from '../lib/calculations';
 import { getCategoryName, getAllCategories } from '../lib/financeCategories';
+import { getFinanceAccountIcon, getFinanceCategoryIcon } from '../lib/financeIcons';
 import { identifyMerchant } from '../lib/merchantIdentity';
 import { AppIcon } from './AppIcon';
 import { PrivateFinancialText, PrivacyAmount, usePrivacyMode } from './PrivacyAmount';
@@ -24,6 +26,9 @@ interface FinanceTransactionTableProps {
 
 type TypeFilter = 'all' | 'gasto' | 'ingreso';
 type SortOption = 'date_desc' | 'date_asc' | 'amount_desc' | 'amount_asc';
+
+const CLEAN_FOCUS_RING =
+  'outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
 
 export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = ({
   transactions,
@@ -66,11 +71,9 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
   // Filter logic
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => {
-      // Account filter
       if (selectedAccount !== 'all' && t.accountId !== selectedAccount) {
         return false;
       }
-      // Category filter
       if (selectedCategory !== 'all') {
         const selName = getCategoryName(categories, selectedCategory).toLowerCase();
         const txCatName = getCategoryName(categories, t.category).toLowerCase();
@@ -78,11 +81,9 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
           return false;
         }
       }
-      // Type filter
       if (selectedType !== 'all' && t.type !== selectedType) {
         return false;
       }
-      // Search query
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
         const accountName = accounts.find((a) => a.id === t.accountId)?.name?.toLowerCase() || '';
@@ -153,13 +154,13 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
 
   return (
     <div className="space-y-3">
-      {/* Monarch-Style Clean Action Header: Search + On-Demand Filter Popover */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      {/* Clean Fintech Search + Filter Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
         {/* Search bar */}
-        <div className="relative min-w-[220px] flex-1 sm:max-w-md">
+        <div className="relative min-w-0 flex-1 sm:max-w-md">
           <AppIcon
             name="search"
-            className="finance-text-muted absolute left-3 top-2.5 h-4 w-4 pointer-events-none"
+            className="finance-text-muted absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none"
           />
           <input
             type="text"
@@ -169,15 +170,16 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
               setPage(1);
             }}
             placeholder="Buscar por comercio, categoría, cuenta..."
-            className="finance-control w-full rounded-xl border py-2 pl-9 pr-8 text-xs placeholder:text-[var(--finance-text-muted)] outline-none focus:border-indigo-500 transition-colors"
+            className="finance-control w-full min-h-10 rounded-xl border py-2 pl-9 pr-8 text-xs placeholder:text-[var(--finance-text-muted)] outline-none focus:border-indigo-500 transition-colors"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="finance-text-muted absolute right-2.5 top-2 text-xs hover:text-[var(--finance-text-primary)] cursor-pointer"
+              aria-label="Limpiar búsqueda"
+              className={`finance-text-muted absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 inline-flex items-center justify-center rounded-md hover:text-[var(--finance-text-primary)] cursor-pointer ${CLEAN_FOCUS_RING}`}
             >
-              ✕
+              <AppIcon name="x" className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
@@ -187,16 +189,17 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
           <button
             type="button"
             onClick={() => setIsFiltersOpen((prev) => !prev)}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
+            aria-expanded={isFiltersOpen}
+            className={`min-h-10 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold border transition-colors cursor-pointer ${CLEAN_FOCUS_RING} ${
               activeFiltersCount > 0 || isFiltersOpen
-                ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500/40 text-indigo-700 dark:text-indigo-300 font-bold shadow-2xs'
+                ? 'bg-indigo-500/10 border-indigo-500/35 text-indigo-700 dark:text-indigo-300'
                 : 'finance-control'
             }`}
           >
-            <AppIcon name="settings" className="h-3.5 w-3.5 opacity-80" />
+            <SlidersHorizontal className="h-3.5 w-3.5 opacity-80 shrink-0" aria-hidden="true" />
             <span>Filtros</span>
             {activeFiltersCount > 0 && (
-              <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] tabular-nums bg-indigo-600 text-white font-bold">
+              <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] leading-none tabular-nums bg-[#4F46E5] text-white font-bold">
                 {activeFiltersCount}
               </span>
             )}
@@ -205,7 +208,8 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortOption)}
-            className="finance-control rounded-xl border px-3 py-2 text-xs font-medium outline-none focus:border-indigo-500 cursor-pointer"
+            aria-label="Ordenar movimientos"
+            className="finance-control min-h-10 flex-1 sm:flex-initial rounded-xl border px-3 py-2 text-xs font-medium outline-none focus:border-indigo-500 cursor-pointer"
           >
             <option value="date_desc">Más recientes</option>
             <option value="date_asc">Más antiguos</option>
@@ -215,14 +219,14 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
 
           {/* On-demand Filter Dropdown / Popover */}
           {isFiltersOpen && (
-            <div className="finance-surface-raised absolute right-0 top-12 z-30 w-80 sm:w-96 p-4 rounded-2xl space-y-3.5 animate-in fade-in slide-in-from-top-2">
+            <div className="finance-surface-raised absolute right-0 top-12 z-30 w-[min(22rem,calc(100vw-2rem))] sm:w-96 p-4 rounded-2xl space-y-3.5 animate-in fade-in slide-in-from-top-2">
               <div className="finance-divider flex items-center justify-between pb-2 border-b">
                 <span className="finance-text-primary text-xs font-bold">Filtros de Movimientos</span>
                 {hasActiveFilters && (
                   <button
                     type="button"
                     onClick={clearFilters}
-                    className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer"
+                    className={`text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer ${CLEAN_FOCUS_RING}`}
                   >
                     Restablecer
                   </button>
@@ -231,7 +235,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
 
               {/* Cuenta */}
               <div className="space-y-1">
-                <label className="finance-text-muted text-[10px] font-bold uppercase tracking-wider">
+                <label className="finance-text-muted text-xs font-semibold block">
                   Cuenta
                 </label>
                 <select
@@ -240,7 +244,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                     setSelectedAccount(e.target.value);
                     setPage(1);
                   }}
-                  className="finance-control w-full rounded-xl border px-3 py-1.5 text-xs outline-none"
+                  className="finance-control w-full rounded-xl border px-3 py-2 text-xs outline-none"
                 >
                   <option value="all">Todas las cuentas ({transactions.length})</option>
                   {accounts.map((acc) => (
@@ -253,7 +257,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
 
               {/* Categoría */}
               <div className="space-y-1">
-                <label className="finance-text-muted text-[10px] font-bold uppercase tracking-wider">
+                <label className="finance-text-muted text-xs font-semibold block">
                   Categoría
                 </label>
                 <select
@@ -262,7 +266,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                     setSelectedCategory(e.target.value);
                     setPage(1);
                   }}
-                  className="finance-control w-full rounded-xl border px-3 py-1.5 text-xs outline-none"
+                  className="finance-control w-full rounded-xl border px-3 py-2 text-xs outline-none"
                 >
                   <option value="all">Todas las categorías</option>
                   {allCats.map((cat) => (
@@ -275,19 +279,19 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
 
               {/* Tipo */}
               <div className="space-y-1">
-                <label className="finance-text-muted text-[10px] font-bold uppercase tracking-wider">
+                <label className="finance-text-muted text-xs font-semibold block">
                   Tipo
                 </label>
-                <div className="flex gap-2">
+                <div className="flex gap-1.5">
                   <button
                     type="button"
                     onClick={() => {
                       setSelectedType('all');
                       setPage(1);
                     }}
-                    className={`flex-1 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${CLEAN_FOCUS_RING} ${
                       selectedType === 'all'
-                        ? 'bg-[var(--accent)] text-white font-bold'
+                        ? 'bg-[#4F46E5] text-white'
                         : 'finance-surface-subtle finance-text-secondary'
                     }`}
                   >
@@ -299,9 +303,9 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                       setSelectedType('gasto');
                       setPage(1);
                     }}
-                    className={`flex-1 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${CLEAN_FOCUS_RING} ${
                       selectedType === 'gasto'
-                        ? 'bg-rose-500 text-white font-bold'
+                        ? 'bg-rose-600 text-white'
                         : 'finance-surface-subtle finance-text-secondary'
                     }`}
                   >
@@ -313,9 +317,9 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                       setSelectedType('ingreso');
                       setPage(1);
                     }}
-                    className={`flex-1 py-1 rounded-lg text-xs font-semibold cursor-pointer ${
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${CLEAN_FOCUS_RING} ${
                       selectedType === 'ingreso'
-                        ? 'bg-emerald-600 text-white font-bold'
+                        ? 'bg-emerald-600 text-white'
                         : 'finance-surface-subtle finance-text-secondary'
                     }`}
                   >
@@ -328,7 +332,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                 <button
                   type="button"
                   onClick={() => setIsFiltersOpen(false)}
-                  className="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-bold cursor-pointer hover:bg-indigo-500"
+                  className={`px-3.5 py-1.5 rounded-lg bg-[#4F46E5] text-white text-xs font-semibold cursor-pointer hover:bg-[#4338CA] ${CLEAN_FOCUS_RING}`}
                 >
                   Cerrar
                 </button>
@@ -338,70 +342,74 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
         </div>
       </div>
 
-      {/* Active Filter Chips Rail (Only appears when active filters exist) */}
+      {/* Active Filter Chips Rail */}
       {hasActiveFilters && (
-        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-          <span className="finance-text-muted text-[10px] font-bold uppercase">
+        <div className="flex flex-wrap items-center gap-2 pt-0.5 text-xs">
+          <span className="finance-text-muted text-xs font-semibold">
             Filtros activos:
           </span>
 
           {selectedAccount !== 'all' && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50 text-[11px] font-medium">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25 text-xs font-medium">
               <span>Cuenta: {selectedAccountObj?.name || selectedAccount}</span>
               <button
                 type="button"
+                aria-label="Quitar filtro de cuenta"
                 onClick={() => {
                   setSelectedAccount('all');
                   setPage(1);
                 }}
-                className="hover:text-rose-500 cursor-pointer font-bold"
+                className={`hover:text-rose-500 cursor-pointer inline-flex items-center ${CLEAN_FOCUS_RING}`}
               >
-                ✕
+                <AppIcon name="x" className="h-3 w-3" />
               </button>
             </span>
           )}
 
           {selectedCategory !== 'all' && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50 text-[11px] font-medium">
-              <span>Categoría: <PrivateFinancialText>{selectedCategoryName}</PrivateFinancialText></span>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25 text-xs font-medium">
+              <span>Categoría: <PrivateFinancialText>{selectedCategoryName || ''}</PrivateFinancialText></span>
               <button
                 type="button"
+                aria-label="Quitar filtro de categoría"
                 onClick={() => {
                   setSelectedCategory('all');
                   setPage(1);
                 }}
-                className="hover:text-rose-500 cursor-pointer font-bold"
+                className={`hover:text-rose-500 cursor-pointer inline-flex items-center ${CLEAN_FOCUS_RING}`}
               >
-                ✕
+                <AppIcon name="x" className="h-3 w-3" />
               </button>
             </span>
           )}
 
           {selectedType !== 'all' && (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/50 text-[11px] font-medium">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25 text-xs font-medium">
               <span>Tipo: {selectedType === 'gasto' ? 'Gastos' : 'Ingresos'}</span>
               <button
                 type="button"
+                aria-label="Quitar filtro de tipo"
                 onClick={() => {
                   setSelectedType('all');
                   setPage(1);
                 }}
-                className="hover:text-rose-500 cursor-pointer font-bold"
+                className={`hover:text-rose-500 cursor-pointer inline-flex items-center ${CLEAN_FOCUS_RING}`}
               >
-                ✕
+                <AppIcon name="x" className="h-3 w-3" />
               </button>
             </span>
           )}
 
           {searchQuery.trim() !== '' && (
-            <span className="finance-surface-subtle finance-text-secondary inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium">
+            <span className="finance-surface-subtle finance-text-secondary inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium">
               <span>Búsqueda: &ldquo;{searchQuery}&rdquo;</span>
               <button
                 type="button"
+                aria-label="Quitar búsqueda"
                 onClick={() => setSearchQuery('')}
-                className="hover:text-rose-500 cursor-pointer font-bold"
+                className={`hover:text-rose-500 cursor-pointer inline-flex items-center ${CLEAN_FOCUS_RING}`}
               >
-                ✕
+                <AppIcon name="x" className="h-3 w-3" />
               </button>
             </span>
           )}
@@ -409,17 +417,19 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
           <button
             type="button"
             onClick={clearFilters}
-            className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer ml-1"
+            className={`text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline cursor-pointer ml-1 ${CLEAN_FOCUS_RING}`}
           >
             Limpiar todo
           </button>
         </div>
       )}
 
-      {/* Main Transactions Surface: Open, Clean Monarch-Inspired Table */}
+      {/* Main Fintech Transaction Feed */}
       {sortedTransactions.length === 0 ? (
-        <div className="finance-surface rounded-2xl p-4 text-center">
-          <p className="finance-text-primary text-sm font-semibold">{hasActiveFilters ? 'Sin resultados para estos filtros' : 'Sin movimientos registrados'}</p>
+        <div className="finance-surface rounded-2xl p-6 text-center">
+          <p className="finance-text-primary text-sm font-semibold">
+            {hasActiveFilters ? 'Sin resultados para estos filtros' : 'Sin movimientos registrados'}
+          </p>
           <p className="finance-text-secondary mt-1 text-xs">
             {hasActiveFilters
               ? 'Probá ajustando o limpiando los filtros seleccionados.'
@@ -429,7 +439,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
             <button
               type="button"
               onClick={clearFilters}
-              className="mt-3 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 px-3 py-1.5 text-xs font-semibold hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer"
+              className={`mt-3 rounded-xl bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/25 px-3.5 py-1.5 text-xs font-semibold hover:bg-[#4F46E5] hover:text-white transition-colors cursor-pointer ${CLEAN_FOCUS_RING}`}
             >
               Restablecer filtros
             </button>
@@ -437,121 +447,175 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
         </div>
       ) : (
         <div className="finance-surface rounded-2xl overflow-hidden">
-          {/* Mobile Card List */}
-          <div className="divide-y divide-[var(--finance-border)] md:hidden">
+          <div
+            role="list"
+            aria-label="Listado de movimientos"
+            data-finance-feed="true"
+            className="divide-y divide-[var(--finance-border)]"
+          >
             {paginatedTransactions.map((t) => {
               const account = accounts.find((a) => a.id === t.accountId);
               const txCurrency = resolveTransactionCurrency(t, accounts);
               const isExpense = t.type === 'gasto';
               const commercialMeta = resolveCommercialTransactionPresentation(t, commercial);
               const merchant = commercialMeta.isCommercial ? null : identifyMerchant(t.note);
-              const displayLabel = commercialMeta.displayNote || getCategoryName(categories, t.category);
+              const categoryName = getCategoryName(categories, t.category);
+              const displayLabel = commercialMeta.displayNote || categoryName || 'Movimiento';
+              const categoryIconMeta = getFinanceCategoryIcon(
+                commercialMeta.isCommercial ? 'Mi negocio' : categoryName
+              );
+              const CategoryIcon = categoryIconMeta.icon;
+              const accountIconMeta = account ? getFinanceAccountIcon(account.name) : null;
+              const AccountIcon = accountIconMeta?.icon;
+              const timeLabel = transactionTimeLabel(t);
+
               return (
-                <article key={t.id} className="p-3.5 space-y-2 hover:bg-[var(--finance-surface-hover)] transition-colors">
-                  <div className="flex items-start justify-between gap-2">
+                <article
+                  key={t.id}
+                  role="listitem"
+                  className="group flex items-start sm:items-center justify-between gap-2.5 sm:gap-4 px-3.5 py-3 sm:px-4 sm:py-3.5 hover:bg-[var(--finance-surface-hover)] transition-colors min-w-0"
+                >
+                  {/* Left: Squircle Category/Origin Icon + Description & Compact Metadata */}
+                  <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                    <div
+                      data-finance-category-icon={categoryIconMeta.iconName}
+                      className={`h-9 w-9 sm:h-10 sm:w-10 rounded-xl border flex items-center justify-center shrink-0 mt-0.5 sm:mt-0 ${categoryIconMeta.containerClass}`}
+                      aria-hidden="true"
+                    >
+                      <CategoryIcon className={`h-4 w-4 sm:h-[18px] sm:w-[18px] ${categoryIconMeta.iconClass}`} strokeWidth={1.85} />
+                    </div>
+
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {commercialMeta.isCommercial ? (
+                      <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                        <p className="finance-text-primary text-sm font-medium leading-snug break-words [overflow-wrap:anywhere]">
+                          <PrivateFinancialText>{displayLabel}</PrivateFinancialText>
+                        </p>
+                        {commercialMeta.isCommercial && (
                           <span
-                            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold border shrink-0 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/25"
+                            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold border shrink-0 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/25"
                             title="Origen: Mi negocio"
                           >
-                            <span>🏪</span>
+                            <Store className="h-3 w-3 shrink-0" aria-hidden="true" />
                             <span>{commercialMeta.originBadge}</span>
                           </span>
-                        ) : merchant ? (
+                        )}
+                        {merchant && !commercialMeta.isCommercial && (
                           <span
-                            className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold border shrink-0"
+                            className="hidden sm:inline-flex items-center rounded-md px-1.5 py-0.5 text-[11px] font-medium border shrink-0"
                             style={{
                               backgroundColor: merchant.badgeBg,
                               color: merchant.badgeColor,
                               borderColor: merchant.badgeBorder,
                             }}
                           >
-                            <span>{merchant.icon}</span>
-                            <span>{merchant.name}</span>
-                          </span>
-                        ) : (
-                          <span
-                            className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                              isExpense
-                                ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-                                : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                            }`}
-                          >
-                            {isExpense ? 'Gasto' : 'Ingreso'}
-                          </span>
-                        )}
-                        <span className="finance-text-secondary text-[11px] font-medium">
-                          <PrivateFinancialText>{getCategoryName(categories, t.category)}</PrivateFinancialText>
-                        </span>
-                        {account && (
-                          <span className="finance-text-muted text-[10px]">
-                            · <PrivateFinancialText>{account.name}</PrivateFinancialText>
+                            {merchant.name}
                           </span>
                         )}
                       </div>
-                      <p className="finance-text-primary mt-1 text-sm font-semibold leading-snug break-words [overflow-wrap:anywhere]">
-                        <PrivateFinancialText>{displayLabel}</PrivateFinancialText>
-                      </p>
-                      <p className="finance-text-muted text-[11px] tabular-nums">
-                        {fmtDate(t.date)}
-                        {transactionTimeLabel(t) && ` · ${transactionTimeLabel(t)}`}
-                        {t.fixed && ` · ${t.fixed}`}
-                      </p>
-                    </div>
 
-                    <div className="text-right shrink-0">
-                      <PrivacyAmount
-                        as="strong"
-                        className={`tabular-nums text-sm font-extrabold block ${
-                          isExpense ? 'finance-text-primary' : 'text-emerald-600 dark:text-emerald-400'
-                        }`}
-                      >
-                        {isExpense ? '−' : '+'} {formatMoney(t.amount, txCurrency)}
-                      </PrivacyAmount>
-                      <div className="mt-1.5 flex items-center justify-end gap-1">
-                        {commercialMeta.isCommercial ? (
-                          onOpenCommercial ? (
-                            <button
-                              type="button"
-                              onClick={onOpenCommercial}
-                              title="Movimiento comercial protegido. Para corregir, devolver o reembolsar, abrí Mi negocio."
-                              className="rounded-md px-2 py-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 cursor-pointer"
-                            >
-                              Mi negocio →
-                            </button>
-                          ) : (
-                            <span
-                              title="Movimiento comercial protegido. Gestioná devoluciones, correcciones o reembolsos desde Mi negocio."
-                              className="finance-text-muted rounded-md px-2 py-0.5 text-[10px] font-semibold"
-                            >
-                              En Mi negocio
-                            </span>
-                          )
-                        ) : (
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-[var(--finance-text-muted)] min-w-0">
+                        <span className="text-[var(--finance-text-secondary)]">
+                          <PrivateFinancialText>{categoryName}</PrivateFinancialText>
+                        </span>
+
+                        {account?.name && AccountIcon && (
                           <>
-                            <button
-                              type="button"
-                              onClick={() => onEdit(t)}
-                              className="rounded-md px-2 py-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 cursor-pointer"
+                            <span aria-hidden="true">·</span>
+                            <span
+                              data-finance-account-icon={accountIconMeta.iconName}
+                              className="inline-flex items-center gap-1 min-w-0"
                             >
-                              Editar
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (confirm(maskFinancialText(`¿Eliminar movimiento "${displayLabel}"? El saldo se actualizará según los movimientos y conciliaciones existentes. No se puede deshacer.`, privateMode))) {
-                                  onDelete(t.id);
-                                }
-                              }}
-                              className="finance-text-muted rounded-md px-1.5 py-0.5 text-[11px] hover:text-rose-500 cursor-pointer"
-                            >
-                              ✕
-                            </button>
+                              <AccountIcon className="h-3.5 w-3.5 shrink-0 opacity-75" strokeWidth={1.75} aria-hidden="true" />
+                              <span className="truncate max-w-[140px] sm:max-w-[180px]">
+                                <PrivateFinancialText>{account.name}</PrivateFinancialText>
+                              </span>
+                            </span>
+                          </>
+                        )}
+
+                        <span aria-hidden="true">·</span>
+                        <span className="tabular-nums whitespace-nowrap">
+                          {fmtDate(t.date)}
+                          {timeLabel && ` · ${timeLabel}`}
+                        </span>
+
+                        {t.fixed === 'fijo' && (
+                          <>
+                            <span aria-hidden="true">·</span>
+                            <span className="text-[var(--finance-text-muted)]">Fijo</span>
                           </>
                         )}
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Signed Amount + Consistent Icon Actions */}
+                  <div className="flex flex-col items-end sm:flex-row sm:items-center gap-1.5 sm:gap-3 shrink-0">
+                    <PrivacyAmount
+                      as="span"
+                      className={`text-sm sm:text-[15px] font-semibold tabular-nums whitespace-nowrap text-right ${
+                        isExpense
+                          ? 'finance-text-primary'
+                          : 'text-emerald-600 dark:text-emerald-400'
+                      }`}
+                    >
+                      {isExpense ? '−' : '+'}
+                      {formatMoney(t.amount, txCurrency)}
+                    </PrivacyAmount>
+
+                    <div className="flex items-center justify-end gap-1 sm:opacity-75 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity">
+                      {commercialMeta.isCommercial ? (
+                        onOpenCommercial ? (
+                          <button
+                            type="button"
+                            onClick={onOpenCommercial}
+                            title="Movimiento comercial protegido. Para corregir, devolver o reembolsar, abrí Mi negocio."
+                            className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/10 transition-colors cursor-pointer whitespace-nowrap ${CLEAN_FOCUS_RING}`}
+                          >
+                            <span>Mi negocio</span>
+                            <AppIcon name="externalLink" className="h-3.5 w-3.5 shrink-0" />
+                          </button>
+                        ) : (
+                          <span
+                            title="Movimiento comercial protegido. Gestioná devoluciones, correcciones o reembolsos desde Mi negocio."
+                            className="finance-text-muted rounded-lg px-2 py-1 text-xs font-medium whitespace-nowrap"
+                          >
+                            En Mi negocio
+                          </span>
+                        )
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => onEdit(t)}
+                            aria-label={`Editar movimiento ${displayLabel}`}
+                            title="Editar movimiento"
+                            className={`h-8 w-8 inline-flex items-center justify-center rounded-lg text-[var(--finance-text-muted)] hover:text-indigo-600 dark:hover:text-indigo-300 hover:bg-indigo-500/10 transition-colors cursor-pointer ${CLEAN_FOCUS_RING}`}
+                          >
+                            <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  maskFinancialText(
+                                    `¿Eliminar movimiento "${displayLabel}"? El saldo se actualizará según los movimientos y conciliaciones existentes. No se puede deshacer.`,
+                                    privateMode
+                                  )
+                                )
+                              ) {
+                                onDelete(t.id);
+                              }
+                            }}
+                            aria-label={`Eliminar movimiento ${displayLabel}`}
+                            title="Eliminar movimiento"
+                            className={`h-8 w-8 inline-flex items-center justify-center rounded-lg text-[var(--finance-text-muted)] hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer ${CLEAN_FOCUS_RING}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </article>
@@ -559,177 +623,13 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
             })}
           </div>
 
-          {/* Desktop Clean Monarch Table */}
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full text-xs text-left border-collapse">
-              <thead>
-                <tr className="finance-divider finance-text-muted bg-[var(--finance-surface-subtle)] border-b uppercase text-[10px] font-bold tracking-wider">
-                  <th className="py-3 px-4">Comercio / Descripción</th>
-                  <th className="py-3 px-3.5">Categoría</th>
-                  <th className="py-3 px-3.5">Cuenta</th>
-                  <th className="py-3 px-3">Fecha</th>
-                  <th className="py-3 px-3">Tipo</th>
-                  <th className="py-3 px-4 text-right">Monto</th>
-                  <th className="py-3 px-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                {paginatedTransactions.map((t) => {
-                  const account = accounts.find((a) => a.id === t.accountId);
-                  const txCurrency = resolveTransactionCurrency(t, accounts);
-                  const isExpense = t.type === 'gasto';
-                  const commercialMeta = resolveCommercialTransactionPresentation(t, commercial);
-                  const merchant = commercialMeta.isCommercial ? null : identifyMerchant(t.note);
-                  const displayLabel = commercialMeta.displayNote || getCategoryName(categories, t.category);
-                  return (
-                    <tr
-                      key={t.id}
-                      className="hover:bg-[var(--finance-surface-hover)] transition-colors group"
-                    >
-                      {/* Column 1: Merchant / Description */}
-                      <td className="py-3 px-4 max-w-[280px]">
-                        <div className="flex items-center gap-2">
-                          {commercialMeta.isCommercial ? (
-                            <span
-                              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold border shrink-0 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/25"
-                              title="Origen: Mi negocio"
-                            >
-                              <span>🏪</span>
-                              <span>{commercialMeta.originBadge}</span>
-                            </span>
-                          ) : (
-                            merchant && (
-                              <span
-                                className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold border shrink-0"
-                                style={{
-                                  backgroundColor: merchant.badgeBg,
-                                  color: merchant.badgeColor,
-                                  borderColor: merchant.badgeBorder,
-                                }}
-                              >
-                                <span>{merchant.icon}</span>
-                                <span>{merchant.name}</span>
-                              </span>
-                            )
-                          )}
-                          <span className="finance-text-primary min-w-0 font-semibold leading-snug break-words [overflow-wrap:anywhere]">
-                            <PrivateFinancialText>{displayLabel}</PrivateFinancialText>
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Column 2: Categoría */}
-                      <td className="finance-text-secondary py-3 px-3.5 whitespace-nowrap">
-                        <span className="finance-surface-subtle finance-text-secondary inline-block px-2 py-0.5 rounded-md text-[11px] font-medium">
-                          <PrivateFinancialText>{getCategoryName(categories, t.category)}</PrivateFinancialText>
-                        </span>
-                      </td>
-
-                      {/* Column 3: Cuenta */}
-                      <td className="finance-text-secondary py-3 px-3.5 whitespace-nowrap">
-                        {account?.name ? (
-                          <span className="inline-flex items-center gap-1.5">
-                            <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
-                            <span><PrivateFinancialText>{account.name}</PrivateFinancialText></span>
-                          </span>
-                        ) : (
-                          <span>—</span>
-                        )}
-                      </td>
-
-                      {/* Column 4: Fecha */}
-                      <td className="finance-text-secondary py-3 px-3 tabular-nums whitespace-nowrap">
-                        {fmtDate(t.date)}
-                        {transactionTimeLabel(t) && (
-                          <span className="finance-text-muted block text-[10px]">{transactionTimeLabel(t)}</span>
-                        )}
-                      </td>
-
-                      {/* Column 5: Tipo */}
-                      <td className="py-3 px-3 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            isExpense
-                              ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
-                              : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                          }`}
-                        >
-                          {isExpense ? 'Gasto' : 'Ingreso'}
-                        </span>
-                      </td>
-
-                      {/* Column 6: Monto */}
-                      <td className="py-3 px-4 text-right tabular-nums whitespace-nowrap">
-                        <PrivacyAmount
-                          as="span"
-                          className={`font-black text-xs sm:text-sm ${
-                            isExpense ? 'finance-text-primary' : 'text-emerald-600 dark:text-emerald-400'
-                          }`}
-                        >
-                          {isExpense ? '−' : '+'} {formatMoney(t.amount, txCurrency)}
-                        </PrivacyAmount>
-                      </td>
-
-                      {/* Column 7: Acciones */}
-                      <td className="py-3 px-3 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1 opacity-70 group-hover:opacity-100 transition-opacity">
-                          {commercialMeta.isCommercial ? (
-                            onOpenCommercial ? (
-                              <button
-                                type="button"
-                                onClick={onOpenCommercial}
-                                title="Movimiento comercial protegido. Para corregir, devolver o reembolsar, abrí Mi negocio."
-                                className="rounded-lg px-2 py-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition cursor-pointer"
-                              >
-                                Mi negocio →
-                              </button>
-                            ) : (
-                              <span
-                                title="Movimiento comercial protegido. Gestioná devoluciones, correcciones o reembolsos desde Mi negocio."
-                                className="finance-text-muted rounded-lg px-2 py-1 text-[10px] font-semibold"
-                              >
-                                En Mi negocio
-                              </span>
-                            )
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => onEdit(t)}
-                                className="rounded-lg px-2 py-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition cursor-pointer"
-                              >
-                                Editar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (confirm(maskFinancialText(`¿Eliminar movimiento "${displayLabel}"? El saldo se actualizará según los movimientos y conciliaciones existentes. No se puede deshacer.`, privateMode))) {
-                                    onDelete(t.id);
-                                  }
-                                }}
-                                className="finance-text-muted rounded-lg px-1.5 py-1 text-[11px] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition cursor-pointer"
-                                title="Eliminar movimiento"
-                              >
-                                ✕
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
           {/* Clean Footer with Filtered Totals & Pagination */}
-          <div className="finance-divider bg-[var(--finance-surface-subtle)] p-3 sm:px-4 border-t flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
-            <div className="finance-text-secondary flex flex-wrap items-center gap-2 sm:gap-3">
-              <span>
+          <div className="finance-divider bg-[var(--finance-surface-subtle)] p-3 sm:px-4 border-t flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-xs">
+            <div className="finance-text-secondary flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="tabular-nums">
                 {filteredTransactions.length} {filteredTransactions.length === 1 ? 'movimiento' : 'movimientos'}
               </span>
-              <span>·</span>
+              <span aria-hidden="true">·</span>
               <span>Neto de la lista (ingresos − gastos):</span>
               {Object.keys(totalsByCurrency).length === 0 ? (
                 <PrivacyAmount as="strong" className="text-emerald-600 dark:text-emerald-400 tabular-nums">
@@ -739,8 +639,16 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                 (Object.entries(totalsByCurrency) as [string, { gastos: number; ingresos: number; balance: number }][]).map(([cur, data], idx) => (
                   <span key={cur} className="inline-flex items-center gap-1">
                     {idx > 0 && <span>|</span>}
-                    <PrivacyAmount as="strong" className={data.balance >= 0 ? 'text-emerald-600 dark:text-emerald-400 tabular-nums' : 'text-rose-500 tabular-nums'}>
-                      {data.balance >= 0 ? '+' : ''}{formatMoney(data.balance, cur)}
+                    <PrivacyAmount
+                      as="strong"
+                      className={
+                        data.balance >= 0
+                          ? 'text-emerald-600 dark:text-emerald-400 tabular-nums'
+                          : 'text-rose-600 dark:text-rose-400 tabular-nums'
+                      }
+                    >
+                      {data.balance >= 0 ? '+' : ''}
+                      {formatMoney(data.balance, cur)}
                     </PrivacyAmount>
                   </span>
                 ))
@@ -749,12 +657,12 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
             </div>
 
             {totalPages > 1 && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 self-end sm:self-auto">
                 <button
                   type="button"
                   disabled={currentPage <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  className="finance-control px-2.5 py-1 rounded-lg border disabled:opacity-50 disabled:pointer-events-none cursor-pointer text-xs"
+                  className={`finance-control px-2.5 py-1 rounded-lg border disabled:opacity-50 disabled:pointer-events-none cursor-pointer text-xs ${CLEAN_FOCUS_RING}`}
                 >
                   Anterior
                 </button>
@@ -765,7 +673,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                   type="button"
                   disabled={currentPage >= totalPages}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  className="finance-control px-2.5 py-1 rounded-lg border disabled:opacity-50 disabled:pointer-events-none cursor-pointer text-xs"
+                  className={`finance-control px-2.5 py-1 rounded-lg border disabled:opacity-50 disabled:pointer-events-none cursor-pointer text-xs ${CLEAN_FOCUS_RING}`}
                 >
                   Siguiente
                 </button>
