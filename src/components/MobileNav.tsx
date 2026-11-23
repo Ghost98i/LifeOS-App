@@ -131,7 +131,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
             onClick={onTogglePrivacy}
             className={`flex min-h-8 items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold transition-all cursor-pointer ${
               privacyMode
-                ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 border border-indigo-500/30'
+                ? 'bg-[#4F46E5]/12 text-[#4F46E5] dark:bg-[#4F46E5]/20 dark:text-[#818CF8] border border-[#4F46E5]/30'
                 : 'text-[var(--text-faint)] hover:text-[var(--text)]'
             }`}
             title="Alternar Privacidad"

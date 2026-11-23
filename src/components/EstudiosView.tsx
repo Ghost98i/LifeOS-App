@@ -19,7 +19,6 @@ import {
 import {
   studyMinutesForDate,
   studyMinutesThisWeek,
-  examApprovalPct,
 } from '../lib/calculations';
 import {
   addStudyProgram,
@@ -28,6 +27,8 @@ import {
   filterExamsByProgram,
   filterSubjectsByProgram,
   GENERAL_PROGRAM_FILTER,
+  getExamCardDisplay,
+  getStudyThirdOverviewMetric,
   hasGeneralSubjects,
   selectStudyExams,
   STUDY_PROGRAM_KIND_LABELS,
@@ -70,6 +71,7 @@ interface EstudiosViewProps {
   onUpdateState: (updater: (draft: LifeOSState) => void) => boolean;
   initialFocusId?: string | null;
   focusNonce?: number;
+  initialTab?: 'overview' | 'practice';
   onOpenNote?: (id: string) => void;
   onOpenAgenda?: () => void;
 }
@@ -79,6 +81,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
   onUpdateState,
   initialFocusId,
   focusNonce,
+  initialTab,
   onOpenNote,
   onOpenAgenda,
 }) => {
@@ -96,7 +99,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
 
   // Filtros y estados de visualización
   const [studyTab, setStudyTab] = useState<'overview' | 'practice'>(() =>
-    state.study?.activePracticeSession ? 'practice' : 'overview'
+    initialTab || (state.study?.activePracticeSession ? 'practice' : 'overview')
   );
   const [examTab, setExamTab] = useState<'upcoming' | 'pending_results' | 'completed' | 'all'>('all');
   const [selectedProgramFilter, setSelectedProgramFilter] = useState<string | null>(null);
@@ -171,7 +174,6 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
   };
 
   // Derivaciones
-  const approvalRate = useMemo(() => examApprovalPct(state), [state]);
   const minutesToday = useMemo(() => studyMinutesForDate(state, todayISO()), [state]);
   const minutesWeek = useMemo(() => studyMinutesThisWeek(state), [state]);
 
@@ -193,6 +195,16 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
   );
 
   const categorized = useMemo(() => categorizeExams(scopedExams), [scopedExams]);
+  const thirdMetric = useMemo(
+    () =>
+      getStudyThirdOverviewMetric({
+        completedExams: categorized.completed,
+        subjects: scopedSubjects,
+        exams: scopedExams,
+        studyLogs,
+      }),
+    [categorized.completed, scopedSubjects, scopedExams, studyLogs]
+  );
 
   // Filtrado de evaluaciones según pestaña y materia seleccionada
   const displayedExams = useMemo(() => {
@@ -844,9 +856,21 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
     studyLogCount: studyLogs.length,
     programCount: programs.length,
   }), [subjects.length, exams.length, studyLogs.length, programs.length]);
-  const workspace = getStudyWorkspace(state, selectedSubjectFilter, todayISO());
+  const workspace = getStudyWorkspace(
+    state,
+    selectedSubjectFilter,
+    todayISO(),
+    selectedProgramFilter ? scopedSubjects.map((s) => s.id) : undefined
+  );
   const notesVisible = !state.settings.hiddenTabs?.includes('notas');
   const agendaVisible = !state.settings.hiddenTabs?.includes('agenda');
+  const workspaceVisibleNotes = workspace.subject ? workspace.notes.slice(0, 4) : workspace.notes.slice(0, 3);
+  const showWorkspaceNotesColumn = notesVisible && workspaceVisibleNotes.length > 0;
+  const hasWorkspaceActivity =
+    workspace.upcoming.length > 0 ||
+    showWorkspaceNotesColumn ||
+    workspace.pendingResults.length > 0 ||
+    (agendaVisible && workspace.tasks.length > 0);
   const isEmptyModule = overviewKind === 'empty';
   const showGuidedEmpty = isEmptyModule && !state.study?.activeSession;
 
@@ -865,15 +889,19 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
       {/* -------------------------------------------------------------------- */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <PageHeader title="Estudios" />
-        <div role="tablist" aria-label="Secciones de Estudios" className="inline-flex rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 self-start sm:self-auto">
+        <div
+          role="tablist"
+          aria-label="Secciones de Estudios"
+          className="grid w-full grid-cols-2 sm:inline-flex sm:w-auto rounded-xl border border-[var(--border)] bg-[var(--card)] p-1"
+        >
           <button
             type="button"
             role="tab"
             aria-selected={studyTab === 'overview'}
             onClick={() => setStudyTab('overview')}
-            className={`min-h-11 sm:min-h-9 rounded-lg px-3.5 text-xs font-bold transition cursor-pointer ${
+            className={`min-h-11 sm:min-h-9 rounded-lg px-3.5 text-center text-xs font-bold transition cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
               studyTab === 'overview'
-                ? 'bg-[var(--blue)] text-white shadow-xs'
+                ? 'bg-[#4F46E5] text-white shadow-xs'
                 : 'text-[var(--text-soft)] hover:text-[var(--text)]'
             }`}
           >
@@ -884,9 +912,9 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
             role="tab"
             aria-selected={studyTab === 'practice'}
             onClick={() => setStudyTab('practice')}
-            className={`min-h-11 sm:min-h-9 rounded-lg px-3.5 text-xs font-bold transition cursor-pointer ${
+            className={`min-h-11 sm:min-h-9 rounded-lg px-3.5 text-center text-xs font-bold transition cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
               studyTab === 'practice'
-                ? 'bg-[var(--blue)] text-white shadow-xs'
+                ? 'bg-[#4F46E5] text-white shadow-xs'
                 : 'text-[var(--text-soft)] hover:text-[var(--text)]'
             }`}
           >
@@ -1093,52 +1121,119 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
       {/* B. Métricas resumen de un vistazo */}
       {/* Daily workspace uses the same exams and tasks as Agenda/Calendario. */}
       {/* -------------------------------------------------------------------- */}
-      <section aria-label="Para estudiar" className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <section
+        aria-label="Para estudiar"
+        data-study-workspace-compact={hasWorkspaceActivity ? 'false' : 'true'}
+        className={`rounded-2xl border border-[var(--border)] bg-[var(--card)] ${
+          hasWorkspaceActivity ? 'p-4 sm:p-5 space-y-4' : 'px-4 py-3 sm:px-5 sm:py-3.5 space-y-2'
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
           <h2 className="text-base font-semibold text-[var(--text)]">Para estudiar</h2>
           <label className="flex items-center gap-2 text-sm text-[var(--text-soft)]">Materia
-            <select aria-label="Materia del espacio de estudio" value={selectedSubjectFilter || ''} onChange={(event) => setSelectedSubjectFilter(event.target.value || null)} className="min-h-11 max-w-[230px] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-[var(--text)]">
+            <select aria-label="Materia del espacio de estudio" value={selectedSubjectFilter || ''} onChange={(event) => setSelectedSubjectFilter(event.target.value || null)} className={`${hasWorkspaceActivity ? 'min-h-11' : 'min-h-9'} max-w-[230px] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-[var(--text)]`}>
               <option value="">Todas las materias</option>{scopedSubjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
             </select>
           </label>
         </div>
-        <div className="grid gap-5 md:grid-cols-2">
+        {!hasWorkspaceActivity ? (
+          <p className="text-xs text-[var(--text-soft)]">
+            {workspace.subject
+              ? `Sin evaluaciones próximas${notesVisible ? ` ni notas con #${workspace.subject.name}` : ''} en esta materia.`
+              : `Sin evaluaciones próximas${notesVisible ? ` ni apuntes vinculados${scopedSubjects[0] ? ` (etiquetá notas con #${scopedSubjects[0].name} para verlas acá)` : ''}` : ''}.`}
+          </p>
+        ) : (
+        <>
+        <div className={showWorkspaceNotesColumn ? 'grid gap-5 md:grid-cols-2' : 'space-y-4'}>
           <div className="space-y-3 min-w-0">
             <h3 className="text-sm font-medium text-[var(--text-soft)]">Próximas evaluaciones</h3>
             {workspace.upcoming.length ? workspace.upcoming.slice(0, 3).map((exam) => {
               const prep = getExamPreparationMetrics(exam, state, todayISO());
+              const cardDisplay = getExamCardDisplay(exam, subjects);
               const proxLabel = prep.daysUntil === 0 ? 'Hoy' : prep.daysUntil === 1 ? 'Mañana' : `En ${prep.daysUntil} d`;
-              return <div key={exam.id} className="flex items-center justify-between gap-3">
-              <button type="button" onClick={() => openEditExamModal(exam)} className="min-w-0 py-2 text-left text-sm text-[var(--text)]">
-                <span className="block font-semibold break-words">{getExamDisplayName(exam, subjects).fullLabel}</span>
-                <span className="text-xs text-[var(--text-soft)]">
-                  {fmtDate(exam.date)}{exam.time ? ' · ' + exam.time : ''} · {proxLabel}
-                  {prep.totalTopics > 0 ? ` · ${prep.completedTopics}/${prep.totalTopics} temas` : ''}
-                </span>
-              </button>
-              {!state.study.activeSession && <button type="button" onClick={() => handleStartSession(25, exam.subjectId)} className="shrink-0 min-h-11 rounded-lg border border-[var(--border)] px-3 text-xs font-semibold text-[var(--text)]">Estudiar 25 min</button>}
-            </div>;
+              return (
+                <div key={exam.id} className="flex items-center justify-between gap-3">
+                  <button type="button" onClick={() => openEditExamModal(exam)} className="min-w-0 py-1.5 text-left text-sm text-[var(--text)] hover:text-[#4F46E5] dark:hover:text-[#A5A0FF] transition-colors cursor-pointer">
+                    <span className="block font-semibold break-words">{cardDisplay.primaryTitle}</span>
+                    <span className="text-xs text-[var(--text-soft)]">
+                      {cardDisplay.typeLabel ? `${cardDisplay.typeLabel} · ` : ''}
+                      {fmtDate(exam.date)}{exam.time ? ' · ' + exam.time : ''} · {proxLabel}
+                      {prep.totalTopics > 0 ? ` · ${prep.completedTopics}/${prep.totalTopics} temas` : ''}
+                    </span>
+                  </button>
+                  {!state.study.activeSession && (
+                    <button
+                      type="button"
+                      onClick={() => handleStartSession(25, exam.subjectId)}
+                      className="shrink-0 min-h-10 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-xs font-semibold text-[var(--text)] hover:border-[#4F46E5]/50 hover:text-[#4F46E5] dark:hover:text-[#A5A0FF] transition-colors cursor-pointer whitespace-nowrap"
+                    >
+                      Estudiar 25 min
+                    </button>
+                  )}
+                </div>
+              );
             }) : <p className="text-sm text-[var(--text-soft)]">Sin evaluaciones próximas en esta selección.</p>}
             {workspace.pendingResults.length > 0 && <button type="button" onClick={() => { setExamTab('pending_results'); document.getElementById('exam-view-filter')?.focus(); }} className="min-h-11 text-sm text-[var(--text-soft)] underline">{workspace.pendingResults.length} sin resultado · revisar</button>}
             {agendaVisible && workspace.tasks.length > 0 && <div className="border-t border-[var(--border)] pt-3 space-y-2"><h3 className="text-sm font-medium text-[var(--text-soft)]">Pendientes de Agenda</h3>{workspace.tasks.slice(0, 3).map((task) => <p key={task.id} className="text-sm text-[var(--text)] break-words">{task.text}<span className="block text-xs text-[var(--text-soft)]">{fmtDate(task.dueDate || task.date)}</span></p>)}{agendaVisible && onOpenAgenda && <button type="button" onClick={onOpenAgenda} className="min-h-11 text-sm underline text-[var(--text-soft)]">Abrir Agenda</button>}</div>}
           </div>
-          {notesVisible && <div className="space-y-3 min-w-0">
-            <h3 className="text-sm font-medium text-[var(--text-soft)]">Apuntes y material en Notas</h3>
-            <p className="text-xs text-[var(--text-soft)]">{workspace.subject ? 'Notas con la etiqueta #' + workspace.subject.name + '. Podés guardar apuntes y enlaces en ellas.' : 'Elegí una materia para recuperar sus notas por etiqueta.'}</p>
-            {workspace.notes.slice(0, 4).map((note) => <button key={note.id} type="button" onClick={() => onOpenNote?.(note.id)} className="block min-h-11 w-full text-left text-sm text-[var(--text)]"><span className="block font-semibold break-words">{note.title || note.text.split('\n')[0].slice(0, 80)}</span><span className="line-clamp-2 text-xs text-[var(--text-soft)]">{note.text}</span></button>)}
-            {workspace.subject && workspace.notes.length === 0 && <p className="text-sm text-[var(--text-soft)]">Todavía no hay notas con esta etiqueta.</p>}
-          </div>}
+          {showWorkspaceNotesColumn && (
+            <div className="space-y-3 min-w-0 md:border-l md:border-[var(--border)]/60 md:pl-5">
+              <h3 className="text-sm font-medium text-[var(--text-soft)]">Apuntes y material en Notas</h3>
+              <p className="text-xs text-[var(--text-soft)]">
+                {workspace.subject
+                  ? `Notas con la etiqueta #${workspace.subject.name}.`
+                  : 'Apuntes recientes etiquetados con tus materias.'}
+              </p>
+              <div className="space-y-2">
+                {workspaceVisibleNotes.map((note) => {
+                  const matchedSubject = workspace.noteSubjectNames[note.id];
+                  return (
+                    <button
+                      key={note.id}
+                      type="button"
+                      onClick={() => onOpenNote?.(note.id)}
+                      className="block min-h-11 w-full rounded-xl border border-[var(--border)]/70 bg-[var(--bg)]/60 px-3 py-2 text-left text-sm text-[var(--text)] hover:border-[#4F46E5]/45 transition-colors cursor-pointer"
+                    >
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="font-semibold break-words truncate">
+                          {note.title || note.text.split('\n')[0].slice(0, 80)}
+                        </span>
+                        {!workspace.subject && matchedSubject && (
+                          <span className="shrink-0 whitespace-nowrap rounded-md border border-[#4F46E5]/25 bg-[#4F46E5]/10 px-1.5 py-0.5 text-[12px] font-medium text-[#4F46E5] dark:border-[#818CF8]/30 dark:bg-[#4F46E5]/18 dark:text-[#A5A0FF]">
+                            #{matchedSubject}
+                          </span>
+                        )}
+                      </span>
+                      <span className="line-clamp-2 text-xs text-[var(--text-soft)] mt-0.5">{note.text}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
+        {notesVisible && !showWorkspaceNotesColumn && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-[var(--border)]/60 pt-3 text-xs text-[var(--text-faint)]">
+            <span className="font-medium text-[var(--text-soft)]">Apuntes en Notas:</span>
+            <span>
+              {workspace.subject
+                ? `Todavía no hay notas con la etiqueta #${workspace.subject.name}.`
+                : `Etiquetá una nota con el nombre de una materia${scopedSubjects[0] ? ` (ej. #${scopedSubjects[0].name})` : ''} para ver tus apuntes acá.`}
+            </span>
+          </div>
+        )}
+        </>
+        )}
       </section>
 
-      {!isEmptyModule && <div className="study-overview grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+      {!isEmptyModule && <div className="study-overview grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
         {/* Estudio esta semana */}
         <div className="lifeos-stat-card">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium text-[var(--text-soft)]">
               Estudio esta semana
             </span>
-            <AppIcon name="book" className="h-4 w-4 text-indigo-500 shrink-0" />
+            <AppIcon name="book" className="h-4 w-4 text-[#4F46E5] dark:text-[#818CF8] shrink-0" />
           </div>
           <div className="text-xl sm:text-2xl font-black tabular-nums mt-1 text-[var(--text)]">
             {formatStudyDuration(minutesWeek)}
@@ -1168,21 +1263,32 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
           </p>
         </div>
 
-        {/* Aprobación académica */}
-        <div className="lifeos-stat-card">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-[var(--text-soft)]">
-              Aprobación
+        {/* Aprobación académica o métrica real de preparación si aún no hay evaluaciones calificadas */}
+        <div
+          data-study-third-metric={thirdMetric.kind}
+          className="lifeos-stat-card col-span-2 sm:col-span-1 flex items-center justify-between gap-3 sm:block"
+        >
+          <div className="min-w-0 sm:flex sm:items-center sm:justify-between">
+            <span className="block text-xs font-medium text-[var(--text-soft)]">
+              {thirdMetric.label}
             </span>
-            <AppIcon name="checkCircle" className="h-4 w-4 text-teal-500 shrink-0" />
+            <span className="block text-[11px] text-[var(--text-faint)] sm:hidden">
+              {thirdMetric.subtitle}
+            </span>
+            <AppIcon
+              name={thirdMetric.kind === 'approval' ? 'checkCircle' : thirdMetric.kind === 'topics' ? 'checkCircle' : 'clock'}
+              className={`hidden sm:block h-4 w-4 shrink-0 ${
+                thirdMetric.kind === 'approval'
+                  ? 'text-teal-500'
+                  : 'text-[#4F46E5] dark:text-[#818CF8]'
+              }`}
+            />
           </div>
-          <div className="text-xl sm:text-2xl font-black tabular-nums mt-1 text-[var(--text)]">
-            {categorized.completed.length > 0
-              ? `${categorized.completed.filter((e) => e.status === 'aprobado').length} de ${categorized.completed.length} aprobadas`
-              : '—'}
+          <div className="shrink-0 text-xl sm:text-2xl font-black tabular-nums sm:mt-1 text-[var(--text)]">
+            {thirdMetric.value}
           </div>
-          <p className="text-[11px] text-[var(--text-soft)] mt-0.5">
-            {approvalRate !== null ? 'Evaluaciones calificadas' : 'Sin evaluaciones calificadas'}
+          <p className="hidden sm:block text-[11px] text-[var(--text-soft)] mt-0.5">
+            {thirdMetric.subtitle}
           </p>
         </div>
       </div>}
@@ -1240,7 +1346,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
               <button
                 type="button"
                 onClick={openCreateSubjectModal}
-                className="inline-flex min-h-11 items-center gap-1 px-3 py-2 text-sm font-semibold rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white transition cursor-pointer"
+                className="inline-flex min-h-11 items-center gap-1 px-3 py-2 text-sm font-semibold rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white transition cursor-pointer"
                 title="Nueva materia"
               >
                 <AppIcon name="plus" className="h-4 w-4" />
@@ -1297,43 +1403,54 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                 return (
                   <div
                     key={s.id}
-                    className={`py-3 text-xs rounded-xl px-2.5 transition-colors space-y-2.5 ${
+                    className={`py-3 text-xs rounded-xl px-2.5 transition-colors space-y-2 ${
                       isSelected
-                        ? 'bg-[var(--blue-soft)] ring-1 ring-inset ring-[var(--blue)]/35'
+                        ? 'bg-[#4F46E5]/10 dark:bg-[#4F46E5]/18 ring-1 ring-inset ring-[#4F46E5]/35 dark:ring-[#818CF8]/35'
                         : 'hover:bg-[var(--surface-muted)]/50'
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-3">
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
                       <button
                         type="button"
                         onClick={() => setSelectedSubjectFilter(isSelected ? null : s.id)}
-                        className="min-w-0 flex-1 text-left cursor-pointer group"
+                        className="min-w-[165px] flex-1 text-left cursor-pointer group"
                         title={isSelected ? 'Quitar filtro' : `Filtrar evaluaciones de ${s.name}`}
                       >
-                        <span className="flex items-center gap-1.5 min-w-0">
-                          <span className="font-bold text-sm text-[var(--text)] group-hover:text-[var(--blue)] truncate">
+                        <span className="flex flex-wrap items-center gap-1.5 min-w-0">
+                          <span className="font-semibold text-[15px] leading-snug text-[var(--text)] group-hover:text-[#4F46E5] dark:group-hover:text-[#A5A0FF] break-words">
                             {s.name}
                           </span>
                           {!selectedProgramFilter && programs.length > 0 && (
-                            <span className="shrink-0 rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-soft)]">
+                            <span className="shrink-0 whitespace-nowrap rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[12px] font-medium text-[var(--text-soft)]">
                               {programName || 'General'}
                             </span>
                           )}
                         </span>
-                        <span className="text-[11px] text-[var(--text-soft)] block mt-0.5">
-                          {stats.examCount} {stats.examCount === 1 ? 'evaluación' : 'evaluaciones'} · {formatStudyDuration(stats.studyMinutes)} de estudio
+                        <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-[var(--text-soft)] mt-0.5">
+                          <span className="whitespace-nowrap">
+                            {stats.examCount} {stats.examCount === 1 ? 'evaluación' : 'evaluaciones'}
+                          </span>
+                          <span aria-hidden="true">·</span>
+                          <span className="whitespace-nowrap">
+                            {formatStudyDuration(stats.studyMinutes)} de estudio
+                          </span>
                           {stats.topicCount > 0 && (
-                            <span className="tabular-nums"> · {stats.completedTopicCount}/{stats.topicCount} temas</span>
+                            <>
+                              <span aria-hidden="true">·</span>
+                              <span className="tabular-nums whitespace-nowrap">
+                                {stats.completedTopicCount}/{stats.topicCount} temas
+                              </span>
+                            </>
                           )}
                           {stats.pendingExamCount > 0 && (
-                            <span className="ml-1 text-amber-600 dark:text-amber-400 font-medium">
+                            <span className="whitespace-nowrap text-amber-600 dark:text-amber-400 font-medium">
                               ({stats.pendingExamCount} pend.)
                             </span>
                           )}
                         </span>
                       </button>
 
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div data-subject-actions="true" className="flex items-center gap-1.5 shrink-0">
                         <button
                           type="button"
                           onClick={() => {
@@ -1341,9 +1458,9 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                             setNewSubjectTopicTitle('');
                           }}
                           aria-expanded={topicsOpen}
-                          className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition cursor-pointer ${
+                          className={`shrink-0 whitespace-nowrap px-2.5 py-1 rounded-lg border text-[12px] font-semibold transition cursor-pointer ${
                             topicsOpen
-                              ? 'border-[var(--blue)]/40 bg-[var(--blue-soft)] text-[var(--blue)]'
+                              ? 'border-[#4F46E5]/40 bg-[#4F46E5]/12 text-[#4F46E5] dark:border-[#818CF8]/40 dark:bg-[#4F46E5]/20 dark:text-[#A5A0FF]'
                               : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:text-[var(--text)]'
                           }`}
                           title="Temario de la materia"
@@ -1353,7 +1470,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                         <button
                           type="button"
                           onClick={() => openEditSubjectModal(s)}
-                          className="p-1.5 rounded-lg text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--bg-elevated)] transition cursor-pointer"
+                          className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-lg text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--bg-elevated)] transition cursor-pointer"
                           title="Renombrar materia"
                           aria-label={`Renombrar ${s.name}`}
                         >
@@ -1362,7 +1479,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                         <button
                           type="button"
                           onClick={() => handleDeleteSubject(s.id)}
-                          className="p-1.5 rounded-lg text-[var(--text-soft)] hover:text-red-500 hover:bg-red-500/10 transition cursor-pointer"
+                          className="inline-flex min-h-8 min-w-8 items-center justify-center rounded-lg text-[var(--text-soft)] hover:text-red-500 hover:bg-red-500/10 transition cursor-pointer"
                           title="Eliminar materia"
                           aria-label={`Eliminar materia ${s.name}`}
                         >
@@ -1420,11 +1537,11 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                             onChange={(ev) => setNewSubjectTopicTitle(ev.target.value)}
                             placeholder="Ej. Grafos y árboles..."
                             aria-label={`Nuevo tema para ${s.name}`}
-                            className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs text-[var(--text)] outline-hidden focus:border-[var(--blue)]"
+                            className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs text-[var(--text)] outline-hidden focus:border-[#4F46E5]"
                           />
                           <button
                             type="submit"
-                            className="shrink-0 rounded-lg bg-[var(--blue)] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[var(--blue-hover)] transition cursor-pointer"
+                            className="shrink-0 rounded-lg bg-[#4F46E5] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#4338CA] transition cursor-pointer"
                           >
                             Sumar
                           </button>
@@ -1457,7 +1574,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
             <button
               type="button"
               onClick={() => openCreateExamModal()}
-              className="inline-flex min-h-11 items-center gap-1 px-3 py-2 text-sm font-semibold rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white transition cursor-pointer"
+              className="inline-flex min-h-11 items-center gap-1 px-3 py-2 text-sm font-semibold rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white transition cursor-pointer"
               title="Agregar evaluación"
             >
               <AppIcon name="plus" className="h-4 w-4" />
@@ -1495,6 +1612,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
             ) : (
               displayedExams.map((e) => {
                 const meta = getExamDisplayName(e, subjects);
+                const cardDisplay = getExamCardDisplay(e, subjects);
                 const today = todayISO();
                 const isOverduePending = e.status === 'pendiente' && e.date < today;
                 const isUpcomingPending = e.status === 'pendiente' && e.date >= today;
@@ -1512,125 +1630,130 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                   <div
                     key={e.id}
                     id={`exam-${e.id}`}
-                    className="py-3 text-xs rounded-xl px-2 transition-all hover:bg-[var(--surface-muted)]/50 space-y-2"
+                    className="py-3.5 text-xs rounded-xl px-2 transition-all hover:bg-[var(--surface-muted)]/50 space-y-2.5"
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-start justify-between gap-2.5">
                       <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => openEditExamModal(e)}
-                            title={`Editar ${meta.title}`}
-                            className="text-left font-bold text-sm text-[var(--text)] hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors line-clamp-2 leading-snug break-words cursor-pointer"
-                          >
-                            {meta.title}
-                          </button>
-                          {meta.subjectName && (
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-[var(--surface-muted)] text-[var(--text-soft)]">
-                              {meta.subjectName}
+                        <button
+                          type="button"
+                          onClick={() => openEditExamModal(e)}
+                          title={`Editar ${cardDisplay.primaryTitle}`}
+                          className="text-left font-semibold text-[15px] text-[var(--text)] hover:text-[#4F46E5] dark:hover:text-[#A5A0FF] transition-colors leading-snug break-words cursor-pointer"
+                        >
+                          {cardDisplay.primaryTitle}
+                        </button>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--text-soft)] mt-1">
+                          {cardDisplay.typeLabel && (
+                            <span className="inline-flex items-center whitespace-nowrap rounded-md border border-[var(--border)]/80 bg-[var(--bg)] px-1.5 py-0.5 text-[12px] font-medium text-[var(--text-soft)]">
+                              {cardDisplay.typeLabel}
                             </span>
                           )}
-                          {isUpcomingPending && (
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md tabular-nums ${
-                              prep.daysUntil <= 2
-                                ? 'bg-rose-500/15 text-rose-600 dark:text-rose-300'
-                                : prep.daysUntil <= 7
-                                ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
-                                : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'
-                            }`}>
-                              {proximityLabel}
-                            </span>
-                          )}
-                          {isOverduePending && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300">
-                              Pendiente de nota
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-soft)] mt-0.5">
-                          <span className="tabular-nums">
+                          <span className="tabular-nums whitespace-nowrap">
                             {fmtDate(e.date)}{e.time ? ` · ${e.time}` : ''}
                           </span>
                           {e.grade && (
                             <span
                               data-testid={`exam-grade-${e.id}`}
-                              className="inline-flex items-center gap-1 font-medium text-[var(--text)] px-1.5 py-0.5 rounded-md bg-[var(--surface-muted)] border border-[var(--border)]/60 text-[11px]"
+                              className="inline-flex items-center gap-1 whitespace-nowrap font-medium text-[var(--text)] px-1.5 py-0.5 rounded-md bg-[var(--surface-muted)] border border-[var(--border)]/60 text-[12px]"
                             >
                               <span className="text-[var(--text-soft)]">Nota:</span>{' '}
                               <span className="font-bold tabular-nums">{e.grade}</span>
                             </span>
                           )}
-                          {isUpcomingPending && (prep.totalTopics > 0 || prep.recentMinutes7d > 0) && (
-                            <span className="tabular-nums">
-                              {prep.totalTopics > 0 ? `Temas: ${prep.completedTopics}/${prep.totalTopics} (${prep.progressPct}%)` : ''}
-                              {prep.totalTopics > 0 && prep.recentMinutes7d > 0 ? ' · ' : ''}
-                              {prep.recentMinutes7d > 0 ? `7d: ${formatStudyDuration(prep.recentMinutes7d)}` : ''}
-                            </span>
-                          )}
                         </div>
+                        {isUpcomingPending && (prep.totalTopics > 0 || prep.recentMinutes7d > 0) && (
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-[var(--text-soft)] mt-1 tabular-nums">
+                            {prep.totalTopics > 0 && (
+                              <span>Temas: {prep.completedTopics}/{prep.totalTopics} ({prep.progressPct}%)</span>
+                            )}
+                            {prep.totalTopics > 0 && prep.recentMinutes7d > 0 && <span aria-hidden="true">·</span>}
+                            {prep.recentMinutes7d > 0 && (
+                              <span>{formatStudyDuration(prep.recentMinutes7d)} (últimos 7 d)</span>
+                            )}
+                          </div>
+                        )}
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-1.5 shrink-0 self-end sm:self-auto">
-                        {isUpcomingPending && (
-                          <button
-                            type="button"
-                            disabled={alreadyInToday}
-                            onClick={() => handlePrioritizeExamToday(e)}
-                            className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition ${
-                              alreadyInToday
-                                ? 'border-teal-500/30 bg-teal-500/10 text-teal-700 dark:text-teal-300 cursor-default'
-                                : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--blue)]/40 cursor-pointer'
-                            }`}
-                            title={alreadyInToday ? 'Ya figura en tus prioridades de Hoy' : 'Enviar como prioridad del día a Hoy'}
-                          >
-                            {alreadyInToday ? 'En Hoy' : 'Priorizar hoy'}
-                          </button>
-                        )}
-                        {e.status === 'pendiente' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setExpandedExamTopicsId(examTopicsOpen ? null : e.id);
-                              setNewExamTopicTitle('');
-                            }}
-                            aria-expanded={examTopicsOpen}
-                            className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition cursor-pointer ${
-                              examTopicsOpen
-                                ? 'border-[var(--blue)]/40 bg-[var(--blue-soft)] text-[var(--blue)]'
-                                : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:text-[var(--text)]'
-                            }`}
-                            title="Temas de la evaluación"
-                          >
-                            Temas{ownTopics.length > 0 ? ` (${ownTopics.filter((t) => t.done).length}/${ownTopics.length})` : ''}
-                          </button>
-                        )}
-                        <select
-                          value={e.status}
-                          onChange={(ev) => handleSetExamStatus(e.id, ev.target.value as any)}
-                          aria-label={`Estado de ${meta.title}`}
-                          className={`px-2.5 py-1 text-xs rounded-lg border font-semibold outline-hidden cursor-pointer ${
-                            e.status === 'aprobado'
-                              ? 'bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/20'
-                              : e.status === 'desaprobado'
-                              ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
-                              : 'bg-[var(--bg-elevated)] text-[var(--text-soft)] border-[var(--border)]'
+                      {isUpcomingPending && (
+                        <span
+                          className={`shrink-0 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[12px] font-semibold tabular-nums ${
+                            prep.daysUntil <= 2
+                              ? 'border-rose-500/30 bg-rose-500/12 text-rose-600 dark:text-rose-300'
+                              : prep.daysUntil <= 7
+                              ? 'border-amber-500/30 bg-amber-500/12 text-amber-700 dark:text-amber-300'
+                              : 'border-[#4F46E5]/25 bg-[#4F46E5]/10 text-[#4F46E5] dark:border-[#818CF8]/30 dark:bg-[#4F46E5]/18 dark:text-[#A5A0FF]'
                           }`}
                         >
-                          <option value="pendiente">Pendiente</option>
-                          <option value="aprobado">Aprobado</option>
-                          <option value="desaprobado">Desaprobado</option>
-                        </select>
+                          {proximityLabel}
+                        </span>
+                      )}
+                      {isOverduePending && (
+                        <span className="shrink-0 whitespace-nowrap rounded-full border border-amber-500/30 bg-amber-500/12 px-2.5 py-0.5 text-[12px] font-semibold text-amber-700 dark:text-amber-300">
+                          Pendiente de nota
+                        </span>
+                      )}
+                    </div>
 
+                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                      {isUpcomingPending && (
                         <button
                           type="button"
-                          onClick={() => handleDeleteExam(e.id)}
-                          className="p-1.5 rounded-lg text-[var(--text-soft)] hover:text-red-500 hover:bg-red-500/10 transition cursor-pointer"
-                          title="Eliminar examen"
-                          aria-label={`Eliminar evaluación ${meta.title}`}
+                          disabled={alreadyInToday}
+                          onClick={() => handlePrioritizeExamToday(e)}
+                          className={`min-h-9 px-2.5 py-1 rounded-lg border text-[12px] font-semibold transition whitespace-nowrap ${
+                            alreadyInToday
+                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 cursor-default'
+                              : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[#4F46E5]/45 cursor-pointer'
+                          }`}
+                          title={alreadyInToday ? 'Ya figura en tus prioridades de Hoy' : 'Enviar como prioridad del día a Hoy'}
                         >
-                          <AppIcon name="trash" className="h-3.5 w-3.5" />
+                          {alreadyInToday ? 'En Hoy' : 'Priorizar hoy'}
                         </button>
-                      </div>
+                      )}
+                      {e.status === 'pendiente' && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setExpandedExamTopicsId(examTopicsOpen ? null : e.id);
+                            setNewExamTopicTitle('');
+                          }}
+                          aria-expanded={examTopicsOpen}
+                          className={`min-h-9 px-2.5 py-1 rounded-lg border text-[12px] font-semibold transition whitespace-nowrap cursor-pointer ${
+                            examTopicsOpen
+                              ? 'border-[#4F46E5]/40 bg-[#4F46E5]/12 text-[#4F46E5] dark:border-[#818CF8]/40 dark:bg-[#4F46E5]/20 dark:text-[#A5A0FF]'
+                              : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:text-[var(--text)]'
+                          }`}
+                          title="Temas de la evaluación"
+                        >
+                          Temas{ownTopics.length > 0 ? ` (${ownTopics.filter((t) => t.done).length}/${ownTopics.length})` : ''}
+                        </button>
+                      )}
+                      <select
+                        value={e.status}
+                        onChange={(ev) => handleSetExamStatus(e.id, ev.target.value as any)}
+                        aria-label={`Estado de ${cardDisplay.primaryTitle}`}
+                        className={`min-h-9 px-2.5 py-1 text-[12px] rounded-lg border font-semibold outline-hidden cursor-pointer ${
+                          e.status === 'aprobado'
+                            ? 'study-exam-status-approved bg-emerald-500/12 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300 border-emerald-500/35'
+                            : e.status === 'desaprobado'
+                            ? 'study-exam-status-failed bg-rose-500/12 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300 border-rose-500/35'
+                            : 'study-exam-status-pending bg-amber-500/10 text-amber-700 dark:bg-amber-500/12 dark:text-amber-300 border-amber-500/30'
+                        }`}
+                      >
+                        <option value="pendiente">Pendiente</option>
+                        <option value="aprobado">Aprobado</option>
+                        <option value="desaprobado">Desaprobado</option>
+                      </select>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteExam(e.id)}
+                        className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg text-[var(--text-soft)] hover:text-red-500 hover:bg-red-500/10 transition cursor-pointer"
+                        title="Eliminar examen"
+                        aria-label={`Eliminar evaluación ${cardDisplay.primaryTitle}`}
+                      >
+                        <AppIcon name="trash" className="h-3.5 w-3.5" />
+                      </button>
                     </div>
 
                     {isUpcomingPending && prep.progressPct !== null && (
@@ -1643,7 +1766,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                               ? 'bg-rose-500'
                               : prep.readiness === 'needs_attention'
                               ? 'bg-amber-500'
-                              : 'bg-[var(--blue)]'
+                              : 'bg-[#4F46E5]'
                           }`}
                           style={{ width: `${Math.max(4, prep.progressPct)}%` }}
                         />
@@ -1691,12 +1814,12 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                             value={newExamTopicTitle}
                             onChange={(ev) => setNewExamTopicTitle(ev.target.value)}
                             placeholder="Ej. Unidad 3: Programación dinámica..."
-                            aria-label={`Nuevo tema para ${meta.title}`}
-                            className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs text-[var(--text)] outline-hidden focus:border-[var(--blue)]"
+                            aria-label={`Nuevo tema para ${cardDisplay.primaryTitle}`}
+                            className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2.5 py-1.5 text-xs text-[var(--text)] outline-hidden focus:border-[#4F46E5]"
                           />
                           <button
                             type="submit"
-                            className="shrink-0 rounded-lg bg-[var(--blue)] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[var(--blue-hover)] transition cursor-pointer"
+                            className="shrink-0 rounded-lg bg-[#4F46E5] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#4338CA] transition cursor-pointer"
                           >
                             Sumar
                           </button>
@@ -1730,7 +1853,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
             onClick={() => setManualFormOpen((open) => !open)}
             className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] px-3 py-2 text-xs font-bold text-[var(--text)] transition hover:bg-[var(--bg-elevated)] cursor-pointer"
           >
-            <AppIcon name="plus" className="h-3.5 w-3.5 text-[var(--blue)]" />
+            <AppIcon name="plus" className="h-3.5 w-3.5 text-[#4F46E5] dark:text-[#A5A0FF]" />
             {manualFormOpen ? 'Cerrar registro' : 'Registrar estudio'}
           </button>
         </div>
@@ -1797,14 +1920,14 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                 return (
                   <div
                     key={l.id}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-3 text-sm hover:bg-[var(--surface-muted)]/40 px-2 rounded-xl transition-colors"
+                    className="flex items-center justify-between gap-2.5 py-3 text-sm hover:bg-[var(--surface-muted)]/40 px-2 rounded-xl transition-colors"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm text-[var(--text)]">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="font-semibold text-sm text-[var(--text)] break-words">
                           {getSubjectDisplayName(l.subjectId, subjects, l.subjectName)}
                         </span>
-                        <span className="tabular-nums font-bold text-xs px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                        <span className="tabular-nums whitespace-nowrap font-bold text-xs px-2 py-0.5 rounded-md bg-[#4F46E5]/10 text-[#4F46E5] dark:bg-[#4F46E5]/20 dark:text-[#A5A0FF]">
                           {formatStudyDuration(l.minutes)}
                         </span>
                       </div>
@@ -1814,7 +1937,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0 self-end sm:self-auto">
+                    <div className="flex items-center gap-1 shrink-0">
                       <button
                         type="button"
                         onClick={() => openEditLogModal(l)}

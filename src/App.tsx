@@ -108,6 +108,7 @@ import {
   type ResaleConflictReconciliationPreview,
 } from './lib/resaleConflictResolution';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { isAmbientSessionAttached, isAnyAmbientNoisePlaying, isSoundEnabled, stopAllAmbientNoise } from './lib/audio';
 
 const MobileQuickCapture = lazy(() => import('./components/MobileQuickCapture').then((module) => ({ default: module.MobileQuickCapture })));
 const GymRestOverlay = lazy(() => import('./components/GymRestOverlay').then((module) => ({ default: module.GymRestOverlay })));
@@ -928,6 +929,27 @@ export default function App() {
     const interval = window.setInterval(heartbeat, 30_000);
     return () => window.clearInterval(interval);
   }, [studySessionId, studySessionStatus]);
+
+  // Keep ambient study audio playing across view navigation while a focus session
+  // is running, and guarantee immediate cleanup if the session pauses, ends,
+  // Estudios is hidden, or global sound is muted.
+  const isStudyModuleEnabled = isModuleEnabled(state, 'estudios');
+  useEffect(() => {
+    const isRunningSession = Boolean(studySessionId && studySessionStatus === 'running' && isStudyModuleEnabled);
+    if (!isRunningSession && (isAmbientSessionAttached() || (currentView !== 'estudios' && isAnyAmbientNoisePlaying()))) {
+      stopAllAmbientNoise();
+    }
+  }, [studySessionId, studySessionStatus, isStudyModuleEnabled, currentView]);
+
+  useEffect(() => {
+    const handleSoundPref = () => {
+      if (!isSoundEnabled() && (isAnyAmbientNoisePlaying() || isAmbientSessionAttached())) {
+        stopAllAmbientNoise();
+      }
+    };
+    window.addEventListener('lifeos-sound-preference', handleSoundPref);
+    return () => window.removeEventListener('lifeos-sound-preference', handleSoundPref);
+  }, []);
 
   useEffect(() => {
     if (!cloudSyncConfigured) return;

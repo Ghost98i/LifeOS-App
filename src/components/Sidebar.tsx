@@ -131,9 +131,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onCloseMobile();
                   }}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`group relative flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40 ${
+                  className={`group relative flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/40 ${
                     isActive
-                      ? 'bg-[var(--blue-soft)] font-bold text-[var(--text)] ring-1 ring-inset ring-[var(--blue)]/25 shadow-2xs'
+                      ? 'bg-[#4F46E5]/12 dark:bg-[#4F46E5]/20 font-bold text-[var(--text)] ring-1 ring-inset ring-[#4F46E5]/30 dark:ring-[#818CF8]/30 shadow-2xs'
                       : 'font-medium text-[var(--text-soft)] hover:bg-[var(--surface-muted)]/60 hover:text-[var(--text)]'
                   }`}
                 >
@@ -142,7 +142,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       name={item.icon}
                       strokeWidth={1.75}
                       className={`h-[18px] w-[18px] shrink-0 transition-colors ${
-                        isActive ? 'text-indigo-600 dark:text-indigo-400' : 'text-[var(--text-soft)] group-hover:text-[var(--text)]'
+                        isActive ? 'text-[#4F46E5] dark:text-[#818CF8]' : 'text-[var(--text-soft)] group-hover:text-[var(--text)]'
                       }`}
                     />
                   </span>
@@ -165,7 +165,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <AppIcon
                 name={state.settings.darkMode ? 'moon' : 'sun'}
                 strokeWidth={1.75}
-                className="h-4 w-4 shrink-0 text-[var(--text-soft)] group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors"
+                className="h-4 w-4 shrink-0 text-[var(--text-soft)] group-hover:text-[#4F46E5] dark:group-hover:text-[#818CF8] transition-colors"
               />
               <span>Modo {state.settings.darkMode ? 'oscuro' : 'claro'}</span>
             </div>
@@ -173,7 +173,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               aria-hidden="true"
               className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border p-0.5 transition-colors ${
                 state.settings.darkMode
-                  ? 'border-[var(--blue)] bg-[var(--blue)] justify-end'
+                  ? 'border-[#4F46E5] bg-[#4F46E5] justify-end'
                   : 'border-[var(--border-strong)] bg-[var(--surface-muted)] justify-start'
               }`}
             >

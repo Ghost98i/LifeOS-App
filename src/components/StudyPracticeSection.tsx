@@ -125,6 +125,16 @@ export const StudyPracticeSection: React.FC<StudyPracticeSectionProps> = ({
     }).length;
   }, [questions, practiceSubjectId, practiceTopicId]);
 
+  const effectivePracticeCount = availablePoolCount > 0
+    ? Math.max(1, Math.min(practiceCount, availablePoolCount))
+    : 1;
+
+  useEffect(() => {
+    if (availablePoolCount > 0 && practiceCount > availablePoolCount) {
+      setPracticeCount(availablePoolCount);
+    }
+  }, [availablePoolCount, practiceCount]);
+
   const handleCompleteSession = React.useCallback(() => {
     if (finishingRef.current) return;
     finishingRef.current = true;
@@ -323,7 +333,7 @@ export const StudyPracticeSection: React.FC<StudyPracticeSectionProps> = ({
         topicId: practiceTopicId || null,
         mode: practiceMode,
         penalty: practicePenalty,
-        questionCount: practiceCount,
+        questionCount: effectivePracticeCount,
         timeLimitMinutes: practiceMode === 'simulacro' || practiceTimed ? practiceMinutes : null,
         immediateFeedback: practiceMode === 'practica' ? immediateFeedback : false,
         now: Date.now(),
@@ -369,7 +379,7 @@ export const StudyPracticeSection: React.FC<StudyPracticeSectionProps> = ({
       <section aria-label="Sesión de repaso activa" className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-6 space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
           <div>
-            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--blue)]">
+            <span className="text-xs font-semibold uppercase tracking-wide text-[#4F46E5] dark:text-[#A5A0FF]">
               {activeSession.mode === 'simulacro' ? 'Simulacro cronometrado' : 'Repaso activo'} · {subjectName}
             </span>
             <h2 className="text-lg font-bold text-[var(--text)] mt-0.5">
@@ -409,7 +419,7 @@ export const StudyPracticeSection: React.FC<StudyPracticeSectionProps> = ({
             const isCorrectOption = opt.id === currentQuestion.correctOptionId;
             const reveal = Boolean(currentAnswer) && (showingFeedback || activeSession.immediateFeedback);
 
-            let cardStyle = 'border-[var(--border)] bg-[var(--bg)] hover:border-[var(--blue)]/60';
+            let cardStyle = 'border-[var(--border)] bg-[var(--bg)] hover:border-[#4F46E5]/60';
             if (reveal) {
               if (isCorrectOption) {
                 cardStyle = 'border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300';
@@ -417,7 +427,7 @@ export const StudyPracticeSection: React.FC<StudyPracticeSectionProps> = ({
                 cardStyle = 'border-red-500 bg-red-500/10 text-red-700 dark:text-red-300';
               }
             } else if (isSelected) {
-              cardStyle = 'border-[var(--blue)] bg-[var(--blue-soft)] ring-1 ring-[var(--blue)]';
+              cardStyle = 'border-[#4F46E5] bg-[#4F46E5]/12 dark:bg-[#4F46E5]/20 ring-1 ring-[#4F46E5]';
             }
 
             return (
@@ -466,7 +476,7 @@ export const StudyPracticeSection: React.FC<StudyPracticeSectionProps> = ({
             type="button"
             disabled={!currentAnswer && !selectedOptionId}
             onClick={handleConfirmOrAdvance}
-            className="min-h-11 rounded-xl bg-[var(--blue)] px-5 text-sm font-bold text-white hover:bg-[var(--blue-hover)] disabled:opacity-45 cursor-pointer"
+            className="min-h-11 rounded-xl bg-[#4F46E5] px-5 text-sm font-bold text-white hover:bg-[#4338CA] dark:hover:bg-[#6366F1] disabled:opacity-45 cursor-pointer transition-colors"
           >
             {!currentAnswer
               ? 'Confirmar'
@@ -563,18 +573,22 @@ export const StudyPracticeSection: React.FC<StudyPracticeSectionProps> = ({
             type="button"
             onClick={openNewQuestionForm}
             disabled={subjects.length === 0}
-            className="min-h-10 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3.5 text-xs font-bold text-[var(--text)] hover:border-[var(--blue)] disabled:opacity-45 cursor-pointer"
+            className={`min-h-10 rounded-xl px-4 text-xs font-bold transition-colors disabled:opacity-45 cursor-pointer ${
+              subjects.length > 0 && questions.length === 0
+                ? 'bg-[#4F46E5] text-white hover:bg-[#4338CA] dark:hover:bg-[#6366F1] shadow-xs'
+                : 'border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text)] hover:border-[#4F46E5]/50 hover:text-[#4F46E5] dark:hover:text-[#A5A0FF]'
+            }`}
           >
             + Nueva pregunta
           </button>
         </div>
 
         {subjects.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-[var(--border)] p-4 text-xs text-[var(--text-soft)]">
+          <p className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg)]/60 p-4 text-xs text-[var(--text-soft)]">
             Primero creá al menos una materia en la pestaña principal para poder asociar preguntas de repaso.
           </p>
         ) : questions.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-[var(--border)] p-4 space-y-2">
+          <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--bg)]/60 p-4 sm:p-5 space-y-1.5">
             <p className="text-sm font-semibold text-[var(--text)]">Todavía no tenés preguntas cargadas</p>
             <p className="text-xs text-[var(--text-soft)]">
               Cargá preguntas de opción múltiple por materia o tema para entrenar con práctica libre o simulacro con reloj y descuento.
@@ -636,8 +650,11 @@ export const StudyPracticeSection: React.FC<StudyPracticeSectionProps> = ({
                 type="number"
                 min={1}
                 max={Math.max(1, availablePoolCount)}
-                value={practiceCount}
-                onChange={(e) => setPracticeCount(Math.max(1, Number(e.target.value) || 1))}
+                value={effectivePracticeCount}
+                onChange={(e) => {
+                  const raw = Math.max(1, Number(e.target.value) || 1);
+                  setPracticeCount(availablePoolCount > 0 ? Math.min(raw, availablePoolCount) : raw);
+                }}
                 className="w-full min-h-10 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 text-[var(--text)]"
               />
             </label>
@@ -671,35 +688,53 @@ export const StudyPracticeSection: React.FC<StudyPracticeSectionProps> = ({
                 />
               </label>
             ) : (
-              <div className="space-y-2 pt-1">
-                <label className="flex items-center gap-2 cursor-pointer text-[var(--text-soft)]">
-                  <input
-                    type="checkbox"
-                    checked={immediateFeedback}
-                    onChange={(e) => setImmediateFeedback(e.target.checked)}
-                  />
-                  <span>Mostrar feedback inmediato</span>
-                </label>
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-2 cursor-pointer text-[var(--text-soft)]">
-                    <input
-                      type="checkbox"
-                      checked={practiceTimed}
-                      onChange={(e) => setPracticeTimed(e.target.checked)}
-                    />
-                    <span>Con temporizador</span>
-                  </label>
-                  {practiceTimed && (
-                    <input
-                      type="number"
-                      aria-label="Minutos del temporizador opcional"
-                      min={1}
-                      max={180}
-                      value={practiceMinutes}
-                      onChange={(e) => setPracticeMinutes(Math.max(1, Number(e.target.value) || 1))}
-                      className="w-20 min-h-8 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-[var(--text)]"
-                    />
-                  )}
+              <div className="flex flex-col justify-center gap-2 sm:pt-1">
+                <div className="flex items-center justify-between gap-3 min-h-9 rounded-lg border border-[var(--border)]/70 bg-[var(--bg)]/60 px-2.5 py-1.5">
+                  <span className="font-medium text-[var(--text-soft)]">Mostrar feedback inmediato</span>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={immediateFeedback}
+                    aria-label="Mostrar feedback inmediato"
+                    onClick={() => setImmediateFeedback((prev) => !prev)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border p-0.5 transition-colors cursor-pointer outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
+                      immediateFeedback
+                        ? 'border-[#4F46E5] bg-[#4F46E5] justify-end'
+                        : 'border-[var(--border-strong)] bg-[var(--surface-muted)] justify-start'
+                    }`}
+                  >
+                    <span className="h-3.5 w-3.5 rounded-full bg-white shadow-2xs transition-transform" />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between gap-3 min-h-9 rounded-lg border border-[var(--border)]/70 bg-[var(--bg)]/60 px-2.5 py-1.5">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-medium text-[var(--text-soft)]">Con temporizador</span>
+                    {practiceTimed && (
+                      <input
+                        type="number"
+                        aria-label="Minutos del temporizador opcional"
+                        min={1}
+                        max={180}
+                        value={practiceMinutes}
+                        onChange={(e) => setPracticeMinutes(Math.max(1, Number(e.target.value) || 1))}
+                        className="w-16 min-h-8 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] px-2 tabular-nums text-[var(--text)]"
+                      />
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={practiceTimed}
+                    aria-label="Con temporizador"
+                    onClick={() => setPracticeTimed((prev) => !prev)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border p-0.5 transition-colors cursor-pointer outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
+                      practiceTimed
+                        ? 'border-[#4F46E5] bg-[#4F46E5] justify-end'
+                        : 'border-[var(--border-strong)] bg-[var(--surface-muted)] justify-start'
+                    }`}
+                  >
+                    <span className="h-3.5 w-3.5 rounded-full bg-white shadow-2xs transition-transform" />
+                  </button>
                 </div>
               </div>
             )}
@@ -715,7 +750,7 @@ export const StudyPracticeSection: React.FC<StudyPracticeSectionProps> = ({
               type="button"
               disabled={availablePoolCount === 0}
               onClick={handleStartPractice}
-              className="min-h-11 rounded-xl bg-[var(--blue)] px-5 text-sm font-bold text-white hover:bg-[var(--blue-hover)] disabled:opacity-45 cursor-pointer"
+              className="min-h-11 rounded-xl bg-[#4F46E5] px-5 text-sm font-bold text-white hover:bg-[#4338CA] dark:hover:bg-[#6366F1] disabled:opacity-45 cursor-pointer transition-colors"
             >
               Comenzar {practiceMode === 'simulacro' ? 'simulacro' : 'repaso'}
             </button>
@@ -757,17 +792,20 @@ export const StudyPracticeSection: React.FC<StudyPracticeSectionProps> = ({
                     <button
                       type="button"
                       onClick={() => openEditQuestionForm(q)}
-                      className="min-h-9 rounded-lg px-2 text-[var(--blue)] hover:bg-[var(--surface-muted)] font-semibold cursor-pointer"
+                      className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] transition-colors cursor-pointer"
+                      title="Editar pregunta"
+                      aria-label={`Editar pregunta: ${q.prompt}`}
                     >
-                      Editar
+                      <AppIcon name="edit" className="h-3.5 w-3.5" />
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDeleteQuestion(q.id)}
-                      className="min-h-9 rounded-lg px-2 text-[var(--text-faint)] hover:text-red-500 cursor-pointer"
-                      aria-label="Eliminar pregunta"
+                      className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg text-[var(--text-faint)] hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer"
+                      title="Eliminar pregunta"
+                      aria-label={`Eliminar pregunta: ${q.prompt}`}
                     >
-                      Eliminar
+                      <AppIcon name="trash" className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </li>
@@ -884,7 +922,7 @@ export const StudyPracticeSection: React.FC<StudyPracticeSectionProps> = ({
                   <button
                     type="button"
                     onClick={() => setQOptions([...qOptions, { id: uid(), text: '' }])}
-                    className="text-[var(--blue)] font-semibold hover:underline cursor-pointer"
+                    className="text-[#4F46E5] dark:text-[#A5A0FF] font-semibold hover:underline cursor-pointer"
                   >
                     + Agregar opción
                   </button>
@@ -951,7 +989,7 @@ export const StudyPracticeSection: React.FC<StudyPracticeSectionProps> = ({
               </button>
               <button
                 type="submit"
-                className="min-h-10 rounded-xl bg-[var(--blue)] px-4 font-bold text-white hover:bg-[var(--blue-hover)] cursor-pointer"
+                className="min-h-10 rounded-xl bg-[#4F46E5] px-4 font-bold text-white hover:bg-[#4338CA] dark:hover:bg-[#6366F1] cursor-pointer transition-colors"
               >
                 Guardar pregunta
               </button>

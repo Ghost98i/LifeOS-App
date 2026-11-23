@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { LifeOSState } from '../types';
 import { isModuleEnabled } from '../lib/moduleVisibility';
-import { playSound } from '../lib/audio';
+import { isAmbientSessionAttached, isAnyAmbientNoisePlaying, playSound, stopAllAmbientNoise } from '../lib/audio';
 import {
   assessStudySession,
   pauseStudySession,
@@ -38,10 +38,17 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
   useEffect(() => {
     if (!session) {
       setAssessment(null);
+      if (isAnyAmbientNoisePlaying() || isAmbientSessionAttached()) {
+        stopAllAmbientNoise();
+      }
       return;
     }
     const update = () => {
-      setAssessment(assessStudySession(session));
+      const next = assessStudySession(session);
+      setAssessment(next);
+      if (next.status !== 'running' && (isAnyAmbientNoisePlaying() || isAmbientSessionAttached())) {
+        stopAllAmbientNoise();
+      }
     };
     update();
     const interval = window.setInterval(update, 500);
@@ -73,6 +80,9 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
 
   const handleTogglePause = () => {
     playSound('click');
+    if (session.status === 'running') {
+      stopAllAmbientNoise();
+    }
     onUpdateState((draft) => {
       if (!draft.study?.activeSession) return;
       if (draft.study.activeSession.status === 'running') {
@@ -84,6 +94,7 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
   };
 
   const handleFinishAndRecord = () => {
+    stopAllAmbientNoise();
     onUpdateState((draft) => {
       if (!draft.study?.activeSession) return;
       if (isBreak) {
@@ -107,6 +118,7 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
 
   const handleDiscard = () => {
     if (!window.confirm('¿Descartar esta sesión de enfoque sin registrar el tiempo?')) return;
+    stopAllAmbientNoise();
     playSound('click');
     onUpdateState((draft) => {
       if (draft.study) draft.study.activeSession = null;
@@ -125,7 +137,7 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
       <div className="h-1 bg-[var(--surface-muted)]">
         <div
           className={`h-full transition-all duration-300 ${
-            status === 'paused' ? 'bg-amber-500' : 'bg-[var(--blue)]'
+            status === 'paused' ? 'bg-amber-500' : 'bg-[#4F46E5]'
           }`}
           style={{
             width: `${Math.max(
@@ -149,7 +161,7 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
                 status === 'running' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
               }`}
             />
-            <span className="block truncate text-[11px] font-bold text-[var(--blue)] group-hover:underline">
+            <span className="block truncate text-[11px] font-bold text-[#4F46E5] dark:text-[#818CF8] group-hover:underline">
               {phaseLabel}
             </span>
           </div>
@@ -164,7 +176,7 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
         <div className="flex items-center gap-1.5 shrink-0">
           {needsReview ? (
             <button type="button" onClick={onOpenStudies}
-              className="min-h-9 rounded-xl bg-[var(--blue)] px-3 text-xs font-bold text-white">
+              className="min-h-9 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] dark:hover:bg-[#6366F1] px-3 text-xs font-bold text-white transition-colors cursor-pointer">
               Revisar en Estudios
             </button>
           ) : (
@@ -185,7 +197,7 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
           <button
             type="button"
             onClick={handleFinishAndRecord}
-            className="min-h-9 rounded-xl bg-[var(--blue)] px-3 text-xs font-bold text-white transition-colors hover:bg-[var(--blue-hover)] active:scale-95 cursor-pointer"
+            className="min-h-9 rounded-xl bg-[#4F46E5] px-3 text-xs font-bold text-white transition-colors hover:bg-[#4338CA] dark:hover:bg-[#6366F1] active:scale-95 cursor-pointer"
             title="Guardar minutos estudiados y finalizar"
           >
             Terminar

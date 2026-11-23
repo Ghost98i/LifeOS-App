@@ -387,8 +387,21 @@ interface ActiveTrack {
 }
 const activeAmbientTracks = new Map<AmbientSoundType, ActiveTrack>();
 const ambientBuffers = new Map<string, AudioBuffer>();
+let ambientSessionAttached = false;
 const clampVolume = (value: number) => Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
 const getTrackMaxGain = (_type: AmbientSoundType) => 0.12;
+
+export function isAmbientSessionAttached(): boolean {
+  return ambientSessionAttached;
+}
+
+export function setAmbientSessionAttached(attached: boolean): void {
+  ambientSessionAttached = attached;
+}
+
+export function shouldKeepAmbientOnUnmount(sessionRunning: boolean): boolean {
+  return Boolean(sessionRunning && ambientSessionAttached && isSoundEnabled());
+}
 
 function rampAmbientGain(param: AudioParam, value: number, ctx: AudioContext, seconds = 0.2) {
   const now = ctx.currentTime;
@@ -469,9 +482,13 @@ export function playConfiguredAmbients(config: AmbientMixerConfig): void {
 }
 
 export function stopAllAmbientNoise(): void {
+  ambientSessionAttached = false;
   const types = Array.from(activeAmbientTracks.keys());
   types.forEach((type) => stopAmbientTrack(type));
   activeAmbientTracks.clear();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('lifeos-audio-state'));
+  }
 }
 
 export function isAnyAmbientNoisePlaying(): boolean {

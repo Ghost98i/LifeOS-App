@@ -2,6 +2,7 @@
 :is(.study-refinement, .notes-refinement, .ai-refinement) {
   --blue: #4F46E5;
   --blue-hover: #4338CA;
+  --blue-soft: rgb(79 70 229 / 0.14);
   --accent: #4F46E5;
   --color-indigo-600: #4F46E5;
   min-width: 0;
@@ -19,6 +20,117 @@
 .study-refinement { font-variant-numeric: tabular-nums; }
 .study-refinement button[aria-controls="manual-study-form"] { border-color: var(--blue); color: var(--blue); background: var(--card); }
 .dark .study-refinement button[aria-controls="manual-study-form"] { color: #A5A0FF; }
+
+/* Semantic exam status selects (overrides unlayered select base in index.css) */
+.study-refinement select.study-exam-status-approved {
+  background-color: rgba(16, 185, 129, 0.12);
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+.dark .study-refinement select.study-exam-status-approved {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #6EE7B7;
+  border-color: rgba(16, 185, 129, 0.35);
+}
+.study-refinement select.study-exam-status-failed {
+  background-color: rgba(244, 63, 94, 0.11);
+  color: #BE123C;
+  border-color: rgba(244, 63, 94, 0.35);
+}
+.dark .study-refinement select.study-exam-status-failed {
+  background-color: rgba(244, 63, 94, 0.15);
+  color: #FDA4AF;
+  border-color: rgba(244, 63, 94, 0.35);
+}
+.study-refinement select.study-exam-status-pending {
+  background-color: rgba(245, 158, 11, 0.10);
+  color: #92400E;
+  border-color: rgba(245, 158, 11, 0.30);
+}
+.dark .study-refinement select.study-exam-status-pending {
+  background-color: rgba(245, 158, 11, 0.12);
+  color: #FCD34D;
+  border-color: rgba(245, 158, 11, 0.30);
+}
+
+/* Custom ambient volume slider: subtle dark/light track + dynamic Celestian indigo fill */
+.study-volume-slider {
+  --study-range-track: rgba(15, 23, 42, 0.14);
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to right,
+    #4F46E5 0%,
+    #4F46E5 var(--range-progress, 0%),
+    var(--study-range-track) var(--range-progress, 0%),
+    var(--study-range-track) 100%
+  );
+  outline: none;
+  cursor: pointer;
+}
+.dark .study-volume-slider {
+  --study-range-track: rgba(255, 255, 255, 0.12);
+}
+.study-volume-slider:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.study-volume-slider:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.45);
+}
+.study-volume-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: transparent;
+}
+.study-volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -5px;
+  border-radius: 9999px;
+  background: #4F46E5;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+.dark .study-volume-slider::-webkit-slider-thumb {
+  background: #6366F1;
+  border-color: #0F131D;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+}
+.study-volume-slider:hover:not(:disabled)::-webkit-slider-thumb {
+  transform: scale(1.08);
+}
+.study-volume-slider::-moz-range-track {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--study-range-track);
+}
+.study-volume-slider::-moz-range-progress {
+  height: 6px;
+  border-radius: 9999px;
+  background: #4F46E5;
+}
+.study-volume-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: #4F46E5;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.35);
+  transition: transform 0.15s ease, background-color 0.15s ease;
+}
+.dark .study-volume-slider::-moz-range-thumb {
+  background: #6366F1;
+  border-color: #0F131D;
+}
 :root:not(.dark) :is(.study-refinement, .notes-refinement, .ai-refinement) :is(.text-emerald-500, .text-emerald-600) { color: #047857; }
 :root:not(.dark) :is(.study-refinement, .notes-refinement, .ai-refinement) :is(.text-rose-500, .text-rose-600, .text-red-500) { color: #BE123C; }
 :root:not(.dark) :is(.study-refinement, .notes-refinement, .ai-refinement) :is(.text-amber-500, .text-amber-600) { color: #92400E; }
