@@ -14,7 +14,7 @@ import { shouldPlayCompletionMotion } from '../lib/motion';
 import { playSound } from '../lib/audio';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
-import { CompletionCheckMark } from './visual/CompletionCheckMark';
+import { CompletionCheck } from './ui/CompletionCheck';
 import { SurfaceCard, SectionHeader, ListDivider } from './ui/SurfacePrimitives';
 import { agendaWeek, editedWeeklyBlockTime, isCurrentWeek, parseLocalDateISO, shiftWeek, validatePunctualEvent, validateWeeklyBlock, weekDates } from '../lib/agendaWeek';
 import { isModuleEnabled } from '../lib/moduleVisibility';
@@ -67,7 +67,6 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
   const weeklySubmitting = useRef(false);
   const weeklyTrigger = useRef<HTMLElement | null>(null);
   const templateTrigger = useRef<HTMLButtonElement | null>(null);
-  const [completionMotion, setCompletionMotion] = useState<{ taskId: string; nonce: number } | null>(null);
   const [todayIso, setTodayIso] = useState(todayISO);
   const days = useMemo(() => agendaWeek(state, weekReference), [state, weekReference]);
   const dates = useMemo(() => weekDates(weekReference), [weekReference]);
@@ -183,12 +182,6 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
     });
     setEventDraft(null);
   };
-
-  useEffect(() => {
-    if (!completionMotion) return;
-    const timeout = window.setTimeout(() => setCompletionMotion(null), 1100);
-    return () => window.clearTimeout(timeout);
-  }, [completionMotion]);
 
   // Editing state for Agenda Block
   const [editingBlock, setEditingBlock] = useState<{
@@ -393,30 +386,21 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
 
     if (saved && shouldPlayCompletionMotion(wasCompleted, nextCompleted)) {
       playSound('success');
-      setCompletionMotion((current) => ({ taskId, nonce: (current?.nonce || 0) + 1 }));
     }
   };
 
-  const todayCompletionButton = (taskId: string, taskName: string, completed: boolean) => {
-    const showMotion = Boolean(completed && completionMotion?.taskId === taskId);
-    return (
-      <button
-        type="button"
-        onClick={() => handleToggleTodayTask(taskId)}
-        aria-label={completed ? `Reabrir ${taskName}` : `Completar ${taskName}`}
-        aria-pressed={completed}
-        title={completed ? 'Reabrir para hoy' : 'Completar para hoy'}
-        className={`lifeos-task-check agenda-completion-check relative -ml-2 flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer ${completed ? (showMotion ? 'is-completed is-animating' : 'is-completed') : 'is-pending'}`}
-      >
-        <CompletionCheckMark
-          completed={completed}
-          animate={showMotion}
-          nonce={completionMotion?.nonce || 0}
-          size={22}
-        />
-      </button>
-    );
-  };
+  const todayCompletionButton = (taskId: string, taskName: string, completed: boolean) => (
+    <button
+      type="button"
+      onClick={() => handleToggleTodayTask(taskId)}
+      aria-label={completed ? `Reabrir ${taskName}` : `Completar ${taskName}`}
+      aria-pressed={completed}
+      title={completed ? 'Reabrir para hoy' : 'Completar para hoy'}
+      className={`lifeos-task-check agenda-completion-check group relative -ml-2 flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer ${completed ? 'is-completed' : 'is-pending'}`}
+    >
+      <CompletionCheck checked={completed} size="md" />
+    </button>
+  );
 
   const getDayEntries = (item: typeof days[number]) => {
     const entries = [

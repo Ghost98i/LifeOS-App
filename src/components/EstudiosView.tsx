@@ -8,6 +8,7 @@ import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 import { StudyPracticeSection } from './StudyPracticeSection';
 import { SurfaceCard } from './ui/SurfacePrimitives';
+import { CompletionCheck } from './ui/CompletionCheck';
 import { playSound } from '../lib/audio';
 import {
   todayISO,
@@ -1379,15 +1380,10 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleToggleSubjectTopic(s.id, topic.id)}
-                                  className="flex items-center gap-2 min-w-0 flex-1 text-left cursor-pointer"
+                                  aria-pressed={topic.done}
+                                  className="group flex items-center gap-2 min-w-0 flex-1 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer"
                                 >
-                                  <span className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition ${
-                                    topic.done
-                                      ? 'border-teal-500 bg-teal-500 text-white'
-                                      : 'border-[var(--border)] bg-[var(--bg-elevated)]'
-                                  }`}>
-                                    {topic.done && <AppIcon name="check" className="h-3 w-3" />}
-                                  </span>
+                                  <CompletionCheck checked={topic.done} size="sm" />
                                   <span className="min-w-0 flex-1">
                                     <span className={`block text-xs break-words ${topic.done ? 'line-through text-[var(--text-faint)]' : 'text-[var(--text)]'}`}>
                                       {topic.title}
@@ -1663,15 +1659,10 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleToggleExamTopic(e.id, topic.id)}
-                                  className="flex items-center gap-2 min-w-0 flex-1 text-left cursor-pointer"
+                                  aria-pressed={topic.done}
+                                  className="group flex items-center gap-2 min-w-0 flex-1 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer"
                                 >
-                                  <span className={`inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border transition ${
-                                    topic.done
-                                      ? 'border-teal-500 bg-teal-500 text-white'
-                                      : 'border-[var(--border)] bg-[var(--bg-elevated)]'
-                                  }`}>
-                                    {topic.done && <AppIcon name="check" className="h-3 w-3" />}
-                                  </span>
+                                  <CompletionCheck checked={topic.done} size="sm" />
                                   <span className={`text-xs break-words ${topic.done ? 'line-through text-[var(--text-faint)]' : 'text-[var(--text)]'}`}>
                                     {topic.title}
                                   </span>

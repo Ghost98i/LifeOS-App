@@ -6,6 +6,10 @@ import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { dayKeyFromDate, defaultState, todayISO } from '../lib/storage';
 import { DashboardView } from './DashboardView';
+import { AgendaView } from './AgendaView';
+import { ProjectsManager } from './ProjectsManager';
+import { NotasView } from './NotasView';
+import { TodayFocus } from './TodayFocus';
 import { CompletionCheck } from './ui/CompletionCheck';
 
 class TestNode {
@@ -322,4 +326,105 @@ test('Hoy: Tu día y HÁBITOS DE HOY unifican CompletionCheck y el atenuado de c
   assert.match(css, /@keyframes check-halo[\s\S]*opacity:\s*0\.45[\s\S]*scale\(1\.65\)/);
   assert.match(css, /animation:\s*check-halo 440ms ease-out forwards/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.completion-check--animate/);
+});
+
+test('Bloque 14: AgendaView unifica CompletionCheck (size=md) en pendiente y completado sin CompletionCheckMark legacy', () => {
+  const state = defaultState();
+  const today = todayISO();
+  const dayKey = dayKeyFromDate(new Date(`${today}T12:00:00`));
+
+  state.agenda[dayKey] = [
+    { id: 'ag-done', time: '09:00', activity: 'Revisar correos' },
+    { id: 'ag-pending', time: '14:00', activity: 'Bloque creativo' },
+  ];
+  state.taskLog[today] = { 'ag-done': true };
+
+  const html = renderToStaticMarkup(
+    <AgendaView state={state} onUpdateState={() => true} />
+  );
+
+  assert.match(html, /data-completion-check="true" data-size="md" data-state="checked" data-animating="false"/);
+  assert.match(html, /data-completion-check="true" data-size="md" data-state="unchecked" data-animating="false"/);
+  assert.doesNotMatch(html, /lifeos-task-pending\.svg|lifeos-task-completed\.svg/);
+
+  const agendaRowMatches = html.match(/<div id="agenda-block-[^"]*" class="[^"]*"/g) || [];
+  assert.ok(agendaRowMatches.length >= 2);
+  for (const rowTag of agendaRowMatches) {
+    assert.doesNotMatch(rowTag, /opacity-\d+/);
+  }
+});
+
+test('Bloque 14: ProjectsManager, NotasView (compras y streaming) y TodayFocus unifican CompletionCheck sin opacidad heredada', async () => {
+  const today = todayISO();
+  const state = defaultState();
+  state.projects = [
+    {
+      id: 'proj-1',
+      name: 'Celestian V2',
+      objective: 'Cohesión visual',
+      status: 'activo',
+      nextStep: 'Unificar checks',
+      createdAt: `${today}T10:00:00.000Z`,
+      tasks: [
+        { id: 'pt-done', text: 'Crear CompletionCheck', done: true },
+        { id: 'pt-pending', text: 'Migrar subtareas', done: false },
+      ],
+    },
+  ];
+  state.notes.shopping = [
+    { id: 'shop-done', text: 'Leche', done: true },
+    { id: 'shop-pending', text: 'Avena', done: false },
+  ];
+  state.settings.streamingEnabled = true;
+  state.streaming.preStreamChecklist = [
+    { id: 'st-done', label: 'Micrófono', done: true },
+    { id: 'st-pending', label: 'Escenas OBS', done: false },
+  ];
+
+  // ProjectsManager (subtasks -> size="sm")
+  const projectsHtml = renderToStaticMarkup(
+    <ProjectsManager state={state} onUpdateState={() => true} />
+  );
+  assert.match(projectsHtml, /data-completion-check="true" data-size="sm" data-state="checked" data-animating="false"/);
+  assert.match(projectsHtml, /data-completion-check="true" data-size="sm" data-state="unchecked" data-animating="false"/);
+  assert.doesNotMatch(projectsHtml, /<input[^>]*type="checkbox"/);
+
+  // NotasView: shopping checklist (size="md")
+  const shoppingHtml = renderToStaticMarkup(
+    <NotasView state={state} onUpdateState={() => true} storageUserId={null} onOpenGym={() => {}} initialTab="compras" />
+  );
+  assert.match(shoppingHtml, /data-completion-check="true" data-size="md" data-state="checked" data-animating="false"/);
+  assert.match(shoppingHtml, /data-completion-check="true" data-size="md" data-state="unchecked" data-animating="false"/);
+
+  // NotasView: streaming pre-stream checklist (size="md")
+  const streamingHtml = renderToStaticMarkup(
+    <NotasView state={state} onUpdateState={() => true} storageUserId={null} onOpenGym={() => {}} initialTab="streaming" />
+  );
+  assert.match(streamingHtml, /data-completion-check="true" data-size="md" data-state="checked" data-animating="false"/);
+  assert.match(streamingHtml, /data-completion-check="true" data-size="md" data-state="unchecked" data-animating="false"/);
+
+  // TodayFocus: priorities (size="md") with opacity isolated to text button, never on row container
+  const focusHtml = renderToStaticMarkup(
+    <TodayFocus
+      priorities={[
+        { id: 'pr-done', date: today, text: 'Prioridad completada', done: true, rank: 1 },
+        { id: 'pr-pending', date: today, text: 'Prioridad pendiente', done: false, rank: 2 },
+      ]}
+      onAdd={() => {}}
+      onToggle={() => {}}
+      onRemove={() => {}}
+    />
+  );
+  assert.match(focusHtml, /data-completion-check="true" data-size="md" data-state="checked" data-animating="false"/);
+  assert.match(focusHtml, /data-completion-check="true" data-size="md" data-state="unchecked" data-animating="false"/);
+  const focusRowMatches = focusHtml.match(/<div class="group\/row[^"]*"/g) || [];
+  assert.equal(focusRowMatches.length, 2);
+  for (const rowTag of focusRowMatches) {
+    assert.doesNotMatch(rowTag, /opacity-60/, 'La fila de TodayFocus no debe heredar opacity-60 sobre CompletionCheck');
+  }
+
+  // EstudiosView: subject & exam topics checklists use CompletionCheck size="sm"
+  const estudiosSource = await readFile(new URL('./EstudiosView.tsx', import.meta.url), 'utf8');
+  assert.match(estudiosSource, /import \{ CompletionCheck \} from '\.\/ui\/CompletionCheck';/);
+  assert.equal((estudiosSource.match(/<CompletionCheck checked=\{topic\.done\} size="sm" \/>/g) || []).length, 2);
 });

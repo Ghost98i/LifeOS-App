@@ -174,15 +174,3 @@ test('the three approved task and routine completion assets remain byte-for-byte
   assert.equal(lottie.op, 15);
 });
 
-test('CompletionCheckMark wires the three approved assets with full motion fidelity and reduced-motion guard', async () => {
-  const source = await readFile(new URL('../components/visual/CompletionCheckMark.tsx', import.meta.url), 'utf8');
-
-  assert.match(source, /TASK_PENDING_SVG_SRC = '\/motion\/lifeos-task-pending\.svg'/);
-  assert.match(source, /TASK_COMPLETED_SVG_SRC = '\/motion\/lifeos-task-completed\.svg'/);
-  assert.match(source, /TASK_COMPLETION_LOTTIE_SRC = '\/motion\/lifeos-task-completion\.json'/);
-  assert.match(source, /prefersReducedMotion/);
-  assert.match(source, /speed=\{1\}/);
-  assert.doesNotMatch(source, /segment=\{/);
-  assert.doesNotMatch(source, /VIOLET_CHECK_DRAW_SEGMENT=\{/);
-});
-

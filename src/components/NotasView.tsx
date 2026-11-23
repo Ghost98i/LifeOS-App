@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
   Archive,
-  Check,
   ExternalLink,
   Gift,
   Link2,
@@ -43,6 +42,7 @@ import {
 import { showToast } from '../lib/toast';
 import { isStreamingEnabled } from '../lib/moduleVisibility';
 import { ProjectsManager } from './ProjectsManager';
+import { CompletionCheck } from './ui/CompletionCheck';
 import { ListDivider, SectionHeader, SurfaceCard } from './ui/SurfacePrimitives';
 import { addGymPlacement, GYM_NOTE_PLACEMENTS_ENABLED, loadPlacements, placementStorageKey, removePlacement, savePlacements } from '../lib/notePlacements';
 
@@ -1347,15 +1347,9 @@ export const NotasView: React.FC<NotasViewProps> = ({
                     aria-label={`${s.done ? 'Marcar pendiente' : 'Marcar comprado'}: ${s.text}`}
                     aria-pressed={s.done}
                     onClick={() => handleToggleShop(s.id)}
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg cursor-pointer"
+                    className="group inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer"
                   >
-                    <span className={`flex h-5 w-5 items-center justify-center rounded-md border transition-colors ${
-                      s.done
-                        ? 'border-[#4F46E5] bg-[#4F46E5] text-white'
-                        : 'border-slate-300 bg-white text-transparent dark:border-white/20 dark:bg-transparent'
-                    }`}>
-                      <Check size={13} strokeWidth={2.25} aria-hidden="true" />
-                    </span>
+                    <CompletionCheck checked={s.done} size="md" />
                   </button>
                   <span className={`min-w-0 flex-1 text-sm break-words ${s.done ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}>
                     {s.text}
@@ -1511,16 +1505,11 @@ export const NotasView: React.FC<NotasViewProps> = ({
                       <button
                         type="button"
                         aria-label={`${item.done ? 'Desmarcar' : 'Marcar'} ${item.label}`}
+                        aria-pressed={item.done}
                         onClick={() => saveToolChange((draft) => { const target = (draft.streaming?.preStreamChecklist || []).find((candidate) => candidate.id === item.id); if (target) target.done = !target.done; })}
-                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg cursor-pointer"
+                        className="group inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer"
                       >
-                        <span className={`flex h-5 w-5 items-center justify-center rounded-md border transition-colors ${
-                          item.done
-                            ? 'border-[#4F46E5] bg-[#4F46E5] text-white'
-                            : 'border-slate-300 bg-white text-transparent dark:border-white/20 dark:bg-transparent'
-                        }`}>
-                          <Check size={13} strokeWidth={2.25} aria-hidden="true" />
-                        </span>
+                        <CompletionCheck checked={item.done} size="md" />
                       </button>
                       <span className={`min-w-0 flex-1 text-sm break-words ${item.done ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'}`}>{item.label}</span>
                       <button

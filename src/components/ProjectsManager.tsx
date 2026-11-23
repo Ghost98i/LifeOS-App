@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import type { LifeOSState, Project, ProjectStatus, ProjectTask } from '../types';
 import { SurfaceCard, SectionHeader, ListDivider } from './ui/SurfacePrimitives';
+import { CompletionCheck } from './ui/CompletionCheck';
 import { daysBetween, fmtDate, todayISO, uid } from '../lib/storage';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
@@ -694,13 +695,14 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                       return (
                         <div key={t.id} id={`project-task-${t.id}`} className="py-2">
                           <div className="flex items-center justify-between gap-2">
-                            <label className="flex min-h-10 min-w-0 flex-1 flex-wrap items-center gap-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={t.done}
-                                onChange={() => handleToggleTask(project.id, t.id)}
-                                className="h-4 w-4 rounded accent-[#4F46E5] cursor-pointer shrink-0"
-                              />
+                            <button
+                              type="button"
+                              onClick={() => handleToggleTask(project.id, t.id)}
+                              aria-label={t.done ? `Marcar pendiente: ${t.text}` : `Completar: ${t.text}`}
+                              aria-pressed={t.done}
+                              className="group flex min-h-10 min-w-0 flex-1 flex-wrap items-center gap-2.5 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer"
+                            >
+                              <CompletionCheck checked={t.done} size="sm" />
                               <span
                                 className={`text-sm break-words ${
                                   t.done ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'
@@ -744,7 +746,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                                   <span>{t.dueDate === today ? 'Hoy' : fmtDate(t.dueDate)}</span>
                                 </span>
                               )}
-                            </label>
+                            </button>
 
                             <div className="flex items-center gap-0.5 shrink-0">
                               {!t.done && (

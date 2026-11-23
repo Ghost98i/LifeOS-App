@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { DailyPriority } from '../types';
 import { AppIcon } from './AppIcon';
+import { CompletionCheck } from './ui/CompletionCheck';
 
 interface TodayFocusProps {
   priorities: DailyPriority[];
@@ -131,22 +132,18 @@ export const TodayFocus: React.FC<TodayFocusProps> = ({
         {sorted.map((item, index) => {
           const isRankOne = index === 0;
           return (
-            <div key={item.id} className={`group flex items-center gap-3 rounded-lg px-1 py-2 transition-[background-color,opacity] hover:bg-[var(--surface-muted)]/45 ${item.done ? 'opacity-60' : ''}`}>
+            <div key={item.id} className="group/row flex items-center gap-3 rounded-lg px-1 py-2 transition-colors hover:bg-[var(--surface-muted)]/45">
               <button
                 type="button"
                 onClick={() => onToggle(item)}
+                aria-label={item.done ? `Marcar como pendiente: ${item.text}` : `Completar: ${item.text}`}
+                aria-pressed={item.done}
                 title={item.done ? 'Marcar como pendiente' : 'Marcar como completada'}
-                className={`flex shrink-0 items-center justify-center rounded-lg border text-[10px] font-bold tabular-nums transition active:scale-95 ${
-                  isRankOne ? 'h-7 w-7' : 'h-6 w-6'
-                } ${item.done
-                  ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-                  : isRankOne
-                    ? 'border-indigo-500/45 bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'
-                    : 'border-[var(--border)] bg-[var(--card-subtle)] text-[var(--text-soft)] hover:border-indigo-500'}`}
+                className="group flex h-8 w-8 shrink-0 items-center justify-center rounded-full transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer"
               >
-                {item.done ? <AppIcon name="check" className="h-3.5 w-3.5" /> : String(item.rank ?? (index + 1)).padStart(2, '0')}
+                <CompletionCheck checked={item.done} size="md" />
               </button>
-              <button type="button" onClick={() => onToggle(item)} className="min-w-0 flex-1 select-none text-left">
+              <button type="button" onClick={() => onToggle(item)} className={`min-w-0 flex-1 select-none text-left transition-opacity ${item.done ? 'opacity-60' : ''}`}>
                 <span className={`block leading-snug ${item.done
                   ? 'text-xs font-normal text-[var(--text-faint)] line-through sm:text-[13px]'
                   : isRankOne
@@ -158,7 +155,7 @@ export const TodayFocus: React.FC<TodayFocusProps> = ({
                   </span>
                 )}
               </button>
-              <button type="button" onClick={() => onRemove(item.id)} title="Quitar de las prioridades" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] transition hover:bg-rose-500/10 hover:text-rose-500 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"><AppIcon name="x" className="h-3 w-3" /></button>
+              <button type="button" onClick={() => onRemove(item.id)} title="Quitar de las prioridades" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] transition hover:bg-rose-500/10 hover:text-rose-500 sm:opacity-0 sm:group-hover/row:opacity-100 sm:focus:opacity-100"><AppIcon name="x" className="h-3 w-3" /></button>
             </div>
           );
         })}

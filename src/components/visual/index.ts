@@ -8,7 +8,6 @@ export { GymExerciseArtwork, resolveGymArtworkKind } from './GymExerciseArtwork'
 export type { GymArtworkKind } from './GymExerciseArtwork';
 export { GymIcon } from './GymIcon';
 export { LifeOSLottie } from './LifeOSLottie';
-export { CompletionCheckMark } from './CompletionCheckMark';
 export { FinanceFlowMark } from './FinanceFlowMark';
 export { FinanceBalanceAtmosphere } from './FinanceBalanceAtmosphere';
 export { ContextWave } from './ContextWave';
