@@ -118,8 +118,8 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
       aria-label="Sesión de estudio en curso"
       className={`fixed z-[59] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] text-[var(--text)] shadow-[var(--card-shadow)] transition-all duration-200 ${
         isCoexisting
-          ? 'bottom-[calc(5.25rem+env(safe-area-inset-bottom)+5.25rem)] left-3 right-3 sm:right-5 sm:left-auto sm:w-[360px] lg:bottom-5 lg:left-[248px] lg:right-auto'
-          : 'bottom-[calc(5.25rem+env(safe-area-inset-bottom))] left-3 right-3 sm:right-auto sm:w-[360px] sm:left-5 lg:bottom-5 lg:left-[248px]'
+          ? 'bottom-[calc(7.35rem+env(safe-area-inset-bottom)+5.75rem)] left-3 right-3 sm:right-5 sm:left-auto sm:w-[360px] md:bottom-[6.75rem] lg:bottom-5 lg:left-[248px] lg:right-auto'
+          : 'bottom-[calc(7.35rem+env(safe-area-inset-bottom))] left-3 right-3 sm:right-auto sm:w-[360px] sm:left-5 md:bottom-5 lg:left-[248px]'
       }`}
     >
       <div className="h-1 bg-[var(--surface-muted)]">

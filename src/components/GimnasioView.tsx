@@ -32,6 +32,7 @@ import { WorkoutSummaryModal } from './WorkoutSummaryModal';
 import { ExerciseHistoryModal } from './ExerciseHistoryModal';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
+import { CompletionCheck } from './ui/CompletionCheck';
 import { GymExerciseArtwork } from './visual/GymExerciseArtwork';
 import { GymIcon } from './visual/GymIcon';
 import { PrivacyAmount, usePrivacyMode } from './PrivacyAmount';
@@ -646,6 +647,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
           if (nextTimer) {
             draft.gym.activeTimer = nextTimer;
             startedTimer = nextTimer;
+          } else if (draft.gym.activeTimer?.sessionId === sessionId) {
+            draft.gym.activeTimer = null;
           }
         }
       }
@@ -1633,7 +1636,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                           aria-pressed={selected}
                                           onClick={() => handleToggleTemplateDay(t.id, day)}
                                           className={`min-h-11 rounded-xl px-3 text-xs font-semibold ${selected
-                                            ? 'bg-blue-500/12 text-blue-700 ring-1 ring-blue-500/30 dark:text-blue-300'
+                                            ? 'bg-indigo-500/12 text-indigo-700 ring-1 ring-indigo-500/30 dark:text-indigo-300'
                                             : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'
                                           }`}
                                         >
@@ -1718,7 +1721,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                           })}
                                           className={`flex h-11 w-11 items-center justify-center rounded-xl transition-all ${
                                             isSelected
-                                              ? 'bg-blue-500/15 text-blue-600 ring-2 ring-blue-500 dark:text-blue-400'
+                                              ? 'bg-indigo-500/15 text-indigo-600 ring-2 ring-indigo-500 dark:text-indigo-300'
                                               : 'bg-[var(--surface-muted)] text-[var(--text-soft)] hover:bg-[var(--border)] hover:text-[var(--text)]'
                                           }`}
                                         >
@@ -1759,8 +1762,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                             aria-expanded={isIconPickerOpen}
                                             className={`relative flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl transition-all ${
                                               isIconPickerOpen || ex.icon
-                                                ? 'bg-blue-500/15 text-[var(--blue)] ring-2 ring-[var(--blue)]'
-                                                : 'bg-indigo-500/10 text-[var(--indigo)] hover:ring-2 hover:ring-[var(--blue)]/50'
+                                                ? 'bg-indigo-500/15 text-[#4F46E5] dark:text-indigo-300 ring-2 ring-[#4F46E5]'
+                                                : 'bg-indigo-500/10 text-[#4F46E5] dark:text-indigo-300 hover:ring-2 hover:ring-[#4F46E5]/50'
                                             }`}
                                           >
                                             <GymExerciseArtwork
@@ -1782,7 +1785,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                                 aria-pressed={isIconPickerOpen}
                                                 className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] font-semibold transition-colors ${
                                                   isIconPickerOpen || ex.icon
-                                                    ? 'bg-blue-500/15 text-[var(--blue)] ring-1 ring-blue-500/30'
+                                                    ? 'bg-indigo-500/15 text-[#4F46E5] dark:text-indigo-300 ring-1 ring-indigo-500/30'
                                                     : 'bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)]'
                                                 }`}
                                                 title="Cambiar icono del ejercicio"
@@ -1845,7 +1848,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                                   onClick={() => handleUpdateTemplateExercise(t.id, exIdx, { icon: opt.id })}
                                                   className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
                                                     isSelected
-                                                      ? 'bg-blue-500/15 text-blue-600 ring-2 ring-blue-500 dark:text-blue-400'
+                                                      ? 'bg-indigo-500/15 text-indigo-600 ring-2 ring-indigo-500 dark:text-indigo-300'
                                                       : 'bg-[var(--card)] text-[var(--text-soft)] hover:bg-[var(--border)] hover:text-[var(--text)]'
                                                   }`}
                                                 >
@@ -2592,7 +2595,7 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
             aria-pressed={showIconPicker}
             className={`inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] font-semibold transition-colors ${
               showIconPicker || customIcon
-                ? 'bg-blue-500/15 text-[var(--blue)] ring-1 ring-blue-500/30'
+                ? 'bg-indigo-500/15 text-[#4F46E5] dark:text-indigo-300 ring-1 ring-indigo-500/30'
                 : 'bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)]'
             }`}
           >
@@ -2608,8 +2611,8 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
             aria-label="Elegir icono del ejercicio"
             className={`flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-xl transition-all ${
               showIconPicker || customIcon
-                ? 'bg-blue-500/15 text-[var(--blue)] ring-2 ring-[var(--blue)]'
-                : 'bg-indigo-500/10 text-[var(--indigo)] ring-1 ring-inset ring-[var(--border)] hover:ring-2 hover:ring-[var(--blue)]/50'
+                ? 'bg-indigo-500/15 text-[#4F46E5] dark:text-indigo-300 ring-2 ring-[#4F46E5]'
+                : 'bg-indigo-500/10 text-[#4F46E5] dark:text-indigo-300 ring-1 ring-inset ring-[var(--border)] hover:ring-2 hover:ring-[#4F46E5]/50'
             }`}
           >
             <GymExerciseArtwork
@@ -2674,7 +2677,7 @@ const TemplateAddExerciseForm: React.FC<TemplateAddExerciseFormProps> = ({ onAdd
                   onClick={() => setCustomIcon(opt.id)}
                   className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all ${
                     isSelected
-                      ? 'bg-blue-500/15 text-blue-600 ring-2 ring-blue-500 dark:text-blue-400'
+                      ? 'bg-indigo-500/15 text-indigo-600 ring-2 ring-indigo-500 dark:text-indigo-300'
                       : 'bg-[var(--card)] text-[var(--text-soft)] hover:bg-[var(--border)] hover:text-[var(--text)]'
                   }`}
                 >
@@ -2856,7 +2859,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
       data-workout-session-card
       className={`rounded-2xl border transition-all p-4 space-y-4 ${
         isActive
-          ? 'border-blue-500/50 bg-[var(--card)] shadow-lg ring-2 ring-blue-500/20'
+          ? 'border-indigo-500/50 bg-[var(--card)] shadow-lg ring-2 ring-indigo-500/20'
           : 'border-[var(--border)] bg-[var(--card)] shadow-2xs'
       }`}
     >
@@ -2895,7 +2898,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
               <button
                 type="button"
                 onClick={() => setIsEditingHeader(false)}
-                className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-600 text-white cursor-pointer"
+                className="px-2.5 py-1 text-xs font-bold rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white cursor-pointer"
               >
                 OK
               </button>
@@ -2906,7 +2909,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                 {fmtDate(session.date)}
               </span>
               {session.weekLabel && (
-                <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20">
                   {session.weekLabel}
                 </span>
               )}
@@ -3090,7 +3093,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                             currentBarWeight
                           )
                         }
-                        className="px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 font-bold text-[10px] cursor-pointer flex items-center gap-1"
+                        className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 border border-indigo-500/20 hover:bg-indigo-500/20 font-bold text-[10px] cursor-pointer flex items-center gap-1"
                         title="Calculadora y desglose de discos por lado"
                       >
                         <AppIcon name="dumbbell" className="h-4 w-4" /><span>Discos</span>
@@ -3139,14 +3142,14 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                           <button
                             type="button"
                             onClick={() => onUpdateSet(exIdx, setIdx, { completed: !set.completed })}
-                            className={`inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold ${
+                            className={`group inline-flex min-h-[44px] min-w-[44px] items-center gap-2 rounded-xl px-3 text-sm font-semibold active:scale-90 transition-transform ${
                               set.completed
-                                ? 'bg-[var(--blue-soft)] text-[var(--gym-visual-accent)]'
+                                ? 'bg-indigo-500/12 text-indigo-700 dark:text-indigo-300'
                                 : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'
                             }`}
                           >
-                            <AppIcon name={set.completed ? 'checkCircle' : 'check'} className="h-4 w-4" />
-                            {set.completed ? 'Realizada' : 'Marcar realizada'}
+                            <CompletionCheck checked={Boolean(set.completed)} size="sm" />
+                            <span>{set.completed ? 'Realizada' : 'Marcar realizada'}</span>
                           </button>
                         </div>
                         {ghostSet && (
@@ -3261,7 +3264,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                             reps: ghostSet.reps,
                                           })
                                         }
-                                        className="ml-1 text-[9px] text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 underline cursor-pointer font-sans"
+                                        className="ml-1 text-[9px] text-indigo-500 hover:text-indigo-600 dark:text-indigo-400 dark:hover:text-indigo-300 underline cursor-pointer font-sans"
                                         title="Copiar valores de la sesión anterior"
                                       >
                                         Usar
@@ -3402,13 +3405,9 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                   onUpdateSet(exIdx, setIdx, { completed: !set.completed })
                                 }
                                 aria-label={set.completed ? 'Desmarcar serie' : 'Marcar serie como realizada'}
-                                className={`h-11 w-11 rounded-xl border inline-flex items-center justify-center text-xs font-bold transition-all cursor-pointer ${
-                                  set.completed
-                                    ? 'bg-[var(--blue)] border-[var(--blue)] text-white'
-                                    : 'border-[var(--border)] bg-[var(--card)] text-transparent hover:border-[var(--blue)]'
-                                }`}
+                                className="group min-h-[44px] min-w-[44px] rounded-xl inline-flex items-center justify-center transition-all hover:bg-[var(--surface-muted)] active:scale-90 cursor-pointer"
                               >
-                                <AppIcon name="check" className="h-4 w-4" />
+                                <CompletionCheck checked={Boolean(set.completed)} size="md" />
                               </button>
                             </td>
                             <td className="py-1.5 text-right">
@@ -3433,7 +3432,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                   <button
                     type="button"
                     onClick={() => onAddSet(exIdx)}
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                   >
                     <AppIcon name="plus" className="h-3 w-3" />
                     <span>Agregar serie</span>
@@ -3569,7 +3568,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
 
         <button
           type="submit"
-          className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg cursor-pointer transition-all shadow-2xs"
+          className="px-3.5 py-1.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-bold rounded-lg cursor-pointer transition-all shadow-2xs"
         >
           ＋ Añadir
         </button>
@@ -3659,7 +3658,7 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps & { initiallyExpand
       <div className="p-3.5 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-start gap-3">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-[var(--blue)]">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500/12 text-[#4F46E5] dark:text-indigo-300">
               <AppIcon name="calendar" className="h-5 w-5" />
             </span>
             <div className="min-w-0">

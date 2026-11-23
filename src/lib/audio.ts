@@ -2,6 +2,9 @@ import { createAmbientSamples } from './ambientSynthesis';
 // Web Audio API Synthesizer for LifeOS - Zero external MP3 dependency
 
 let audioCtx: AudioContext | null = null;
+let fxMasterGain: GainNode | null = null;
+let fxOwnerCtx: AudioContext | null = null;
+const FX_MASTER_VOLUME = 0.75;
 
 function getAudioContext(autoResume = true): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -9,6 +12,8 @@ function getAudioContext(autoResume = true): AudioContext | null {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
     if (AudioContextClass) {
       audioCtx = new AudioContextClass();
+      fxMasterGain = null;
+      fxOwnerCtx = null;
       audioCtx.addEventListener('statechange', () => {
         window.dispatchEvent(new Event('lifeos-audio-state'));
       });
@@ -20,18 +25,51 @@ function getAudioContext(autoResume = true): AudioContext | null {
   return audioCtx;
 }
 
+function getFxOutputNode(ctx: AudioContext): AudioNode {
+  if (fxMasterGain && fxOwnerCtx === ctx) {
+    return fxMasterGain;
+  }
+  const masterGain = ctx.createGain();
+  masterGain.gain.setValueAtTime(FX_MASTER_VOLUME, ctx.currentTime);
+  if (typeof ctx.createDynamicsCompressor === 'function') {
+    const compressor = ctx.createDynamicsCompressor();
+    compressor.threshold.setValueAtTime(-10, ctx.currentTime);
+    compressor.knee.setValueAtTime(16, ctx.currentTime);
+    compressor.ratio.setValueAtTime(4, ctx.currentTime);
+    compressor.attack.setValueAtTime(0.003, ctx.currentTime);
+    compressor.release.setValueAtTime(0.15, ctx.currentTime);
+    masterGain.connect(compressor);
+    compressor.connect(ctx.destination);
+  } else {
+    masterGain.connect(ctx.destination);
+  }
+  fxMasterGain = masterGain;
+  fxOwnerCtx = ctx;
+  return masterGain;
+}
+
 export function isSoundEnabled(): boolean {
-  if (typeof window === 'undefined') return true;
-  return localStorage.getItem('lifeos_sound_enabled') !== 'false';
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return true;
+  try {
+    return localStorage.getItem('lifeos_sound_enabled') !== 'false';
+  } catch {
+    return true;
+  }
 }
 
 export function setSoundEnabled(enabled: boolean): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem('lifeos_sound_enabled', enabled ? 'true' : 'false');
-  window.dispatchEvent(new Event('lifeos-sound-preference'));
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem('lifeos_sound_enabled', enabled ? 'true' : 'false');
+    window.dispatchEvent(new Event('lifeos-sound-preference'));
+  } catch {
+    // Ignore storage errors in restricted contexts
+  }
 }
 
-export function playSound(type: 'success' | 'coins' | 'beep' | 'night' | 'click'): void {
+export type SoundType = 'success' | 'coins' | 'beep' | 'night' | 'click' | 'restComplete';
+
+export function playSound(type: SoundType): void {
   if (!isSoundEnabled()) return;
   try {
     const ctx = getAudioContext(false);
@@ -59,20 +97,81 @@ export function playSound(type: 'success' | 'coins' | 'beep' | 'night' | 'click'
       osc.start(now);
       osc.stop(now + 0.04);
     } else if (type === 'success') {
-      // Pleasant double chime chord
-      const freqs = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6
-      freqs.forEach((f, idx) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(f, now + idx * 0.06);
-        gain.gain.setValueAtTime(0, now + idx * 0.06);
-        gain.gain.linearRampToValueAtTime(0.12, now + idx * 0.06 + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.06 + 0.35);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now + idx * 0.06);
-        osc.stop(now + idx * 0.06 + 0.36);
+      // Exact 1:1 port of "Doble Nota Corta" (indigo-chime) from Celestian Sound Lab:
+      // Two soft-attack sine+triangle notes: E5 (659.25Hz, 0ms) -> B5 (987.77Hz, 65ms), ~170ms total
+      const fxOut = getFxOutputNode(ctx);
+      const notes = [
+        { freq: 659.25, start: 0, dur: 0.105, peak: 0.28 },
+        { freq: 987.77, start: 0.065, dur: 0.125, peak: 0.34 },
+      ];
+      notes.forEach((n) => {
+        const t0 = now + n.start;
+        const oscS = ctx.createOscillator();
+        const oscT = ctx.createOscillator();
+        const gS = ctx.createGain();
+        const gT = ctx.createGain();
+
+        oscS.type = 'sine';
+        oscT.type = 'triangle';
+        oscS.frequency.setValueAtTime(n.freq, t0);
+        oscT.frequency.setValueAtTime(n.freq, t0);
+
+        gS.gain.setValueAtTime(0.0001, t0);
+        gS.gain.linearRampToValueAtTime(n.peak, t0 + 0.008);
+        gS.gain.exponentialRampToValueAtTime(0.0001, t0 + n.dur);
+
+        gT.gain.setValueAtTime(0.0001, t0);
+        gT.gain.linearRampToValueAtTime(n.peak * 0.28, t0 + 0.008);
+        gT.gain.exponentialRampToValueAtTime(0.0001, t0 + n.dur * 0.85);
+
+        oscS.connect(gS);
+        oscT.connect(gT);
+        gS.connect(fxOut);
+        gT.connect(fxOut);
+
+        oscS.start(t0);
+        oscT.start(t0);
+        oscS.stop(t0 + n.dur + 0.015);
+        oscT.stop(t0 + n.dur + 0.015);
+      });
+    } else if (type === 'restComplete') {
+      // Exact 1:1 port of "Tríada Ascendente" (short-triad) from Celestian Sound Lab:
+      // 3 fast staccato sine/triangle notes: C6 (1046.5Hz, 0ms), E6 (1318.5Hz, 95ms), G6 (1567.98Hz, 190ms)
+      const fxOut = getFxOutputNode(ctx);
+      const notes = [
+        { freq: 1046.5, start: 0, dur: 0.095, peak: 0.28 },
+        { freq: 1318.5, start: 0.095, dur: 0.095, peak: 0.32 },
+        { freq: 1567.98, start: 0.19, dur: 0.145, peak: 0.38 },
+      ];
+      notes.forEach((n) => {
+        const t0 = now + n.start;
+        const oscS = ctx.createOscillator();
+        const oscT = ctx.createOscillator();
+        const gS = ctx.createGain();
+        const gT = ctx.createGain();
+
+        oscS.type = 'sine';
+        oscT.type = 'triangle';
+        oscS.frequency.setValueAtTime(n.freq, t0);
+        oscT.frequency.setValueAtTime(n.freq, t0);
+
+        gS.gain.setValueAtTime(0.0001, t0);
+        gS.gain.linearRampToValueAtTime(n.peak, t0 + 0.005);
+        gS.gain.exponentialRampToValueAtTime(0.0001, t0 + n.dur);
+
+        gT.gain.setValueAtTime(0.0001, t0);
+        gT.gain.linearRampToValueAtTime(n.peak * 0.32, t0 + 0.005);
+        gT.gain.exponentialRampToValueAtTime(0.0001, t0 + n.dur * 0.85);
+
+        oscS.connect(gS);
+        oscT.connect(gT);
+        gS.connect(fxOut);
+        gT.connect(fxOut);
+
+        oscS.start(t0);
+        oscT.start(t0);
+        oscS.stop(t0 + n.dur + 0.02);
+        oscT.stop(t0 + n.dur + 0.02);
       });
     } else if (type === 'coins') {
       // Metallic coins sound
@@ -127,52 +226,61 @@ export function playSound(type: 'success' | 'coins' | 'beep' | 'night' | 'click'
 
 export function playTimerCountdownTone(secondsLeft: number): void {
   if (!isSoundEnabled()) return;
-  const ctx = getAudioContext();
 
-  // Gentle vibration if supported
-  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-    try {
-      if (secondsLeft > 0) {
-        navigator.vibrate(40);
-      } else {
-        navigator.vibrate([100, 50, 150]);
+  if (secondsLeft <= 0) {
+    if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+      try {
+        navigator.vibrate([120, 70, 120]);
+      } catch {
+        // Ignore vibration errors on unsupported devices
       }
-    } catch {
-      // Ignore vibration errors on unsupported devices
     }
+    playSound('restComplete');
+    return;
   }
 
-  if (!ctx) return;
-
   try {
-    const now = ctx.currentTime;
-    if (secondsLeft > 0) {
-      // Short subtle tick beep for 3, 2, 1
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, now); // D5
-      gain.gain.setValueAtTime(0.1, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now);
-      osc.stop(now + 0.08);
-    } else {
-      // High bright celebratory chime for 0s
-      [880, 1174.66].forEach((f, idx) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(f, now + idx * 0.1);
-        gain.gain.setValueAtTime(0.15, now + idx * 0.1);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.25);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(now + idx * 0.1);
-        osc.stop(now + idx * 0.1 + 0.26);
-      });
+    const ctx = getAudioContext(false);
+    if (!ctx) return;
+    if ((ctx.state as string) !== 'running') {
+      void ctx.resume().catch(() => {});
+      return;
     }
+
+    // Dominant of C Major (G5 = 783.99 Hz) leading cleanly into C6-E6-G6 triad at 00:00.
+    const now = ctx.currentTime;
+    const fxOut = getFxOutputNode(ctx);
+    const freq = 783.99;
+    const peak = 0.15;
+    const dur = 0.055;
+
+    const oscS = ctx.createOscillator();
+    const oscT = ctx.createOscillator();
+    const gS = ctx.createGain();
+    const gT = ctx.createGain();
+
+    oscS.type = 'sine';
+    oscT.type = 'triangle';
+    oscS.frequency.setValueAtTime(freq, now);
+    oscT.frequency.setValueAtTime(freq, now);
+
+    gS.gain.setValueAtTime(0.0001, now);
+    gS.gain.linearRampToValueAtTime(peak, now + 0.004);
+    gS.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+    gT.gain.setValueAtTime(0.0001, now);
+    gT.gain.linearRampToValueAtTime(peak * 0.22, now + 0.004);
+    gT.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+    oscS.connect(gS);
+    oscT.connect(gT);
+    gS.connect(fxOut);
+    gT.connect(fxOut);
+
+    oscS.start(now);
+    oscT.start(now);
+    oscS.stop(now + dur + 0.015);
+    oscT.stop(now + dur + 0.015);
   } catch (err) {
     console.error('Error playing countdown sound:', err);
   }

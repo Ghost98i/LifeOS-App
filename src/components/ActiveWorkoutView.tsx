@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Check } from 'lucide-react';
 import type { ExerciseEquipment, GymActiveTimer, GymSession, GymSet, MuscleGroup } from '../types';
 import { EXERCISE_EQUIPMENT_OPTIONS, inferExerciseEquipment, inferMuscleGroup } from '../lib/gymMigration';
 import {
@@ -15,11 +16,13 @@ import {
 } from '../lib/gymMetrics';
 import type { WakeLockStatus } from '../lib/wakeLock';
 import { AppIcon } from './AppIcon';
-import { playSound, playTimerCountdownTone } from '../lib/audio';
-import { showToast } from '../lib/toast';
+import { CompletionCheck } from './ui/CompletionCheck';
+import { playTimerCountdownTone } from '../lib/audio';
+import {
+  getRestTimerSnapshot,
+  triggerRestTimerCompletionAlert,
+} from '../lib/gymRestTimer';
 import { GymExerciseArtwork } from './visual/GymExerciseArtwork';
-import { LifeOSLottie } from './visual/LifeOSLottie';
-import { motionItemKey } from '../lib/motion';
 
 interface PreviousSetReference {
   weight: number;
@@ -85,7 +88,7 @@ export interface ActiveWorkoutViewProps {
 }
 
 const controlClass =
-  'min-h-11 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-xs font-semibold text-[var(--text)] outline-none transition-colors focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue-soft)]';
+  'min-h-11 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-xs font-semibold text-[var(--text)] outline-none transition-colors focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/20';
 
 function setProgress(session: GymSession) {
   return session.exercises.reduce(
@@ -121,7 +124,6 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
   previousSessionBest,
   previousGhostSets,
   wakeLockStatus,
-  completionMotion,
   restTimer,
   activeTimer,
   showQuickRestAdjustments = true,
@@ -206,22 +208,22 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
       )
     : false;
 
-  // Precision countdown clock derived directly from endsAt timestamp
+  // Precision countdown + positive overtime clock derived directly from endsAt timestamp
   const isPaused = Boolean(activeTimer?.pausedAt);
   const timerEndsAt = activeTimer?.endsAt;
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const left = timerEndsAt
-    ? (isPaused
-        ? (activeTimer?.remainingSecondsWhenPaused ?? Math.max(0, Math.ceil((timerEndsAt - (activeTimer?.pausedAt ?? nowMs)) / 1000)))
-        : Math.max(0, Math.ceil((timerEndsAt - nowMs) / 1000)))
-    : 0;
+  const timerSnapshot = getRestTimerSnapshot(activeTimer, nowMs);
+  const isOvertime = Boolean(timerSnapshot?.isOvertime);
 
   const lastChimeSecondRef = useRef<number | null>(null);
-  const hasFinishedRef = useRef(false);
+
+  // Rest state determination
+  const isTimerRunning = Boolean(activeTimer);
+  const restingExerciseIndex = activeTimer?.exerciseIndex ?? safeExerciseIndex;
+  const restingExercise = session.exercises[restingExerciseIndex] ?? exercise;
 
   useEffect(() => {
     setIsReviewingPreviousSet(false);
-    hasFinishedRef.current = false;
     lastChimeSecondRef.current = null;
   }, [activeTimer?.setId, activeTimer?.exerciseId, activeTimer?.endsAt, isPaused]);
 
@@ -231,24 +233,25 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
       const now = Date.now();
       setNowMs(now);
 
-      const remaining = isPaused
-        ? (activeTimer?.remainingSecondsWhenPaused ?? Math.max(0, Math.ceil((timerEndsAt - (activeTimer?.pausedAt ?? now)) / 1000)))
-        : Math.max(0, Math.ceil((timerEndsAt - now) / 1000));
+      const snap = getRestTimerSnapshot(activeTimer, now);
+      if (!snap || isPaused) return;
 
-      if (!isPaused && remaining <= 3 && remaining >= 0 && lastChimeSecondRef.current !== remaining) {
-        lastChimeSecondRef.current = remaining;
-        playTimerCountdownTone(remaining);
+      if (
+        !snap.isOvertime
+        && snap.remainingSeconds <= 3
+        && snap.remainingSeconds >= 1
+        && lastChimeSecondRef.current !== snap.remainingSeconds
+      ) {
+        lastChimeSecondRef.current = snap.remainingSeconds;
+        playTimerCountdownTone(snap.remainingSeconds);
       }
 
-      if (!isPaused && remaining <= 0) {
-        if (!hasFinishedRef.current) {
-          hasFinishedRef.current = true;
-          const saved = onCompleteRestTimer ? onCompleteRestTimer() : onSkipRestTimer?.();
-          if (saved !== false) {
-            playSound('success');
-            showToast('Descanso finalizado. ¡Siguiente serie lista!', 'info');
-          }
-        }
+      if (snap.isOvertime && activeTimer) {
+        triggerRestTimerCompletionAlert(
+          activeTimer,
+          { exerciseName: restingExercise?.name, sessionName: sessionTitle },
+          now
+        );
       }
     };
 
@@ -265,7 +268,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
       document.removeEventListener('visibilitychange', handleWake);
       window.removeEventListener('focus', handleWake);
     };
-  }, [timerEndsAt, isPaused, activeTimer?.pausedAt, activeTimer?.remainingSecondsWhenPaused, onCompleteRestTimer, onSkipRestTimer]);
+  }, [timerEndsAt, isPaused, activeTimer, restingExercise?.name, sessionTitle]);
 
   const selectExercise = (index: number) => {
     const selectedExercise = session.exercises[index];
@@ -291,23 +294,17 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
     setNewExerciseName('');
   };
 
-  // Rest state determination
-  // An expired rest still needs a confirmed clear. Keep its existing retry action
-  // available if persistence rejected the automatic completion.
-  const isTimerRunning = Boolean(activeTimer);
-  const restingExerciseIndex = activeTimer?.exerciseIndex ?? safeExerciseIndex;
   const isRestingThisExercise = isTimerRunning && restingExerciseIndex === safeExerciseIndex;
   const isRestPhaseActive = isRestingThisExercise && !activeTimer?.minimized && !isReviewingPreviousSet;
 
-  // Resting exercise and completed set (for contextual review and next effort preview)
-  const restingExercise = session.exercises[restingExerciseIndex] ?? exercise;
+  // Completed set (for contextual review and next effort preview)
   const completedSetIndex = restingExercise?.sets?.findIndex((s) => s.id === activeTimer?.setId) ?? (safeSetIndex > 0 ? safeSetIndex - 1 : 0);
   const completedSet = restingExercise?.sets?.[completedSetIndex >= 0 ? completedSetIndex : 0] ?? currentSet;
 
   // Next effort preview calculation (bound strictly to the real rest event)
   let nextEffortTarget = '';
   let nextEffortTitle = '';
-  let nextEffortButtonText = 'Comenzar siguiente serie →';
+  let nextEffortButtonText = isOvertime ? 'Descartar aviso' : 'Saltar descanso';
 
   if (activeTimer?.kind === 'exercise') {
     const targetExIdx = typeof activeTimer.targetExerciseIndex === 'number'
@@ -322,7 +319,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
       nextEffortButtonText = 'Pasar al siguiente ejercicio →';
     } else {
       nextEffortTitle = 'Todas las series completadas · Podés sumar más o finalizar manualmente';
-      nextEffortButtonText = 'Cerrar descanso →';
+      nextEffortButtonText = isOvertime ? 'Descartar aviso' : 'Cerrar descanso →';
     }
   } else {
     // kind === 'set'
@@ -331,7 +328,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
       const pendingSet = restingExercise.sets[pendingSetIdx];
       nextEffortTarget = `${pendingSet.weight} kg × ${pendingSet.reps} reps`;
       nextEffortTitle = `Serie ${pendingSetIdx + 1} de ${restingExercise.sets.length} · ${restingExercise.name}`;
-      nextEffortButtonText = `Comenzar Serie ${pendingSetIdx + 1} Ahora →`;
+      nextEffortButtonText = isOvertime ? 'Descartar aviso' : 'Saltar descanso';
     } else {
       const pendingExIdx = findNextPendingExerciseIndex(session, restingExerciseIndex);
       if (pendingExIdx >= 0) {
@@ -343,18 +340,15 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
         nextEffortButtonText = 'Pasar al siguiente ejercicio →';
       } else {
         nextEffortTitle = 'Todas las series completadas · Podés sumar más o finalizar manualmente';
-        nextEffortButtonText = 'Cerrar descanso →';
+        nextEffortButtonText = isOvertime ? 'Descartar aviso' : 'Cerrar descanso →';
       }
     }
   }
 
   // Timer dial metrics
-  const timerDuration = activeTimer?.durationSeconds || 90;
-  const timerProgress = Math.max(0, Math.min(1, left / timerDuration));
+  const timerProgress = timerSnapshot?.progressRatio ?? 0;
   const dashOffset = RING_CIRCUMFERENCE * (1 - timerProgress);
-  const minutes = Math.floor(left / 60);
-  const seconds = left % 60;
-  const formattedTimer = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  const formattedTimer = timerSnapshot?.formatted ?? '00:00';
 
   const handleSkipOrAdvance = () => {
     setIsReviewingPreviousSet(false);
@@ -371,23 +365,49 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
   };
 
   const compactRestBar = (
-    <div className="gym-rest-sticky-bar w-full" data-gym-rest-compact-bar="true">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--blue)]/40 bg-[var(--card)]/95 p-3 shadow-md backdrop-blur-md">
+    <div className="gym-rest-sticky-bar w-full" data-gym-rest-compact-bar="true" data-rest-state={isOvertime ? 'overtime' : 'active'}>
+      <div
+        className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl border bg-[var(--card)]/95 p-3 shadow-md backdrop-blur-md transition-colors ${
+          isOvertime
+            ? 'border-[#F59E0B]/50 ring-1 ring-[#F59E0B]/20'
+            : 'border-[#4F46E5]/35 ring-1 ring-[#4F46E5]/10'
+        }`}
+      >
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--blue-soft)] text-[var(--gym-visual-accent)] text-xs">
+          <span
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xs ${
+              isOvertime
+                ? 'bg-[#F59E0B]/15 text-amber-600 dark:text-[#F59E0B]'
+                : 'bg-[#4F46E5]/12 text-[#4F46E5] dark:bg-[#4F46E5]/20 dark:text-indigo-300'
+            }`}
+          >
             <AppIcon name={isPaused ? 'pause' : 'clock'} className="h-4 w-4" />
           </span>
           <div className="min-w-0">
-            <span className="block text-[10px] font-black uppercase tracking-wider text-[var(--text-faint)] truncate">
-              {isPaused ? 'En pausa' : (activeTimer?.kind === 'exercise' ? 'Cambio estación' : 'Descanso activo')}
+            <span
+              className={`block text-[10px] font-black uppercase tracking-wider truncate ${
+                isOvertime
+                  ? 'text-amber-600 dark:text-[#F59E0B]'
+                  : 'text-[#4F46E5] dark:text-indigo-300'
+              }`}
+            >
+              {isOvertime
+                ? (isPaused ? 'Exceso · En pausa' : 'Descanso excedido')
+                : isPaused
+                  ? 'En pausa'
+                  : (activeTimer?.kind === 'exercise' ? 'Cambio estación' : 'Descanso activo')}
             </span>
-            <strong className="block text-base font-black tabular-nums text-[var(--text)]">
+            <strong
+              className={`block text-base font-black tabular-nums ${
+                isOvertime ? 'text-amber-600 dark:text-[#F59E0B]' : 'text-[var(--text)]'
+              }`}
+            >
               {formattedTimer}
             </strong>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-          {onTogglePauseRestTimer && (
+          {!isOvertime && onTogglePauseRestTimer && (
             <button
               type="button"
               onClick={onTogglePauseRestTimer}
@@ -398,7 +418,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
               {isPaused ? 'Seguir' : 'Pausa'}
             </button>
           )}
-          {onAdjustRestTimer && showQuickRestAdjustments && (
+          {!isOvertime && onAdjustRestTimer && showQuickRestAdjustments && (
             <button
               type="button"
               onClick={() => onAdjustRestTimer(30)}
@@ -407,7 +427,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
               +30s
             </button>
           )}
-          {onToggleMinimizeRest && (
+          {onToggleMinimizeRest && !isOvertime && (
             <button
               type="button"
               onClick={() => {
@@ -415,7 +435,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                 if (activeTimer?.minimized) onToggleMinimizeRest();
                 else if (!isRestingThisExercise) selectExercise(restingExerciseIndex);
               }}
-              className="min-h-11 px-2.5 py-1.5 rounded-xl bg-[var(--blue)] text-xs font-bold text-white shadow-xs"
+              className="min-h-11 px-2.5 py-1.5 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-xs font-bold text-white shadow-xs"
             >
               Ver
             </button>
@@ -423,9 +443,14 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
           <button
             type="button"
             onClick={handleSkipOrAdvance}
-            className="min-h-11 px-2.5 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-xs font-bold text-[var(--text-soft)] hover:text-[var(--text)]"
+            aria-label={isOvertime ? 'Descartar aviso de descanso excedido' : 'Saltar descanso'}
+            className={
+              isOvertime
+                ? 'min-h-11 px-3 py-1.5 rounded-xl border border-[#F59E0B]/55 bg-[#F59E0B]/15 hover:bg-[#F59E0B]/25 text-xs font-bold text-amber-700 dark:text-[#F59E0B]'
+                : 'min-h-11 px-2.5 py-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] text-xs font-bold text-[var(--text-soft)] hover:text-[var(--text)]'
+            }
           >
-            Saltar
+            {isOvertime ? 'Descartar' : 'Saltar'}
           </button>
         </div>
       </div>
@@ -516,7 +541,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
 
       {exercise ? (
         <>
-          {isTimerRunning && !isRestPhaseActive && (
+          {isTimerRunning && (!isRestPhaseActive || isOvertime) && (
             <div className="sticky top-[68px] z-20 lg:hidden" data-gym-rest-mobile-sticky="true">
               {compactRestBar}
             </div>
@@ -563,18 +588,39 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
             )}
             {/* Aviso Contextual si el usuario navega a otro ejercicio mientras corre un descanso */}
             {!isRestingThisExercise && isTimerRunning && (
-              <div className="gym-rest-origin-note flex flex-wrap items-center justify-between gap-2 rounded-xl bg-[var(--blue-soft)] border border-[var(--blue)]/30 px-3.5 py-2.5 text-xs">
+              <div
+                className={`gym-rest-origin-note flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-xs ${
+                  isOvertime
+                    ? 'bg-[#F59E0B]/10 border-[#F59E0B]/35'
+                    : 'bg-[#4F46E5]/10 border-[#4F46E5]/30'
+                }`}
+              >
                 <div className="flex items-center gap-2">
-                  <AppIcon name="clock" className="h-4 w-4 text-[var(--blue)] shrink-0" />
+                  <AppIcon
+                    name="clock"
+                    className={`h-4 w-4 shrink-0 ${
+                      isOvertime ? 'text-amber-600 dark:text-[#F59E0B]' : 'text-[#4F46E5] dark:text-indigo-400'
+                    }`}
+                  />
                   <span className="font-semibold text-[var(--text)]">
-                    Descanso de {restingExercise.name}: <strong className="tabular-nums font-bold text-[var(--blue)]">{formattedTimer}</strong>
+                    {isOvertime ? 'Descanso excedido de ' : 'Descanso de '}
+                    {restingExercise.name}:{' '}
+                    <strong
+                      className={`tabular-nums font-bold ${
+                        isOvertime ? 'text-amber-600 dark:text-[#F59E0B]' : 'text-[#4F46E5] dark:text-indigo-400'
+                      }`}
+                    >
+                      {formattedTimer}
+                    </strong>
                   </span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={() => selectExercise(restingExerciseIndex)}
-                    className="min-h-11 font-bold text-[var(--blue)] hover:underline"
+                    className={`min-h-11 font-bold hover:underline ${
+                      isOvertime ? 'text-amber-600 dark:text-[#F59E0B]' : 'text-[#4F46E5] dark:text-indigo-400'
+                    }`}
                   >
                     Ver descanso
                   </button>
@@ -583,7 +629,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     onClick={() => onSkipRestTimer?.()}
                     className="min-h-11 rounded-lg bg-[var(--card)] border border-[var(--border)] px-2.5 py-1 font-semibold text-[var(--text-soft)] hover:text-[var(--text)]"
                   >
-                    Saltar
+                    {isOvertime ? 'Listo' : 'Saltar'}
                   </button>
                 </div>
               </div>
@@ -593,7 +639,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
             {isReviewingPreviousSet && isTimerRunning && (
               <div className="gym-rest-origin-note flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)] px-3.5 py-2.5 text-xs">
                 <span className="font-semibold text-[var(--text-soft)]">
-                  Revisando Serie {completedSetIndex + 1} ({completedSet.weight} kg × {completedSet.reps}) · Descanso: <strong className="tabular-nums">{formattedTimer}</strong>
+                  Revisando Serie {completedSetIndex + 1} ({completedSet.weight} kg × {completedSet.reps}) · {isOvertime ? 'Exceso' : 'Descanso'}: <strong className={`tabular-nums ${isOvertime ? 'text-amber-600 dark:text-[#F59E0B]' : ''}`}>{formattedTimer}</strong>
                 </span>
                 <button
                   type="button"
@@ -602,7 +648,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     const firstIncomplete = exercise.sets?.findIndex((s) => !s.completed) ?? -1;
                     if (firstIncomplete >= 0) onSelectSet(firstIncomplete);
                   }}
-                  className="min-h-11 font-bold text-[var(--blue)] hover:underline ml-2"
+                  className="min-h-11 font-bold text-[#4F46E5] dark:text-indigo-400 hover:underline ml-2"
                 >
                   Volver al descanso →
                 </button>
@@ -698,38 +744,22 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                   const isSelected = idx === safeSetIndex;
                   const isDone = Boolean(set.completed);
                   const isWarmup = set.type === 'warmup';
-                  const setMotionKey = motionItemKey(exercise.id, set.id, idx);
-                  const showCompletionMotion = completionMotion?.setKey === setMotionKey;
 
                   return (
                     <button
                       key={set.id || idx}
                       type="button"
                       onClick={() => onSelectSet(idx)}
-                      className={`c-set-pill min-h-11 ${isSelected ? 'is-active' : ''} ${isDone ? 'is-done' : ''} ${isWarmup ? 'is-warmup' : ''}`}
+                      className={`c-set-pill group min-h-[44px] min-w-[44px] active:scale-90 ${isSelected ? 'is-active' : ''} ${isDone ? 'is-done' : ''} ${isWarmup ? 'is-warmup' : ''}`}
                       title={`Serie ${idx + 1}: ${set.weight} kg × ${set.reps} repeticiones`}
                       aria-label={`Serie ${idx + 1}: ${set.weight} kilogramos, ${set.reps} repeticiones${isDone ? ', realizada' : ', pendiente'}`}
                       aria-pressed={isSelected}
                     >
                       <div className="c-set-pill-top">
-                        <span>{isWarmup ? 'Aprox.' : `Serie ${idx + 1}`}</span>
-                        {isDone && (
-                          showCompletionMotion ? (
-                            <LifeOSLottie
-                              key={completionMotion.nonce}
-                              src="/motion/lifeos-micro-check-violet.json"
-                              size={14}
-                              speed={1.35}
-                              decorative
-                              className="shrink-0"
-                              fallback={<AppIcon name="check" className="c-check h-3.5 w-3.5" />}
-                            />
-                          ) : (
-                            <AppIcon name="check" className="c-check h-3.5 w-3.5" />
-                          )
-                        )}
+                        <span className={isDone ? 'opacity-75' : ''}>{isWarmup ? 'Aprox.' : `Serie ${idx + 1}`}</span>
+                        <CompletionCheck checked={isDone} size="sm" />
                       </div>
-                      <div className="c-set-pill-weight">{set.weight} kg <span aria-hidden="true">×</span> {set.reps}</div>
+                      <div className={`c-set-pill-weight ${isDone ? 'opacity-75' : ''}`}>{set.weight} kg <span aria-hidden="true">×</span> {set.reps}</div>
                       {!isDone && !isWarmup && previousGhostSets?.[idx] && (
                         <div className="c-set-pill-ghost">Ant: {previousGhostSets[idx].weight}×{previousGhostSets[idx].reps}</div>
                       )}
@@ -740,7 +770,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                 <button
                   type="button"
                   onClick={() => onAddSet(safeExerciseIndex)}
-                  className="c-set-pill min-h-11 border-dashed border-[var(--border-strong)] text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--blue)]"
+                  className="c-set-pill min-h-11 border-dashed border-[var(--border-strong)] text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[#4F46E5]"
                   title="Agregar serie a este ejercicio"
                   aria-label="Agregar serie"
                 >
@@ -749,8 +779,8 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
               </div>
             </div>
 
-            {/* 2. ESCENARIO CENTRAL DINÁMICO: siempre visible en escritorio; en móvil se oculta durante descanso activo */}
-            <div className={`c-stage-card c-logging-phase ${isRestPhaseActive ? 'is-rest-hidden-mobile hidden lg:flex' : ''}`}>
+            {/* 2. ESCENARIO CENTRAL DINÁMICO: siempre visible en escritorio y en exceso; en móvil solo se oculta durante cuenta regresiva activa */}
+            <div className={`c-stage-card c-logging-phase ${isRestPhaseActive && !isOvertime ? 'is-rest-hidden-mobile hidden lg:flex' : ''}`}>
                 {currentSet ? (
                   <>
                     <p className="c-set-position">Serie {safeSetIndex + 1} de {sets.length}<span>{currentSet.completed ? 'Registrada' : 'Por registrar'}</span></p>
@@ -888,9 +918,9 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     <button
                       type="button"
                       onClick={onToggleCurrentSet}
-                      className={`c-primary-cta w-full min-h-[50px] h-auto py-3 px-4 leading-snug ${currentSet.completed ? 'is-completed' : ''}`}
+                      className={`c-primary-cta w-full min-h-[50px] min-w-[44px] h-auto py-3 px-4 leading-snug ${currentSet.completed ? 'is-completed' : ''}`}
                     >
-                      <AppIcon name={currentSet.completed ? 'checkCircle' : 'check'} className="h-5 w-5" />
+                      <Check className="h-4 w-4 shrink-0" aria-hidden="true" />
                       <span>
                         {currentSet.completed
                           ? `Serie ${safeSetIndex + 1} completada · Tocar para desmarcar`
@@ -904,7 +934,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     <button
                       type="button"
                       onClick={() => onAddSet(safeExerciseIndex)}
-                      className="mt-3 min-h-11 rounded-xl bg-[var(--blue)] px-4 text-sm font-bold text-white"
+                      className="mt-3 min-h-11 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] px-4 text-sm font-bold text-white"
                     >
                       Agregar serie
                     </button>
@@ -922,13 +952,24 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
           <aside className="gym-workout-aside min-w-0 space-y-4 lg:col-span-1 lg:sticky lg:top-20 self-start">
             {/* 1. BLOQUE REST TIMER */}
             {isRestPhaseActive ? (
-              <div className="c-stage-card c-rest-phase rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 sm:p-5 lg:p-3.5 xl:p-5 shadow-xs">
+              <div
+                data-rest-state={isOvertime ? 'overtime' : 'active'}
+                className={`c-stage-card c-rest-phase rounded-2xl border bg-[var(--card)] p-4 sm:p-5 lg:p-3.5 xl:p-5 shadow-xs transition-colors ${
+                  isOvertime ? 'is-overtime is-overtime-hidden-mobile !border-[#F59E0B]/45' : 'border-[var(--border)]'
+                }`}
+              >
                 {/* Centro Focal del Cronómetro de Recuperación */}
                 <div className="c-rest-focal-center flex flex-col items-center gap-3 sm:gap-4 text-center">
-                  <span className="c-rest-label">
-                    {isPaused
-                      ? 'Descanso en pausa'
-                      : (activeTimer?.kind === 'exercise' ? 'Cambio de ejercicio' : 'Descanso entre series')}
+                  <span
+                    className={`c-rest-label ${
+                      isOvertime ? '!bg-[#F59E0B]/15 !text-amber-600 dark:!text-[#F59E0B]' : ''
+                    }`}
+                  >
+                    {isOvertime
+                      ? (isPaused ? 'Exceso · En pausa' : 'Descanso excedido')
+                      : isPaused
+                        ? 'Descanso en pausa'
+                        : (activeTimer?.kind === 'exercise' ? 'Cambio de ejercicio' : 'Descanso entre series')}
                   </span>
 
                   <div className="c-rest-timer-wrap relative mx-auto grid place-items-center w-36 h-36 sm:w-48 sm:h-48 lg:w-full lg:h-auto lg:max-w-[256px] aspect-square">
@@ -945,64 +986,77 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                           strokeDasharray={RING_CIRCUMFERENCE}
                           strokeDashoffset={dashOffset}
                           strokeLinecap="round"
-                          className="c-timer-progress"
+                          className={`c-timer-progress ${isOvertime ? '!text-[#F59E0B] overtime-bar-pulse' : ''}`}
                         />
                       </svg>
                     </div>
                     <div
-                      className="c-rest-timer-text relative z-10 text-4xl sm:text-6xl xl:text-7xl font-bold tabular-nums text-[var(--gym-visual-accent)]"
+                      className={`c-rest-timer-text relative z-10 font-sans font-bold tabular-nums leading-none ${
+                        isOvertime
+                          ? 'text-[1.65rem] sm:text-[2.65rem] xl:text-[2.95rem] tracking-[-0.045em] !text-amber-600 dark:!text-[#F59E0B]'
+                          : 'text-3xl sm:text-5xl xl:text-[3.5rem] tracking-[-0.04em] text-[var(--gym-visual-accent)]'
+                      }`}
                       role="timer"
-                      aria-label="Tiempo de descanso restante"
+                      aria-label={isOvertime ? 'Tiempo de descanso excedido' : 'Tiempo de descanso restante'}
                     >
-                      {formattedTimer}
+                      {formattedTimer.startsWith('+') ? (
+                        <>
+                          <span className="inline-block text-[0.78em] font-semibold mr-[0.02em] align-[0.04em]">+</span>
+                          {formattedTimer.slice(1)}
+                        </>
+                      ) : (
+                        formattedTimer
+                      )}
                     </div>
                   </div>
 
-                  <div className="c-rest-details w-full">
-                    {/* Ajustes Rápidos de Tiempo */}
-                    <div className="c-rest-adjust-row grid grid-cols-2 gap-2 w-full">
-                      {onTogglePauseRestTimer && (
-                        <button
-                          type="button"
-                          className={`c-rest-time-btn min-h-11 ${isPaused ? 'is-paused' : ''}`}
-                          onClick={onTogglePauseRestTimer}
-                          aria-label={isPaused ? 'Reanudar descanso' : 'Pausar descanso'}
-                        >
-                          <AppIcon name={isPaused ? 'play' : 'pause'} className="h-3.5 w-3.5 mr-1" />
-                          {isPaused ? 'Reanudar' : 'Pausar'}
-                        </button>
-                      )}
-                      {showQuickRestAdjustments && (
-                        <button
-                          type="button"
-                          className="c-rest-time-btn min-h-11"
-                          onClick={() => onAdjustRestTimer?.(-30)}
-                          aria-label="Restar 30 segundos"
-                        >
-                          −30s
-                        </button>
-                      )}
-                      {showQuickRestAdjustments && (
-                        <button
-                          type="button"
-                          className="c-rest-time-btn min-h-11"
-                          onClick={() => onAdjustRestTimer?.(30)}
-                          aria-label="Sumar 30 segundos"
-                        >
-                          +30s
-                        </button>
-                      )}
-                      {onToggleMinimizeRest && (
-                        <button
-                          type="button"
-                          className="c-rest-time-btn min-h-11 text-xs font-semibold"
-                          onClick={onToggleMinimizeRest}
-                        >
-                          Minimizar
-                        </button>
-                      )}
+                  {!isOvertime && (
+                    <div className="c-rest-details w-full">
+                      {/* Ajustes Rápidos de Tiempo */}
+                      <div className="c-rest-adjust-row grid grid-cols-2 gap-2 w-full">
+                        {onTogglePauseRestTimer && (
+                          <button
+                            type="button"
+                            className={`c-rest-time-btn min-h-11 ${isPaused ? 'is-paused' : ''}`}
+                            onClick={onTogglePauseRestTimer}
+                            aria-label={isPaused ? 'Reanudar descanso' : 'Pausar descanso'}
+                          >
+                            <AppIcon name={isPaused ? 'play' : 'pause'} className="h-3.5 w-3.5 mr-1" />
+                            {isPaused ? 'Reanudar' : 'Pausar'}
+                          </button>
+                        )}
+                        {showQuickRestAdjustments && (
+                          <button
+                            type="button"
+                            className="c-rest-time-btn min-h-11"
+                            onClick={() => onAdjustRestTimer?.(-30)}
+                            aria-label="Restar 30 segundos"
+                          >
+                            −30s
+                          </button>
+                        )}
+                        {showQuickRestAdjustments && (
+                          <button
+                            type="button"
+                            className="c-rest-time-btn min-h-11"
+                            onClick={() => onAdjustRestTimer?.(30)}
+                            aria-label="Sumar 30 segundos"
+                          >
+                            +30s
+                          </button>
+                        )}
+                        {onToggleMinimizeRest && (
+                          <button
+                            type="button"
+                            className="c-rest-time-btn min-h-11 text-xs font-semibold"
+                            onClick={onToggleMinimizeRest}
+                          >
+                            Minimizar
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Tarjeta de Anticipación del Próximo Esfuerzo */}
@@ -1021,7 +1075,9 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                 {/* Acción Primaria de Descanso */}
                 <button
                   type="button"
-                  className="c-primary-cta c-next-effort-cta w-full min-h-[50px] h-auto py-3 px-4 leading-snug"
+                  className={`c-primary-cta c-next-effort-cta w-full min-h-[50px] h-auto py-3 px-4 leading-snug ${
+                    isOvertime ? '!border-[#F59E0B]/55 !bg-[#F59E0B]/15 hover:!bg-[#F59E0B]/25 !text-amber-700 dark:!text-[#F59E0B] !shadow-none' : ''
+                  }`}
                   onClick={handleSkipOrAdvance}
                 >
                   <span>{nextEffortButtonText}</span>
@@ -1076,7 +1132,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                   <button
                     type="button"
                     onClick={() => selectExercise(nextPendingExerciseIndex)}
-                    className="min-h-11 rounded-xl px-3 text-xs font-semibold text-[var(--blue)] hover:bg-[var(--blue-soft)]"
+                    className="min-h-11 rounded-xl px-3 text-xs font-semibold text-[#4F46E5] dark:text-indigo-400 hover:bg-[#4F46E5]/10"
                   >
                     Siguiente pendiente
                   </button>
@@ -1113,32 +1169,25 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                         aria-current={isCurrent ? 'step' : undefined}
                         aria-label={`${index + 1}. ${item.name}, ${done} de ${total} series, ${isDoneExercise ? 'completado' : 'pendiente'}`}
                         data-exercise-status={isDoneExercise ? 'completed' : 'pending'}
-                        className={`flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3 text-left text-sm transition-colors ${
+                        className={`group flex min-h-[44px] min-w-[44px] w-full items-center justify-between gap-2 rounded-xl px-3 text-left text-sm transition-colors ${
                           isCurrent
-                            ? 'bg-[var(--blue-soft)] font-semibold text-[var(--blue)]'
+                            ? 'bg-[#4F46E5]/12 font-semibold text-[#4F46E5] dark:bg-[#4F46E5]/18 dark:text-indigo-300'
                             : isDoneExercise
-                              ? 'text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300'
+                              ? 'text-[var(--text)] hover:bg-[var(--surface-muted)]'
                               : 'text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]'
                         }`}
                       >
-                        <span className="flex min-w-0 items-center gap-2">
-                          {isDoneExercise ? (
-                            <AppIcon name="checkCircle" className="h-4 w-4 shrink-0 text-emerald-500" />
-                          ) : (
-                            <span
-                              aria-hidden="true"
-                              className={`h-2.5 w-2.5 shrink-0 rounded-full ${
-                                done > 0 ? 'bg-amber-400' : 'border border-[var(--border-strong)] bg-transparent'
-                              }`}
-                            />
-                          )}
-                          <span className="min-w-0 break-words">{index + 1}. {item.name}</span>
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <CompletionCheck checked={isDoneExercise} size="sm" />
+                          <span className={`min-w-0 break-words ${isDoneExercise ? 'opacity-60 line-through decoration-slate-400/60' : ''}`}>
+                            {index + 1}. {item.name}
+                          </span>
                         </span>
                         <span className="flex shrink-0 items-center gap-1.5">
                           <span
                             className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
                               isDoneExercise
-                                ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                ? 'bg-indigo-500/12 text-indigo-700 dark:text-indigo-300'
                                 : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'
                             }`}
                           >
@@ -1215,7 +1264,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                       <button
                         type="button"
                         onClick={() => onOpenCalculator(safeExerciseIndex, safeSetIndex, Number(currentSet.weight) || 40, barWeight)}
-                        className="min-h-11 rounded-xl border border-[var(--border)] text-xs font-semibold text-[var(--blue)] hover:bg-[var(--blue-soft)]"
+                        className="min-h-11 rounded-xl border border-[var(--border)] text-xs font-semibold text-[#4F46E5] dark:text-indigo-400 hover:bg-[#4F46E5]/10"
                       >
                         Calcular discos
                       </button>
@@ -1280,7 +1329,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     <label className="space-y-1 text-xs text-[var(--text-soft)]">Peso<input type="number" min="0" step="0.25" value={newExerciseWeight} onChange={(event) => setNewExerciseWeight(Number(event.target.value) || 0)} className={`${controlClass} w-full`} /></label>
                     <label className="space-y-1 text-xs text-[var(--text-soft)]">Reps<input type="number" min="1" value={newExerciseReps} onChange={(event) => setNewExerciseReps(Number(event.target.value) || 1)} className={`${controlClass} w-full`} /></label>
                   </div>
-                  <button type="submit" className="min-h-11 w-full rounded-xl bg-[var(--blue)] text-sm font-bold text-white hover:bg-[var(--blue-hover)]">Agregar ejercicio</button>
+                  <button type="submit" className="min-h-11 w-full rounded-xl bg-[#4F46E5] text-sm font-bold text-white hover:bg-[#4338CA] dark:hover:bg-[#6366F1]">Agregar ejercicio</button>
                 </form>
               </div>
             </details>
@@ -1321,7 +1370,7 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
             </select>
             <label className="space-y-1 text-xs text-[var(--text-soft)]">Peso inicial<input type="number" min="0" step="0.25" value={newExerciseWeight} onChange={(event) => setNewExerciseWeight(Number(event.target.value) || 0)} className={`${controlClass} w-full`} /></label>
             <label className="space-y-1 text-xs text-[var(--text-soft)]">Reps iniciales<input type="number" min="1" value={newExerciseReps} onChange={(event) => setNewExerciseReps(Number(event.target.value) || 1)} className={`${controlClass} w-full`} /></label>
-            <button type="submit" className="min-h-12 rounded-xl bg-[var(--blue)] px-4 text-sm font-bold text-white hover:bg-[var(--blue-hover)] sm:col-span-2">Agregar ejercicio</button>
+            <button type="submit" className="min-h-12 rounded-xl bg-[#4F46E5] px-4 text-sm font-bold text-white hover:bg-[#4338CA] dark:hover:bg-[#6366F1] sm:col-span-2">Agregar ejercicio</button>
           </form>
         </div>
       )}

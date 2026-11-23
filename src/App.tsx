@@ -2529,6 +2529,12 @@ export default function App() {
     state.gym?.activeTimer
   );
 
+  const isInGymRestActive = Boolean(
+    isModuleEnabled(state, 'gimnasio') &&
+    currentView === 'gimnasio' &&
+    state.gym?.activeTimer
+  );
+
   const isStudyOverlayActive = Boolean(
     isModuleEnabled(state, 'estudios') &&
     currentView !== 'estudios' &&
@@ -2536,14 +2542,16 @@ export default function App() {
   );
 
   const mainBottomPadding = (isGymOverlayActive && isStudyOverlayActive)
-    ? 'pb-[calc(18rem+env(safe-area-inset-bottom))] sm:pb-44 lg:pb-32'
+    ? 'pb-[calc(21rem+env(safe-area-inset-bottom))] md:pb-40 lg:pb-32'
     : (isGymOverlayActive || isStudyOverlayActive)
-    ? 'pb-[calc(13rem+env(safe-area-inset-bottom))] sm:pb-36 lg:pb-32'
-    : 'pb-[calc(8.5rem+env(safe-area-inset-bottom))] lg:pb-8';
+    ? 'pb-[calc(15.5rem+env(safe-area-inset-bottom))] md:pb-32'
+    : isInGymRestActive
+    ? 'pb-[calc(11rem+env(safe-area-inset-bottom))] md:pb-12'
+    : 'pb-[calc(9rem+env(safe-area-inset-bottom))] md:pb-8';
 
   return (
     <PrivacyProvider active={Boolean(state.settings.privacyMode)}>
-    <div className="min-h-dvh bg-[var(--bg)] text-[var(--text)] flex flex-col lg:flex-row antialiased selection:bg-blue-500/20 selection:text-blue-500">
+    <div className="min-h-dvh bg-[var(--bg)] text-[var(--text)] flex flex-col lg:flex-row antialiased selection:bg-indigo-500/20 selection:text-indigo-500">
       {/* Sidebar */}
       <Sidebar
         currentView={currentView}

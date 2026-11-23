@@ -117,7 +117,7 @@ test('los controles de la sesión activa mantienen targets de al menos 44 px', (
 
   assert.ok(controls.length > 0);
   for (const control of controls) {
-    assert.match(control, /class="[^"]*(?:h-11|min-h-11|h-12|min-h-12|min-h-\[50px\]|min-h-14)[^"]*"/);
+    assert.match(control, /class="[^"]*(?:h-11|min-h-11|min-h-\[44px\]|h-12|min-h-12|min-h-\[50px\]|min-h-14)[^"]*"/);
   }
 });
 

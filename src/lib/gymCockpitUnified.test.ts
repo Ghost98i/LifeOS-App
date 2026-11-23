@@ -95,7 +95,7 @@ test('Cockpit 1: Completar una serie y comenzar el descanso muestra cronómetro 
   assert.match(html, /01:30/); // 90s formatted
   assert.match(html, /Próximo esfuerzo/);
   assert.match(html, /82\.5 kg × 8 reps/); // Target for set 2
-  assert.match(html, /Comenzar Serie 2 Ahora →/);
+  assert.match(html, /Saltar descanso/);
   assert.match(html, /Revisar o corregir Serie 1 \(80 kg × 8\)/);
 });
 
@@ -197,11 +197,14 @@ test('Cockpit 3: Llegada del temporizador a cero no auto-completa ni modifica se
     })
   );
 
-  // Time expiry is not proof that clearing the timer was persisted. Keep the
-  // existing start/retry control until the parent confirms the clear (Cockpit 4).
+  // Time expiry transitions to positive overtime (+MM:SS) without auto-completing
+  // pending sets, keeping set completion directly accessible on desktop and mobile.
   assert.match(html, /c-stage-card c-rest-phase/);
-  assert.match(html, /00:00/);
-  assert.match(html, /Comenzar Serie 2 Ahora →/);
+  assert.match(html, /Descanso excedido/);
+  assert.match(html.replace(/<[^>]+>/g, ''), /\+00:0[456]/);
+  assert.match(html, /Descartar aviso/);
+  assert.match(html, /Completar serie 2/);
+  assert.doesNotMatch(html, /c-logging-phase[^"]*is-rest-hidden-mobile/);
   assert.equal(session.exercises[0].sets[1].completed, false);
   assert.doesNotMatch(html, /Serie 2 completada · Tocar para desmarcar/);
 });
@@ -532,7 +535,7 @@ test('Cockpit 11: Navegación por teclado, conservación del foco y semántica d
   const controls = html.match(/<(?:button|input|select|summary)\b[^>]*>/g) || [];
   assert.ok(controls.length > 5);
   for (const control of controls) {
-    assert.match(control, /class="[^"]*(?:h-11|min-h-11|h-12|min-h-12|min-h-\[50px\]|min-h-14)[^"]*"/);
+    assert.match(control, /class="[^"]*(?:h-11|min-h-11|min-h-\[44px\]|h-12|min-h-12|min-h-\[50px\]|min-h-14)[^"]*"/);
   }
 });
 

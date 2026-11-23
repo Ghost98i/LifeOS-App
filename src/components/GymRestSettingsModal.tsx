@@ -2,6 +2,13 @@ import React, { useEffect, useState } from 'react';
 import type { GymSettings } from '../types';
 import { AppIcon } from './AppIcon';
 import { useDialogFocus } from '../hooks/useDialogFocus';
+import {
+  getRestNotificationPermission,
+  isRestNotificationEnabled,
+  isRestNotificationSupported,
+  requestRestNotificationPermission,
+  setRestNotificationEnabled,
+} from '../lib/gymRestTimer';
 
 interface GymRestSettingsModalProps {
   settings: Required<GymSettings>;
@@ -24,16 +31,23 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
   const [exerciseRest, setExerciseRest] = useState(settings.restBetweenExercisesSeconds);
   const [showQuickAdjustments, setShowQuickAdjustments] = useState(settings.showQuickRestAdjustments);
   const [allowManualEditing, setAllowManualEditing] = useState(settings.allowManualRestEditing);
+  const [notifyOnRestEnd, setNotifyOnRestEnd] = useState(() =>
+    isRestNotificationEnabled() && getRestNotificationPermission() === 'granted'
+  );
+  const [notificationNotice, setNotificationNotice] = useState<string | null>(null);
+  const [requestingNotification, setRequestingNotification] = useState(false);
   const [saveError, setSaveError] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setSaveError(false);
+      setNotificationNotice(null);
       setAutoTimer(settings.autoTimerEnabled);
       setSetRest(settings.restBetweenSetsSeconds);
       setExerciseRest(settings.restBetweenExercisesSeconds);
       setShowQuickAdjustments(settings.showQuickRestAdjustments);
       setAllowManualEditing(settings.allowManualRestEditing);
+      setNotifyOnRestEnd(isRestNotificationEnabled() && getRestNotificationPermission() === 'granted');
     }
   }, [isOpen, settings]);
 
@@ -41,6 +55,53 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
   useDialogFocus(isOpen, dialogRef, onClose);
 
   if (!isOpen) return null;
+
+  const handleToggleNotify = async () => {
+    if (notifyOnRestEnd) {
+      setNotifyOnRestEnd(false);
+      setNotificationNotice(null);
+      return;
+    }
+
+    if (!isRestNotificationSupported()) {
+      setNotifyOnRestEnd(false);
+      setNotificationNotice('Este navegador no soporta notificaciones nativas.');
+      return;
+    }
+
+    const currentPermission = getRestNotificationPermission();
+    if (currentPermission === 'granted') {
+      setNotifyOnRestEnd(true);
+      setNotificationNotice(null);
+      return;
+    }
+
+    if (currentPermission === 'denied') {
+      setNotifyOnRestEnd(false);
+      setNotificationNotice('Permiso de notificaciones bloqueado en el navegador. Podés habilitarlo desde la configuración del sitio.');
+      return;
+    }
+
+    setRequestingNotification(true);
+    try {
+      const permission = await requestRestNotificationPermission();
+      if (permission === 'granted') {
+        setNotifyOnRestEnd(true);
+        setNotificationNotice(null);
+      } else if (permission === 'denied') {
+        setNotifyOnRestEnd(false);
+        setNotificationNotice('Permiso de notificaciones denegado. El aviso sonoro y visual sigue activo.');
+      } else if (permission === 'unsupported') {
+        setNotifyOnRestEnd(false);
+        setNotificationNotice('Este navegador no soporta notificaciones nativas.');
+      } else {
+        setNotifyOnRestEnd(false);
+        setNotificationNotice('No se otorgó el permiso. Podés activarlo cuando quieras.');
+      }
+    } finally {
+      setRequestingNotification(false);
+    }
+  };
 
   const handleSave = () => {
     const saved = onSave({
@@ -51,6 +112,7 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
       allowManualRestEditing: allowManualEditing,
     });
     if (saved === false) { setSaveError(true); return; }
+    setRestNotificationEnabled(notifyOnRestEnd);
     onClose();
   };
 
@@ -71,7 +133,7 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
       >
         <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--blue-soft)] text-[var(--blue)]">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#4F46E5]/12 text-[#4F46E5] dark:bg-[#4F46E5]/20 dark:text-indigo-300">
               <AppIcon name="stopwatch" className="h-5 w-5" />
             </span>
             <div>
@@ -110,7 +172,7 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
             aria-label="Descanso automático"
             onClick={() => setAutoTimer((prev) => !prev)}
             className={`gym-rest-switch relative inline-flex h-11 w-12 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${
-              autoTimer ? 'bg-[var(--blue)]' : 'bg-[var(--border-strong)]'
+              autoTimer ? 'bg-[#4F46E5]' : 'bg-[var(--border-strong)]'
             }`}
           >
             <span
@@ -139,7 +201,7 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
                 onClick={() => setSetRest(seconds)}
                 className={`min-h-11 rounded-xl border text-xs font-bold transition-colors ${
                   setRest === seconds
-                    ? 'border-[var(--blue)] bg-[var(--blue)] text-white shadow-xs'
+                    ? 'border-[#4F46E5] bg-[#4F46E5] text-white shadow-xs'
                     : 'border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)]'
                 }`}
               >
@@ -155,7 +217,7 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
             step={15}
             value={setRest}
             onChange={(e) => setSetRest(Math.max(15, Math.min(600, Number(e.target.value) || 120)))}
-            className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold text-[var(--text)] outline-none focus:border-[var(--blue)]"
+            className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold tabular-nums text-[var(--text)] outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/25 focus-visible:outline-none"
           />
         </div>
 
@@ -177,7 +239,7 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
                 onClick={() => setExerciseRest(seconds)}
                 className={`min-h-11 rounded-xl border text-xs font-bold transition-colors ${
                   exerciseRest === seconds
-                    ? 'border-[var(--blue)] bg-[var(--blue)] text-white shadow-xs'
+                    ? 'border-[#4F46E5] bg-[#4F46E5] text-white shadow-xs'
                     : 'border-[var(--border)] bg-[var(--surface-muted)] text-[var(--text-soft)] hover:text-[var(--text)]'
                 }`}
               >
@@ -193,15 +255,50 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
             step={15}
             value={exerciseRest}
             onChange={(e) => setExerciseRest(Math.max(15, Math.min(600, Number(e.target.value) || 180)))}
-            className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold text-[var(--text)] outline-none focus:border-[var(--blue)]"
+            className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold tabular-nums text-[var(--text)] outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/25 focus-visible:outline-none"
           />
         </div>
 
         <div className="space-y-2">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3.5 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <span className="block text-sm font-bold text-[var(--text)]">
+                  Notificar al terminar el descanso
+                </span>
+                <span className="block text-xs text-[var(--text-soft)]">
+                  Aviso del dispositivo al llegar a 00:00
+                </span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={notifyOnRestEnd}
+                aria-label="Notificar al terminar el descanso"
+                disabled={requestingNotification}
+                onClick={() => void handleToggleNotify()}
+                className={`gym-rest-switch relative inline-flex h-11 w-12 shrink-0 cursor-pointer rounded-full transition-colors duration-200 disabled:opacity-60 ${
+                  notifyOnRestEnd ? 'bg-[#4F46E5]' : 'bg-[var(--border-strong)]'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none absolute top-3 inline-block h-5 w-5 rounded-full bg-white shadow-md transition duration-200 ${
+                    notifyOnRestEnd ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+            {notificationNotice && (
+              <p role="status" className="text-[11px] leading-relaxed text-[var(--text-soft)]">
+                {notificationNotice}
+              </p>
+            )}
+          </div>
+
           <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3.5">
             <div className="min-w-0">
               <span className="block text-sm font-bold text-[var(--text)]">Mostrar ajustes rápidos</span>
-              <span className="block text-xs text-[var(--text-soft)]">Muestra −30 s y +30 s mientras descansas</span>
+              <span className="block text-xs text-[var(--text-soft)]">Muestra −30 s y +30 s mientras descansás</span>
             </div>
             <button
               type="button"
@@ -210,7 +307,7 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
               aria-label="Mostrar ajustes rápidos de descanso"
               onClick={() => setShowQuickAdjustments((current) => !current)}
               className={`gym-rest-switch relative inline-flex h-11 w-12 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${
-                showQuickAdjustments ? 'bg-[var(--blue)]' : 'bg-[var(--border-strong)]'
+                showQuickAdjustments ? 'bg-[#4F46E5]' : 'bg-[var(--border-strong)]'
               }`}
             >
               <span className={`pointer-events-none absolute top-3 inline-block h-5 w-5 rounded-full bg-white shadow-md transition duration-200 ${
@@ -231,7 +328,7 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
               aria-label="Permitir edición manual del descanso"
               onClick={() => setAllowManualEditing((current) => !current)}
               className={`gym-rest-switch relative inline-flex h-11 w-12 shrink-0 cursor-pointer rounded-full transition-colors duration-200 ${
-                allowManualEditing ? 'bg-[var(--blue)]' : 'bg-[var(--border-strong)]'
+                allowManualEditing ? 'bg-[#4F46E5]' : 'bg-[var(--border-strong)]'
               }`}
             >
               <span className={`pointer-events-none absolute top-3 inline-block h-5 w-5 rounded-full bg-white shadow-md transition duration-200 ${
@@ -253,7 +350,7 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
           <button
             type="button"
             onClick={handleSave}
-            className="min-h-11 rounded-xl bg-[var(--blue)] px-5 text-xs font-bold text-white shadow-xs hover:bg-[var(--blue-hover)]"
+            className="min-h-11 rounded-xl bg-[#4F46E5] px-5 text-xs font-bold text-white shadow-xs hover:bg-[#4338CA] dark:hover:bg-[#6366F1]"
           >
             Guardar cambios
           </button>

@@ -43,7 +43,9 @@ export const MobileNav: React.FC<MobileNavProps> = ({
     }`;
   const iconPillClass = (active: boolean) =>
     `flex h-7 w-12 items-center justify-center rounded-full transition-colors ${
-      active ? 'bg-[var(--blue-soft)] text-[var(--blue)]' : ''
+      active
+        ? 'bg-[#4F46E5]/12 text-[#4F46E5] dark:bg-[#4F46E5]/20 dark:text-[#818CF8]'
+        : ''
     }`;
   const moreActive = !['dashboard', slot2?.id, slot4?.id].filter(Boolean).includes(currentView);
 
@@ -173,7 +175,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
         <button
           type="button"
           onClick={onOpenCapture}
-          className="relative mx-2 -mt-1.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white shadow-md active:scale-95 transition-all cursor-pointer border border-white/15"
+          className="relative mx-2 -mt-1.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] dark:bg-[#4F46E5] dark:hover:bg-[#6366F1] text-white shadow-[0_6px_18px_rgba(79,70,229,0.35)] active:scale-95 transition-all cursor-pointer border border-white/15"
           aria-label="Captura rápida"
         >
           <AppIcon name="squarePlus" strokeWidth={1.75} className="h-5 w-5 text-white" />

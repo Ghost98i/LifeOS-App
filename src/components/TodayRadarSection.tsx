@@ -191,12 +191,12 @@ export const TodayRadarSection: React.FC<TodayRadarSectionProps> = ({
               </span>
               <span className="flex min-w-0 items-center gap-1.5">
                 <span
-                  className={`truncate text-xs font-medium ${
+                  className={`truncate text-xs ${
                     pulse.gymStatus === 'active_session'
-                      ? 'text-indigo-600 dark:text-indigo-400 font-semibold'
+                      ? 'font-semibold text-indigo-600 dark:text-indigo-400'
                       : pulse.gymStatus === 'trained_today'
-                        ? 'text-slate-900 dark:text-slate-100 font-semibold'
-                        : 'text-slate-500 dark:text-slate-400'
+                        ? 'font-semibold text-slate-900 dark:text-slate-100'
+                        : 'font-medium text-slate-500 dark:text-slate-400'
                   }`}
                 >
                   {pulse.gymLabel}

@@ -2359,11 +2359,25 @@ button:active {
   transform: none;
 }
 
+@keyframes overtime-pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.overtime-bar-pulse {
+  animation: overtime-pulse 1.9s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .completion-check,
   .completion-check--animate,
   .completion-check-tick--animate,
-  .completion-check-halo {
+  .completion-check-halo,
+  .overtime-bar-pulse {
     animation: none !important;
     transition: none !important;
   }

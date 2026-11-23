@@ -303,6 +303,7 @@
 }
 @media (max-width: 1023px) {
   .gym-page .c-logging-phase.is-rest-hidden-mobile { display: none; }
+  .gym-page .c-rest-phase.is-overtime-hidden-mobile { display: none; }
 }
 .c-set-position {
   display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
@@ -477,8 +478,20 @@
 
 /* Focus & Touch Floor */
 .gym-page :is(button, input, select, summary):focus-visible,
-[data-gym-rest-settings] :is(button, input):focus-visible,
+[data-gym-rest-settings] button:focus-visible,
 [aria-labelledby="exercise-history-title"] :is(button, input):focus-visible { outline: 2px solid var(--gym-visual-accent, #4f46e5); outline-offset: 2px; }
+[data-gym-rest-settings] input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+[data-gym-rest-settings] input[type="number"]::-webkit-outer-spin-button,
+[data-gym-rest-settings] input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+[data-gym-rest-settings] input:focus-visible {
+  outline: none;
+}
 .gym-page :is(.c-primary-cta, .gym-rest-skip, .gym-rest-mini-skip):focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px rgb(99 102 241 / 0.4);

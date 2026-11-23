@@ -745,6 +745,16 @@ export function applyGymRestTimerAdjustment(
   }
 
   if (deltaSeconds > 0) {
+    if (timer.endsAt <= now) {
+      return {
+        timer: {
+          ...timer,
+          endsAt: now + deltaSeconds * 1000,
+          durationSeconds: deltaSeconds,
+        },
+        completed: false,
+      };
+    }
     return {
       timer: {
         ...timer,
