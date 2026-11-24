@@ -27,7 +27,7 @@ test('Trabajo vacío muestra bienvenida limpia, oculta filtros redundantes y mé
   assert.match(html, /Registrar postulación privada/);
   assert.match(html, /Registrar concurso público/);
   assert.doesNotMatch(html, /Nueva postulación/);
-  assert.doesNotMatch(html, /Lista \/ Tabla/);
+  assert.doesNotMatch(html, /role="tablist"/);
   assert.doesNotMatch(html, /Filtrar por tipo de proceso/);
   assert.doesNotMatch(html, /Sin postulaciones/);
   assert.doesNotMatch(html, /En etapa CV enviado/);
@@ -77,8 +77,8 @@ test('Trabajo muestra el Kanban público con etapas propias y sin columnas empre
 test('métricas móviles priorizan procesos y seguimientos, con métricas secundarias accesibles', () => {
   const html = renderTrabajo([application('métrica', 'pendiente')]);
   assert.match(html, /Postulaciones/);
-  assert.match(html, /Seguimientos vencidos o de hoy/);
-  assert.match(html, /<summary[^>]*>Ver otras métricas<\/summary>/);
+  assert.match(html, /Seguimientos hoy/);
+  assert.match(html, /<summary[^>]*>[\s\S]*?lucide-chevron-right[\s\S]*?Ver otras métricas[\s\S]*?<\/summary>/);
   assert.match(html, /CV enviados/);
   assert.match(html, /Entrevistas/);
   assert.match(html, /Empresas/);

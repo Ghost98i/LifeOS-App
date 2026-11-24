@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { X } from 'lucide-react';
 
 /** Small, reusable non-modal help popover for concepts that should stay out of the way. */
 export const ContextualHelp: React.FC<{ label: string; children: React.ReactNode }> = ({ label, children }) => {
@@ -86,7 +87,7 @@ export const ContextualHelp: React.FC<{ label: string; children: React.ReactNode
         <p className="min-w-0">{children}</p>
         <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => {
           closeAndReturnFocus();
-        }} aria-label="Cerrar ayuda" className="-mr-1 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base text-[var(--text-faint)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--blue)]">×</button>
+        }} aria-label="Cerrar ayuda" className="-mr-1 -mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70"><X className="h-3.5 w-3.5" aria-hidden="true" /></button>
       </div>
     </div>, document.body) : null;
 
@@ -106,7 +107,7 @@ export const ContextualHelp: React.FC<{ label: string; children: React.ReactNode
         if (pinned) { setPinned(false); setOpen(false); }
         else { setPinned(true); setOpen(true); }
       }}
-      className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--blue)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--blue)]"
+      className="trabajo-clean-focus inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--text-faint)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[#4F46E5] outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 dark:hover:text-[#818CF8]"
       >
       <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.6">
         <circle cx="10" cy="10" r="7.25" /><path d="M10 9v4M10 6.5h.01" strokeLinecap="round" />
