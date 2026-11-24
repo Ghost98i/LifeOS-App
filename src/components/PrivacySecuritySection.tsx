@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   AlertTriangle,
+  ArrowRight,
   Check,
   ChevronDown,
   Download,
@@ -731,9 +732,10 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
               href="/eliminar-cuenta.html"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex min-h-10 items-center text-xs font-semibold text-[#4F46E5] hover:underline dark:text-indigo-400"
+              className="inline-flex min-h-10 items-center gap-1.5 text-xs font-semibold text-[#4F46E5] hover:underline dark:text-indigo-400"
             >
-              Instrucciones públicas, incluso si desinstalaste la app →
+              <span>Instrucciones públicas, incluso si desinstalaste la app</span>
+              <ArrowRight size={14} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
             </a>
           </div>
           <button

@@ -137,7 +137,7 @@
 .ai-refinement :is(input, textarea) { color: var(--text); }
 .ai-refinement input { min-height: 2.75rem; }
 .ai-refinement article { overflow-wrap: anywhere; min-width: 0; }
-.notes-refinement :is(form input:not([type="checkbox"]), form select, form button) { min-height: 2.5rem; }
+.notes-refinement :is(form input:not([type="checkbox"]), form select, form button:not([role="switch"])) { min-height: 2.5rem; }
 @media (max-width: 640px) {
   .notes-refinement form > input { width: 100%; flex-basis: 100%; }
   .notes-refinement [aria-label^="Marcar "] { min-width: 2.75rem; min-height: 2.75rem; }

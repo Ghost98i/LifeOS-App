@@ -324,7 +324,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
   };
 
   const fieldClass =
-    'w-full min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
+    'celestian-clean-field w-full min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -355,16 +355,17 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
         </p>
 
         {/* Filter Tabs (scrollable on 389px without horizontal page overflow) */}
-        <div className="flex w-full items-center gap-1 overflow-x-auto rounded-xl border border-slate-200/80 bg-slate-50/80 p-1 dark:border-white/[0.08] dark:bg-white/[0.03] sm:w-fit">
+        <div className="flex w-full items-center gap-1 overflow-x-auto rounded-xl border border-slate-200/80 bg-slate-100/75 p-1 dark:border-white/[0.08] dark:bg-white/[0.03] sm:w-fit">
           {(['activos', 'pausados', 'completados', 'todos'] as const).map((tab) => (
             <button
               key={tab}
               type="button"
+              aria-pressed={filter === tab}
               onClick={() => setFilter(tab)}
-              className={`min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+              className={`min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 cursor-pointer ${
                 filter === tab
-                  ? 'bg-white text-[#4F46E5] dark:bg-[#0D111A] dark:text-indigo-300'
-                  : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+                  ? 'bg-[#4F46E5] text-white'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
               }`}
             >
               {tab === 'activos'
