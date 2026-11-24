@@ -1,6 +1,7 @@
 import { CommercialWorkspace } from './CommercialWorkspace';
 import type { CloudSyncStatus } from '../lib/cloudSync';
 import React, { useEffect, useState } from 'react';
+import { ArrowLeft, CheckCircle2, ChevronDown, FlaskConical, Pencil, Trash2, X } from 'lucide-react';
 import type { LifeOSState, ResaleItem } from '../types';
 import { resaleStats } from '../lib/calculations';
 import { deleteResaleItem, planResaleDeletion, recordResalePurchase, recordResaleSale, resaleProfit, type ResaleDeletionPlan } from '../lib/resaleFlows';
@@ -20,6 +21,16 @@ const fmtMoney = (amount: number | null | undefined, currency: string | null = '
   !currency ? `${formatMoney(amount, 'UYU', { noSymbol: true })} · moneda sin verificar`
     : currency === 'UYU' || currency === 'USD' ? formatMoney(amount, currency)
       : `${currency} ${formatMoney(amount, 'UYU', { noSymbol: true })}`;
+
+const cleanFieldClass =
+  'celestian-clean-field min-h-11 w-full min-w-0 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-[var(--text)] placeholder:text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:placeholder:text-slate-500';
+const cleanSelectClass = `${cleanFieldClass} appearance-none pr-9 cursor-pointer`;
+const segmentedBtnBase =
+  'min-h-10 rounded-lg px-3.5 py-2 text-xs sm:text-sm font-semibold transition-colors cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
+const iconActionBtn =
+  'inline-flex min-h-10 min-w-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white text-slate-500 transition-colors hover:border-[#4F46E5]/50 hover:text-[#4F46E5] dark:border-white/[0.08] dark:bg-transparent dark:text-slate-400 dark:hover:border-indigo-400/50 dark:hover:text-indigo-300 cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70';
+const deleteIconBtn =
+  'inline-flex min-h-10 min-w-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white text-slate-500 transition-colors hover:border-rose-400/60 hover:bg-rose-50 hover:text-rose-600 dark:border-white/[0.08] dark:bg-transparent dark:text-slate-400 dark:hover:border-rose-500/40 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70';
 
 interface ReventaViewProps {
   onCommercialUpdate?: (updater: (draft: LifeOSState) => void) => boolean;
@@ -57,16 +68,35 @@ const SellForm: React.FC<SellFormProps> = ({ item, state, onUpdateState, onClose
     } catch (error) { setMessage(error instanceof Error ? error.message : 'No se pudo registrar.'); }
   };
   return (
-    <form onSubmit={submit} className="mt-3 grid grid-cols-1 gap-2.5 rounded-xl border border-slate-200/80 bg-slate-50/60 p-3 dark:border-white/[0.08] dark:bg-white/[0.02] sm:grid-cols-2 lg:grid-cols-4">
-      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Venta</span><input autoFocus required type="number" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="0" className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm tabular-nums text-[var(--text)]" /></label>
-      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Envío</span><input type="number" value={shippingCost} onChange={(event) => setShippingCost(event.target.value)} placeholder="0" className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm tabular-nums text-[var(--text)]" /></label>
-      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Plataforma</span><input type="number" value={platformFees} onChange={(event) => setPlatformFees(event.target.value)} placeholder="0" className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm tabular-nums text-[var(--text)]" /></label>
-      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Impuestos</span><input type="number" value={taxes} onChange={(event) => setTaxes(event.target.value)} placeholder="0" className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm tabular-nums text-[var(--text)]" /></label>
-      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Cuenta</span><select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)]">{(state.finance?.accounts || []).map((account) => <option key={account.id} value={account.id}><PrivateFinancialText>{account.name}</PrivateFinancialText></option>)}</select></label>
-      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Fecha</span><input type="date" value={date} onChange={(event) => setDate(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)]" /></label>
-      <div className="min-w-0 sm:col-span-2 flex flex-col justify-center rounded-xl border border-slate-200/80 bg-white px-3 py-2 dark:border-white/[0.08] dark:bg-[#0D111A]"><span className="flex items-center gap-1 text-xs font-semibold text-[var(--text-soft)]">Ganancia estimada<ContextualHelp label="Ganancia estimada">Precio de venta menos compra y costos de venta ingresados. No incluye otros gastos del negocio.</ContextualHelp></span><strong className={`tabular-nums text-sm ${estimate !== null && estimate < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-[var(--text)]'}`}><PrivacyAmount>{estimate === null ? 'No comparable entre monedas' : fmtMoney(estimate, selectedCurrency)}</PrivacyAmount></strong></div>
+    <form onSubmit={submit} className="mt-3 grid grid-cols-1 gap-2.5 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 dark:border-white/[0.08] dark:bg-white/[0.02] sm:grid-cols-2 lg:grid-cols-4">
+      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Venta</span><input autoFocus required type="number" value={price} onChange={(event) => setPrice(event.target.value)} placeholder="0" className={`${cleanFieldClass} tabular-nums`} /></label>
+      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Envío</span><input type="number" value={shippingCost} onChange={(event) => setShippingCost(event.target.value)} placeholder="0" className={`${cleanFieldClass} tabular-nums`} /></label>
+      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Plataforma</span><input type="number" value={platformFees} onChange={(event) => setPlatformFees(event.target.value)} placeholder="0" className={`${cleanFieldClass} tabular-nums`} /></label>
+      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Impuestos</span><input type="number" value={taxes} onChange={(event) => setTaxes(event.target.value)} placeholder="0" className={`${cleanFieldClass} tabular-nums`} /></label>
+      <label className="min-w-0">
+        <span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Cuenta</span>
+        <span className="relative block w-full">
+          <select value={accountId} onChange={(event) => setAccountId(event.target.value)} className={cleanSelectClass}>
+            {(state.finance?.accounts || []).map((account) => <option key={account.id} value={account.id}><PrivateFinancialText>{account.name}</PrivateFinancialText></option>)}
+          </select>
+          <ChevronDown size={15} strokeWidth={1.75} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+        </span>
+      </label>
+      <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Fecha</span><input type="date" value={date} onChange={(event) => setDate(event.target.value)} className={cleanFieldClass} /></label>
+      <div className="min-w-0 sm:col-span-2 flex flex-col justify-center rounded-xl border border-slate-200/80 bg-white px-3.5 py-2 dark:border-white/[0.08] dark:bg-[#0D111A]">
+        <span className="flex items-center gap-1 text-xs font-semibold text-[var(--text-soft)]">
+          Ganancia estimada
+          <ContextualHelp label="Ganancia estimada">Precio de venta menos compra y costos de venta ingresados. No incluye otros gastos del negocio.</ContextualHelp>
+        </span>
+        <strong className={`tabular-nums text-sm font-bold ${estimate !== null && estimate < 0 ? 'text-rose-700 dark:text-rose-400' : estimate !== null && estimate > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-[var(--text)]'}`}>
+          <PrivacyAmount>{estimate === null ? 'No comparable entre monedas' : fmtMoney(estimate, selectedCurrency)}</PrivacyAmount>
+        </strong>
+      </div>
       {message && <p className="text-xs font-semibold text-rose-600 dark:text-rose-400 sm:col-span-2 lg:col-span-4">{message}</p>}
-      <div className="flex gap-2 sm:col-span-2 lg:col-span-4"><button className="min-h-10 flex-1 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white hover:bg-[#4338CA] cursor-pointer">Confirmar venta</button><button type="button" onClick={onClose} className="min-h-10 rounded-xl border border-[var(--border)] px-4 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer">Cancelar</button></div>
+      <div className="flex flex-wrap gap-2 sm:col-span-2 sm:justify-end lg:col-span-4">
+        <button type="button" onClick={onClose} className="min-h-10 rounded-xl border border-slate-200/80 bg-white px-4 text-xs font-semibold text-[var(--text-soft)] transition-colors hover:text-[var(--text)] dark:border-white/[0.08] dark:bg-transparent cursor-pointer">Cancelar</button>
+        <button className="min-h-10 flex-1 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] sm:flex-none cursor-pointer">Confirmar venta</button>
+      </div>
     </form>
   );
 };
@@ -146,7 +176,11 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState, 
               aria-expanded={showCostCalculator}
               aria-controls="commercial-cost-calculator"
               onClick={() => setShowCostCalculator((current) => !current)}
-              className="min-h-10 rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)]"
+              className={`min-h-10 rounded-xl border px-3.5 text-xs font-semibold transition-colors cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
+                showCostCalculator
+                  ? 'border-[#4F46E5] bg-[#4F46E5] text-white'
+                  : 'border-slate-200/80 bg-white text-[var(--text-soft)] hover:border-[#4F46E5]/50 hover:text-[var(--text)] dark:border-white/[0.08] dark:bg-[#0D111A]'
+              }`}
             >
               Calcular costos
             </button>
@@ -157,28 +191,36 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState, 
       {showCostCalculator && <CommercialCostCalculator onClose={() => setShowCostCalculator(false)} />}
 
       {hasLegacyInventory && onCommercialUpdate && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3 dark:border-white/[0.06]">
+        <div
+          role="tablist"
+          aria-label="Secciones de Mi negocio"
+          className="grid w-full grid-cols-2 items-center gap-1 rounded-xl border border-slate-200/80 bg-slate-50/80 p-1 dark:border-white/[0.08] dark:bg-white/[0.03] sm:inline-flex sm:w-auto"
+        >
           <button
             type="button"
+            role="tab"
+            aria-selected={activeTab === 'commercial'}
             onClick={() => setActiveTab('commercial')}
-            className={`min-h-10 rounded-xl px-4 py-2 text-xs font-semibold transition-colors cursor-pointer ${
+            className={`${segmentedBtnBase} px-2.5 text-center leading-tight sm:px-3.5 ${
               activeTab === 'commercial'
                 ? 'bg-[#4F46E5] text-white'
-                : 'border border-slate-200/80 bg-white text-[var(--text-soft)] hover:text-[var(--text)] dark:border-white/[0.08] dark:bg-[#0D111A]'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
             }`}
           >
             Operaciones comerciales
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={activeTab === 'legacy'}
             onClick={() => setActiveTab('legacy')}
-            className={`min-h-10 rounded-xl px-4 py-2 text-xs font-semibold transition-colors cursor-pointer ${
+            className={`${segmentedBtnBase} px-2.5 text-center leading-tight sm:px-3.5 ${
               activeTab === 'legacy'
                 ? 'bg-[#4F46E5] text-white'
-                : 'border border-slate-200/80 bg-white text-[var(--text-soft)] hover:text-[var(--text)] dark:border-white/[0.08] dark:bg-[#0D111A]'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
             }`}
           >
-            Inventario histórico anterior ({inventory.length})
+            Inventario histórico ({inventory.length})
           </button>
         </div>
       )}
@@ -193,25 +235,68 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState, 
         />
       ) : (
         <div className="space-y-5">
-          {onCommercialUpdate && (
+          {onCommercialUpdate && !hasLegacyInventory && (
             <button
               type="button"
               onClick={() => setActiveTab('commercial')}
-              className="min-h-10 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white hover:bg-[#4338CA] cursor-pointer"
+              className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer"
             >
-              ← Ir a operaciones comerciales
+              <ArrowLeft size={15} strokeWidth={1.75} aria-hidden="true" />
+              <span>Ir a operaciones comerciales</span>
             </button>
           )}
 
           {inventory.length > 0 && (
-            <SurfaceCard className="flex flex-wrap items-center justify-between gap-3 p-4 sm:p-5">
-              <div className="flex flex-wrap gap-x-7 gap-y-2">
-                <div><span className="block text-xs font-semibold text-[var(--text-soft)]">Disponibles</span><strong className="text-lg tabular-nums">{stats.stock}</strong></div>
-                <div><span className="flex items-center gap-1 text-xs font-semibold text-[var(--text-soft)]">Capital en stock<ContextualHelp label="Capital en stock">Suma el precio de compra de los productos disponibles cuando comparten moneda. Es mercadería, no dinero disponible.</ContextualHelp></span><strong className="text-lg tabular-nums"><PrivacyAmount>{availableItems.length === 0 ? 'Sin stock' : stockValue === null ? 'No comparable entre monedas' : fmtMoney(stockValue, stockCurrency)}</PrivacyAmount></strong></div>
-                <div><span className="block text-xs font-semibold text-[var(--text-soft)]">Vendidos</span><strong className="text-lg tabular-nums">{stats.ventas}</strong></div>
-                <div><span className="flex items-center gap-1 text-xs font-semibold text-[var(--text-soft)]">Ganancia realizada<ContextualHelp label="Ganancia realizada">Ventas menos compra y costos de venta, solo si las monedas son comparables. No incluye otros gastos.</ContextualHelp></span><strong className={`text-lg tabular-nums ${stats.gananciaTotal !== null && stats.gananciaTotal < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-[var(--text)]'}`}><PrivacyAmount>{stats.gananciaTotal === null ? 'No comparable entre monedas' : fmtMoney(stats.gananciaTotal, stats.profitCurrency)}</PrivacyAmount></strong></div>
+            <SurfaceCard className="p-4 sm:p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className="min-w-0">
+                  <span className="flex min-h-10 items-center gap-1 text-xs font-medium text-[var(--text-soft)]">Disponibles</span>
+                  <strong className="block text-xl font-bold tabular-nums text-[var(--text)]">{stats.stock}</strong>
+                </div>
+                <div className="min-w-0">
+                  <span className="flex min-h-10 items-center gap-1 text-xs font-medium text-[var(--text-soft)]">
+                    Capital en stock
+                    <ContextualHelp label="Capital en stock">Suma el precio de compra de los productos disponibles cuando comparten moneda. Es mercadería, no dinero disponible.</ContextualHelp>
+                  </span>
+                  <strong className="block break-words text-xl font-bold tabular-nums text-[var(--text)]">
+                    <PrivacyAmount>{availableItems.length === 0 ? 'Sin stock' : stockValue === null ? 'No comparable' : fmtMoney(stockValue, stockCurrency)}</PrivacyAmount>
+                  </strong>
+                </div>
+                <div className="min-w-0">
+                  <span className="flex min-h-10 items-center gap-1 text-xs font-medium text-[var(--text-soft)]">Vendidos</span>
+                  <strong className="block text-xl font-bold tabular-nums text-[var(--text)]">{stats.ventas}</strong>
+                </div>
+                <div className="min-w-0">
+                  <span className="flex min-h-10 items-center gap-1 text-xs font-medium text-[var(--text-soft)]">
+                    Ganancia realizada
+                    <ContextualHelp label="Ganancia realizada">Ventas menos compra y costos de venta, solo si las monedas son comparables. No incluye otros gastos.</ContextualHelp>
+                  </span>
+                  <strong className={`block break-words text-xl font-bold tabular-nums ${stats.gananciaTotal !== null && stats.gananciaTotal < 0 ? 'text-rose-700 dark:text-rose-400' : stats.gananciaTotal !== null && stats.gananciaTotal > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-[var(--text)]'}`}>
+                    <PrivacyAmount>{stats.gananciaTotal === null ? 'No comparable' : fmtMoney(stats.gananciaTotal, stats.profitCurrency)}</PrivacyAmount>
+                  </strong>
+                </div>
               </div>
-              <details className="text-xs text-[var(--text-soft)]"><summary className="cursor-pointer font-semibold">Más métricas</summary><div className="mt-2 flex flex-wrap gap-x-4 gap-y-1"><span className="inline-flex items-center gap-1">Ganancia / costo total {stats.roi === null ? 'No comparable' : `${stats.roi.toFixed(0)}%`}<ContextualHelp label="Ganancia sobre costo total">Divide la ganancia por el precio de compra más los costos de venta registrados.</ContextualHelp></span><span>Tiempo promedio de venta {stats.tiempoPromedio == null ? '—' : `${stats.tiempoPromedio.toFixed(0)} d`}</span>{stats.ranking.length > 0 && <span>Mejores ventas: {stats.ranking.map((candidate) => candidate.item).join(', ')}</span>}</div></details>
+              <details className="group border-t border-slate-100 pt-3 text-xs text-[var(--text-soft)] dark:border-white/[0.06]">
+                <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 font-semibold text-[var(--text-soft)] transition-colors hover:text-[var(--text)] [&::-webkit-details-marker]:hidden">
+                  <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" className="transition-transform group-open:rotate-180" />
+                  <span>Más métricas</span>
+                </summary>
+                <div className="mt-2.5 flex flex-wrap gap-x-6 gap-y-2 text-xs">
+                  <span className="inline-flex items-center gap-1">
+                    Ganancia / costo total
+                    <b className="tabular-nums text-[var(--text)]">{stats.roi === null ? 'No comparable' : `${stats.roi.toFixed(0)}%`}</b>
+                    <ContextualHelp label="Ganancia sobre costo total">Divide la ganancia por el precio de compra más los costos de venta registrados.</ContextualHelp>
+                  </span>
+                  <span>
+                    Tiempo promedio de venta <b className="tabular-nums text-[var(--text)]">{stats.tiempoPromedio == null ? '—' : `${stats.tiempoPromedio.toFixed(0)} d`}</b>
+                  </span>
+                  {stats.ranking.length > 0 && (
+                    <span>
+                      Mejores ventas: <b className="text-[var(--text)]">{stats.ranking.map((candidate) => candidate.item).join(', ')}</b>
+                    </span>
+                  )}
+                </div>
+              </details>
             </SurfaceCard>
           )}
 
@@ -220,7 +305,7 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState, 
               <AppIcon name="store" className="mx-auto h-6 w-6 text-slate-400 dark:text-slate-500" />
               <h2 className="mt-3 text-base font-semibold text-[var(--text)]">Empezá por registrar una compra</h2>
               <p className="mt-1 text-sm text-[var(--text-soft)]">Actividad disponible: compraventa y reventa.</p>
-              <button id="qa-focus-reventa" onClick={() => setShowPurchaseForm(true)} className="mt-4 inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] cursor-pointer">
+              <button id="qa-focus-reventa" onClick={() => setShowPurchaseForm(true)} className="mt-4 inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer">
                 <AppIcon name="plus" className="h-4 w-4" />
                 <span>Registrar compra</span>
               </button>
@@ -228,7 +313,7 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState, 
           )}
 
           {inventory.length > 0 && !showPurchaseForm && (
-            <button id="qa-focus-reventa" onClick={() => setShowPurchaseForm(true)} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] cursor-pointer">
+            <button id="qa-focus-reventa" onClick={() => setShowPurchaseForm(true)} className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer">
               <AppIcon name="plus" className="h-4 w-4" />
               <span>Registrar compra</span>
             </button>
@@ -240,17 +325,31 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState, 
                 icon={<AppIcon name="product" className="h-4 w-4" />}
                 title="Registrar compra"
                 action={
-                  <button type="button" onClick={() => { setShowPurchaseForm(false); setMessage(''); }} className="min-h-10 px-2 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer">
-                    Cerrar
+                  <button
+                    type="button"
+                    onClick={() => { setShowPurchaseForm(false); setMessage(''); }}
+                    aria-label="Cerrar formulario de compra"
+                    title="Cerrar"
+                    className={iconActionBtn}
+                  >
+                    <X size={16} strokeWidth={1.75} aria-hidden="true" />
                   </button>
                 }
               />
               <form onSubmit={addPurchase} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5 lg:items-end">
-                <label className="min-w-0 sm:col-span-2 lg:col-span-1"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Producto</span><input required value={item} onChange={(event) => setItem(event.target.value)} placeholder="Ej.: RTX 3060" className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)]" /></label>
-                <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Compra</span><input required type="number" value={buyPrice} onChange={(event) => setBuyPrice(event.target.value)} placeholder="0" className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm tabular-nums text-[var(--text)]" /></label>
-                <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Cuenta</span><select value={accountId} onChange={(event) => setAccountId(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)]">{(state.finance?.accounts || []).map((account) => <option key={account.id} value={account.id}><PrivateFinancialText>{account.name}</PrivateFinancialText></option>)}</select></label>
-                <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Fecha</span><input type="date" value={buyDate} onChange={(event) => setBuyDate(event.target.value)} className="min-h-11 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)]" /></label>
-                <button className="min-h-11 w-full rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] cursor-pointer">Comprar</button>
+                <label className="min-w-0 sm:col-span-2 lg:col-span-1"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Producto</span><input required value={item} onChange={(event) => setItem(event.target.value)} placeholder="Ej.: RTX 3060" className={cleanFieldClass} /></label>
+                <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Compra</span><input required type="number" value={buyPrice} onChange={(event) => setBuyPrice(event.target.value)} placeholder="0" className={`${cleanFieldClass} tabular-nums`} /></label>
+                <label className="min-w-0">
+                  <span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Cuenta</span>
+                  <span className="relative block w-full">
+                    <select value={accountId} onChange={(event) => setAccountId(event.target.value)} className={cleanSelectClass}>
+                      {(state.finance?.accounts || []).map((account) => <option key={account.id} value={account.id}><PrivateFinancialText>{account.name}</PrivateFinancialText></option>)}
+                    </select>
+                    <ChevronDown size={15} strokeWidth={1.75} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+                  </span>
+                </label>
+                <label className="min-w-0"><span className="mb-1 block text-xs font-semibold text-[var(--text-soft)]">Fecha</span><input type="date" value={buyDate} onChange={(event) => setBuyDate(event.target.value)} className={cleanFieldClass} /></label>
+                <button className="min-h-11 w-full rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer">Comprar</button>
               </form>
               {message && <p className="text-xs font-semibold text-[#4F46E5] dark:text-indigo-300">{message}</p>}
             </SurfaceCard>
@@ -271,39 +370,49 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState, 
                 <ListDivider>
                   {[...availableItems].sort((a, b) => b.buyDate.localeCompare(a.buyDate)).map((candidate) => (
                     <article key={candidate.id} className="p-4 sm:px-5">
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex min-w-0 items-start gap-2.5">
                           <AppIcon name="product" className="mt-0.5 h-4 w-4 shrink-0 text-[#4F46E5] dark:text-indigo-300" />
                           <div className="min-w-0">
-                            <h3 className="truncate text-sm font-semibold text-[var(--text)]">{candidate.item}</h3>
-                            <p className="text-xs text-[var(--text-soft)]">
-                              Compra <PrivacyAmount>{fmtMoney(candidate.buyPrice, resaleItemCurrency(state, candidate, 'purchase'))}</PrivacyAmount> · {fmtDate(candidate.buyDate)}{candidate.purchaseTxId ? ' · ✓ Finanzas' : ''}
+                            <div className="flex flex-wrap items-center gap-2">
+                              <h3 className="truncate text-sm font-semibold text-[var(--text)]">{candidate.item}</h3>
+                              <span className="shrink-0 rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-[#4F46E5] dark:bg-indigo-500/15 dark:text-indigo-300">
+                                En stock
+                              </span>
+                            </div>
+                            <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-[var(--text-soft)]">
+                              <span>Compra <b className="tabular-nums font-semibold text-[var(--text)]"><PrivacyAmount>{fmtMoney(candidate.buyPrice, resaleItemCurrency(state, candidate, 'purchase'))}</PrivacyAmount></b></span>
+                              <span>·</span>
+                              <span>{fmtDate(candidate.buyDate)}</span>
+                              {candidate.purchaseTxId && (
+                                <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
+                                  · <CheckCircle2 size={12} strokeWidth={2} aria-hidden="true" /> Finanzas
+                                </span>
+                              )}
                             </p>
                           </div>
                         </div>
-                        <span className="shrink-0 rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-[#4F46E5] dark:bg-indigo-500/15 dark:text-indigo-300">
-                          {candidate.status}
-                        </span>
+                        {sellingId !== candidate.id && (
+                          <div className="flex shrink-0 items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSellingId(candidate.id)}
+                              className="min-h-10 flex-1 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] sm:flex-none cursor-pointer"
+                            >Registrar venta</button>
+                            <button
+                              type="button"
+                              onClick={() => requestDeletion(candidate.id)}
+                              className={deleteIconBtn}
+                              title="Eliminar registro"
+                              aria-label={`Eliminar ${candidate.item}`}
+                            >
+                              <Trash2 size={16} strokeWidth={1.75} aria-hidden="true" />
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      {sellingId === candidate.id ? (
+                      {sellingId === candidate.id && (
                         <SellForm item={candidate} state={state} onUpdateState={onUpdateState} onClose={() => setSellingId(null)} />
-                      ) : (
-                        <div className="mt-3 flex gap-2">
-                          <button
-                            onClick={() => setSellingId(candidate.id)}
-                            className="min-h-10 flex-1 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer"
-                          >
-                            Registrar venta
-                          </button>
-                          <button
-                            onClick={() => requestDeletion(candidate.id)}
-                            className="flex min-h-10 min-w-10 items-center justify-center rounded-xl border border-slate-200/80 px-3 text-xs text-[var(--text-soft)] transition-colors hover:border-rose-400 hover:text-rose-600 dark:border-white/[0.08] dark:hover:text-rose-400 cursor-pointer"
-                            title="Eliminar registro"
-                            aria-label="Eliminar registro"
-                          >
-                            <AppIcon name="trash" className="h-4 w-4" />
-                          </button>
-                        </div>
                       )}
                     </article>
                   ))}
@@ -329,20 +438,51 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState, 
                   return (
                     <article key={candidate.id} className="p-4 sm:px-5">
                       <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <h3 className="truncate text-sm font-semibold text-[var(--text)]">{candidate.item}</h3>
-                          <p className="text-xs text-[var(--text-soft)]">Compra <PrivacyAmount>{fmtMoney(candidate.buyPrice, purchaseCurrency)}</PrivacyAmount> · Venta <PrivacyAmount>{fmtMoney(candidate.sellPrice, saleCurrency)}</PrivacyAmount> · {fmtDate(candidate.sellDate || candidate.buyDate)}</p>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="truncate text-sm font-semibold text-[var(--text)]">{candidate.item}</h3>
+                            <span className="shrink-0 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">Vendido</span>
+                          </div>
+                          <p className="mt-0.5 text-xs text-[var(--text-soft)]">
+                            Compra <b className="tabular-nums font-medium text-[var(--text)]"><PrivacyAmount>{fmtMoney(candidate.buyPrice, purchaseCurrency)}</PrivacyAmount></b> · Venta <b className="tabular-nums font-medium text-[var(--text)]"><PrivacyAmount>{fmtMoney(candidate.sellPrice, saleCurrency)}</PrivacyAmount></b> · {fmtDate(candidate.sellDate || candidate.buyDate)}
+                          </p>
                         </div>
-                        <span className="shrink-0 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">Vendido</span>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setSellingId(candidate.id)}
+                            className={iconActionBtn}
+                            title="Editar venta"
+                            aria-label={`Editar venta de ${candidate.item}`}
+                          >
+                            <Pencil size={15} strokeWidth={1.75} aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => requestDeletion(candidate.id)}
+                            className={deleteIconBtn}
+                            title="Eliminar registro"
+                            aria-label={`Eliminar ${candidate.item}`}
+                          >
+                            <Trash2 size={15} strokeWidth={1.75} aria-hidden="true" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="mt-2.5 flex flex-wrap justify-between gap-2 text-xs">
-                        <span className="text-[var(--text-soft)]">Costos <PrivacyAmount>{fmtMoney(candidate.fees, saleCurrency)}</PrivacyAmount></span>
-                        <strong className={`tabular-nums ${profit !== null && profit >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>Ganancia <PrivacyAmount>{profit === null ? 'No comparable entre monedas' : fmtMoney(profit, saleCurrency)}</PrivacyAmount></strong>
-                      </div>
-                      <p className="mt-1 text-xs text-[var(--text-faint)]">Envío <PrivacyAmount>{fmtMoney(candidate.shippingCost, saleCurrency)}</PrivacyAmount> · Plataforma <PrivacyAmount>{fmtMoney(candidate.platformFees, saleCurrency)}</PrivacyAmount> · Impuestos <PrivacyAmount>{fmtMoney(candidate.taxes, saleCurrency)}</PrivacyAmount> · Ganancia / compra {profit !== null && candidate.buyPrice > 0 ? `${(profit / candidate.buyPrice * 100).toFixed(1)}%` : '—'}</p>
-                      <div className="mt-3 flex gap-2">
-                        <button onClick={() => setSellingId(candidate.id)} className="min-h-10 flex-1 rounded-xl border border-slate-200/80 py-2 text-xs font-semibold text-[var(--text)] hover:border-[#4F46E5] dark:border-white/[0.08] cursor-pointer">Editar venta</button>
-                        <button onClick={() => requestDeletion(candidate.id)} className="min-h-10 rounded-xl border border-slate-200/80 px-3 text-xs font-semibold text-[var(--text-soft)] hover:text-rose-600 dark:border-white/[0.08] cursor-pointer">Eliminar</button>
+                      <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2 border-t border-slate-100 pt-2.5 text-xs dark:border-white/[0.06]">
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[var(--text-soft)]">
+                          <span>Costos <b className="tabular-nums text-[var(--text)]"><PrivacyAmount>{fmtMoney(candidate.fees, saleCurrency)}</PrivacyAmount></b></span>
+                          <span className="text-[var(--text-faint)]">Envío <PrivacyAmount>{fmtMoney(candidate.shippingCost, saleCurrency)}</PrivacyAmount> · Plataforma <PrivacyAmount>{fmtMoney(candidate.platformFees, saleCurrency)}</PrivacyAmount> · Impuestos <PrivacyAmount>{fmtMoney(candidate.taxes, saleCurrency)}</PrivacyAmount></span>
+                        </div>
+                        <div className="flex items-baseline gap-2">
+                          <strong className={`tabular-nums text-sm font-bold ${profit !== null && profit > 0 ? 'text-emerald-700 dark:text-emerald-400' : profit !== null && profit < 0 ? 'text-rose-700 dark:text-rose-400' : 'text-[var(--text)]'}`}>
+                            Ganancia <PrivacyAmount>{profit === null ? 'No comparable' : fmtMoney(profit, saleCurrency)}</PrivacyAmount>
+                          </strong>
+                          {profit !== null && candidate.buyPrice > 0 && (
+                            <span className="tabular-nums text-[11px] font-semibold text-[var(--text-soft)]">
+                              ({(profit / candidate.buyPrice * 100).toFixed(1)}%)
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {sellingId === candidate.id && <SellForm item={candidate} state={state} onUpdateState={onUpdateState} onClose={() => setSellingId(null)} />}
                     </article>
@@ -353,48 +493,61 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState, 
           )}
 
           {deletion && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setDeletion(null)}>
-              <div role="dialog" aria-modal="true" aria-label="Confirmar eliminación de Reventa" className="w-full max-w-md rounded-2xl border border-rose-500/40 bg-[var(--card)] p-4 text-sm text-[var(--text)] shadow-xl" onClick={(e) => e.stopPropagation()}>
-                <h2 className="font-bold">Eliminar «{deletion.itemName}»</h2>
-                <p className="mt-1 text-xs text-[var(--text-soft)]">Se quitará el artículo y su historial de compra y venta en Mi negocio.</p>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-[2px]" onClick={() => setDeletion(null)}>
+              <div role="dialog" aria-modal="true" aria-label="Confirmar eliminación de Reventa" className="w-full max-w-md rounded-2xl border border-rose-500/35 bg-[var(--card)] p-5 text-sm text-[var(--text)] shadow-xl" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-start justify-between gap-3">
+                  <h2 className="text-base font-bold text-[var(--text)]">Eliminar «{deletion.itemName}»</h2>
+                  <button
+                    type="button"
+                    onClick={() => setDeletion(null)}
+                    aria-label="Cerrar confirmación"
+                    title="Cerrar"
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--text-soft)] transition-colors hover:bg-slate-100 hover:text-[var(--text)] dark:hover:bg-white/[0.06] cursor-pointer"
+                  >
+                    <X size={16} strokeWidth={1.75} aria-hidden="true" />
+                  </button>
+                </div>
+                <p className="mt-1.5 text-xs text-[var(--text-soft)]">Se quitará el artículo y su historial de compra y venta en Mi negocio.</p>
                 {deletion.transactions.length > 0 && (
                   <>
-                    <p className="mt-2 text-xs font-bold">También se eliminarán estos movimientos de Finanzas y cambiarán los saldos de sus cuentas:</p>
-                    <ul className="mt-1 list-disc pl-5 text-xs">
+                    <p className="mt-3 text-xs font-semibold text-[var(--text)]">También se eliminarán estos movimientos de Finanzas y cambiarán los saldos de sus cuentas:</p>
+                    <ul className="mt-1.5 list-disc space-y-1 pl-5 text-xs text-[var(--text-soft)]">
                       {deletion.transactions.map((tx) => <li key={tx.id}>{tx.label}: <PrivacyAmount>{fmtMoney(tx.amount, tx.currency)}</PrivacyAmount></li>)}
                     </ul>
                   </>
                 )}
-                {message && <p role="alert" className="mt-2 text-xs font-semibold text-rose-600">{message}</p>}
-                <div className="mt-3 flex gap-2">
-                  <button type="button" onClick={confirmDeletion} className="rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white">Eliminar artículo y movimientos indicados</button>
-                  <button type="button" onClick={() => setDeletion(null)} className="rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-bold">Cancelar</button>
+                {message && <p role="alert" className="mt-2 text-xs font-semibold text-rose-600 dark:text-rose-400">{message}</p>}
+                <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <button type="button" onClick={() => setDeletion(null)} className="min-h-10 rounded-xl border border-slate-200/80 px-4 py-2 text-xs font-semibold text-[var(--text-soft)] transition-colors hover:text-[var(--text)] dark:border-white/[0.08] cursor-pointer">Cancelar</button>
+                  <button type="button" onClick={confirmDeletion} className="min-h-10 rounded-xl bg-rose-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-rose-700 cursor-pointer">Eliminar artículo y movimientos indicados</button>
                 </div>
               </div>
             </div>
           )}
-          {message && !showPurchaseForm && <p role="alert" className="text-xs font-semibold text-rose-600">{message}</p>}
+          {message && !showPurchaseForm && <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400">{message}</p>}
         </div>
       )}
 
       {DevInventory && (
-        <div className="pt-6 border-t border-[var(--border)]">
+        <div className="border-t border-slate-200/80 pt-6 dark:border-white/[0.08]">
           {showDevInventory ? (
-            <div className="space-y-3 rounded-2xl border-2 border-dashed border-amber-500/50 bg-amber-500/5 p-4 text-left">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-amber-700 dark:text-amber-400">
+            <div className="space-y-3 rounded-2xl border border-dashed border-amber-500/45 bg-amber-500/[0.04] p-4 text-left">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
+                  <FlaskConical size={14} strokeWidth={1.75} aria-hidden="true" />
                   Sandbox de prueba aislado (solo desarrollo · sin persistencia en Finanzas ni nube)
                 </span>
                 <button
                   type="button"
                   onClick={() => setShowDevInventory(false)}
-                  className="rounded-lg border border-[var(--border)] px-3 py-1 text-xs font-bold"
+                  className="inline-flex min-h-9 items-center gap-1 rounded-xl border border-slate-200/80 bg-white px-3 py-1 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] dark:border-white/[0.08] dark:bg-transparent cursor-pointer"
                 >
-                  Cerrar sandbox
+                  <X size={13} strokeWidth={1.75} aria-hidden="true" />
+                  <span>Cerrar sandbox</span>
                 </button>
               </div>
               <React.Suspense fallback={null}>
-                <DevInventory onClose={() => setShowDevInventory(false)} pilotEnabled={devCommercialPilot} />
+                <DevInventory onClose={() => setShowDevInventory(false)} pilotEnabled={devCommercialPilot} hideHeaderClose />
               </React.Suspense>
             </div>
           ) : (
@@ -402,9 +555,10 @@ export const ReventaView: React.FC<ReventaViewProps> = ({ state, onUpdateState, 
               <button
                 type="button"
                 onClick={openDevInventory}
-                className="text-xs font-semibold text-[var(--text-faint)] hover:text-amber-600 transition-colors"
+                className="inline-flex min-h-10 items-center gap-1.5 text-xs font-semibold text-[var(--text-faint)] transition-colors hover:text-[#4F46E5] dark:hover:text-indigo-300 cursor-pointer"
               >
-                🛠 Abrir sandbox de prueba aislado (solo desarrollo)
+                <FlaskConical size={14} strokeWidth={1.75} aria-hidden="true" />
+                <span>Abrir sandbox de prueba aislado (solo desarrollo)</span>
               </button>
             </div>
           )}

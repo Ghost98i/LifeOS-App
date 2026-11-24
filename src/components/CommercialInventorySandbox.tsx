@@ -1,5 +1,6 @@
 import type { Finance } from '../types';
 import React, { useEffect, useRef, useState } from 'react';
+import { ChevronDown, Plus, X } from 'lucide-react';
 import type { StockUnit } from '../lib/commercialInventory';
 import { addSandboxExit, addSandboxItem, addSandboxReceipt, emptySandboxInventory, sandboxStockEntries } from '../lib/commercialInventorySandbox';
 import { fmtMoney } from '../lib/storage';
@@ -25,10 +26,12 @@ const COMMERCIAL_PILOT_REVISION_KEY = 'celestea:dev-commercial-pilot:emulator-re
 type ItemAction = 'receipt' | 'consumption' | 'waste';
 const units: StockUnit[] = ['unit', 'kg', 'g'];
 const unitLabel: Record<StockUnit, string> = { unit: 'unid.', kg: 'kg', g: 'g' };
-const actionPrimary = 'inline-flex min-h-10 items-center justify-center rounded-xl bg-[#4F46E5] px-3.5 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] transition-colors cursor-pointer';
-const actionSecondary = 'inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold text-[var(--text)] hover:border-[#4F46E5] transition-colors dark:border-white/[0.08] dark:bg-transparent cursor-pointer';
-const fieldClass = 'min-h-11 min-w-0 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)]';
-const labelClass = 'min-w-0 space-y-1 text-sm font-semibold text-[var(--text-soft)]';
+const actionPrimary = 'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-3.5 py-2 text-xs sm:text-sm font-semibold text-white hover:bg-[#4338CA] transition-colors cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70';
+const actionSecondary = 'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-xs sm:text-sm font-semibold text-[var(--text)] hover:border-[#4F46E5] transition-colors dark:border-white/[0.08] dark:bg-transparent cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70';
+const fieldClass = 'celestian-clean-field min-h-11 min-w-0 w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-[var(--text)] placeholder:text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:placeholder:text-slate-500';
+const selectClass = `${fieldClass} appearance-none pr-9 cursor-pointer`;
+const labelClass = 'min-w-0 space-y-1 text-xs font-semibold text-[var(--text-soft)]';
+const segmentedPill = 'min-h-10 rounded-lg px-3.5 py-2 text-xs sm:text-sm font-semibold transition-colors cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
 const formatQuantity = (value: number) => new Intl.NumberFormat('es-UY', { maximumFractionDigits: 3 }).format(value);
 
 function parseNumber(text: string): number {
@@ -40,10 +43,10 @@ const emptySession = (): SandboxProductionSession => ({ inventory: emptySandboxI
   finished: emptySandboxInventory(), productions: [], finishedWastes: [], saleCorrections: [], purchases: [], moneyEvents: [] });
 const maxIdSuffix = (ids: string[], pattern: RegExp) => Math.max(0, ...ids.map((id) => Number(id.match(pattern)?.[1] ?? 0)));
 
-export const CommercialInventorySandbox: React.FC<{ onClose: () => void; pilotEnabled: boolean; production?: {
+export const CommercialInventorySandbox: React.FC<{ onClose: () => void; pilotEnabled: boolean; hideHeaderClose?: boolean; production?: {
     snapshot?: CommercialPilotSnapshot; accounts: Finance['accounts']; financeFields?: (inheritCategory?: boolean) => React.ReactNode;
     commit: (snapshot: CommercialPilotSnapshot) => CommercialPilotSnapshot;
-  } }> = ({ onClose, pilotEnabled, production }) => {
+  } }> = ({ onClose, pilotEnabled, hideHeaderClose = false, production }) => {
   const pilotSyncEnabled = pilotEnabled
     && (import.meta as ImportMeta & { env?: ImportMetaEnv }).env?.VITE_COMMERCIAL_PILOT_SYNC === '1';
   const [pilotSetup] = useState<{ storage: Storage | null; load: CommercialPilotLoad } | null>(() => {
@@ -94,6 +97,11 @@ export const CommercialInventorySandbox: React.FC<{ onClose: () => void; pilotEn
   const [remoteChanged, setRemoteChanged] = useState(false);
   const persistFailureRef = useRef('');
   const sessionRef = useRef(session);
+  const [stockView, setStockView] = useState<'available' | 'empty'>(() => {
+    const initialEntries = sandboxStockEntries(session.inventory);
+    const initialAvailable = initialEntries.filter(({ summary }) => summary.quantity > 0).length;
+    return initialAvailable === 0 && initialEntries.length > 0 ? 'empty' : 'available';
+  });
   useEffect(() => () => { void emulatorClientRef.current?.close().catch(() => undefined); }, []);
   useEffect(() => {
     if (!production?.snapshot) return;
@@ -105,6 +113,9 @@ export const CommercialInventorySandbox: React.FC<{ onClose: () => void; pilotEn
       sessionRef.current = production.snapshot.session;
       pilotSnapshotRef.current = production.snapshot;
       pilotRawRef.current = captured.json;
+      const hydratedEntries = sandboxStockEntries(production.snapshot.session.inventory);
+      const hydratedAvailable = hydratedEntries.filter(({ summary }) => summary.quantity > 0).length;
+      if (hydratedAvailable === 0 && hydratedEntries.length > 0) setStockView('empty');
     }
   }, [production?.snapshot]);
   const directCounter = useRef(maxIdSuffix(session.sales.map((sale) => sale.id), /^sandbox-direct-(\d+)$/));
@@ -128,17 +139,34 @@ export const CommercialInventorySandbox: React.FC<{ onClose: () => void; pilotEn
   const [entryTiming, setEntryTiming] = useState<'now' | 'later'>('later');
   const [entryAccount, setEntryAccount] = useState('');
   const [error, setError] = useState('');
-  const [stockView, setStockView] = useState<'available' | 'empty'>('available');
   const stockEntries = sandboxStockEntries(inventory);
   const availableCount = stockEntries.filter(({ summary }) => summary.quantity > 0).length;
   const shownEntries = stockEntries.filter(({ summary }) => stockView === 'available' ? summary.quantity > 0 : summary.quantity === 0);
-  const entryPaymentFields = <div className="col-span-full space-y-1">
-    <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-[var(--text)]">
-      <legend className="font-semibold text-[var(--text-soft)]">Pago de esta compra</legend>
-      <label className="inline-flex items-center gap-1.5"><input type="radio" name="entry-payment" checked={entryTiming === 'later'} onChange={() => setEntryTiming('later')} />Pagar después</label>
-      <label className="inline-flex items-center gap-1.5"><input type="radio" name="entry-payment" checked={entryTiming === 'now'} onChange={() => setEntryTiming('now')} />Pagado ahora</label>
-    </fieldset>
-    {entryTiming === 'now' && <><label className={`${labelClass} block max-w-xs`}>{production ? 'Cuenta' : 'Cuenta simulada'}{production ? <select required value={entryAccount} onChange={e => setEntryAccount(e.target.value)} className={fieldClass}><option value="">Seleccionar cuenta</option>{production.accounts.filter(a => (a.currency || 'UYU') === 'UYU').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select> : <input required value={entryAccount} onChange={(event) => setEntryAccount(event.target.value)} placeholder="Ej.: caja de prueba" className={fieldClass} />}</label>{production?.financeFields?.()}</>}
+  const entryPaymentFields = <div className="col-span-full space-y-2.5">
+    <div className="space-y-1.5">
+      <span className="block text-xs font-semibold text-[var(--text-soft)]">Pago de esta compra</span>
+      <div role="group" aria-label="Pago de esta compra" className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-slate-200/80 bg-slate-50/80 p-1 dark:border-white/[0.08] dark:bg-white/[0.03]">
+        <button type="button" aria-pressed={entryTiming === 'later'} onClick={() => setEntryTiming('later')} className={`${segmentedPill} ${entryTiming === 'later' ? 'bg-[#4F46E5] text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'}`}>Pagar después</button>
+        <button type="button" aria-pressed={entryTiming === 'now'} onClick={() => setEntryTiming('now')} className={`${segmentedPill} ${entryTiming === 'now' ? 'bg-[#4F46E5] text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'}`}>Pagado ahora</button>
+      </div>
+    </div>
+    {entryTiming === 'now' && <>
+      <label className={`${labelClass} block max-w-xs`}>
+        {production ? 'Cuenta' : 'Cuenta simulada'}
+        {production ? (
+          <span className="relative mt-1 block w-full">
+            <select required value={entryAccount} onChange={e => setEntryAccount(e.target.value)} className={selectClass}>
+              <option value="">Seleccionar cuenta</option>
+              {production.accounts.filter(a => (a.currency || 'UYU') === 'UYU').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+            <ChevronDown size={15} strokeWidth={1.75} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+          </span>
+        ) : (
+          <input required value={entryAccount} onChange={(event) => setEntryAccount(event.target.value)} placeholder="Ej.: caja de prueba" className={fieldClass} />
+        )}
+      </label>
+      {production?.financeFields?.()}
+    </>}
   </div>;
 
   const persistPilot = (next: SandboxProductionSession, nextRecipes: SandboxRecipe[]): boolean => {
@@ -385,19 +413,21 @@ export const CommercialInventorySandbox: React.FC<{ onClose: () => void; pilotEn
           title={production ? 'Inventario' : 'Inventario de prueba'}
           count={production ? 'UYU' : null}
           action={
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {inventory.items.length > 0 && !showNew && (
                 <button
                   type="button"
                   onClick={() => { setShowNew(true); setActive(null); setError(''); setEntryTiming('later'); setEntryAccount(''); entrySubmitted.current = false; }}
-                  className={actionSecondary}
+                  className={actionPrimary}
                 >
-                  Agregar otro artículo
+                  <Plus size={15} strokeWidth={2} aria-hidden="true" />
+                  <span>Agregar artículo</span>
                 </button>
               )}
-              {!production && (
+              {!production && !hideHeaderClose && (
                 <button type="button" onClick={onClose} className={actionSecondary}>
-                  Cerrar prueba
+                  <X size={14} strokeWidth={1.75} aria-hidden="true" />
+                  <span>Cerrar prueba</span>
                 </button>
               )}
             </div>
@@ -433,63 +463,109 @@ export const CommercialInventorySandbox: React.FC<{ onClose: () => void; pilotEn
         </div>}
         {showNew && <form onSubmit={createItem} className="grid grid-cols-1 gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06] sm:grid-cols-2 lg:grid-cols-4">
           <label className={labelClass}>Artículo o insumo<input autoFocus required value={name} onChange={(event) => setName(event.target.value)} placeholder="Ej.: panes" className={fieldClass} /></label>
-          <label className={labelClass}>Cantidad que ingresa<input required type="number" min="0" step="any" value={newQuantity} onChange={(event) => setNewQuantity(event.target.value)} className={fieldClass} /></label>
-          <label className={labelClass}>Unidad<select value={newUnit} onChange={(event) => setNewUnit(event.target.value as StockUnit)} className={fieldClass}>{units.map((candidate) => <option key={candidate} value={candidate}>{unitLabel[candidate]}</option>)}</select></label>
-          <label className={labelClass}>Costo total ($U)<input required type="number" min="0" step="0.01" value={newCost} onChange={(event) => setNewCost(event.target.value)} className={fieldClass} /></label>
+          <label className={labelClass}>Cantidad que ingresa<input required type="number" min="0" step="any" value={newQuantity} onChange={(event) => setNewQuantity(event.target.value)} className={`${fieldClass} tabular-nums`} /></label>
+          <label className={labelClass}>
+            Unidad
+            <span className="relative block w-full">
+              <select value={newUnit} onChange={(event) => setNewUnit(event.target.value as StockUnit)} className={selectClass}>
+                {units.map((candidate) => <option key={candidate} value={candidate}>{unitLabel[candidate]}</option>)}
+              </select>
+              <ChevronDown size={15} strokeWidth={1.75} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+            </span>
+          </label>
+          <label className={labelClass}>Costo total ($U)<input required type="number" min="0" step="0.01" value={newCost} onChange={(event) => setNewCost(event.target.value)} className={`${fieldClass} tabular-nums`} /></label>
           {entryPaymentFields}
           <div className="col-span-full flex flex-wrap gap-2"><button className={actionPrimary}>Guardar entrada</button><button type="button" onClick={() => { setShowNew(false); setError(''); }} className={actionSecondary}>Cancelar</button></div>
         </form>}
         {inventory.items.length > 0 && <div className="flex flex-wrap items-center justify-between gap-2">
-          <div role="group" aria-label="Ver insumos por existencias" className="flex flex-wrap gap-2">
-            <button type="button" aria-pressed={stockView === 'available'} onClick={() => setStockView('available')} className={`min-h-10 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors cursor-pointer ${stockView === 'available' ? 'border-[#4F46E5] bg-indigo-50/70 text-[#4F46E5] dark:border-indigo-400 dark:bg-indigo-500/15 dark:text-indigo-200' : 'border-slate-200/80 text-[var(--text-soft)] dark:border-white/[0.08]'}`}>Con stock ({availableCount})</button>
-            <button type="button" aria-pressed={stockView === 'empty'} onClick={() => setStockView('empty')} className={`min-h-10 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors cursor-pointer ${stockView === 'empty' ? 'border-[#4F46E5] bg-indigo-50/70 text-[#4F46E5] dark:border-indigo-400 dark:bg-indigo-500/15 dark:text-indigo-200' : 'border-slate-200/80 text-[var(--text-soft)] dark:border-white/[0.08]'}`}>Sin stock ({stockEntries.length - availableCount})</button>
+          <div role="group" aria-label="Ver insumos por existencias" className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-slate-200/80 bg-slate-50/80 p-1 dark:border-white/[0.08] dark:bg-white/[0.03]">
+            <button type="button" aria-pressed={stockView === 'available'} onClick={() => setStockView('available')} className={`${segmentedPill} ${stockView === 'available' ? 'bg-[#4F46E5] text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'}`}>Con stock ({availableCount})</button>
+            <button type="button" aria-pressed={stockView === 'empty'} onClick={() => setStockView('empty')} className={`${segmentedPill} ${stockView === 'empty' ? 'bg-[#4F46E5] text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'}`}>Sin stock ({stockEntries.length - availableCount})</button>
           </div>
         </div>}
-        {inventory.items.length > 0 && shownEntries.length === 0 && <p className="text-sm text-[var(--text-soft)]">{stockView === 'available' ? 'Sin stock disponible. Elegí «Sin stock» para reponer artículos.' : 'No hay artículos agotados.'}</p>}
+        {inventory.items.length > 0 && shownEntries.length === 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200/75 bg-slate-50/60 px-3.5 py-3 text-sm text-[var(--text-soft)] dark:border-white/[0.06] dark:bg-white/[0.02]">
+            <span>{stockView === 'available' ? 'No hay artículos con stock disponible.' : 'No hay artículos agotados.'}</span>
+            {stockView === 'available' && stockEntries.length - availableCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setStockView('empty')}
+                className="inline-flex min-h-9 items-center rounded-lg border border-slate-200/80 bg-white px-3 text-xs font-semibold text-[#4F46E5] transition-colors hover:border-[#4F46E5] dark:border-white/[0.08] dark:bg-transparent dark:text-indigo-300 cursor-pointer"
+              >
+                Ver sin stock ({stockEntries.length - availableCount})
+              </button>
+            )}
+          </div>
+        )}
         {shownEntries.length > 0 && <ListDivider className="-mx-4 sm:-mx-5">
           {shownEntries.map(({ item, summary }) => {
             const isActive = active?.itemId === item.id;
             const history = inventory.movements.filter((movement) => movement.itemId === item.id).slice().reverse();
             return <article key={item.id} className="min-w-0 px-4 py-4 sm:px-5">
-              <div className="flex items-start justify-between gap-3"><h3 className="min-w-0 break-words text-sm font-semibold text-[var(--text)]">{item.name}</h3><span className="shrink-0 text-xs font-medium text-[var(--text-faint)]">{unitLabel[item.unit]}</span></div>
-              <div className="mt-3 grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
-                <div className="min-w-0"><span className="block text-xs font-semibold text-[var(--text-soft)]">Disponible</span><strong className="block break-words text-base tabular-nums text-[var(--text)]">{formatQuantity(summary.quantity)} {unitLabel[item.unit]}</strong></div>
-                <div className="min-w-0"><span className="flex flex-wrap items-center gap-1 text-xs font-semibold text-[var(--text-soft)]">Valor disponible<ContextualHelp label="Valor disponible">Valor estimado de la cantidad que queda, calculado con el costo promedio de las entradas. No representa dinero en caja.</ContextualHelp></span><strong className="block break-words text-sm tabular-nums text-[var(--text)]">{fmtMoney(summary.valueCents / 100)}</strong></div>
-                <div className="min-w-0"><span className="flex flex-wrap items-center gap-1 text-xs font-semibold text-[var(--text-soft)]">Costo / {unitLabel[item.unit]}<ContextualHelp label="Costo por unidad">Costo promedio actual por unidad de medida, según las entradas registradas.</ContextualHelp></span><strong className="block break-words text-sm tabular-nums text-[var(--text)]">{fmtMoney(summary.averageUnitCost)}</strong></div>
-                <div className="min-w-0 text-xs text-[var(--text-soft)]"><span className="block">Utilizado: <b className="tabular-nums text-[var(--text)]">{formatQuantity(summary.consumed)} {unitLabel[item.unit]}</b></span><span className="block">Pérdidas: <b className="tabular-nums text-[var(--text)]">{formatQuantity(summary.discarded)} {unitLabel[item.unit]}</b></span></div>
+              <div className="flex items-start justify-between gap-3">
+                <h3 className="min-w-0 break-words text-sm font-semibold text-[var(--text)]">{item.name.charAt(0).toUpperCase() + item.name.slice(1)}</h3>
+                <span className="shrink-0 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-[var(--text-soft)] dark:bg-white/[0.06]">{unitLabel[item.unit]}</span>
               </div>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-2.5 grid min-w-0 grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-4">
+                <div className="min-w-0"><span className="block text-xs font-medium text-[var(--text-soft)]">Disponible</span><strong className="mt-0.5 block break-words text-base font-bold tabular-nums text-[var(--text)]">{formatQuantity(summary.quantity)} {unitLabel[item.unit]}</strong></div>
+                <div className="min-w-0"><span className="block text-xs font-medium text-[var(--text-soft)]">Valor disponible</span><strong className="mt-0.5 block break-words text-base font-bold tabular-nums text-[var(--text)]">{fmtMoney(summary.valueCents / 100)}</strong></div>
+                <div className="min-w-0"><span className="block text-xs font-medium text-[var(--text-soft)]">Costo / {unitLabel[item.unit]}</span><strong className="mt-0.5 block break-words text-base font-bold tabular-nums text-[var(--text)]">{fmtMoney(summary.averageUnitCost)}</strong></div>
+                <div className="min-w-0"><span className="block text-xs font-medium text-[var(--text-soft)]">Movimientos</span><div className="mt-0.5 space-y-0.5 text-xs text-[var(--text-soft)]"><span className="block">Utilizado: <b className="tabular-nums text-[var(--text)]">{formatQuantity(summary.consumed)} {unitLabel[item.unit]}</b></span><span className="block">Pérdidas: <b className="tabular-nums text-[var(--text)]">{formatQuantity(summary.discarded)} {unitLabel[item.unit]}</b></span></div></div>
+              </div>
+              <div className="mt-3.5 flex flex-wrap gap-2">
                 <button type="button" onClick={() => openAction(item.id, 'receipt', item.unit)} className={actionPrimary}>Reponer stock</button>
                 {summary.quantity > 0 && item.unit === 'unit' && <button type="button" onClick={() => { directCounter.current = Math.max(directCounter.current, maxIdSuffix(sessionRef.current.sales.map((sale) => sale.id), /^sandbox-direct-(\d+)$/)) + 1; setPendingDirect({ id: `sandbox-direct-${directCounter.current}`, itemId: item.id, unitsText: '1', priceText: '' }); setDirectTiming('later'); setDirectAccount(''); setDirectError(''); setActive(null); setShowNew(false); }} className={actionSecondary}>Vender artículo</button>}
                 {summary.quantity > 0 && <button type="button" onClick={() => openAction(item.id, 'consumption', item.unit)} className={actionSecondary}>Registrar uso</button>}
                 {summary.quantity > 0 && <button type="button" onClick={() => openAction(item.id, 'waste', item.unit)} className={actionSecondary}>Registrar pérdida</button>}
               </div>
               {isActive && <form onSubmit={applyAction} className="mt-3 grid grid-cols-1 gap-2.5 border-t border-slate-100 pt-3 dark:border-white/[0.06] sm:grid-cols-3">
-                <label className={labelClass}>Cantidad<input autoFocus required type="number" min="0" step="any" value={quantity} onChange={(event) => setQuantity(event.target.value)} className={fieldClass} /></label>
-                <label className={labelClass}>Unidad<select value={unit} onChange={(event) => setUnit(event.target.value as StockUnit)} className={fieldClass}>{(item.unit === 'unit' ? ['unit'] : ['kg', 'g']).map((candidate) => <option key={candidate} value={candidate}>{unitLabel[candidate as StockUnit]}</option>)}</select></label>
-                {active.kind === 'receipt' && <label className={labelClass}>Costo total ($U)<input required type="number" min="0" step="0.01" value={cost} onChange={(event) => setCost(event.target.value)} className={fieldClass} /></label>}
+                <label className={labelClass}>Cantidad<input autoFocus required type="number" min="0" step="any" value={quantity} onChange={(event) => setQuantity(event.target.value)} className={`${fieldClass} tabular-nums`} /></label>
+                <label className={labelClass}>
+                  Unidad
+                  <span className="relative block w-full">
+                    <select value={unit} onChange={(event) => setUnit(event.target.value as StockUnit)} className={selectClass}>
+                      {(item.unit === 'unit' ? ['unit'] : ['kg', 'g']).map((candidate) => <option key={candidate} value={candidate}>{unitLabel[candidate as StockUnit]}</option>)}
+                    </select>
+                    <ChevronDown size={15} strokeWidth={1.75} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+                  </span>
+                </label>
+                {active.kind === 'receipt' && <label className={labelClass}>Costo total ($U)<input required type="number" min="0" step="0.01" value={cost} onChange={(event) => setCost(event.target.value)} className={`${fieldClass} tabular-nums`} /></label>}
                 {active.kind === 'receipt' && entryPaymentFields}
                 {active.kind !== 'receipt' && <p className="col-span-full inline-flex items-center gap-1 text-sm text-[var(--text-soft)]">{active.kind === 'waste' ? 'Registrar pérdida' : 'Registrar uso'}{active.kind === 'use' && <ContextualHelp label="Uso de insumos">Materiales utilizados para preparar o fabricar otro producto. No registra una venta ni crea un producto terminado.</ContextualHelp>}</p>}
                 <div className="col-span-full flex flex-wrap items-end gap-2"><button className={actionPrimary}>{active.kind === 'receipt' ? 'Guardar entrada' : active.kind === 'waste' ? 'Confirmar pérdida' : 'Confirmar uso'}</button><button type="button" onClick={() => { setActive(null); setError(''); }} className={actionSecondary}>Cancelar</button></div>
               </form>}
-              <details className="mt-3 border-t border-slate-100 pt-2.5 text-sm text-[var(--text-soft)] dark:border-white/[0.06]">
-                <summary className="cursor-pointer text-xs font-semibold">Historial de movimientos ({history.length})</summary>
+              <details className="group mt-3 border-t border-slate-100 pt-2.5 text-sm text-[var(--text-soft)] dark:border-white/[0.06]">
+                <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold transition-colors hover:text-[var(--text)] [&::-webkit-details-marker]:hidden">
+                  <ChevronDown size={14} strokeWidth={1.75} aria-hidden="true" className="transition-transform group-open:rotate-180" />
+                  <span>Historial de movimientos ({history.length})</span>
+                </summary>
                 <ol className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs">{history.map((movement) => <li key={movement.id} className="flex flex-wrap justify-between gap-x-2 border-b border-slate-100 py-1 last:border-0 dark:border-white/[0.06]"><span>{movement.kind === 'receipt' ? 'Entrada' : movement.kind === 'consumption' ? 'Uso' : movement.kind === 'waste' ? 'Pérdida' : 'Venta'} · {formatQuantity(movement.quantity)} {unitLabel[movement.unit]}</span><span className="tabular-nums">Costo histórico {fmtMoney((movement.costCents || 0) / 100)}</span></li>)}</ol>
               </details>
             </article>;
           })}
         </ListDivider>}
         {pendingDirect && directPreview && <section className="space-y-3 border-t border-slate-100 pt-4 dark:border-white/[0.06]" aria-label="Vista previa de venta directa">
-          <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-sm font-semibold text-[var(--text)]">Venta directa · {directPreview.item?.name || 'Artículo'}</h3><p className="text-xs text-[var(--text-soft)]">Se descuenta este artículo sin receta. {production ? 'El cobro inmediato se registra en la cuenta seleccionada de Finanzas.' : 'El cobro es simulado y no modifica Finanzas.'}</p></div><button type="button" onClick={() => { setPendingDirect(null); setDirectError(''); }} className="min-h-10 px-2 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer">Cancelar</button></div>
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"><label className={labelClass}>Unidades a vender<input type="number" min="1" step="1" value={pendingDirect.unitsText} onChange={(event) => { setPendingDirect({ ...pendingDirect, unitsText: event.target.value }); setDirectError(''); }} className={fieldClass} /></label><label className={labelClass}>Precio por unidad ($U)<input type="text" inputMode="decimal" value={pendingDirect.priceText} onChange={(event) => { setPendingDirect({ ...pendingDirect, priceText: event.target.value }); setDirectError(''); }} className={fieldClass} /></label></div>
-          <fieldset className="flex flex-wrap gap-x-4 gap-y-2 text-sm text-[var(--text)]"><legend className="mb-1 font-semibold text-[var(--text-soft)]">Cobro de esta venta</legend>
-            <label className="inline-flex min-h-10 items-center gap-1.5"><input type="radio" name="direct-collection" checked={directTiming === 'later'} onChange={() => setDirectTiming('later')} />Cobrar después</label>
-            <label className="inline-flex min-h-10 items-center gap-1.5"><input type="radio" name="direct-collection" checked={directTiming === 'now'} onChange={() => setDirectTiming('now')} />Cobrado ahora</label>
-          </fieldset>
-          {directTiming === 'now' && <label className={`${labelClass} block max-w-xs`}>{production ? 'Cuenta' : 'Cuenta simulada'}{production ? <select required value={directAccount} onChange={e => setDirectAccount(e.target.value)} className={fieldClass}><option value="">Seleccionar cuenta</option>{production.accounts.filter(a => (a.currency || 'UYU') === 'UYU').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select> : <input required value={directAccount} onChange={(event) => setDirectAccount(event.target.value)} placeholder="Ej.: caja de prueba" className={fieldClass} />}</label>}
+          <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="text-sm font-semibold text-[var(--text)]">Venta directa · {directPreview.item?.name || 'Artículo'}</h3><p className="text-xs text-[var(--text-soft)]">Se descuenta este artículo sin receta. {production ? 'El cobro inmediato se registra en la cuenta seleccionada de Finanzas.' : 'El cobro es simulado y no modifica Finanzas.'}</p></div><button type="button" onClick={() => { setPendingDirect(null); setDirectError(''); }} aria-label="Cancelar venta directa" title="Cancelar" className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white text-slate-500 transition-colors hover:text-[var(--text)] dark:border-white/[0.08] dark:bg-transparent cursor-pointer"><X size={16} strokeWidth={1.75} aria-hidden="true" /></button></div>
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"><label className={labelClass}>Unidades a vender<input type="number" min="1" step="1" value={pendingDirect.unitsText} onChange={(event) => { setPendingDirect({ ...pendingDirect, unitsText: event.target.value }); setDirectError(''); }} className={`${fieldClass} tabular-nums`} /></label><label className={labelClass}>Precio por unidad ($U)<input type="text" inputMode="decimal" value={pendingDirect.priceText} onChange={(event) => { setPendingDirect({ ...pendingDirect, priceText: event.target.value }); setDirectError(''); }} className={`${fieldClass} tabular-nums`} /></label></div>
+          <div className="space-y-1.5">
+            <span className="block text-xs font-semibold text-[var(--text-soft)]">Cobro de esta venta</span>
+            <div role="group" aria-label="Cobro de esta venta" className="inline-flex flex-wrap items-center gap-1 rounded-xl border border-slate-200/80 bg-slate-50/80 p-1 dark:border-white/[0.08] dark:bg-white/[0.03]">
+              <button type="button" aria-pressed={directTiming === 'later'} onClick={() => setDirectTiming('later')} className={`${segmentedPill} ${directTiming === 'later' ? 'bg-[#4F46E5] text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'}`}>Cobrar después</button>
+              <button type="button" aria-pressed={directTiming === 'now'} onClick={() => setDirectTiming('now')} className={`${segmentedPill} ${directTiming === 'now' ? 'bg-[#4F46E5] text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'}`}>Cobrado ahora</button>
+            </div>
+          </div>
+          {directTiming === 'now' && <label className={`${labelClass} block max-w-xs`}>{production ? 'Cuenta' : 'Cuenta simulada'}{production ? (
+            <span className="relative mt-1 block w-full">
+              <select required value={directAccount} onChange={e => setDirectAccount(e.target.value)} className={selectClass}>
+                <option value="">Seleccionar cuenta</option>
+                {production.accounts.filter(a => (a.currency || 'UYU') === 'UYU').map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+              <ChevronDown size={15} strokeWidth={1.75} aria-hidden="true" className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+            </span>
+          ) : <input required value={directAccount} onChange={(event) => setDirectAccount(event.target.value)} placeholder="Ej.: caja de prueba" className={fieldClass} />}</label>}
           {directTiming === 'now' && production?.financeFields?.()}
-          <p className="text-sm text-[var(--text-soft)]">Disponibles: {directPreview.available} · Quedarían: {directPreview.remaining == null ? '—' : directPreview.remaining}</p>
-          {directPreview.totals && <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-4"><span>Venta comercial <b className="block tabular-nums">{fmtMoney(directPreview.totals.revenueCents / 100)}</b></span><span>Costo histórico <b className="block tabular-nums">{fmtMoney(directPreview.totals.totalCostCents / 100)}</b></span><span>Ganancia bruta <b className="block tabular-nums">{fmtMoney(directPreview.totals.grossProfitCents / 100)}</b></span><span>Margen bruto <b className="block tabular-nums">{directPreview.totals.grossMarginPercent.toFixed(2)} %</b></span></div>}
+          <p className="text-xs text-[var(--text-soft)]">Disponibles: <b className="tabular-nums text-[var(--text)]">{directPreview.available}</b> · Quedarían: <b className="tabular-nums text-[var(--text)]">{directPreview.remaining == null ? '—' : directPreview.remaining}</b></p>
+          {directPreview.totals && <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 text-xs dark:border-white/[0.08] dark:bg-white/[0.02] sm:grid-cols-4"><span>Venta comercial <b className="mt-0.5 block text-sm tabular-nums text-[var(--text)]">{fmtMoney(directPreview.totals.revenueCents / 100)}</b></span><span>Costo histórico <b className="mt-0.5 block text-sm tabular-nums text-[var(--text)]">{fmtMoney(directPreview.totals.totalCostCents / 100)}</b></span><span>Ganancia bruta <b className={`mt-0.5 block text-sm tabular-nums ${directPreview.totals.grossProfitCents < 0 ? 'text-rose-700 dark:text-rose-400' : directPreview.totals.grossProfitCents > 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-[var(--text)]'}`}>{fmtMoney(directPreview.totals.grossProfitCents / 100)}</b></span><span>Margen bruto <b className="mt-0.5 block text-sm tabular-nums text-[var(--text)]">{directPreview.totals.grossMarginPercent.toFixed(2)} %</b></span></div>}
           {directPreview.issues.map((issue, index) => <p key={index} className="text-sm font-semibold text-rose-600 dark:text-rose-400">{issue}</p>)}{directError && <p role="alert" className="text-sm font-semibold text-rose-600 dark:text-rose-400">{directError}</p>}
           <button type="button" disabled={!directPreview.valid} onClick={confirmDirect} className={`${actionPrimary} disabled:opacity-50`}>Confirmar venta directa</button>
         </section>}
