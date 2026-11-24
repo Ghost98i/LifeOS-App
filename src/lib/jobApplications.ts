@@ -132,20 +132,20 @@ export interface JobStagePresentation {
 export const JOB_STAGES: Record<JobApplicationType, JobStagePresentation[]> = {
   convencional: [
     { id: 'pendiente', label: 'Pendiente', colorClass: 'border-slate-300 dark:border-slate-700', dotColor: 'bg-slate-400', badgeBg: 'bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/20' },
-    { id: 'cv_enviado', label: 'CV enviado', colorClass: 'border-blue-300 dark:border-blue-800', dotColor: 'bg-blue-500', badgeBg: 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20' },
+    { id: 'cv_enviado', label: 'CV enviado', colorClass: 'border-indigo-300 dark:border-indigo-500/40', dotColor: 'bg-[#4F46E5] dark:bg-indigo-400', badgeBg: 'bg-indigo-500/10 text-[#4F46E5] dark:text-indigo-300 border-indigo-500/25' },
     { id: 'entrevista', label: 'Entrevista', colorClass: 'border-amber-300 dark:border-amber-800', dotColor: 'bg-amber-500', badgeBg: 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20' },
     { id: 'oferta', label: 'Oferta recibida', colorClass: 'border-emerald-300 dark:border-emerald-800', dotColor: 'bg-emerald-500', badgeBg: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20' },
-    { id: 'contratado', label: 'Contratado', colorClass: 'border-teal-300 dark:border-teal-800', dotColor: 'bg-teal-500', badgeBg: 'bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/20' },
+    { id: 'contratado', label: 'Contratado', colorClass: 'border-emerald-300 dark:border-emerald-800', dotColor: 'bg-emerald-500', badgeBg: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25' },
     { id: 'rechazado', label: 'Rechazado', colorClass: 'border-rose-300 dark:border-rose-800', dotColor: 'bg-rose-500', badgeBg: 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20' },
   ],
   concurso: [
     { id: 'pendiente_inscripcion', label: 'Pendiente de inscripción', colorClass: 'border-slate-300 dark:border-slate-700', dotColor: 'bg-slate-400', badgeBg: 'bg-slate-500/10 text-slate-700 dark:text-slate-300 border-slate-500/20' },
-    { id: 'inscripto', label: 'Inscripto', colorClass: 'border-blue-300 dark:border-blue-800', dotColor: 'bg-blue-500', badgeBg: 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20' },
-    { id: 'sorteo_preseleccion', label: 'Sorteo / Preselección', colorClass: 'border-violet-300 dark:border-violet-800', dotColor: 'bg-violet-500', badgeBg: 'bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/20' },
+    { id: 'inscripto', label: 'Inscripto', colorClass: 'border-indigo-300 dark:border-indigo-500/40', dotColor: 'bg-[#4F46E5] dark:bg-indigo-400', badgeBg: 'bg-indigo-500/10 text-[#4F46E5] dark:text-indigo-300 border-indigo-500/25' },
+    { id: 'sorteo_preseleccion', label: 'Sorteo / Preselección', colorClass: 'border-indigo-300 dark:border-indigo-500/40', dotColor: 'bg-indigo-400', badgeBg: 'bg-indigo-500/10 text-[#4F46E5] dark:text-indigo-300 border-indigo-500/20' },
     { id: 'prueba_evaluacion', label: 'Prueba / Evaluación', colorClass: 'border-amber-300 dark:border-amber-800', dotColor: 'bg-amber-500', badgeBg: 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20' },
-    { id: 'esperando_resultados', label: 'Esperando resultados', colorClass: 'border-cyan-300 dark:border-cyan-800', dotColor: 'bg-cyan-500', badgeBg: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 border-cyan-500/20' },
-    { id: 'lista_prelacion', label: 'Lista de prelación', colorClass: 'border-indigo-300 dark:border-indigo-800', dotColor: 'bg-indigo-500', badgeBg: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border-indigo-500/20' },
-    { id: 'ingreso_confirmado', label: 'Ingreso confirmado', colorClass: 'border-emerald-300 dark:border-emerald-800', dotColor: 'bg-emerald-500', badgeBg: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20' },
+    { id: 'esperando_resultados', label: 'Esperando resultados', colorClass: 'border-amber-300 dark:border-amber-800', dotColor: 'bg-amber-500', badgeBg: 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20' },
+    { id: 'lista_prelacion', label: 'Lista de prelación', colorClass: 'border-indigo-300 dark:border-indigo-500/40', dotColor: 'bg-[#4F46E5] dark:bg-indigo-400', badgeBg: 'bg-indigo-500/10 text-[#4F46E5] dark:text-indigo-300 border-indigo-500/25' },
+    { id: 'ingreso_confirmado', label: 'Ingreso confirmado', colorClass: 'border-emerald-300 dark:border-emerald-800', dotColor: 'bg-emerald-500', badgeBg: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/25' },
     { id: 'no_seleccionado', label: 'No seleccionado', colorClass: 'border-rose-300 dark:border-rose-800', dotColor: 'bg-rose-500', badgeBg: 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20' },
   ],
 };

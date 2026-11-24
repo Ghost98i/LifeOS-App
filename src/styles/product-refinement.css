@@ -34,3 +34,22 @@
 .product-refinement .agenda-clean-tab:focus-visible {
   outline: none;
 }
+
+/* Clean single-border indigo focus on Trabajo controls without double browser outline */
+.product-refinement .trabajo-clean-input:focus,
+.product-refinement .trabajo-clean-input:focus-visible {
+  outline: none;
+  border-color: #4F46E5;
+  box-shadow: 0 0 0 1px rgb(79 70 229 / 0.4);
+}
+
+.dark .product-refinement .trabajo-clean-input:focus,
+.dark .product-refinement .trabajo-clean-input:focus-visible {
+  border-color: #818CF8;
+  box-shadow: 0 0 0 1px rgb(129 140 248 / 0.4);
+}
+
+.product-refinement .trabajo-clean-focus:focus,
+.product-refinement .trabajo-clean-focus:focus-visible {
+  outline: none;
+}
