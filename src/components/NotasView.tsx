@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import {
   Archive,
+  ChevronDown,
   ExternalLink,
   Gift,
   Link2,
   MapPin,
   MoreHorizontal,
+  Pencil,
   Pin,
   Plus,
   Radio,
@@ -13,6 +15,7 @@ import {
   ShoppingCart,
   StickyNote,
   Target,
+  Trash2,
   X,
 } from 'lucide-react';
 import type { LifeOSState, Goal, Postit } from '../types';
@@ -43,6 +46,7 @@ import { showToast } from '../lib/toast';
 import { isStreamingEnabled } from '../lib/moduleVisibility';
 import { ProjectsManager } from './ProjectsManager';
 import { CompletionCheck } from './ui/CompletionCheck';
+import { CelestianSwitch } from './ui/CelestianSwitch';
 import { ListDivider, SectionHeader, SurfaceCard } from './ui/SurfacePrimitives';
 import { addGymPlacement, GYM_NOTE_PLACEMENTS_ENABLED, loadPlacements, placementStorageKey, removePlacement, savePlacements } from '../lib/notePlacements';
 
@@ -67,7 +71,7 @@ const TagEditor: React.FC<{ value: string; onChange: (value: string) => void }> 
       ))}
       <input type="text" value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ',') { event.preventDefault(); add(); }
-      }} placeholder="Agregar etiqueta…" aria-label="Agregar etiqueta" className="min-h-10 min-w-32 flex-1 bg-transparent px-1.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none dark:text-slate-100 dark:placeholder:text-slate-500" />
+      }} placeholder="Agregar etiqueta…" aria-label="Agregar etiqueta" className="celestian-clean-field-bare min-h-10 min-w-32 flex-1 bg-transparent px-1.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none dark:text-slate-100 dark:placeholder:text-slate-500" />
       <button type="button" onClick={add} disabled={!input.trim()} className="min-h-10 rounded-lg border border-slate-200/80 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 dark:border-white/[0.08] dark:text-slate-300 dark:hover:bg-white/[0.05] cursor-pointer">Agregar</button>
     </div>
   );
@@ -593,11 +597,13 @@ export const NotasView: React.FC<NotasViewProps> = ({
 
 
   const fieldClass =
-    'w-full min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
+    'celestian-clean-field w-full min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
   const primaryBtnClass =
     'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer';
   const secondaryBtnClass =
     'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-transparent px-3.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:bg-white/[0.04] cursor-pointer';
+  const segmentedBtnBase =
+    'outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 transition-colors cursor-pointer';
 
   return (
     <div className="notes-refinement space-y-5">
@@ -617,9 +623,9 @@ export const NotasView: React.FC<NotasViewProps> = ({
         </div>
       </div>
 
-      <nav aria-label="Secciones de Notas" className="flex gap-1 border-b border-slate-200/80 dark:border-white/[0.08]">
-        <button type="button" onClick={() => setActiveTab('notas')} aria-current={!inTools ? 'page' : undefined} className={`min-h-11 border-b-2 px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/50 cursor-pointer ${!inTools ? 'border-[#4F46E5] text-slate-900 dark:text-slate-100' : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'}`}>Mis notas</button>
-        <button type="button" onClick={() => setActiveTab('proyectos')} aria-current={inTools ? 'page' : undefined} className={`min-h-11 border-b-2 px-4 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/50 cursor-pointer ${inTools ? 'border-[#4F46E5] text-slate-900 dark:text-slate-100' : 'border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'}`}>Herramientas<span className="hidden sm:inline font-normal ml-2 text-slate-400 dark:text-slate-500">Proyectos, listas y enlaces</span></button>
+      <nav aria-label="Secciones de Notas" className="no-scrollbar inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-slate-200/80 bg-slate-100/75 p-1 dark:border-white/[0.08] dark:bg-white/[0.03]">
+        <button type="button" onClick={() => setActiveTab('notas')} aria-current={!inTools ? 'page' : undefined} className={`min-h-10 shrink-0 whitespace-nowrap rounded-lg px-4 text-sm font-semibold ${segmentedBtnBase} ${!inTools ? 'bg-[#4F46E5] text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'}`}>Mis notas</button>
+        <button type="button" onClick={() => setActiveTab('proyectos')} aria-current={inTools ? 'page' : undefined} className={`min-h-10 shrink-0 whitespace-nowrap rounded-lg px-4 text-sm font-semibold ${segmentedBtnBase} ${inTools ? 'bg-[#4F46E5] text-white' : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'}`}>Herramientas<span className={`hidden sm:inline font-normal ml-2 ${inTools ? 'text-indigo-100' : 'text-slate-400 dark:text-slate-500'}`}>Proyectos, listas y enlaces</span></button>
       </nav>
 
       {inTools && toolMessage && <p role="status" className="text-sm font-medium text-slate-700 dark:text-slate-300">{toolMessage}</p>}
@@ -637,9 +643,9 @@ export const NotasView: React.FC<NotasViewProps> = ({
               type="button"
               aria-current={activeTab === section ? 'page' : undefined}
               onClick={() => setActiveTab(section)}
-              className={`min-h-10 shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/50 cursor-pointer ${
+              className={`min-h-10 shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-sm font-semibold transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/50 cursor-pointer ${
                 activeTab === section
-                  ? 'border-[#4F46E5] bg-[#4F46E5]/10 text-[#4F46E5] dark:border-indigo-400 dark:bg-indigo-500/15 dark:text-indigo-300'
+                  ? 'border-[#4F46E5] bg-[#4F46E5] text-white'
                   : 'border-slate-200/80 text-slate-600 hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-400 dark:hover:bg-white/[0.04]'
               }`}
             >
@@ -657,10 +663,10 @@ export const NotasView: React.FC<NotasViewProps> = ({
               type="button"
               aria-pressed={projectView === 'projects'}
               onClick={() => setProjectView('projects')}
-              className={`min-h-10 shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/50 cursor-pointer ${
+              className={`min-h-10 shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-sm font-medium transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/50 cursor-pointer ${
                 projectView === 'projects'
-                  ? 'border-[#4F46E5] bg-[#4F46E5]/10 text-[#4F46E5] dark:border-indigo-400 dark:text-indigo-300'
-                  : 'border-slate-200/80 text-slate-600 dark:border-white/[0.08] dark:text-slate-400'
+                  ? 'border-[#4F46E5] bg-[#4F46E5] text-white'
+                  : 'border-slate-200/80 text-slate-600 hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-400 dark:hover:bg-white/[0.04]'
               }`}
             >
               Proyectos<span className="hidden sm:inline"> · tareas y próximo paso</span>
@@ -669,10 +675,10 @@ export const NotasView: React.FC<NotasViewProps> = ({
               type="button"
               aria-pressed={projectView === 'goals'}
               onClick={() => setProjectView('goals')}
-              className={`min-h-10 shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/50 cursor-pointer ${
+              className={`min-h-10 shrink-0 whitespace-nowrap rounded-xl border px-3.5 text-sm font-medium transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4F46E5]/50 cursor-pointer ${
                 projectView === 'goals'
-                  ? 'border-[#4F46E5] bg-[#4F46E5]/10 text-[#4F46E5] dark:border-indigo-400 dark:text-indigo-300'
-                  : 'border-slate-200/80 text-slate-600 dark:border-white/[0.08] dark:text-slate-400'
+                  ? 'border-[#4F46E5] bg-[#4F46E5] text-white'
+                  : 'border-slate-200/80 text-slate-600 hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-400 dark:hover:bg-white/[0.04]'
               }`}
             >
               Objetivos<span className="hidden sm:inline"> · avance numérico</span>
@@ -798,10 +804,11 @@ export const NotasView: React.FC<NotasViewProps> = ({
                         <button
                           type="button"
                           aria-label={`Eliminar objetivo ${g.name}`}
+                          title={`Eliminar objetivo ${g.name}`}
                           onClick={() => handleDeleteGoal(g.id)}
                           className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
                         >
-                          <X size={15} strokeWidth={1.75} aria-hidden="true" />
+                          <Trash2 size={15} strokeWidth={1.75} aria-hidden="true" />
                         </button>
                       </div>
 
@@ -848,16 +855,16 @@ export const NotasView: React.FC<NotasViewProps> = ({
               <form onSubmit={handleAddPostit} className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Nueva nota</span>
-                  <label className="inline-flex min-h-10 items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-400 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
+                  <div className="inline-flex min-h-10 items-center gap-2.5 text-xs font-medium text-slate-600 dark:text-slate-400 select-none">
+                    <Pin size={13} strokeWidth={1.75} aria-hidden="true" className={notePinned ? 'text-[#4F46E5] dark:text-indigo-400' : ''} />
+                    <span id="new-note-pin-label">Fijar arriba</span>
+                    <CelestianSwitch
                       checked={notePinned}
-                      onChange={(e) => setNotePinned(e.target.checked)}
-                      className="h-4 w-4 rounded accent-[#4F46E5]"
+                      onChange={setNotePinned}
+                      ariaLabelledBy="new-note-pin-label"
+                      size="sm"
                     />
-                    <Pin size={13} strokeWidth={1.75} aria-hidden="true" />
-                    <span>Fijar arriba</span>
-                  </label>
+                  </div>
                 </div>
 
                 <input
@@ -876,7 +883,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
                   onChange={(e) => setNoteContent(e.target.value)}
                   placeholder="Escribí el contenido de la nota..."
                   rows={3}
-                  className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm leading-6 text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 resize-y"
+                  className="celestian-clean-field w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm leading-6 text-slate-900 placeholder:text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 resize-y"
                   required
                 />
 
@@ -907,7 +914,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
                 onChange={(e) => setNoteSearch(e.target.value)}
                 aria-label="Buscar notas"
                 placeholder="Buscar por título, texto o etiqueta"
-                className="w-full min-h-10 rounded-xl border border-slate-200/80 bg-white pl-9 pr-10 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-[#0D111A] dark:text-slate-100"
+                className="celestian-clean-field w-full min-h-10 rounded-xl border border-slate-200/80 bg-white pl-9 pr-10 py-2 text-sm text-slate-900 placeholder:text-slate-400 dark:border-white/[0.08] dark:bg-[#0D111A] dark:text-slate-100"
               />
               {noteSearch && (
                 <button
@@ -922,25 +929,27 @@ export const NotasView: React.FC<NotasViewProps> = ({
               )}
             </div>
 
-            <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-slate-200/80 bg-slate-50/80 p-1 text-xs font-semibold dark:border-white/[0.08] dark:bg-white/[0.03]">
+            <div className="no-scrollbar flex items-center gap-1 overflow-x-auto rounded-xl border border-slate-200/80 bg-slate-100/75 p-1 text-xs font-semibold dark:border-white/[0.08] dark:bg-white/[0.03]">
               <button
                 type="button"
+                aria-pressed={noteFilter === 'activas'}
                 onClick={() => setNoteFilter('activas')}
-                className={`min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 transition-colors cursor-pointer ${
+                className={`min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 ${segmentedBtnBase} ${
                   noteFilter === 'activas'
-                    ? 'bg-white text-[#4F46E5] dark:bg-[#0D111A] dark:text-indigo-300'
-                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+                    ? 'bg-[#4F46E5] text-white'
+                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
                 }`}
               >
                 Activas ({totalActiveNotes})
               </button>
               <button
                 type="button"
+                aria-pressed={noteFilter === 'fijadas'}
                 onClick={() => setNoteFilter('fijadas')}
-                className={`inline-flex min-h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-3 py-1.5 transition-colors cursor-pointer ${
+                className={`inline-flex min-h-10 shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-3 py-1.5 ${segmentedBtnBase} ${
                   noteFilter === 'fijadas'
-                    ? 'bg-white text-[#4F46E5] dark:bg-[#0D111A] dark:text-indigo-300'
-                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+                    ? 'bg-[#4F46E5] text-white'
+                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
                 }`}
               >
                 <Pin size={13} strokeWidth={1.75} aria-hidden="true" />
@@ -948,11 +957,12 @@ export const NotasView: React.FC<NotasViewProps> = ({
               </button>
               <button
                 type="button"
+                aria-pressed={noteFilter === 'archivadas'}
                 onClick={() => setNoteFilter('archivadas')}
-                className={`min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 transition-colors cursor-pointer ${
+                className={`min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 ${segmentedBtnBase} ${
                   noteFilter === 'archivadas'
-                    ? 'bg-white text-[#4F46E5] dark:bg-[#0D111A] dark:text-indigo-300'
-                    : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+                    ? 'bg-[#4F46E5] text-white'
+                    : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
                 }`}
               >
                 Archivadas ({totalArchivedNotes})
@@ -964,10 +974,13 @@ export const NotasView: React.FC<NotasViewProps> = ({
             <span role="status">{displayedNotes.length} {displayedNotes.length === 1 ? 'nota' : 'notas'}{noteSearch ? ' encontradas' : ''}</span>
             <label className="flex items-center gap-2">
               <span>Ordenar</span>
-              <select aria-label="Ordenar notas" value={noteOrder} onChange={(event) => setNoteOrder(event.target.value as 'recent' | 'pinned')} className="min-h-10 rounded-xl border border-slate-200/80 bg-white px-2.5 text-sm text-slate-900 dark:border-white/[0.08] dark:bg-[#0D111A] dark:text-slate-100">
-                <option value="recent">Más recientes</option>
-                <option value="pinned">Fijadas primero</option>
-              </select>
+              <span className="relative inline-flex items-center">
+                <select aria-label="Ordenar notas" value={noteOrder} onChange={(event) => setNoteOrder(event.target.value as 'recent' | 'pinned')} className="celestian-clean-field min-h-10 appearance-none rounded-xl border border-slate-200/80 bg-white pl-3 pr-9 text-sm text-slate-900 dark:border-white/[0.08] dark:bg-[#0D111A] dark:text-slate-100 cursor-pointer">
+                  <option value="recent">Más recientes</option>
+                  <option value="pinned">Fijadas primero</option>
+                </select>
+                <ChevronDown size={15} strokeWidth={1.75} aria-hidden="true" className="pointer-events-none absolute right-2.5 text-slate-400 dark:text-slate-500" />
+              </span>
             </label>
           </div>
 
@@ -1024,47 +1037,68 @@ export const NotasView: React.FC<NotasViewProps> = ({
                           </button>
                         )}
                       </div>
-                      <div className="relative shrink-0" data-note-menu onBlur={(event) => {
-                        if (!event.currentTarget.contains(event.relatedTarget)) setOpenNoteMenuId(null);
-                      }}>
+                      <div className="flex shrink-0 items-center gap-0.5">
                         <button
-                          id={`note-menu-trigger-${p.id}`}
                           type="button"
-                          onClick={() => setOpenNoteMenuId(openNoteMenuId === p.id ? null : p.id)}
-                          aria-label={`Acciones de la nota ${p.title || p.text.slice(0, 45)}`}
-                          aria-haspopup="menu"
-                          aria-expanded={openNoteMenuId === p.id}
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#4F46E5] dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
+                          onClick={() => handleStartEdit(p)}
+                          aria-label={`Editar nota ${p.title || p.text.slice(0, 45)}`}
+                          title="Editar nota"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-[#4F46E5] dark:hover:bg-white/[0.06] dark:hover:text-indigo-300 cursor-pointer"
                         >
-                          <MoreHorizontal size={18} strokeWidth={1.75} aria-hidden="true" />
+                          <Pencil size={15} strokeWidth={1.75} aria-hidden="true" />
                         </button>
-                        {openNoteMenuId === p.id && (
-                          <div
-                            role="menu"
-                            aria-label="Acciones de nota"
-                            onKeyDown={(event) => {
-                              if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-                              event.preventDefault();
-                              const items = Array.from(event.currentTarget.querySelectorAll('[role="menuitem"]')) as HTMLButtonElement[];
-                              const current = items.indexOf(document.activeElement as HTMLButtonElement);
-                              const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : event.key === 'ArrowDown' ? (current + 1) % items.length : (current - 1 + items.length) % items.length;
-                              items[next]?.focus();
-                            }}
-                            className="absolute right-0 top-full z-30 mt-1 w-48 rounded-xl border border-slate-200/80 bg-white p-1.5 shadow-lg dark:border-white/[0.08] dark:bg-[#0D111A]"
+                        <button
+                          type="button"
+                          onClick={() => handleDeletePostit(p.id)}
+                          aria-label={`Eliminar nota ${p.title || p.text.slice(0, 45)}`}
+                          title="Eliminar nota"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
+                        >
+                          <Trash2 size={15} strokeWidth={1.75} aria-hidden="true" />
+                        </button>
+                        <div className="relative shrink-0" data-note-menu onBlur={(event) => {
+                          if (!event.currentTarget.contains(event.relatedTarget)) setOpenNoteMenuId(null);
+                        }}>
+                          <button
+                            id={`note-menu-trigger-${p.id}`}
+                            type="button"
+                            onClick={() => setOpenNoteMenuId(openNoteMenuId === p.id ? null : p.id)}
+                            aria-label={`Acciones de la nota ${p.title || p.text.slice(0, 45)}`}
+                            title="Más acciones"
+                            aria-haspopup="menu"
+                            aria-expanded={openNoteMenuId === p.id}
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#4F46E5] dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
                           >
-                            <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleStartEdit(p); }} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">Editar</button>
-                            <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleTogglePin(p.id, isPinned); }} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">{isPinned ? 'Desfijar' : 'Fijar'}</button>
-                            <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleConvertToTask(p.id); }} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">Convertir a tarea</button>
-                            {GYM_NOTE_PLACEMENTS_ENABLED && (currentPlacements.some((placement) => placement.noteId === p.id) ? (
-                              <>
-                                <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); onOpenGym(); }} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">Ver en Gimnasio</button>
-                                <button role="menuitem" type="button" onClick={() => handleRemoveFromGym(p.id)} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">Retirar de Gimnasio</button>
-                              </>
-                            ) : <button role="menuitem" type="button" onClick={() => handlePlaceInGym(p.id)} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">Colocar en… Gimnasio</button>)}
-                            <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleToggleArchive(p.id, isArchived); }} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">{isArchived ? 'Restaurar' : 'Archivar'}</button>
-                            <button role="menuitem" type="button" onClick={() => handleDeletePostit(p.id)} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-500/10 dark:text-rose-400 cursor-pointer">Eliminar</button>
-                          </div>
-                        )}
+                            <MoreHorizontal size={18} strokeWidth={1.75} aria-hidden="true" />
+                          </button>
+                          {openNoteMenuId === p.id && (
+                            <div
+                              role="menu"
+                              aria-label="Acciones de nota"
+                              onKeyDown={(event) => {
+                                if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+                                event.preventDefault();
+                                const items = Array.from(event.currentTarget.querySelectorAll('[role="menuitem"]')) as HTMLButtonElement[];
+                                const current = items.indexOf(document.activeElement as HTMLButtonElement);
+                                const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : event.key === 'ArrowDown' ? (current + 1) % items.length : (current - 1 + items.length) % items.length;
+                                items[next]?.focus();
+                              }}
+                              className="absolute right-0 top-full z-30 mt-1 w-48 rounded-xl border border-slate-200/80 bg-white p-1.5 shadow-lg dark:border-white/[0.08] dark:bg-[#0D111A]"
+                            >
+                              <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleStartEdit(p); }} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">Editar</button>
+                              <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleTogglePin(p.id, isPinned); }} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">{isPinned ? 'Desfijar' : 'Fijar'}</button>
+                              <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleConvertToTask(p.id); }} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">Convertir a tarea</button>
+                              {GYM_NOTE_PLACEMENTS_ENABLED && (currentPlacements.some((placement) => placement.noteId === p.id) ? (
+                                <>
+                                  <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); onOpenGym(); }} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">Ver en Gimnasio</button>
+                                  <button role="menuitem" type="button" onClick={() => handleRemoveFromGym(p.id)} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">Retirar de Gimnasio</button>
+                                </>
+                              ) : <button role="menuitem" type="button" onClick={() => handlePlaceInGym(p.id)} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">Colocar en… Gimnasio</button>)}
+                              <button role="menuitem" type="button" onClick={() => { setOpenNoteMenuId(null); handleToggleArchive(p.id, isArchived); }} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer">{isArchived ? 'Restaurar' : 'Archivar'}</button>
+                              <button role="menuitem" type="button" onClick={() => handleDeletePostit(p.id)} className="block min-h-10 w-full rounded-lg px-3 py-2 text-left text-sm text-rose-600 hover:bg-rose-500/10 dark:text-rose-400 cursor-pointer">Eliminar</button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
 
@@ -1120,12 +1154,13 @@ export const NotasView: React.FC<NotasViewProps> = ({
 
           {/* Edit Note Modal */}
           {editingNote && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs" onClick={closeEditor}>
               <div
                 ref={editorRef}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="note-editor-title"
+                onClick={(e) => e.stopPropagation()}
                 onKeyDown={(event) => {
                   if (event.key === 'Escape') { event.stopPropagation(); closeEditor(); }
                   if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); editorRef.current?.querySelector('form')?.requestSubmit(); }
@@ -1176,7 +1211,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
                       value={editText}
                       onChange={(e) => setEditText(e.target.value)}
                       rows={10}
-                      className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-3 text-sm leading-6 text-slate-900 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 resize-y"
+                      className="celestian-clean-field w-full rounded-xl border border-slate-200/80 bg-white px-3 py-3 text-sm leading-6 text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 resize-y"
                       required
                     />
                   </div>
@@ -1188,27 +1223,27 @@ export const NotasView: React.FC<NotasViewProps> = ({
                     <TagEditor value={editTags} onChange={setEditTags} />
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-4 pt-1">
-                    <label className="inline-flex min-h-10 items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
+                  <div className="flex flex-wrap items-center gap-5 pt-1">
+                    <div className="inline-flex min-h-10 items-center gap-2.5 text-xs font-medium text-slate-600 dark:text-slate-300 select-none">
+                      <Pin size={13} strokeWidth={1.75} aria-hidden="true" className={editPinned ? 'text-[#4F46E5] dark:text-indigo-400' : ''} />
+                      <span id="edit-note-pin-label">Fijar arriba</span>
+                      <CelestianSwitch
                         checked={editPinned}
-                        onChange={(e) => setEditPinned(e.target.checked)}
-                        className="h-4 w-4 rounded accent-[#4F46E5]"
+                        onChange={setEditPinned}
+                        ariaLabelledBy="edit-note-pin-label"
+                        size="sm"
                       />
-                      <Pin size={13} strokeWidth={1.75} aria-hidden="true" />
-                      <span>Fijar arriba</span>
-                    </label>
-                    <label className="inline-flex min-h-10 items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
+                    </div>
+                    <div className="inline-flex min-h-10 items-center gap-2.5 text-xs font-medium text-slate-600 dark:text-slate-300 select-none">
+                      <Archive size={13} strokeWidth={1.75} aria-hidden="true" className={editArchived ? 'text-[#4F46E5] dark:text-indigo-400' : ''} />
+                      <span id="edit-note-archive-label">Archivada</span>
+                      <CelestianSwitch
                         checked={editArchived}
-                        onChange={(e) => setEditArchived(e.target.checked)}
-                        className="h-4 w-4 rounded accent-[#4F46E5]"
+                        onChange={setEditArchived}
+                        ariaLabelledBy="edit-note-archive-label"
+                        size="sm"
                       />
-                      <Archive size={13} strokeWidth={1.75} aria-hidden="true" />
-                      <span>Archivada</span>
-                    </label>
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
@@ -1246,7 +1281,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
                   value={possessionSearch}
                   onChange={(event) => setPossessionSearch(event.target.value)}
                   placeholder="Buscar en mis cosas…"
-                  className="min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 text-sm text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100"
+                  className="celestian-clean-field min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 text-sm text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100"
                 />
               )}
             </div>
@@ -1257,7 +1292,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
               <input aria-label="Ubicación (opcional)" value={possessionLocation} onChange={(event) => setPossessionLocation(event.target.value)} placeholder="Dónde está (opcional)" className={fieldClass} />
               <input type="date" max={todayISO()} aria-label="Fecha del objeto" value={possessionDate} onChange={(event) => setPossessionDate(event.target.value)} className={fieldClass} />
               <button type="submit" className={`${primaryBtnClass} sm:col-span-2 lg:col-span-1`}>Guardar</button>
-              <textarea aria-label="Detalles del objeto" value={possessionNote} onChange={(event) => setPossessionNote(event.target.value)} placeholder="Qué te gusta, quién te lo regaló o por qué lo valorás…" rows={2} className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 sm:col-span-2 lg:col-span-5" />
+              <textarea aria-label="Detalles del objeto" value={possessionNote} onChange={(event) => setPossessionNote(event.target.value)} placeholder="Qué te gusta, quién te lo regaló o por qué lo valorás…" rows={2} className="celestian-clean-field w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 sm:col-span-2 lg:col-span-5" />
             </form>
           </SurfaceCard>
 
@@ -1284,9 +1319,10 @@ export const NotasView: React.FC<NotasViewProps> = ({
                         draft.notes.possessions = draft.notes.possessions.filter((candidate) => candidate.id !== item.id);
                       })}
                       aria-label={`Eliminar ${item.name}`}
+                      title={`Eliminar ${item.name}`}
                       className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
                     >
-                      <X size={15} strokeWidth={1.75} aria-hidden="true" />
+                      <Trash2 size={15} strokeWidth={1.75} aria-hidden="true" />
                     </button>
                   </div>
                   {item.note && <p className="whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-400">{item.note}</p>}
@@ -1357,10 +1393,11 @@ export const NotasView: React.FC<NotasViewProps> = ({
                   <button
                     type="button"
                     aria-label={`Eliminar ${s.text}`}
+                    title={`Eliminar ${s.text}`}
                     onClick={() => handleDeleteShop(s.id)}
                     className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
                   >
-                    <X size={15} strokeWidth={1.75} aria-hidden="true" />
+                    <Trash2 size={15} strokeWidth={1.75} aria-hidden="true" />
                   </button>
                 </div>
               ))}
@@ -1418,10 +1455,11 @@ export const NotasView: React.FC<NotasViewProps> = ({
                   <button
                     type="button"
                     aria-label={`Eliminar enlace ${l.name}`}
+                    title={`Eliminar enlace ${l.name}`}
                     onClick={() => handleDeleteLink(l.id)}
                     className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
                   >
-                    <X size={15} strokeWidth={1.75} aria-hidden="true" />
+                    <Trash2 size={15} strokeWidth={1.75} aria-hidden="true" />
                   </button>
                 </div>
               ))}
@@ -1515,10 +1553,11 @@ export const NotasView: React.FC<NotasViewProps> = ({
                       <button
                         type="button"
                         aria-label={`Eliminar control ${item.label}`}
+                        title={`Eliminar control ${item.label}`}
                         onClick={() => saveToolChange((draft) => { if (draft.streaming?.preStreamChecklist) draft.streaming.preStreamChecklist = draft.streaming.preStreamChecklist.filter((candidate) => candidate.id !== item.id); })}
                         className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
                       >
-                        <X size={15} strokeWidth={1.75} aria-hidden="true" />
+                        <Trash2 size={15} strokeWidth={1.75} aria-hidden="true" />
                       </button>
                     </div>
                   ))}
@@ -1568,7 +1607,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
                                 aria-label={`Estado de ${item.title}`}
                                 value={item.status}
                                 onChange={(event) => saveToolChange((draft) => { const target = (draft.streaming?.contentPipeline || []).find((candidate) => candidate.id === item.id); if (target) { target.status = event.target.value as typeof item.status; target.updatedAt = new Date().toISOString(); } })}
-                                className="min-h-10 min-w-0 flex-1 rounded-lg border border-slate-200/80 bg-white px-1.5 text-xs text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200"
+                                className="celestian-clean-field min-h-10 min-w-0 flex-1 rounded-lg border border-slate-200/80 bg-white px-1.5 text-xs text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200"
                               >
                                 {pipelineStages.map((option) => (
                                   <option key={option.id} value={option.id}>{option.label}</option>
@@ -1577,10 +1616,11 @@ export const NotasView: React.FC<NotasViewProps> = ({
                               <button
                                 type="button"
                                 aria-label={`Eliminar ${item.title}`}
+                                title={`Eliminar ${item.title}`}
                                 onClick={() => saveToolChange((draft) => { if (draft.streaming?.contentPipeline) draft.streaming.contentPipeline = draft.streaming.contentPipeline.filter((candidate) => candidate.id !== item.id); })}
                                 className="inline-flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
                               >
-                                <X size={14} strokeWidth={1.75} aria-hidden="true" />
+                                <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
                               </button>
                             </div>
                           </article>

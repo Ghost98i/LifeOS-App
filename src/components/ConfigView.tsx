@@ -3,7 +3,9 @@ import {
   AlertTriangle,
   Bell,
   Check,
+  ChevronDown,
   Cloud,
+  Download,
   Dumbbell,
   HardDrive,
   Info,
@@ -42,6 +44,7 @@ import { PrivacySecuritySection } from './PrivacySecuritySection';
 import { getDismissedAttentionItems, nextAttentionDismissalTimestamp, type AttentionItem } from '../lib/todayAttention';
 import { DismissedAttentionModal } from './DismissedAttentionModal';
 import { ListDivider, SectionHeader, SurfaceCard } from './ui/SurfacePrimitives';
+import { CelestianSwitch } from './ui/CelestianSwitch';
 import type { AttentionDismissalRecord } from '../types';
 
 export type ConfigTab = 'cuenta' | 'preferencias' | 'copias' | 'diagnostico';
@@ -453,7 +456,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   })();
 
   const fieldClass =
-    'w-full min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100';
+    'celestian-clean-field w-full min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100';
   const primaryBtnClass =
     'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
   const secondaryBtnClass =
@@ -476,7 +479,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
         )}
       />
 
-      <div role="tablist" aria-label="Secciones de Configuración" className="flex w-full items-center gap-1 overflow-x-auto border-b border-slate-200/80 pb-px dark:border-white/[0.08]">
+      <div role="tablist" aria-label="Secciones de Configuración" className="no-scrollbar inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-slate-200/80 bg-slate-100/75 p-1 dark:border-white/[0.08] dark:bg-white/[0.03]">
         {CONFIG_TABS.map((tab) => {
           const isSelected = activeTab === tab.id;
           return (
@@ -486,16 +489,13 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               role="tab"
               aria-selected={isSelected}
               onClick={() => setActiveTab(tab.id)}
-              className={`relative min-h-11 shrink-0 whitespace-nowrap px-3 py-2.5 text-sm transition-colors cursor-pointer sm:px-4 ${
+              className={`min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 cursor-pointer sm:px-4 ${
                 isSelected
-                  ? 'font-semibold text-[#4F46E5] dark:text-indigo-300'
-                  : 'font-medium text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+                  ? 'bg-[#4F46E5] font-semibold text-white'
+                  : 'font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
               }`}
             >
               {tab.label}
-              {isSelected && (
-                <span aria-hidden="true" className="absolute inset-x-2 bottom-0 h-[2px] rounded-full bg-[#4F46E5]" />
-              )}
             </button>
           );
         })}
@@ -641,7 +641,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
             <div className="flex flex-wrap gap-2.5">
               <button type="button" onClick={onExportJSON} className={primaryBtnClass}>
-                <Cloud size={15} strokeWidth={1.75} aria-hidden="true" />
+                <Download size={15} strokeWidth={1.75} aria-hidden="true" />
                 <span>Descargar copia</span>
               </button>
 
@@ -741,16 +741,24 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                   <label htmlFor="config-body-sex" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
                     Sexo para cálculos corporales
                   </label>
-                  <select
-                    id="config-body-sex"
-                    value={profileBodySex}
-                    onChange={(e) => setProfileBodySex(e.target.value as '' | 'male' | 'female')}
-                    className={`${fieldClass} cursor-pointer`}
-                  >
-                    <option value="">Seleccionar…</option>
-                    <option value="male">Masculino</option>
-                    <option value="female">Femenino</option>
-                  </select>
+                  <div className="relative">
+                    <select
+                      id="config-body-sex"
+                      value={profileBodySex}
+                      onChange={(e) => setProfileBodySex(e.target.value as '' | 'male' | 'female')}
+                      className={`${fieldClass} appearance-none pr-9 cursor-pointer`}
+                    >
+                      <option value="">Seleccionar…</option>
+                      <option value="male">Masculino</option>
+                      <option value="female">Femenino</option>
+                    </select>
+                    <ChevronDown
+                      size={15}
+                      strokeWidth={1.75}
+                      aria-hidden="true"
+                      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
+                    />
+                  </div>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Se guarda en tu perfil y se usa para fórmulas como RFM.</p>
                 </div>
 
@@ -790,37 +798,32 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
             <div className="grid grid-cols-1 gap-2 border-t border-slate-100 pt-3.5 sm:grid-cols-2 lg:grid-cols-3 dark:border-white/[0.06]">
               {NAV_ITEMS.filter((item) => item.optional).map((item) => {
-                const isHidden = isModuleHidden(state, item.id);
+                const isVisible = !isModuleHidden(state, item.id);
+                const labelId = `module-switch-label-${item.id}`;
 
                 return (
-                  <button
+                  <div
                     key={item.id}
-                    type="button"
-                    onClick={() => handleToggleTab(item.id)}
-                    aria-pressed={!isHidden}
-                    className={`flex min-h-11 items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left text-sm font-medium transition-colors cursor-pointer ${
-                      !isHidden
-                        ? 'border-[#4F46E5]/40 bg-[#4F46E5]/[0.05] text-slate-900 dark:border-indigo-400/40 dark:bg-indigo-500/10 dark:text-slate-100'
-                        : 'border-slate-200/80 bg-transparent text-slate-500 hover:border-slate-300 dark:border-white/[0.08] dark:text-slate-400 dark:hover:border-white/[0.15]'
+                    className={`flex min-h-11 items-center justify-between gap-2.5 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
+                      isVisible
+                        ? 'border-[#4F46E5]/30 bg-[#4F46E5]/[0.04] text-slate-900 dark:border-indigo-400/30 dark:bg-indigo-500/[0.08] dark:text-slate-100'
+                        : 'border-slate-200/80 bg-transparent text-slate-500 dark:border-white/[0.08] dark:text-slate-400'
                     }`}
                   >
                     <div className="flex min-w-0 items-center gap-2">
                       <AppIcon
                         name={item.icon}
-                        className={`h-4 w-4 shrink-0 ${!isHidden ? 'text-[#4F46E5] dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}
+                        className={`h-4 w-4 shrink-0 ${isVisible ? 'text-[#4F46E5] dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}
                       />
-                      <span className="truncate">{item.label}</span>
+                      <span id={labelId} className="truncate">{item.label}</span>
                     </div>
-                    <span
-                      className={`shrink-0 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-semibold ${
-                        !isHidden
-                          ? 'border-[#4F46E5]/20 bg-[#4F46E5]/10 text-[#4F46E5] dark:text-indigo-300'
-                          : 'border-slate-200/80 bg-slate-50 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400'
-                      }`}
-                    >
-                      {!isHidden ? 'Visible' : 'Oculto'}
-                    </span>
-                  </button>
+                    <CelestianSwitch
+                      checked={isVisible}
+                      onChange={() => handleToggleTab(item.id)}
+                      ariaLabelledBy={labelId}
+                      size="sm"
+                    />
+                  </div>
                 );
               })}
             </div>
@@ -829,14 +832,11 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
                 Herramientas opcionales en Notas
               </p>
-              <button
-                type="button"
-                onClick={handleToggleStreaming}
-                aria-pressed={streamingEnabled}
-                className={`flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-left text-sm font-medium transition-colors sm:w-auto sm:min-w-[260px] cursor-pointer ${
+              <div
+                className={`flex min-h-11 w-full items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors sm:w-auto sm:min-w-[280px] sm:inline-flex ${
                   streamingEnabled
-                    ? 'border-[#4F46E5]/40 bg-[#4F46E5]/[0.05] text-slate-900 dark:border-indigo-400/40 dark:bg-indigo-500/10 dark:text-slate-100'
-                    : 'border-slate-200/80 bg-transparent text-slate-500 hover:border-slate-300 dark:border-white/[0.08] dark:text-slate-400 dark:hover:border-white/[0.15]'
+                    ? 'border-[#4F46E5]/30 bg-[#4F46E5]/[0.04] text-slate-900 dark:border-indigo-400/30 dark:bg-indigo-500/[0.08] dark:text-slate-100'
+                    : 'border-slate-200/80 bg-transparent text-slate-500 dark:border-white/[0.08] dark:text-slate-400'
                 }`}
               >
                 <div className="flex min-w-0 items-center gap-2">
@@ -846,18 +846,15 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                     aria-hidden="true"
                     className={`shrink-0 ${streamingEnabled ? 'text-[#4F46E5] dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'}`}
                   />
-                  <span className="truncate">Streaming y contenido</span>
+                  <span id="streaming-switch-label" className="truncate">Streaming y contenido</span>
                 </div>
-                <span
-                  className={`shrink-0 whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-semibold ${
-                    streamingEnabled
-                      ? 'border-[#4F46E5]/20 bg-[#4F46E5]/10 text-[#4F46E5] dark:text-indigo-300'
-                      : 'border-slate-200/80 bg-slate-50 text-slate-500 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400'
-                  }`}
-                >
-                  {streamingEnabled ? 'Activo' : 'Oculto'}
-                </span>
-              </button>
+                <CelestianSwitch
+                  checked={streamingEnabled}
+                  onChange={handleToggleStreaming}
+                  ariaLabelledBy="streaming-switch-label"
+                  size="sm"
+                />
+              </div>
             </div>
           </SurfaceCard>
 
@@ -1001,13 +998,16 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
             {/* Diagnóstico técnico y almacenamiento (Divulgación Progresiva) */}
             <details className="group border-t border-slate-100 pt-3 dark:border-white/[0.06]">
-              <summary className="flex min-h-10 cursor-pointer items-center justify-between gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 select-none">
+              <summary className="flex min-h-10 cursor-pointer items-center justify-between gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 select-none list-none">
                 <span className="flex items-center gap-2">
                   <Shield size={15} strokeWidth={1.75} className="text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
                   <span>Almacenamiento y detalles técnicos</span>
                 </span>
-                <span className="font-mono text-xs text-slate-400 dark:text-slate-500">
-                  Dispositivo: {deviceId.slice(0, 8)}…
+                <span className="flex items-center gap-2">
+                  <span className="font-mono text-xs text-slate-400 dark:text-slate-500">
+                    Dispositivo: {deviceId.slice(0, 8)}…
+                  </span>
+                  <ChevronDown size={15} strokeWidth={1.75} className="shrink-0 text-slate-400 transition-transform group-open:rotate-180" aria-hidden="true" />
                 </span>
               </summary>
               <div className="pt-3 space-y-3">
@@ -1317,8 +1317,8 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
       {/* Modal 5: Privacidad y términos */}
       {isAboutModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Privacidad y términos" className="w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs" onClick={() => setIsAboutModalOpen(false)}>
+          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Privacidad y términos" className="w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
                 <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Privacidad, términos y créditos</h3>

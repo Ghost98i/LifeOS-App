@@ -772,13 +772,38 @@ button:disabled {
   cursor: not-allowed;
 }
 
-:where(button, a, input, select, textarea, summary):focus-visible {
+:where(button:not([class*="focus-visible:ring"]):not([role="switch"]), a, summary):focus-visible {
   outline: 2px solid rgb(99 102 241 / 0.45);
   outline-offset: 2px;
 }
 
+:where(input:not(.celestian-clean-field):not(.celestian-clean-field-bare), select:not(.celestian-clean-field), textarea:not(.celestian-clean-field)):focus-visible {
+  outline: 2px solid rgb(99 102 241 / 0.45);
+  outline-offset: 2px;
+}
+
+.celestian-clean-field:focus,
+.celestian-clean-field:focus-visible {
+  outline: none !important;
+  border-color: #4F46E5;
+  box-shadow: 0 0 0 2px rgb(79 70 229 / 0.16);
+}
+
+.dark .celestian-clean-field:focus,
+.dark .celestian-clean-field:focus-visible {
+  outline: none !important;
+  border-color: #818CF8;
+  box-shadow: 0 0 0 2px rgb(129 140 248 / 0.22);
+}
+
+.celestian-clean-field-bare:focus,
+.celestian-clean-field-bare:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 input, select, textarea {
-  accent-color: var(--blue);
+  accent-color: #4F46E5;
   background-color: var(--control-bg);
   color: var(--text);
 }
