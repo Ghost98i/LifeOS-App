@@ -14,7 +14,7 @@ import { ProjectsManager } from './ProjectsManager';
 import { ConfigView } from './ConfigView';
 import { PrivacySecuritySection } from './PrivacySecuritySection';
 
-test('Micro-pulido 1 y 2: CommercialWorkspace sin sesión envuelve el aviso en SurfaceCard y el CTA vacío tiene disabled:opacity-50', () => {
+test('Micro-pulido 1 y 2: CommercialWorkspace sin sesión muestra una única SurfaceCard sobria y el sandbox conserva CTA con disabled:opacity-50', () => {
   const state = defaultState();
   const wsHtml = renderToStaticMarkup(
     <CommercialWorkspace
@@ -27,7 +27,7 @@ test('Micro-pulido 1 y 2: CommercialWorkspace sin sesión envuelve el aviso en S
 
   assert.match(wsHtml, /rounded-2xl border border-slate-200\/80[^>]*>[\s\S]*Sesión requerida para operar/);
   assert.match(wsHtml, /role="status"/);
-  assert.match(wsHtml, /<fieldset aria-label="Operaciones comerciales" disabled=""/);
+  assert.doesNotMatch(wsHtml, /Agregar artículo o insumo/, 'Sin sesión y sin datos previos no muestra caja vacía con CTA deshabilitado');
 
   const sandboxHtml = renderToStaticMarkup(
     <CommercialInventorySandbox pilotEnabled={false} onClose={() => {}} />
