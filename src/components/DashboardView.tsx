@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Bell,
+  Briefcase,
   CalendarDays,
   Check,
   Clock,
@@ -712,6 +713,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     const cls = 'h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500';
     if (kind === 'backup_urgent') return <Shield className={cls} strokeWidth={1.75} aria-hidden="true" />;
     if (kind === 'task_overdue') return <Clock className={cls} strokeWidth={1.75} aria-hidden="true" />;
+    if (kind === 'job_deadline_upcoming') {
+      return <Briefcase className="h-4 w-4 shrink-0 text-[#4F46E5] dark:text-[#818CF8]" strokeWidth={1.75} aria-hidden="true" />;
+    }
     if (kind === 'agenda_event_soon' || kind === 'agenda_event_tomorrow') {
       return <CalendarDays className={cls} strokeWidth={1.75} aria-hidden="true" />;
     }
@@ -946,6 +950,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           onOpenEntry={(entry) => {
             if (entry.source === 'extra' && onNavigateToRecord) {
               onNavigateToRecord('agenda', { date: todayIso, focusId: `agenda-task-extra-${entry.id}-${todayIso}` });
+            } else if (entry.source === 'trabajo' && onNavigateToRecord) {
+              const appId = entry.calendarItem?.jobApplicationId || entry.todayItem?.id || entry.id;
+              onNavigateToRecord('trabajo', { focusId: `job-app-${appId}` });
             } else {
               onNavigate(entry.navigationTarget || 'agenda');
             }

@@ -27,6 +27,7 @@ import {
   getJobApplicationType,
   getJobStageLabel,
   getNextJobKeyDate,
+  getSafeJobHref,
   hasAdvancedJobDetails,
   isJobStatusForType,
   JOB_KEY_DATE_KINDS,
@@ -36,6 +37,7 @@ import {
   JobApplicationDraft,
   JobTypeFilter,
   normalizeJobKeyDates,
+  normalizeJobUrl,
   saveJobApplication,
 } from '../lib/jobApplications';
 
@@ -138,6 +140,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
   const [newKeyDateNote, setNewKeyDateNote] = useState<string>('');
   const [tableSearch, setTableSearch] = useState('');
   const [formError, setFormError] = useState('');
+  const [linkError, setLinkError] = useState('');
   const today = todayISO();
 
   const focusedAppId = initialFocusId?.startsWith('job-app-')
@@ -232,6 +235,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
     setDetailsOpen(false);
     resetNewKeyDateInputs();
     setFormError('');
+    setLinkError('');
     setFormOpen(true);
   };
 
@@ -256,6 +260,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
     setDetailsOpen(hasAdvancedJobDetails(application));
     resetNewKeyDateInputs();
     setFormError('');
+    setLinkError('');
     setFormOpen(true);
   };
 
@@ -265,6 +270,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
     setEditingId(null);
     resetNewKeyDateInputs();
     setFormError('');
+    setLinkError('');
   };
 
   const handleAddKeyDateToForm = () => {
@@ -311,10 +317,18 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
       return;
     }
 
+    const normalizedLink = normalizeJobUrl(form.link || '');
+    if (!normalizedLink.valid) {
+      setLinkError('Ingresá un enlace válido (ej.: linkedin.com/jobs/... o https://...).');
+      return;
+    }
+    setLinkError('');
+
     const draft: JobApplicationDraft = {
       ...form,
       empresa: form.empresa.trim(),
       puesto: form.puesto.trim(),
+      link: normalizedLink.url,
       source: form.source?.trim() || '',
       reclutador: form.reclutador?.trim() || '',
       followUpNotes: form.followUpNotes?.trim() || '',
@@ -665,12 +679,23 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
             <label className={labelClass}>
               Enlace a la publicación <span className="font-normal text-[var(--text-faint)]">(opcional)</span>
               <input
-                type="url"
+                type="text"
+                inputMode="url"
                 value={form.link}
-                onChange={(e) => setForm({ ...form, link: e.target.value })}
-                placeholder="https://…"
-                className={`${fieldClass} mt-1`}
+                onChange={(e) => {
+                  setForm({ ...form, link: e.target.value });
+                  if (linkError) setLinkError('');
+                }}
+                aria-invalid={Boolean(linkError)}
+                aria-describedby={linkError ? 'job-link-error' : undefined}
+                placeholder="Ej.: linkedin.com/jobs/... o https://…"
+                className={`${fieldClass} mt-1${linkError ? ' border-rose-500/70 focus:border-rose-500 focus:ring-rose-500/30' : ''}`}
               />
+              {linkError && (
+                <span id="job-link-error" role="alert" className="mt-1 block text-xs font-medium text-rose-600 dark:text-rose-400">
+                  {linkError}
+                </span>
+              )}
             </label>
 
             <div className="pt-1 sm:col-span-2 lg:col-span-3">
@@ -1122,6 +1147,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                     .map((application) => {
                       const tipo = getJobApplicationType(application);
                       const nextKey = getNextJobKeyDate(application, today);
+                      const safeHref = getSafeJobHref(application.link);
                       return (
                         <article
                           key={application.id}
@@ -1196,9 +1222,9 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                           <div className="flex items-center justify-between gap-2 border-t border-[var(--border)] pt-2.5">
                             <div className="flex flex-wrap items-center gap-2.5 text-xs tabular-nums text-[var(--text-faint)]">
                               <span>{fmtDate(application.fecha)}</span>
-                              {application.link && (
+                              {safeHref && (
                                 <a
-                                  href={application.link}
+                                  href={safeHref}
                                   target="_blank"
                                   rel="noreferrer"
                                   className="inline-flex items-center gap-1 font-semibold text-[#4F46E5] transition-colors hover:text-[#4338CA] hover:underline dark:text-[#818CF8] dark:hover:text-indigo-300"
@@ -1261,6 +1287,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                       .map((application) => {
                         const tipo = getJobApplicationType(application);
                         const nextKey = getNextJobKeyDate(application, today);
+                        const safeHref = getSafeJobHref(application.link);
                         return (
                           <tr key={application.id} id={`job-app-${application.id}`} className="transition-colors hover:bg-[var(--bg)]/50">
                             {showProcessTypeColumn && (
@@ -1278,9 +1305,9 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                                     {application.source}
                                   </span>
                                 )}
-                                {application.link && (
+                                {safeHref && (
                                   <a
-                                    href={application.link}
+                                    href={safeHref}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="inline-flex items-center gap-1 whitespace-nowrap font-semibold text-[#4F46E5] transition-colors hover:text-[#4338CA] hover:underline dark:text-[#818CF8] dark:hover:text-indigo-300"

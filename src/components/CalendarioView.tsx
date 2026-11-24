@@ -267,7 +267,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
     item.taskRef ? (item.isDeadline ? 'Tarea · vencimiento' : 'Tarea programada')
       : item.financialType === 'commitment' ? 'Compromiso financiero'
       : item.financialType === 'income' ? 'Ingreso previsto'
-      : item.type === 'job_deadline' ? 'Trabajo · fecha clave'
+      : item.type === 'job_deadline' ? (item.isJobFollowup ? 'Trabajo · seguimiento' : 'Trabajo · fecha clave')
       : item.type === 'examen' ? 'Estudios · examen'
       : item.type === 'entrega' ? 'Tarea · vencimiento'
       : item.id.startsWith('scheduled-extra-') ? 'Elemento programado'
@@ -296,7 +296,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
       ? 'bg-emerald-500'
       : item.financialType === 'commitment'
       ? 'bg-rose-500'
-      : item.type === 'examen' || item.type === 'entrega'
+      : item.type === 'examen' || item.type === 'entrega' || (item.type === 'job_deadline' && item.isJobFollowup)
       ? 'bg-amber-500'
       : 'bg-[#4F46E5] dark:bg-indigo-400';
 
@@ -305,7 +305,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
       ? 'text-emerald-600 dark:text-emerald-400'
       : item.financialType === 'commitment'
       ? 'text-rose-600 dark:text-rose-400'
-      : item.type === 'examen' || item.type === 'entrega'
+      : item.type === 'examen' || item.type === 'entrega' || (item.type === 'job_deadline' && item.isJobFollowup)
       ? 'text-amber-600 dark:text-amber-400'
       : 'text-[#4F46E5] dark:text-indigo-300';
 
@@ -314,7 +314,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
       ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
       : item.financialType === 'commitment'
       ? 'bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300'
-      : item.type === 'examen' || item.type === 'entrega'
+      : item.type === 'examen' || item.type === 'entrega' || (item.type === 'job_deadline' && item.isJobFollowup)
       ? 'bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
       : 'bg-indigo-50 text-[#4F46E5] dark:bg-indigo-500/15 dark:text-indigo-300';
 
@@ -507,8 +507,14 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                       <button
                         type="button"
                         onClick={() => {
-                          if (item.type === 'job_deadline' && item.jobApplicationId && onNavigateToRecord) {
-                            onNavigateToRecord('trabajo', { focusId: `job-app-${item.jobApplicationId}` });
+                          if (item.type === 'job_deadline' && item.jobApplicationId) {
+                            if (onNavigateToRecord) {
+                              onNavigateToRecord('trabajo', { focusId: `job-app-${item.jobApplicationId}` });
+                            } else if (onNavigate) {
+                              onNavigate('trabajo');
+                            } else {
+                              setSelectedItem(item);
+                            }
                           } else {
                             setSelectedItem(item);
                           }
@@ -798,7 +804,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
                     : selectedItem.financialType === 'income'
                     ? 'Ingreso Previsto'
                     : selectedItem.type === 'job_deadline'
-                    ? 'Trabajo · Fecha clave'
+                    ? (selectedItem.isJobFollowup ? 'Trabajo · Seguimiento' : 'Trabajo · Fecha clave')
                     : selectedItem.type === 'examen'
                     ? 'Examen'
                     : selectedItem.type === 'entrega'
@@ -830,14 +836,18 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({ state, onUpdateS
             {selectedItem.taskRef && onNavigateToRecord && <button type="button" className="min-h-11 rounded-xl bg-[var(--blue)] px-4 text-sm font-semibold text-white" onClick={() => {
               const target = datedTaskDestination(selectedItem.taskRef!); setSelectedItem(null); onNavigateToRecord(target.view, target.options);
             }}>Abrir tarea original</button>}
-            {selectedItem.type === 'job_deadline' && selectedItem.jobApplicationId && onNavigateToRecord && (
+            {selectedItem.type === 'job_deadline' && selectedItem.jobApplicationId && (onNavigateToRecord || onNavigate) && (
               <button
                 type="button"
-                className="min-h-11 rounded-xl bg-[var(--blue)] px-4 text-sm font-semibold text-white cursor-pointer"
+                className="min-h-11 rounded-xl bg-[#4F46E5] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer"
                 onClick={() => {
                   const appId = selectedItem.jobApplicationId!;
                   setSelectedItem(null);
-                  onNavigateToRecord('trabajo', { focusId: `job-app-${appId}` });
+                  if (onNavigateToRecord) {
+                    onNavigateToRecord('trabajo', { focusId: `job-app-${appId}` });
+                  } else {
+                    onNavigate?.('trabajo');
+                  }
                 }}
               >
                 Abrir postulación en Trabajo

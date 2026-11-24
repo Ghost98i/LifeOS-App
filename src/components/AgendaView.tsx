@@ -436,6 +436,20 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
 
   const renderEntryChip = (entry: ReturnType<typeof getDayEntries>['entries'][number]) => {
     if (entry.kind === 'event') {
+      if (entry.event.type === 'job_deadline') {
+        const isFollowup = Boolean(entry.event.isJobFollowup);
+        return (
+          <span
+            className={`inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 text-[11px] font-semibold leading-none ${
+              isFollowup
+                ? 'border-amber-500/25 bg-amber-50/90 text-amber-800 dark:border-amber-400/25 dark:bg-amber-500/15 dark:text-amber-300'
+                : 'border-indigo-500/20 bg-indigo-50/80 text-[#4F46E5] dark:border-indigo-400/25 dark:bg-indigo-500/15 dark:text-[#818CF8]'
+            }`}
+          >
+            {isFollowup ? 'Trabajo · seguimiento' : 'Trabajo'}
+          </span>
+        );
+      }
       const eventLabel =
         entry.event.type === 'examen'
           ? 'Examen'
@@ -508,6 +522,19 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   onClick={() => {
                     const target = datedTaskDestination(entry.task);
                     onNavigateToRecord(target.view, target.options);
+                  }}
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-[#4F46E5] hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 dark:text-[#818CF8] dark:hover:bg-indigo-500/15 cursor-pointer"
+                >
+                  <AppIcon name="arrowRight" className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {entry.kind === 'event' && entry.event.type === 'job_deadline' && entry.event.jobApplicationId && onNavigateToRecord && (
+                <button
+                  type="button"
+                  aria-label={`Abrir en Trabajo: ${entry.label}`}
+                  title="Abrir en Trabajo"
+                  onClick={() => {
+                    onNavigateToRecord('trabajo', { focusId: `job-app-${entry.event.jobApplicationId}` });
                   }}
                   className="flex h-6 w-6 items-center justify-center rounded-md text-[#4F46E5] hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 dark:text-[#818CF8] dark:hover:bg-indigo-500/15 cursor-pointer"
                 >
@@ -600,8 +627,20 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             className="flex h-5 w-5 shrink-0 items-center justify-center text-slate-400 dark:text-slate-500"
           >
             <AppIcon
-              name={entry.kind === 'task' ? (completed ? 'checkCircle' : 'task') : entry.kind === 'event' ? 'calendarDays' : entry.kind === 'routine' && !entry.time ? 'list' : 'clock'}
-              className="h-4 w-4"
+              name={
+                entry.kind === 'task'
+                  ? (completed ? 'checkCircle' : 'task')
+                  : entry.kind === 'event'
+                  ? (entry.event.type === 'job_deadline' ? 'briefcase' : 'calendarDays')
+                  : entry.kind === 'routine' && !entry.time
+                  ? 'list'
+                  : 'clock'
+              }
+              className={`h-4 w-4 ${
+                entry.kind === 'event' && entry.event.type === 'job_deadline'
+                  ? (entry.event.isJobFollowup ? 'text-amber-600 dark:text-amber-400' : 'text-[#4F46E5] dark:text-[#818CF8]')
+                  : ''
+              }`}
             />
           </span>
         )}
@@ -623,6 +662,19 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
             onClick={() => {
               const target = datedTaskDestination(entry.task);
               onNavigateToRecord(target.view, target.options);
+            }}
+            className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-xl text-[#4F46E5] hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 dark:text-[#818CF8] dark:hover:bg-indigo-500/15 cursor-pointer"
+          >
+            <AppIcon name="arrowRight" className="h-4 w-4" />
+          </button>
+        )}
+        {entry.kind === 'event' && entry.event.type === 'job_deadline' && entry.event.jobApplicationId && onNavigateToRecord && (
+          <button
+            type="button"
+            aria-label={`Abrir en Trabajo: ${entry.label}`}
+            title="Abrir en Trabajo"
+            onClick={() => {
+              onNavigateToRecord('trabajo', { focusId: `job-app-${entry.event.jobApplicationId}` });
             }}
             className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-xl text-[#4F46E5] hover:bg-indigo-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 dark:text-[#818CF8] dark:hover:bg-indigo-500/15 cursor-pointer"
           >

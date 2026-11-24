@@ -1149,6 +1149,7 @@ export interface CalendarDisplayItem {
   category?: string | null;
   jobApplicationId?: string;
   jobKeyDateKind?: JobKeyDateKind;
+  isJobFollowup?: boolean;
   /** Read-only source reference, never a second persisted task. */
   taskRef?: import('./datedAgendaTasks').AgendaTaskReference;
 }
@@ -1309,7 +1310,7 @@ export function calendarItemsOnDate(state: LifeOSState, iso: string): CalendarDi
     }
   }
 
-  // 7. Job Application Key Dates (virtual derived items; no CalendarEvent created)
+  // 7. Job Application Key Dates & Follow-ups (virtual derived items; no CalendarEvent created)
   if (isModuleEnabled(state, 'trabajo')) {
     for (const app of state.jobs?.applications || []) {
       if (!isJobApplicationActive(app)) continue;
@@ -1327,6 +1328,22 @@ export function calendarItemsOnDate(state: LifeOSState, iso: string): CalendarDi
           isDeadline: true,
           jobApplicationId: app.id,
           jobKeyDateKind: kd.kind,
+        });
+      }
+      const nextDate = typeof app.nextActionDate === 'string' ? app.nextActionDate.trim().slice(0, 10) : '';
+      if (/^\d{4}-\d{2}-\d{2}$/.test(nextDate) && nextDate === iso) {
+        const actionLabel = app.nextAction?.trim() || 'Seguimiento';
+        items.push({
+          id: `job-followup:${app.id}`,
+          name: `${actionLabel} · ${app.empresa}`,
+          date: iso,
+          type: 'job_deadline',
+          icon: EVENT_TYPE_META.job_deadline.icon,
+          pill: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 font-semibold',
+          isDeadline: false,
+          jobApplicationId: app.id,
+          jobKeyDateKind: 'otro',
+          isJobFollowup: true,
         });
       }
     }
@@ -1720,7 +1737,7 @@ export function todayItems(state: LifeOSState, dateIso?: string, includeFollowup
 
   if (includeFollowups && isModuleEnabled(state, 'trabajo')) {
     (state.jobs?.applications || [])
-      .filter((a) => a.nextActionDate && a.nextActionDate <= iso)
+      .filter((a) => isJobApplicationActive(a) && a.nextActionDate && a.nextActionDate <= iso)
       .forEach((a) => {
         items.push({
           id: a.id,

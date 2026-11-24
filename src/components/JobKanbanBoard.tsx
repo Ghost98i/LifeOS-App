@@ -5,6 +5,7 @@ import { fmtDate, todayISO } from '../lib/storage';
 import {
   filterJobApplications,
   getNextJobKeyDate,
+  getSafeJobHref,
   isJobApplicationActive,
   JOB_KEY_DATE_LABELS,
   JOB_STAGES,
@@ -218,6 +219,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
             {activeStageApplications.map((app) => {
               const isFollowupDue = Boolean(app.nextActionDate && app.nextActionDate <= today);
               const nextKey = getNextJobKeyDate(app, today);
+              const safeHref = getSafeJobHref(app.link);
               return (
                 <article
                   key={app.id}
@@ -228,9 +230,9 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex min-w-0 items-start justify-between gap-2">
                         <h4 className="text-sm font-bold leading-snug text-[var(--text)] break-words">{app.empresa}</h4>
-                        {app.link && (
+                        {safeHref && (
                           <a
-                            href={app.link}
+                            href={safeHref}
                             target="_blank"
                             rel="noreferrer"
                             aria-label="Ver publicación"
@@ -385,6 +387,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                     const isBeingDragged = draggedAppId === app.id;
                     const isFollowupDue = Boolean(app.nextActionDate && app.nextActionDate <= today);
                     const nextKey = getNextJobKeyDate(app, today);
+                    const safeHref = getSafeJobHref(app.link);
 
                     return (
                       <div
@@ -403,9 +406,9 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                             <h4 className="line-clamp-2 break-words text-sm font-bold leading-snug text-[var(--text)]">
                               {app.empresa}
                             </h4>
-                            {app.link && (
+                            {safeHref && (
                               <a
-                                href={app.link}
+                                href={safeHref}
                                 target="_blank"
                                 rel="noreferrer"
                                 onClick={(e) => e.stopPropagation()}

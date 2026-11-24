@@ -11,6 +11,62 @@ export const JOB_SOURCE_SUGGESTIONS: readonly string[] = [
   'Referido',
 ] as const;
 
+function hasValidWebHostname(hostname: string): boolean {
+  if (!hostname || hostname.startsWith('.') || hostname.endsWith('.') || hostname.includes('..')) {
+    return false;
+  }
+  const labels = hostname.split('.');
+  if (labels.length < 2) return false;
+  if (labels.some((label) => !label || label.startsWith('-') || label.endsWith('-') || !/^[a-z0-9-]+$/i.test(label))) {
+    return false;
+  }
+  const tld = labels[labels.length - 1];
+  const isIpv4 = labels.length === 4 && labels.every((part) => /^\d+$/.test(part) && Number(part) >= 0 && Number(part) <= 255);
+  return isIpv4 || /^[a-z]{2,}$/i.test(tld);
+}
+
+/**
+ * Pure URL normalizer for JobApplication links:
+ * - Empty/whitespace -> valid empty string
+ * - Contains internal whitespace -> invalid
+ * - Starts with http:// or https:// -> validated with URL()
+ * - No protocol but valid domain with dot (e.g. `gemini.com`) -> prepends `https://` and validates
+ */
+export function normalizeJobUrl(raw: string): { url: string; valid: boolean } {
+  const trimmed = (raw || '').trim();
+  if (!trimmed) return { url: '', valid: true };
+  if (/\s/.test(trimmed)) return { url: trimmed, valid: false };
+
+  const hasHttpProtocol = /^https?:\/\//i.test(trimmed);
+  if (!hasHttpProtocol && /^[a-z][a-z0-9+.-]*:/i.test(trimmed)) {
+    return { url: trimmed, valid: false };
+  }
+
+  const candidate = hasHttpProtocol
+    ? trimmed.replace(/^https?:\/\//i, (match) => match.toLowerCase())
+    : `https://${trimmed}`;
+
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return { url: trimmed, valid: false };
+    }
+    if (!hasValidWebHostname(parsed.hostname)) {
+      return { url: trimmed, valid: false };
+    }
+    return { url: candidate, valid: true };
+  } catch {
+    return { url: trimmed, valid: false };
+  }
+}
+
+/** Returns a safe normalized href for rendering external job links, including legacy URLs without scheme. */
+export function getSafeJobHref(raw?: string | null): string | null {
+  if (!raw || !raw.trim()) return null;
+  const { url, valid } = normalizeJobUrl(raw);
+  return valid && url ? url : null;
+}
+
 export function hasAdvancedJobDetails(
   application: Pick<JobApplication, 'reclutador' | 'notas' | 'followUpNotes' | 'nextAction' | 'nextActionDate' | 'keyDates'>
 ): boolean {
@@ -173,7 +229,7 @@ export type JobApplicationDraft = Omit<JobApplication, 'id' | 'sourceOpportunity
 export interface SaveJobApplicationResult {
   applications: JobApplication[];
   saved: boolean;
-  reason?: 'invalid_status' | 'missing_record';
+  reason?: 'invalid_status' | 'missing_record' | 'invalid_url';
 }
 
 /** Saves an application without dropping legacy fields, IDs, or opportunity links. */
@@ -187,9 +243,15 @@ export function saveJobApplication(
     return { applications, saved: false, reason: 'invalid_status' };
   }
 
+  const normalizedLink = normalizeJobUrl(draft.link || '');
+  if (!normalizedLink.valid) {
+    return { applications, saved: false, reason: 'invalid_url' };
+  }
+
   const cleanSource = typeof draft.source === 'string' ? draft.source.trim() : '';
   const normalizedDraft: JobApplicationDraft = {
     ...draft,
+    link: normalizedLink.url,
     ...(cleanSource ? { source: cleanSource } : { source: undefined }),
   };
 

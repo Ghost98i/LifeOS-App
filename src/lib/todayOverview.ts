@@ -17,6 +17,7 @@ import {
   getUnblockedCountIfCompleted,
 } from './taskDependencies';
 import { isModuleEnabled } from './moduleVisibility';
+import { isJobApplicationActive } from './jobApplications';
 
 export interface TodayPriorityItem {
   id: string;
@@ -109,9 +110,11 @@ export function getTodayAgendaCalendarItems(
 ): CalendarDisplayItem[] {
   const calendarEnabled = isModuleEnabled(state, 'calendario');
   const studyEnabled = isModuleEnabled(state, 'estudios');
+  const jobsEnabled = isModuleEnabled(state, 'trabajo');
   return calendarItemsOnDate(state, dateIso).filter((item) => {
     if (item.taskRef || item.id.startsWith('scheduled-extra-') || item.id.startsWith('deadline-extra-') || item.id.startsWith('deadline-task-')) return false;
-    if (item.type === 'finanza_compromiso' || item.type === 'finanza_ingreso' || item.type === 'entrega' || item.type === 'job_deadline') return false;
+    if (item.type === 'finanza_compromiso' || item.type === 'finanza_ingreso' || item.type === 'entrega') return false;
+    if (item.type === 'job_deadline') return jobsEnabled;
     if (item.type === 'examen') return studyEnabled;
     return calendarEnabled;
   });
@@ -177,9 +180,11 @@ export function getTodayAgendaEntries(
     .sort((a, b) => (a.rank || 99) - (b.rank || 99));
   const priorityByLabel = new Map(priorities.map((priority) => [normalizeAgendaLabel(priority.text), priority]));
   const matchedPriorityIds = new Set<string>();
+  const emittedJobFollowupIds = new Set<string>();
   const entries: TodayAgendaEntry[] = [];
 
   for (const item of todayItems(state, dateIso, dateIso === todayISO())) {
+    if (item.source === 'trabajo') emittedJobFollowupIds.add(item.id);
     const { label, time } = splitAgendaText(item);
     const normalized = normalizeAgendaLabel(label);
     const focus = priorityByLabel.get(normalized);
@@ -221,8 +226,17 @@ export function getTodayAgendaEntries(
   }
 
   for (const item of getTodayAgendaCalendarItems(state, dateIso)) {
+    if (
+      item.type === 'job_deadline' &&
+      item.isJobFollowup &&
+      item.jobApplicationId &&
+      emittedJobFollowupIds.has(item.jobApplicationId)
+    ) {
+      continue;
+    }
+    const isJobItem = item.type === 'job_deadline';
     entries.push({
-      key: `calendar-${item.id}`,
+      key: isJobItem ? `trabajo-cal-${item.id}` : `calendar-${item.id}`,
       id: item.id,
       label: item.name,
       time: item.time || null,
@@ -230,11 +244,17 @@ export function getTodayAgendaEntries(
       done: false,
       completable: false,
       isFocus: false,
-      priority: item.type === 'importante' || item.type === 'examen' ? 5 : 2,
-      source: 'calendar',
-      sourceLabel: item.type === 'cumpleanos' ? 'Cumpleaños' : item.type === 'examen' ? 'Examen' : 'Evento',
+      priority: isJobItem || item.type === 'importante' || item.type === 'examen' ? 5 : 2,
+      source: isJobItem ? 'trabajo' : 'calendar',
+      sourceLabel: isJobItem
+        ? (item.isJobFollowup ? 'Trabajo · seguimiento' : 'Trabajo')
+        : item.type === 'cumpleanos'
+        ? 'Cumpleaños'
+        : item.type === 'examen'
+        ? 'Examen'
+        : 'Evento',
       calendarItem: item,
-      navigationTarget: item.type === 'examen' ? 'estudios' : 'calendario',
+      navigationTarget: isJobItem ? 'trabajo' : item.type === 'examen' ? 'estudios' : 'calendario',
     });
   }
 
@@ -347,7 +367,7 @@ export function getTodayUnifiedOverview(
   const isJobsOn = isModuleEnabled(state, 'trabajo');
   const followups: TodayJobFollowup[] = isJobsOn
     ? (state.jobs?.applications || [])
-        .filter((a) => a.nextActionDate && a.nextActionDate <= dateIso)
+        .filter((a) => isJobApplicationActive(a) && a.nextActionDate && a.nextActionDate <= dateIso)
         .map((a) => ({
           id: a.id,
           text: `${a.nextAction || 'Seguimiento'} — ${a.empresa}`,
