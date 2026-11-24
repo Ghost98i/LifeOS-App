@@ -15,3 +15,22 @@
   font-size: 0.875rem;
   line-height: 1.25rem;
 }
+
+/* Clean single-border indigo focus on Agenda controls without double browser outline */
+.product-refinement .agenda-clean-input:focus,
+.product-refinement .agenda-clean-input:focus-visible {
+  outline: none;
+  border-color: #4F46E5;
+  box-shadow: 0 0 0 3px rgb(79 70 229 / 0.16);
+}
+
+.dark .product-refinement .agenda-clean-input:focus,
+.dark .product-refinement .agenda-clean-input:focus-visible {
+  border-color: #818CF8;
+  box-shadow: 0 0 0 3px rgb(129 140 248 / 0.22);
+}
+
+.product-refinement .agenda-clean-tab:focus,
+.product-refinement .agenda-clean-tab:focus-visible {
+  outline: none;
+}
