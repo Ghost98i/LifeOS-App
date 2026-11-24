@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import type { FinancingAgreement, InstallmentSchedule, LifeOSState } from '../types';
 import {
   calculateAgreementRemainingBalance,
@@ -550,9 +551,10 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                             <button
                               type="button"
                               onClick={() => setEditingAcquisitionId(null)}
-                              className="text-[var(--finance-text-muted)] hover:text-[var(--finance-text-primary)] cursor-pointer"
+                              aria-label="Cerrar edición de adquisición"
+                              className="h-7 w-7 inline-flex items-center justify-center rounded-lg text-[var(--finance-text-muted)] hover:text-[var(--finance-text-primary)] hover:bg-[var(--finance-surface-subtle)] cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70"
                             >
-                              ✕
+                              <AppIcon name="x" className="h-3.5 w-3.5" />
                             </button>
                           </div>
                           {editAcquisitionError && (
@@ -690,10 +692,11 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                       <button
                         type="button"
                         onClick={() => handleDelete(agreement.id, agreement.title)}
-                        className="text-[var(--finance-text-muted)] hover:text-rose-500 p-1 rounded-lg cursor-pointer"
+                        className="h-8 w-8 inline-flex items-center justify-center rounded-lg text-[var(--finance-text-muted)] hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70"
+                        aria-label={maskFinancialText(`Eliminar acuerdo ${agreement.title}`, Boolean(state.settings.privacyMode))}
                         title="Eliminar acuerdo"
                       >
-                        ✕
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
                     </div>
                   </div>
@@ -854,9 +857,10 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
               <button
                 type="button"
                 onClick={() => setIsCreateOpen(false)}
-                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg cursor-pointer"
+                aria-label="Cerrar"
+                className="h-8 w-8 inline-flex items-center justify-center text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] rounded-lg cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70"
               >
-                ✕
+                <AppIcon name="x" className="h-4 w-4" />
               </button>
             </div>
 
@@ -1232,9 +1236,10 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
               <button
                 type="button"
                 onClick={() => setPayingAgreement(null)}
-                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg"
+                aria-label="Cerrar"
+                className="h-8 w-8 inline-flex items-center justify-center text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] rounded-lg cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70"
               >
-                ✕
+                <AppIcon name="x" className="h-4 w-4" />
               </button>
             </div>
 

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { LifeOSState } from '../types';
 import { fmtDate, fmtMoney, formatMoney, parseDecimalInput } from '../lib/storage';
+import { getFinanceAccountIcon } from '../lib/financeIcons';
 import { AppIcon } from './AppIcon';
 import { PrivateFinancialText, PrivacyInput, PrivacyAmount } from './PrivacyAmount';
 import {
@@ -11,6 +13,9 @@ import {
 } from '../lib/calculations';
 import { FinanceAgreementsSection } from './FinanceAgreementsSection';
 import { maskFinancialText } from '../lib/financialPrivacy';
+
+const CLEAN_FOCUS_RING =
+  'outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
 
 interface FinanceAccountsViewProps {
   state: LifeOSState;
@@ -178,10 +183,10 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
               <button
                 type="button"
                 onClick={onOpenTransfer}
-                className="finance-control px-3.5 py-2 text-xs font-bold rounded-xl border flex items-center justify-center gap-1.5 cursor-pointer transition-all hover:border-[var(--finance-border-strong)] min-h-[40px]"
+                className={`finance-control px-3.5 py-2 text-xs font-bold rounded-xl border flex items-center justify-center gap-1.5 cursor-pointer transition-all hover:border-[var(--finance-border-strong)] min-h-[40px] ${CLEAN_FOCUS_RING}`}
                 title="Transferir dinero entre cuentas propias"
               >
-                <AppIcon name="repeat" className="h-4 w-4" />
+                <AppIcon name="transfer" className="h-4 w-4" />
                 <span>Transferir</span>
               </button>
             )}
@@ -189,7 +194,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsAddAccountOpen(true)}
-              className="py-2 px-4 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all min-h-[40px]"
+              className={`py-2 px-4 text-xs font-bold rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95 transition-all min-h-[40px] ${CLEAN_FOCUS_RING}`}
             >
               <AppIcon name="plus" className="h-4 w-4" />
               <span>Nueva cuenta</span>
@@ -197,7 +202,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
           </div>
         </div>
 
-        {/* Accounts Cards Grid */}
+        {/* Accounts Cards Grid (Adaptive: 1 col for 1 account, 2 cols for 2 accounts, 3 cols on lg for 3+) */}
         {accounts.length === 0 ? (
           <div className="p-8 text-center rounded-2xl border border-dashed border-[var(--finance-border)] bg-[var(--finance-surface-subtle)] space-y-3">
             <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto">
@@ -205,7 +210,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
             </div>
             <div>
               <h3 className="font-extrabold text-sm text-[var(--finance-text-primary)]">
-              Sin cuentas
+                Sin cuentas
               </h3>
               <p className="text-xs text-[var(--finance-text-muted)] max-w-sm mx-auto mt-1">
                 Agregá una cuenta para registrar saldos y movimientos.
@@ -214,30 +219,51 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
             <button
               type="button"
               onClick={() => setIsAddAccountOpen(true)}
-              className="py-2 px-4 rounded-xl text-xs font-bold bg-indigo-600 text-white hover:bg-indigo-500 cursor-pointer shadow-xs inline-flex items-center gap-1.5"
+              className={`py-2 px-4 rounded-xl text-xs font-bold bg-[#4F46E5] text-white hover:bg-[#4338CA] cursor-pointer shadow-xs inline-flex items-center gap-1.5 ${CLEAN_FOCUS_RING}`}
             >
               <AppIcon name="plus" className="h-3.5 w-3.5" />
               <span>Crear cuenta</span>
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          <div
+            data-accounts-grid="true"
+            data-accounts-grid-cols={accounts.length === 1 ? '1' : accounts.length === 2 ? '2' : '3'}
+            className={
+              accounts.length === 1
+                ? 'grid grid-cols-1 gap-3.5'
+                : accounts.length === 2
+                ? 'grid grid-cols-1 md:grid-cols-2 gap-3.5'
+                : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5'
+            }
+          >
             {accounts.map((account) => {
               const hasRecentRecon = Boolean(account.lastReconciledAt);
+              const accountIconMeta = getFinanceAccountIcon(account.name);
+              const AccountIcon = accountIconMeta.icon;
               return (
                 <div
                   key={account.id}
                   className="finance-surface-raised p-4 sm:p-5 rounded-2xl border border-[var(--finance-border)] flex flex-col justify-between gap-3.5 transition-all hover:border-[var(--finance-border-strong)] shadow-2xs"
                 >
-                  {/* Top: Name + Currency + Delete button */}
+                  {/* Top: Icon Badge + Name + Currency + Consistent Trash2 Delete Button */}
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-bold text-sm text-[var(--finance-text-primary)] break-words [overflow-wrap:anywhere]">
-                        <PrivateFinancialText>{account.name}</PrivateFinancialText>
-                      </span>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--finance-surface-subtle)] text-[var(--finance-text-secondary)] shrink-0">
-                        {(account.currency || 'UYU').toUpperCase()}
-                      </span>
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        data-finance-account-icon={accountIconMeta.iconName}
+                        className={`h-9 w-9 rounded-xl border flex items-center justify-center shrink-0 ${accountIconMeta.containerClass}`}
+                        aria-hidden="true"
+                      >
+                        <AccountIcon className={`h-4 w-4 ${accountIconMeta.iconClass}`} strokeWidth={1.85} />
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <span className="font-bold text-sm text-[var(--finance-text-primary)] break-words [overflow-wrap:anywhere]">
+                          <PrivateFinancialText>{account.name}</PrivateFinancialText>
+                        </span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--finance-surface-subtle)] text-[var(--finance-text-secondary)] shrink-0">
+                          {(account.currency || 'UYU').toUpperCase()}
+                        </span>
+                      </div>
                     </div>
 
                     <button
@@ -247,10 +273,11 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                           onDeleteAccount(account.id);
                         }
                       }}
-                      className="text-[var(--finance-text-muted)] hover:text-rose-500 p-1 -mr-1 -mt-0.5 rounded-lg hover:bg-rose-500/10 text-xs cursor-pointer transition-colors shrink-0"
+                      className={`h-8 w-8 inline-flex items-center justify-center -mr-1 -mt-0.5 rounded-lg text-[var(--finance-text-muted)] hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer transition-colors shrink-0 ${CLEAN_FOCUS_RING}`}
+                      aria-label={maskFinancialText(`Eliminar cuenta ${account.name}`, Boolean(state.settings.privacyMode))}
                       title="Eliminar cuenta"
                     >
-                      ✕
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   </div>
 
@@ -487,10 +514,11 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                     <button
                       type="button"
                       onClick={() => onDeleteInvestment(inv.id)}
-                      className="text-[var(--finance-text-muted)] hover:text-rose-500 p-1 rounded-lg cursor-pointer transition-colors"
+                      className={`h-8 w-8 inline-flex items-center justify-center rounded-lg text-[var(--finance-text-muted)] hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer transition-colors ${CLEAN_FOCUS_RING}`}
+                      aria-label={maskFinancialText(`Eliminar inversión ${inv.name}`, Boolean(state.settings.privacyMode))}
                       title="Eliminar inversión"
                     >
-                      ✕
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -597,10 +625,11 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                       <button
                         type="button"
                         onClick={() => onDeleteDebt(d.id)}
-                        className="text-[var(--finance-text-muted)] hover:text-rose-500 p-1 rounded-lg cursor-pointer transition-colors"
+                        className={`h-8 w-8 inline-flex items-center justify-center rounded-lg text-[var(--finance-text-muted)] hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer transition-colors ${CLEAN_FOCUS_RING}`}
+                        aria-label={maskFinancialText(`Eliminar deuda ${d.name}`, Boolean(state.settings.privacyMode))}
                         title="Eliminar deuda"
                       >
-                        ✕
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
                     </div>
                   </div>
@@ -626,9 +655,10 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsAddAccountOpen(false)}
-                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg"
+                aria-label="Cerrar"
+                className={`h-8 w-8 inline-flex items-center justify-center text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] rounded-lg cursor-pointer ${CLEAN_FOCUS_RING}`}
               >
-                ✕
+                <AppIcon name="x" className="h-4 w-4" />
               </button>
             </div>
             <form onSubmit={handleCreateAccount} className="space-y-3">
@@ -714,9 +744,10 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsAddDebtOpen(false)}
-                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg"
+                aria-label="Cerrar"
+                className={`h-8 w-8 inline-flex items-center justify-center text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] rounded-lg cursor-pointer ${CLEAN_FOCUS_RING}`}
               >
-                ✕
+                <AppIcon name="x" className="h-4 w-4" />
               </button>
             </div>
             <form onSubmit={handleCreateDebt} className="space-y-3">
@@ -798,9 +829,10 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsAddInvOpen(false)}
-                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg"
+                aria-label="Cerrar"
+                className={`h-8 w-8 inline-flex items-center justify-center text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] rounded-lg cursor-pointer ${CLEAN_FOCUS_RING}`}
               >
-                ✕
+                <AppIcon name="x" className="h-4 w-4" />
               </button>
             </div>
             <form onSubmit={handleCreateInv} className="space-y-3">

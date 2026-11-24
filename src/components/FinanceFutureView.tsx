@@ -29,6 +29,29 @@ interface FinanceFutureViewProps {
   onDeleteSubscription?: (id: string) => void;
 }
 
+const CLEAN_FOCUS_RING =
+  'outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
+
+/**
+ * Computes evenly spaced X-axis date ticks (always including start and end)
+ * so 30/60/90-day trajectory charts remain clean and legible on desktop and 389px mobile.
+ */
+export function computeProjectionXAxisTicks(dates: string[], maxTicks = 6): string[] {
+  if (dates.length <= maxTicks || maxTicks <= 2) {
+    return dates;
+  }
+  const result: string[] = [];
+  const lastIdx = dates.length - 1;
+  for (let i = 0; i < maxTicks; i++) {
+    const idx = Math.round((i * lastIdx) / (maxTicks - 1));
+    const date = dates[idx];
+    if (date && !result.includes(date)) {
+      result.push(date);
+    }
+  }
+  return result;
+}
+
 export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
   state,
   projection,
@@ -97,6 +120,11 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
     if (currencies.length <= 1 && activeCurrency === 'UYU') return projection;
     return cashFlowProjection(state, projHorizon, todayISO(), activeCurrency);
   }, [state, projHorizon, activeCurrency, currencies.length, projection]);
+
+  const xAxisTicks = useMemo(
+    () => computeProjectionXAxisTicks(activeProj.dailyTrajectory.map((pt) => pt.date), 6),
+    [activeProj.dailyTrajectory]
+  );
 
   const horizonEndDate = useMemo(() => {
     const today = todayISO();
@@ -181,11 +209,12 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                   <button
                     key={cur}
                     type="button"
+                    aria-pressed={activeCurrency === cur}
                     onClick={() => setSelectedCurrency(cur)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${CLEAN_FOCUS_RING} ${
                       activeCurrency === cur
-                        ? 'bg-[var(--finance-surface-raised)] text-[var(--finance-text-primary)] shadow-xs'
-                        : 'text-[var(--finance-text-muted)] hover:text-[var(--finance-text-primary)]'
+                        ? 'bg-[#4F46E5] text-white shadow-xs'
+                        : 'text-[var(--finance-text-secondary)] hover:text-[var(--finance-text-primary)]'
                     }`}
                   >
                     {cur}
@@ -194,19 +223,24 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
               </div>
             )}
 
-            <div className="flex items-center gap-1 p-1 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] shadow-2xs">
+            <div
+              role="group"
+              aria-label="Horizonte de proyección"
+              className="flex items-center gap-1 p-1 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] shadow-2xs"
+            >
               {([30, 60, 90] as const).map((h) => (
                 <button
                   key={h}
                   type="button"
+                  aria-pressed={projHorizon === h}
                   onClick={() => onSetProjHorizon(h)}
-                  className={`px-3 py-1 rounded-lg text-xs tabular-nums font-bold transition-all cursor-pointer ${
+                  className={`px-3 py-1 rounded-lg text-xs tabular-nums font-bold transition-all cursor-pointer ${CLEAN_FOCUS_RING} ${
                     projHorizon === h
-                      ? 'bg-[var(--finance-surface-raised)] text-[var(--finance-text-primary)] shadow-xs'
-                      : 'text-[var(--finance-text-muted)] hover:text-[var(--finance-text-primary)]'
+                      ? 'bg-[#4F46E5] text-white shadow-xs'
+                      : 'text-[var(--finance-text-secondary)] hover:text-[var(--finance-text-primary)]'
                   }`}
                 >
-                  {h} días {h === 30 && <span className="text-[10px] opacity-70">★</span>}
+                  {h} días
                 </button>
               ))}
             </div>
@@ -333,16 +367,18 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                   <button
                     type="button"
                     onClick={onOpenCommitmentModal}
-                    className="finance-control px-2.5 py-1.5 rounded-xl border text-xs font-bold text-[var(--finance-text-primary)] hover:border-[var(--finance-border-strong)] cursor-pointer min-h-[36px]"
+                    className={`finance-control px-2.5 py-1.5 rounded-xl border text-xs font-bold text-[var(--finance-text-primary)] hover:border-[var(--finance-border-strong)] inline-flex items-center gap-1 cursor-pointer min-h-[36px] ${CLEAN_FOCUS_RING}`}
                   >
-                    + Compromiso
+                    <AppIcon name="plus" className="h-3.5 w-3.5" />
+                    <span>Compromiso</span>
                   </button>
                   <button
                     type="button"
                     onClick={onOpenIncomeModal}
-                    className="finance-control px-2.5 py-1.5 rounded-xl border text-xs font-bold text-[var(--finance-text-primary)] hover:border-[var(--finance-border-strong)] cursor-pointer min-h-[36px]"
+                    className={`finance-control px-2.5 py-1.5 rounded-xl border text-xs font-bold text-[var(--finance-text-primary)] hover:border-[var(--finance-border-strong)] inline-flex items-center gap-1 cursor-pointer min-h-[36px] ${CLEAN_FOCUS_RING}`}
                   >
-                    + Ingreso
+                    <AppIcon name="plus" className="h-3.5 w-3.5" />
+                    <span>Ingreso</span>
                   </button>
                 </div>
               </div>
@@ -362,7 +398,10 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                   </defs>
                   <XAxis
                     dataKey="date"
-                    tick={{ fill: 'var(--finance-text-muted)', fontSize: 13 }}
+                    ticks={xAxisTicks}
+                    interval={0}
+                    padding={{ left: 8, right: 8 }}
+                    tick={{ fill: 'var(--finance-text-muted)', fontSize: 12 }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(val) => {
@@ -456,59 +495,69 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
         {/* Milestones Strip: Top Upcoming Events along Trajectory */}
         {activeProj.forecastItems.length > 0 && (
           <div className="pt-3 border-t border-[var(--finance-border)] space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-[var(--finance-text-muted)] flex items-center gap-1.5">
-                <span>▲ Hitos del horizonte ({projHorizon}d)</span>
+                <AppIcon name="calendarDays" className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+                <span>Hitos del horizonte ({projHorizon}d)</span>
               </span>
-              <span className="text-[10px] text-[var(--finance-text-muted)]">
+              <span className="text-[10px] text-[var(--finance-text-muted)] shrink-0">
                 {activeProj.forecastItems.length} eventos previstos
               </span>
             </div>
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-              {activeProj.forecastItems.slice(0, 8).map((item) => {
-                const merchant = identifyMerchant(item.label);
-                const isIncome = item.type === 'income';
-                return (
-                  <div
-                    key={item.id}
-                    className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[var(--finance-border)] bg-[var(--finance-surface-subtle)] text-xs"
-                  >
-                    <span className="tabular-nums text-[10px] font-bold text-[var(--finance-text-muted)]">
-                      {fmtDate(item.date)}
-                    </span>
-                    {merchant ? (
-                      <span
-                        className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold border"
-                        style={{
-                          backgroundColor: merchant.badgeBg,
-                          color: merchant.badgeColor,
-                          borderColor: merchant.badgeBorder,
-                        }}
-                      >
-                        <span>{merchant.icon}</span>
-                        <span className="truncate max-w-[70px]">{merchant.name}</span>
-                      </span>
-                    ) : (
-                      <span className="truncate max-w-[80px] font-medium text-[var(--finance-text-primary)]">
-                        <PrivateFinancialText>{item.label}</PrivateFinancialText>
-                      </span>
-                    )}
-                    {item.isFinancing && item.installmentNumber && (
-                      <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-                        {item.installmentNumber}/{item.totalInstallments}
-                      </span>
-                    )}
-                    <PrivacyAmount
-                      as="span"
-                      className={`tabular-nums font-bold text-[11px] ${
-                        isIncome ? 'text-emerald-500' : 'text-[var(--finance-text-primary)]'
-                      }`}
+            <div className="relative">
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 pr-8 no-scrollbar">
+                {activeProj.forecastItems.slice(0, 8).map((item) => {
+                  const merchant = identifyMerchant(item.label);
+                  const isIncome = item.type === 'income';
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-xl border border-[var(--finance-border)] bg-[var(--finance-surface-subtle)] text-xs"
                     >
-                      {isIncome ? '+' : '−'}{formatMoney(item.amount)}
-                    </PrivacyAmount>
-                  </div>
-                );
-              })}
+                      <span className="tabular-nums text-[10px] font-bold text-[var(--finance-text-muted)]">
+                        {fmtDate(item.date)}
+                      </span>
+                      {merchant ? (
+                        <span
+                          className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold border"
+                          style={{
+                            backgroundColor: merchant.badgeBg,
+                            color: merchant.badgeColor,
+                            borderColor: merchant.badgeBorder,
+                          }}
+                        >
+                          <span>{merchant.icon}</span>
+                          <span className="truncate max-w-[70px]">{merchant.name}</span>
+                        </span>
+                      ) : (
+                        <span className="truncate max-w-[80px] font-medium text-[var(--finance-text-primary)]">
+                          <PrivateFinancialText>{item.label}</PrivateFinancialText>
+                        </span>
+                      )}
+                      {item.isFinancing && item.installmentNumber && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                          {item.installmentNumber}/{item.totalInstallments}
+                        </span>
+                      )}
+                      <PrivacyAmount
+                        as="span"
+                        className={`tabular-nums font-bold text-[11px] ${
+                          isIncome ? 'text-emerald-500' : 'text-[var(--finance-text-primary)]'
+                        }`}
+                      >
+                        {isIncome ? '+' : '−'}{formatMoney(item.amount)}
+                      </PrivacyAmount>
+                    </div>
+                  );
+                })}
+              </div>
+              {activeProj.forecastItems.length > 2 && (
+                <div
+                  aria-hidden="true"
+                  data-milestones-fade="true"
+                  className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-[var(--finance-surface-raised)] via-[var(--finance-surface-raised)]/70 to-transparent"
+                />
+              )}
             </div>
           </div>
         )}
@@ -535,10 +584,10 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
               <button
                 type="button"
                 onClick={onOpenCommitmentModal}
-                className="finance-control px-2.5 py-1 text-xs font-bold rounded-xl border flex items-center gap-1 cursor-pointer transition-all hover:border-[var(--finance-border-strong)] min-h-[34px]"
+                className={`finance-control px-2.5 py-1 text-xs font-bold rounded-xl border flex items-center gap-1 cursor-pointer transition-all hover:border-[var(--finance-border-strong)] min-h-[34px] ${CLEAN_FOCUS_RING}`}
               >
-                <AppIcon name="plus" className="h-3 w-3" />
-                <span>+ Compromiso</span>
+                <AppIcon name="plus" className="h-3.5 w-3.5" />
+                <span>Compromiso</span>
               </button>
             </div>
 
@@ -598,7 +647,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                           <button
                             type="button"
                             onClick={() => onPayCommitment(com)}
-                            className="px-2 py-0.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer transition-colors shadow-2xs"
+                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold border border-indigo-500/30 bg-indigo-500/10 hover:bg-indigo-500/16 text-indigo-700 dark:border-indigo-400/25 dark:bg-indigo-500/12 dark:hover:bg-indigo-500/20 dark:text-indigo-300 cursor-pointer transition-colors ${CLEAN_FOCUS_RING}`}
                             title="Registrar un pago ya realizado"
                           >
                             Registrar pago
@@ -656,10 +705,10 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
               <button
                 type="button"
                 onClick={onOpenIncomeModal}
-                className="finance-control px-2.5 py-1 text-xs font-bold rounded-xl border flex items-center gap-1 cursor-pointer transition-all hover:border-[var(--finance-border-strong)] min-h-[34px]"
+                className={`finance-control px-2.5 py-1 text-xs font-bold rounded-xl border flex items-center gap-1 cursor-pointer transition-all hover:border-[var(--finance-border-strong)] min-h-[34px] ${CLEAN_FOCUS_RING}`}
               >
                 <AppIcon name="plus" className="h-3.5 w-3.5" />
-                <span>+ Ingreso</span>
+                <span>Ingreso</span>
               </button>
             </div>
 
@@ -769,10 +818,10 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
             <button
               type="button"
               onClick={() => setIsAddSubOpen(true)}
-              className="finance-control px-2.5 py-1 text-xs font-bold rounded-xl border flex items-center gap-1 cursor-pointer transition-all hover:border-[var(--finance-border-strong)] min-h-[34px]"
+              className={`finance-control px-2.5 py-1 text-xs font-bold rounded-xl border flex items-center gap-1 cursor-pointer transition-all hover:border-[var(--finance-border-strong)] min-h-[34px] ${CLEAN_FOCUS_RING}`}
             >
-              <AppIcon name="plus" className="h-3 w-3" />
-              <span>+ Suscripción</span>
+              <AppIcon name="plus" className="h-3.5 w-3.5" />
+              <span>Suscripción</span>
             </button>
           </div>
 
@@ -832,10 +881,12 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
           <div className="border-t border-[var(--finance-border)] pt-4">
             <button
               type="button"
+              aria-expanded={showScheduleDetails}
+              aria-controls="finance-future-schedule"
               onClick={() => setShowScheduleDetails(!showScheduleDetails)}
-              className="w-full flex items-center justify-between text-left cursor-pointer py-1"
+              className={`w-full flex items-center justify-between gap-3 text-left cursor-pointer py-1.5 px-1 rounded-xl transition-colors ${CLEAN_FOCUS_RING}`}
             >
-              <div>
+              <div className="min-w-0">
                 <h3 className="text-xs font-extrabold text-[var(--finance-text-primary)]">
                   Pagos y cobros por fecha ({projHorizon} días)
                 </h3>
@@ -843,13 +894,17 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                   {activeProj.forecastItems.length} eventos de cobro y pago proyectados día por día
                 </p>
               </div>
-              <span className="text-xs tabular-nums font-bold text-[var(--finance-text-muted)]">
-                {showScheduleDetails ? 'Ocultar cronograma ▴' : 'Ver cronograma día por día ▾'}
+              <span className="inline-flex items-center gap-1.5 text-xs tabular-nums font-semibold text-[var(--finance-text-muted)] shrink-0">
+                <span className="hidden sm:inline">{showScheduleDetails ? 'Ocultar cronograma' : 'Ver cronograma día por día'}</span>
+                <AppIcon
+                  name="chevronDown"
+                  className={`h-4 w-4 shrink-0 transition-transform duration-150 ${showScheduleDetails ? 'rotate-180' : ''}`}
+                />
               </span>
             </button>
 
             {showScheduleDetails && (
-              <div className="mt-3 pt-3 border-t border-[var(--finance-border)] overflow-x-auto animate-in fade-in">
+              <div id="finance-future-schedule" className="mt-3 pt-3 border-t border-[var(--finance-border)] overflow-x-auto animate-in fade-in">
                 <table className="w-full text-left text-xs">
                   <thead>
                     <tr className="border-b border-[var(--finance-border)] text-[10px] font-black uppercase text-[var(--finance-text-muted)]">
@@ -918,9 +973,10 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsAddSubOpen(false)}
-                className="text-[var(--finance-text-muted)] hover:text-[var(--finance-text-primary)] p-1 rounded-lg cursor-pointer"
+                aria-label="Cerrar"
+                className={`h-8 w-8 inline-flex items-center justify-center text-[var(--finance-text-muted)] hover:text-[var(--finance-text-primary)] hover:bg-[var(--finance-surface-subtle)] rounded-lg cursor-pointer ${CLEAN_FOCUS_RING}`}
               >
-                ✕
+                <AppIcon name="x" className="h-4 w-4" />
               </button>
             </div>
             <form onSubmit={handleCreateSub} className="space-y-3">

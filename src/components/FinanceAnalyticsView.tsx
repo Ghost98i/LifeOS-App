@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { TrendingDown, TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, Legend } from 'recharts';
 import { LifeOSState } from '../types';
 import { formatMoney, todayISO, diffMoney, sumMoney, sameYear } from '../lib/storage';
@@ -49,6 +50,9 @@ const PALETTE = [
   '#06B6D4', '#F97316', '#6366F1', '#14B8A6', '#84CC16',
 ];
 
+const CLEAN_FOCUS_RING =
+  'outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
+
 function shiftMonth(monthIso: string, delta: number): string {
   const [y, m] = monthIso.split('-').map((v) => parseInt(v, 10));
   const d = new Date(Date.UTC(y, m - 1 + delta, 1));
@@ -98,6 +102,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
   // Toggles for Progressive Disclosure
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [showCategoryChart, setShowCategoryChart] = useState(false);
+  const [showMoreDetails, setShowMoreDetails] = useState(false);
   const [showAllTimeCategories, setShowAllTimeCategories] = useState(false);
 
   // Multi-currency detection
@@ -152,6 +157,13 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
 
   // Currency-scoped metrics
   const scopedIngreso = useMemo(() => calcIncomeMonth(state, monthScope.offset, activeCurrency), [state, monthScope, activeCurrency]);
+  const scopedIncomeCount = useMemo(() => {
+    return (state.finance?.transactions || []).filter((t) => {
+      if (t.type !== 'ingreso' || t.origin === 'adjustment') return false;
+      if ((t.date || '').slice(0, 7) !== selectedMonth) return false;
+      return resolveTransactionCurrency(t, state.finance?.accounts || []) === activeCurrency;
+    }).length;
+  }, [state, selectedMonth, activeCurrency]);
   const currentBalanceMes = diffMoney(scopedIngreso, effectiveSpent);
   const scopedFijoMes = useMemo(() => calcFixedSpentMonth(state, monthScope.offset, activeCurrency), [state, monthScope, activeCurrency]);
   const currentGastoVariable = Math.max(0, diffMoney(effectiveSpent, scopedFijoMes));
@@ -221,8 +233,10 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
     : currentCmp.dir === 'flat'
     ? 'similar al mes anterior'
     : currentCmp.dir === 'up'
-    ? `▲ ${currentCmp.pct.toFixed(0)}% más que el mes anterior`
-    : `▼ ${currentCmp.pct.toFixed(0)}% menos que el mes anterior`;
+    ? `${currentCmp.pct.toFixed(0)}% más que el mes anterior`
+    : `${currentCmp.pct.toFixed(0)}% menos que el mes anterior`;
+  const primaryOutflow = analyticsMode === 'cash_flow' ? cashOutflow.totalOutflow : acquisitions.totalAcquired;
+  const isEmptyBudgetState = !report.hasBudget && configuredCategories.length === 0 && !showAllCategories;
 
   // Inline editing handlers
   const startEditCategory = (categoryId: string, currentBudget: number | null) => {
@@ -277,14 +291,15 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
             </h2>
 
             {/* Month Navigator */}
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] text-xs font-semibold">
+            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-lg bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] text-xs font-semibold">
               <button
                 type="button"
                 onClick={() => setSelectedMonth((prev) => shiftMonth(prev, -1))}
-                className="hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer px-1"
+                className={`h-6 w-6 inline-flex items-center justify-center rounded hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer ${CLEAN_FOCUS_RING}`}
+                aria-label="Mes anterior"
                 title="Mes anterior"
               >
-                ‹
+                <AppIcon name="chevronLeft" className="h-3.5 w-3.5" />
               </button>
               <span className="font-bold text-[11px] min-w-[85px] text-center tabular-nums">
                 {formatMonthTitle(selectedMonth)}
@@ -292,10 +307,11 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedMonth((prev) => shiftMonth(prev, 1))}
-                className="hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer px-1"
+                className={`h-6 w-6 inline-flex items-center justify-center rounded hover:text-indigo-600 dark:hover:text-indigo-400 cursor-pointer ${CLEAN_FOCUS_RING}`}
+                aria-label="Mes siguiente"
                 title="Mes siguiente"
               >
-                ›
+                <AppIcon name="chevronRight" className="h-3.5 w-3.5" />
               </button>
             </div>
 
@@ -303,7 +319,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setSelectedMonth(currentMonthIso)}
-                className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                className={`text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer ${CLEAN_FOCUS_RING}`}
               >
                 Ir al mes actual
               </button>
@@ -317,9 +333,9 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                     key={c}
                     type="button"
                     onClick={() => setSelectedCurrency(c)}
-                    className={`px-1.5 py-0.5 rounded cursor-pointer ${
+                    className={`px-1.5 py-0.5 rounded cursor-pointer transition-colors ${CLEAN_FOCUS_RING} ${
                       activeCurrency === c
-                        ? 'bg-indigo-600 text-white'
+                        ? 'bg-[#4F46E5] text-white'
                         : 'text-[var(--finance-text-secondary)] hover:text-[var(--finance-text-primary)]'
                     }`}
                   >
@@ -334,9 +350,9 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setAnalyticsMode('cash_flow')}
-                className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${CLEAN_FOCUS_RING} ${
                   analyticsMode === 'cash_flow'
-                    ? 'bg-indigo-600 text-white shadow-2xs'
+                    ? 'bg-[#4F46E5] text-white shadow-2xs'
                     : 'text-[var(--finance-text-secondary)] hover:text-[var(--finance-text-primary)]'
                 }`}
                 title="Flujo de caja: salidas efectivas de dinero de tus cuentas"
@@ -346,9 +362,9 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setAnalyticsMode('acquisitions')}
-                className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${
+                className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${CLEAN_FOCUS_RING} ${
                   analyticsMode === 'acquisitions'
-                    ? 'bg-indigo-600 text-white shadow-2xs'
+                    ? 'bg-[#4F46E5] text-white shadow-2xs'
                     : 'text-[var(--finance-text-secondary)] hover:text-[var(--finance-text-primary)]'
                 }`}
                 title="Compras al contado y financiadas del período"
@@ -398,19 +414,32 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                 )}
               </div>
               <div className="flex items-baseline gap-3 flex-wrap mt-0.5">
-                <PrivacyAmount as="span" className="font-black tabular-nums text-3xl sm:text-4xl text-rose-500 tracking-tight">
-                  −{formatCurr(analyticsMode === 'cash_flow' ? cashOutflow.totalOutflow : acquisitions.totalAcquired)}
+                <PrivacyAmount
+                  as="span"
+                  className={`font-black tabular-nums text-3xl sm:text-4xl tracking-tight ${
+                    primaryOutflow > 0
+                      ? 'text-rose-600 dark:text-rose-400'
+                      : 'text-[var(--finance-text-primary)]'
+                  }`}
+                >
+                  {primaryOutflow > 0 ? `−${formatCurr(primaryOutflow)}` : formatCurr(0)}
                 </PrivacyAmount>
-                <span className={`text-xs font-bold ${
-                  currentCmp.pct === null
+                <span className={`inline-flex items-center gap-1 text-xs font-bold ${
+                  currentCmp.pct === null || currentCmp.current === 0
                     ? 'text-[var(--finance-text-muted)]'
                     : currentCmp.dir === 'up'
-                    ? 'text-rose-500'
+                    ? 'text-rose-600 dark:text-rose-400'
                     : currentCmp.dir === 'down'
-                    ? 'text-emerald-500'
+                    ? 'text-emerald-600 dark:text-emerald-400'
                     : 'text-[var(--finance-text-muted)]'
                 }`}>
-                  {comparisonText}
+                  {currentCmp.pct !== null && currentCmp.current > 0 && currentCmp.dir === 'up' && (
+                    <TrendingUp className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  )}
+                  {currentCmp.pct !== null && currentCmp.current > 0 && currentCmp.dir === 'down' && (
+                    <TrendingDown className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  )}
+                  <span>{comparisonText}</span>
                 </span>
               </div>
 
@@ -490,25 +519,44 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
               <PrivacyAmount
                 as="div"
                 className={`font-black tabular-nums text-2xl sm:text-3xl tracking-tight mt-0.5 ${
-                  currentBalanceMes < 0 ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'
+                  currentBalanceMes < 0
+                    ? 'text-rose-600 dark:text-rose-400'
+                    : currentBalanceMes > 0
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-[var(--finance-text-primary)]'
                 }`}
               >
-                {currentBalanceMes >= 0 ? `+${formatCurr(currentBalanceMes)}` : formatCurr(currentBalanceMes)}
+                {currentBalanceMes > 0
+                  ? `+${formatCurr(currentBalanceMes)}`
+                  : currentBalanceMes < 0
+                  ? formatCurr(currentBalanceMes)
+                  : formatCurr(0)}
               </PrivacyAmount>
             </div>
 
             {/* Ingresos del mes (Métrica secundaria compacta) */}
-            <div className="pt-2 border-t border-[var(--finance-border)] flex items-center justify-between text-xs">
+            <div className="pt-2 border-t border-[var(--finance-border)] flex items-center justify-between gap-2 text-xs">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--finance-text-muted)] block">
                   Ingresos registrados
                 </span>
                 <span className="text-[11px] text-[var(--finance-text-muted)]">
-                  entradas registradas
+                  {scopedIncomeCount === 0
+                    ? 'Sin ingresos en el mes'
+                    : scopedIncomeCount === 1
+                    ? '1 ingreso en el mes'
+                    : `${scopedIncomeCount} ingresos en el mes`}
                 </span>
               </div>
-              <PrivacyAmount as="span" className="font-bold tabular-nums text-base text-emerald-600 dark:text-emerald-400">
-                +{formatCurr(scopedIngreso)}
+              <PrivacyAmount
+                as="span"
+                className={`font-bold tabular-nums text-base ${
+                  scopedIngreso > 0
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-[var(--finance-text-primary)]'
+                }`}
+              >
+                {scopedIngreso > 0 ? `+${formatCurr(scopedIngreso)}` : formatCurr(0)}
               </PrivacyAmount>
             </div>
           </div>
@@ -533,8 +581,8 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
             </h3>
           </div>
 
-          {/* Secondary Controls & View Toggles */}
-          <div className="flex items-center gap-2 flex-wrap text-xs">
+          {/* Secondary Controls & View Toggles (Serene hierarchy in empty state) */}
+          <div className="flex items-center gap-2.5 flex-wrap text-xs">
             {editingGlobal ? (
               <div className="flex items-center gap-1">
                 <PrivacyInput
@@ -546,22 +594,23 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                     if (e.key === 'Enter') saveEditGlobal();
                     if (e.key === 'Escape') setEditingGlobal(false);
                   }}
-                  className="finance-control w-24 px-2 py-1 rounded-lg border text-xs outline-none"
+                  className="finance-control finance-amount-input w-24 px-2 py-1 rounded-lg border text-xs outline-none"
                   placeholder="Límite"
                 />
                 <button
                   type="button"
                   onClick={saveEditGlobal}
-                  className="px-2 py-1 rounded-lg bg-indigo-600 text-white font-bold text-[10px] cursor-pointer"
+                  className={`px-2.5 py-1 rounded-lg bg-[#4F46E5] hover:bg-[#4338CA] text-white font-bold text-xs cursor-pointer ${CLEAN_FOCUS_RING}`}
                 >
                   Guardar
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditingGlobal(false)}
-                  className="px-1.5 py-1 text-xs text-zinc-400 hover:text-zinc-600 cursor-pointer"
+                  aria-label="Cancelar límite global"
+                  className={`h-7 w-7 inline-flex items-center justify-center rounded-lg text-[var(--finance-text-muted)] hover:text-[var(--finance-text-primary)] cursor-pointer ${CLEAN_FOCUS_RING}`}
                 >
-                  ✕
+                  <AppIcon name="x" className="h-3.5 w-3.5" />
                 </button>
               </div>
             ) : onSetGlobalBudget ? (
@@ -571,9 +620,13 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                   setTempGlobalBudget(report.globalLimit ? String(report.globalLimit) : '');
                   setEditingGlobal(true);
                 }}
-                className="finance-control px-2.5 py-1 text-xs font-semibold rounded-xl border cursor-pointer hover:border-[var(--finance-border-strong)] min-h-[34px]"
+                className={
+                  isEmptyBudgetState
+                    ? `text-xs font-semibold text-[var(--finance-text-secondary)] hover:text-[var(--finance-text-primary)] hover:underline cursor-pointer px-1 min-h-[34px] inline-flex items-center ${CLEAN_FOCUS_RING}`
+                    : `finance-control px-2.5 py-1 text-xs font-semibold rounded-xl border cursor-pointer hover:border-[var(--finance-border-strong)] min-h-[34px] ${CLEAN_FOCUS_RING}`
+                }
               >
-                {report.globalLimit ? 'Modificar límite global' : '+ Fijar límite global'}
+                {report.globalLimit ? 'Modificar límite global' : 'Límite global'}
               </button>
             ) : null}
 
@@ -581,25 +634,31 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
               <button
                 type="button"
                 onClick={onOpenCategoryManager}
-                className="finance-control px-2.5 py-1 text-xs font-semibold rounded-xl border cursor-pointer hover:border-[var(--finance-border-strong)] min-h-[34px]"
+                className={
+                  isEmptyBudgetState
+                    ? `text-xs font-semibold text-[var(--finance-text-secondary)] hover:text-[var(--finance-text-primary)] hover:underline cursor-pointer px-1 min-h-[34px] inline-flex items-center ${CLEAN_FOCUS_RING}`
+                    : `finance-control px-2.5 py-1 text-xs font-semibold rounded-xl border cursor-pointer hover:border-[var(--finance-border-strong)] min-h-[34px] ${CLEAN_FOCUS_RING}`
+                }
               >
                 Categorías
               </button>
             )}
 
-            <button
-              type="button"
-              onClick={() => setShowAllCategories((prev) => !prev)}
-              className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer px-1 min-h-[34px] flex items-center"
-            >
-              {showAllCategories ? 'Solo con límite' : 'Ver todas'}
-            </button>
+            {!isEmptyBudgetState && (
+              <button
+                type="button"
+                onClick={() => setShowAllCategories((prev) => !prev)}
+                className={`text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer px-1 min-h-[34px] flex items-center ${CLEAN_FOCUS_RING}`}
+              >
+                {showAllCategories ? 'Solo con límite' : 'Ver todas'}
+              </button>
+            )}
 
             {distinctMonthCategoriesCount >= 3 && (
               <button
                 type="button"
                 onClick={() => setShowCategoryChart((prev) => !prev)}
-                className="text-xs font-bold text-[var(--finance-text-secondary)] hover:text-[var(--finance-text-primary)] hover:underline cursor-pointer px-1 min-h-[34px] flex items-center"
+                className={`text-xs font-bold text-[var(--finance-text-secondary)] hover:text-[var(--finance-text-primary)] hover:underline cursor-pointer px-1 min-h-[34px] flex items-center ${CLEAN_FOCUS_RING}`}
               >
                 {showCategoryChart ? 'Ocultar gráfico' : 'Ver distribución circular'}
               </button>
@@ -608,15 +667,18 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
         </div>
 
         {/* Empty state if no budgets configured */}
-        {!report.hasBudget && configuredCategories.length === 0 && !showAllCategories ? (
-          <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+        {isEmptyBudgetState ? (
+          <div
+            data-budget-empty-state="true"
+            className="flex flex-wrap items-center justify-between gap-3 text-xs"
+          >
             <span className="text-[var(--finance-text-muted)]">
               Todavía no definiste límites de gasto para {formatMonthTitle(selectedMonth)}.
             </span>
             <button
               type="button"
               onClick={() => setShowAllCategories(true)}
-              className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold cursor-pointer transition-colors shadow-2xs shrink-0"
+              className={`px-3.5 py-2 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white font-semibold cursor-pointer transition-colors shadow-2xs shrink-0 ${CLEAN_FOCUS_RING}`}
             >
               Fijar límites de categorías
             </button>
@@ -830,153 +892,188 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
         )}
       </section>
 
-      {hasFinancialDetails && <details className="finance-surface rounded-2xl p-4 sm:p-5 space-y-4">
-        <summary className="min-h-11 cursor-pointer text-base font-bold text-[var(--finance-text-primary)]">Más detalles del mes <span className="ml-2 text-sm font-normal text-[var(--finance-text-muted)]">Gastos fijos, patrimonio e histórico</span></summary>
-        {/* Fila A: Estructura de Rigidez del Gasto (Fijo vs Variable) */}
-        <div className="p-3.5 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] space-y-2 text-xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div className="flex items-center gap-4">
-              <div>
-                <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
-                  Gasto Fijo
-                </span>
-                <PrivacyAmount as="span" className="font-bold tabular-nums text-sm text-[var(--finance-text-primary)]">
-                  {formatCurr(scopedFijoMes)}
-                </PrivacyAmount>
-                <span className="text-[10px] text-[var(--finance-text-muted)] block">
-                  {effectiveSpent > 0 ? `${Math.round((scopedFijoMes / effectiveSpent) * 100)}%` : '0%'} del gasto
-                </span>
-              </div>
-
-              <div className="w-px h-6 bg-[var(--finance-border)]" />
-
-              <div>
-                <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
-                  Gasto Variable
-                </span>
-                <PrivacyAmount as="span" className="font-bold tabular-nums text-sm text-[var(--finance-text-primary)]">
-                  {formatCurr(currentGastoVariable)}
-                </PrivacyAmount>
-                <span className="text-[10px] text-[var(--finance-text-muted)] block">
-                  {effectiveSpent > 0 ? `${Math.round((currentGastoVariable / effectiveSpent) * 100)}%` : '0%'} del gasto
-                </span>
-              </div>
-            </div>
-
-            <div className="text-left sm:text-right">
-              <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
-                Parte fija del gasto
-              </span>
-              <span className="font-bold tabular-nums text-sm text-[var(--finance-text-primary)]">
-                {effectiveSpent > 0 ? `${Math.round((scopedFijoMes / effectiveSpent) * 100)}%` : '0%'} fijo
-              </span>
-            </div>
-          </div>
-
-          {/* Compact Ratio Bar */}
-          {effectiveSpent > 0 && (
-            <div className="h-1.5 w-full rounded-full bg-[var(--finance-border)] overflow-hidden flex">
-              <div
-                className="h-full bg-indigo-600 transition-all"
-                style={{ width: `${Math.min(Math.round((scopedFijoMes / effectiveSpent) * 100), 100)}%` }}
-                title="Gasto fijo"
-              />
-              <div
-                className="h-full bg-emerald-500 transition-all"
-                style={{ width: `${Math.min(Math.round((currentGastoVariable / effectiveSpent) * 100), 100)}%` }}
-                title="Gasto variable"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Fila B: Indicadores Secundarios en Tira Tipográfica Abierta (Sin Cards Equivalentes) */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-1 text-xs border-t border-[var(--finance-border)]">
-          <div>
-            <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
-              Gastos del año
-            </span>
-            <PrivacyAmount as="span" className="font-bold tabular-nums text-base text-[var(--finance-text-primary)] block mt-0.5">
-              {formatCurr(scopedTotalGastadoAnio)}
-            </PrivacyAmount>
-            <span className="text-[10px] text-[var(--finance-text-muted)] block">año en curso</span>
-          </div>
-
-          {gananciaReventa !== null && gananciaReventaMoneda === activeCurrency && gananciaReventa > 0 ? (
-            <div>
-              <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
-                Ganancia Reventa
-              </span>
-              <PrivacyAmount as="span" className="font-bold tabular-nums text-base text-emerald-600 dark:text-emerald-400 block mt-0.5">
-                +{formatCurr(gananciaReventa)}
-              </PrivacyAmount>
-              <span className="text-[10px] text-[var(--finance-text-muted)] block">margen neto acumulado</span>
-            </div>
-          ) : (
-            <div>
-              <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
-                Ingresos destinados a gastos
-              </span>
-              <span className="font-bold tabular-nums text-base text-[var(--finance-text-primary)] block mt-0.5">
-                {scopedIngreso > 0 ? `${Math.round((effectiveSpent / scopedIngreso) * 100)}%` : '0%'}
-              </span>
-              <span className="text-[10px] text-[var(--finance-text-muted)] block">gasto vs ingresos</span>
-            </div>
-          )}
-
-          <div className="col-span-2 sm:col-span-1">
-            <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
-              Patrimonio neto
-            </span>
-            <PrivacyAmount as="span" className="font-bold tabular-nums text-base text-[var(--finance-text-primary)] block mt-0.5">
-              {formatCurr(activeNetWorth)}
-            </PrivacyAmount>
-            <span className="text-[10px] text-[var(--finance-text-muted)] block">
-              {activeCurrency === 'USD' ? 'cuentas − deudas en USD' : 'activos − pasivos acumulados'}
-            </span>
-          </div>
-        </div>
-
-        {/* Fila C: Histórico Acumulado por Categoría (Progressive Disclosure) */}
-        <div className="pt-2 border-t border-[var(--finance-border)]">
+      {hasFinancialDetails && (
+        <section className="finance-surface rounded-2xl p-4 sm:p-5 space-y-4">
           <button
             type="button"
-            onClick={() => setShowAllTimeCategories(!showAllTimeCategories)}
-            className="w-full flex items-center justify-between text-left cursor-pointer py-1"
+            aria-expanded={showMoreDetails}
+            aria-controls="finance-analytics-more-details"
+            onClick={() => setShowMoreDetails((prev) => !prev)}
+            className={`w-full min-h-11 flex items-center justify-between gap-3 text-left cursor-pointer rounded-xl px-1 transition-colors ${CLEAN_FOCUS_RING}`}
           >
-            <div>
-              <h4 className="text-xs font-bold text-[var(--finance-text-primary)]">
-                Histórico acumulado por categoría
-              </h4>
+            <div className="min-w-0 flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="text-base font-bold text-[var(--finance-text-primary)]">
+                Más detalles del mes
+              </span>
+              <span className="text-sm font-normal text-[var(--finance-text-muted)]">
+                Gastos fijos, patrimonio e histórico
+              </span>
             </div>
-            <span className="text-xs text-[var(--finance-text-muted)] font-bold">
-              {showAllTimeCategories ? 'Ocultar ▴' : 'Ver detalle ▾'}
-            </span>
+            <AppIcon
+              name="chevronDown"
+              className={`h-4 w-4 shrink-0 text-[var(--finance-text-muted)] transition-transform duration-150 ${
+                showMoreDetails ? 'rotate-180' : ''
+              }`}
+            />
           </button>
 
-          {showAllTimeCategories && (
-            <div className="mt-3 pt-3 border-t border-[var(--finance-border)] space-y-2 animate-in fade-in">
-              {allTimeCategories.length === 0 ? (
-                <p className="text-xs text-[var(--finance-text-muted)] py-1">Sin gastos históricos.</p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1 divide-y sm:divide-y-0">
-                  {allTimeCategories.map((c) => (
-                    <div
-                      key={c.name}
-                      className="py-1.5 px-2 rounded-lg flex items-center justify-between text-xs hover:bg-[var(--finance-surface-hover)] transition-colors"
-                    >
-                      <span className="font-medium text-[var(--finance-text-primary)] truncate"><PrivateFinancialText>{c.name}</PrivateFinancialText></span>
-                      <PrivacyAmount as="span" className="font-bold tabular-nums text-[var(--finance-text-secondary)]">
-                        {formatCurr(c.value)}
+          {showMoreDetails && (
+            <div id="finance-analytics-more-details" className="space-y-4 pt-1">
+              {/* Fila A: Estructura de Rigidez del Gasto (Fijo vs Variable) */}
+              <div className="p-3.5 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] space-y-2 text-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
+                        Gasto Fijo
+                      </span>
+                      <PrivacyAmount as="span" className="font-bold tabular-nums text-sm text-[var(--finance-text-primary)]">
+                        {formatCurr(scopedFijoMes)}
                       </PrivacyAmount>
+                      <span className="text-[10px] text-[var(--finance-text-muted)] block">
+                        {effectiveSpent > 0 ? `${Math.round((scopedFijoMes / effectiveSpent) * 100)}%` : '0%'} del gasto
+                      </span>
                     </div>
-                  ))}
+
+                    <div className="w-px h-6 bg-[var(--finance-border)]" />
+
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
+                        Gasto Variable
+                      </span>
+                      <PrivacyAmount as="span" className="font-bold tabular-nums text-sm text-[var(--finance-text-primary)]">
+                        {formatCurr(currentGastoVariable)}
+                      </PrivacyAmount>
+                      <span className="text-[10px] text-[var(--finance-text-muted)] block">
+                        {effectiveSpent > 0 ? `${Math.round((currentGastoVariable / effectiveSpent) * 100)}%` : '0%'} del gasto
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-left sm:text-right">
+                    <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
+                      Parte fija del gasto
+                    </span>
+                    <span className="font-bold tabular-nums text-sm text-[var(--finance-text-primary)]">
+                      {effectiveSpent > 0 ? `${Math.round((scopedFijoMes / effectiveSpent) * 100)}%` : '0%'} fijo
+                    </span>
+                  </div>
                 </div>
-              )}
+
+                {/* Compact Ratio Bar */}
+                {effectiveSpent > 0 && (
+                  <div className="h-1.5 w-full rounded-full bg-[var(--finance-border)] overflow-hidden flex">
+                    <div
+                      className="h-full bg-[#4F46E5] transition-all"
+                      style={{ width: `${Math.min(Math.round((scopedFijoMes / effectiveSpent) * 100), 100)}%` }}
+                      title="Gasto fijo"
+                    />
+                    <div
+                      className="h-full bg-emerald-500 transition-all"
+                      style={{ width: `${Math.min(Math.round((currentGastoVariable / effectiveSpent) * 100), 100)}%` }}
+                      title="Gasto variable"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Fila B: Indicadores Secundarios en Tira Tipográfica Abierta */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 pt-1 text-xs border-t border-[var(--finance-border)]">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
+                    Gastos del año
+                  </span>
+                  <PrivacyAmount as="span" className="font-bold tabular-nums text-base text-[var(--finance-text-primary)] block mt-0.5">
+                    {formatCurr(scopedTotalGastadoAnio)}
+                  </PrivacyAmount>
+                  <span className="text-[10px] text-[var(--finance-text-muted)] block">año en curso</span>
+                </div>
+
+                {gananciaReventa !== null && gananciaReventaMoneda === activeCurrency && gananciaReventa > 0 ? (
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
+                      Ganancia Reventa
+                    </span>
+                    <PrivacyAmount as="span" className="font-bold tabular-nums text-base text-emerald-600 dark:text-emerald-400 block mt-0.5">
+                      +{formatCurr(gananciaReventa)}
+                    </PrivacyAmount>
+                    <span className="text-[10px] text-[var(--finance-text-muted)] block">margen neto acumulado</span>
+                  </div>
+                ) : (
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
+                      Ingresos destinados a gastos
+                    </span>
+                    <span className="font-bold tabular-nums text-base text-[var(--finance-text-primary)] block mt-0.5">
+                      {scopedIngreso > 0 ? `${Math.round((effectiveSpent / scopedIngreso) * 100)}%` : '0%'}
+                    </span>
+                    <span className="text-[10px] text-[var(--finance-text-muted)] block">gasto vs ingresos</span>
+                  </div>
+                )}
+
+                <div className="col-span-2 sm:col-span-1">
+                  <span className="text-[10px] uppercase font-bold text-[var(--finance-text-muted)] block">
+                    Patrimonio neto
+                  </span>
+                  <PrivacyAmount as="span" className="font-bold tabular-nums text-base text-[var(--finance-text-primary)] block mt-0.5">
+                    {formatCurr(activeNetWorth)}
+                  </PrivacyAmount>
+                  <span className="text-[10px] text-[var(--finance-text-muted)] block">
+                    {activeCurrency === 'USD' ? 'cuentas − deudas en USD' : 'activos − pasivos acumulados'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Fila C: Histórico Acumulado por Categoría (Progressive Disclosure) */}
+              <div className="pt-2 border-t border-[var(--finance-border)]">
+                <button
+                  type="button"
+                  aria-expanded={showAllTimeCategories}
+                  onClick={() => setShowAllTimeCategories(!showAllTimeCategories)}
+                  className={`w-full flex items-center justify-between text-left cursor-pointer py-1.5 rounded-lg ${CLEAN_FOCUS_RING}`}
+                >
+                  <div>
+                    <h4 className="text-xs font-bold text-[var(--finance-text-primary)]">
+                      Histórico acumulado por categoría
+                    </h4>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-xs text-[var(--finance-text-muted)] font-semibold">
+                    <span>{showAllTimeCategories ? 'Ocultar' : 'Ver detalle'}</span>
+                    <AppIcon
+                      name="chevronDown"
+                      className={`h-3.5 w-3.5 shrink-0 transition-transform duration-150 ${
+                        showAllTimeCategories ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </span>
+                </button>
+
+                {showAllTimeCategories && (
+                  <div className="mt-3 pt-3 border-t border-[var(--finance-border)] space-y-2 animate-in fade-in">
+                    {allTimeCategories.length === 0 ? (
+                      <p className="text-xs text-[var(--finance-text-muted)] py-1">Sin gastos históricos.</p>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1 divide-y sm:divide-y-0">
+                        {allTimeCategories.map((c) => (
+                          <div
+                            key={c.name}
+                            className="py-1.5 px-2 rounded-lg flex items-center justify-between text-xs hover:bg-[var(--finance-surface-hover)] transition-colors"
+                          >
+                            <span className="font-medium text-[var(--finance-text-primary)] truncate"><PrivateFinancialText>{c.name}</PrivateFinancialText></span>
+                            <PrivacyAmount as="span" className="font-bold tabular-nums text-[var(--finance-text-secondary)]">
+                              {formatCurr(c.value)}
+                            </PrivacyAmount>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
-        </div>
-      </details>}
+        </section>
+      )}
     </div>
   );
 };
