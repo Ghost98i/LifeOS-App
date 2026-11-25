@@ -662,7 +662,7 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
   if (isModuleEnabled(state, 'ia')) {
     (state.ideas || []).forEach((item) =>
       consider(
-        { id: `idea-${item.id}`, icon: '💡', iconName: 'sparkles', title: item.text, subtitle: 'Idea', view: 'ia', category: 'other' },
+        { id: `idea-${item.id}`, icon: '💡', iconName: 'ai', title: item.text, subtitle: 'Idea', view: 'ia', category: 'other' },
         ['idea']
       )
     );

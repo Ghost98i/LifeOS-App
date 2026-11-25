@@ -59,7 +59,7 @@ const VIEW_METADATA: { view: ViewType; label: string; desc: string; icon: AppIco
   { view: 'estudios', label: 'Estudios', desc: 'Materias, exámenes, pomodoro y horas', icon: 'graduation', keywords: ['estudio', 'facultad', 'materias', 'examenes', 'pomodoro'] },
   { view: 'reventa', label: 'Mi negocio', desc: 'Compraventa, inventario y ganancias', icon: 'store', keywords: ['reventa', 'ventas', 'inventario', 'productos', 'negocio'] },
   { view: 'notas', label: 'Notas & Captura', desc: 'Post-its, listas de compras y enlaces', icon: 'note', keywords: ['notas', 'postits', 'compras', 'links', 'enlaces', 'nueva nota'], shortcut: 'G N' },
-  { view: 'ia', label: 'IA & Proyectos', desc: 'Asistente personal, ideas y proyectos', icon: 'sparkles', keywords: ['ia', 'ai', 'ideas', 'proyectos', 'asistente'] },
+  { view: 'ia', label: 'IA & Proyectos', desc: 'Asistente personal, ideas y proyectos', icon: 'ai', keywords: ['ia', 'ai', 'ideas', 'proyectos', 'asistente'] },
   { view: 'config', label: 'Configuración', desc: 'Copias de seguridad, sincronización y ajustes', icon: 'settings', keywords: ['config', 'ajustes', 'backup', 'nube', 'perfil'] },
   { view: 'checkout', label: 'Cerrar Día (Checkout)', desc: 'Revisión nocturna y balance de la jornada', icon: 'moon', keywords: ['checkout', 'cerrar', 'noche', 'balance', 'dia'] },
 ];

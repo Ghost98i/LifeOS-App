@@ -6,6 +6,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { defaultState } from './storage';
 import {
+  AI_CONTEXT_DETAIL_LEVELS,
   AI_CONTEXT_TIME_WINDOWS,
   AI_GOALS,
   buildAIContextPrompt,
@@ -14,6 +15,8 @@ import {
   getGoalDataIndicator,
   getVisibleContextModules,
 } from './aiContextBuilder';
+import { AppIcon } from '../components/AppIcon';
+import { Sidebar } from '../components/Sidebar';
 import { downloadContextMarkdown, IAView } from '../components/IAView';
 import type { LifeOSState } from '../types';
 
@@ -802,7 +805,10 @@ test('Bloque 24.5: estándar Celestian en IAView y aiContextBuilder (cero azul r
   assert.match(html, /7 días/);
   assert.match(html, /30 días/);
   assert.match(html, /90 días/);
-  assert.match(html, /role="switch"[^>]*aria-label="Ocultar montos exactos"/);
+  assert.match(html, /Nivel de detalle/);
+  assert.match(html, /Resumido/);
+  assert.match(html, /Detallado/);
+  assert.match(html, /role="switch"[^>]*aria-label="Ocultar montos y datos personales"/);
   assert.match(html, /Copiar contexto/);
   assert.match(html, /Descargar \.md/);
   assert.match(html, /href="https:\/\/gemini\.google\.com\/app"[^>]*target="_blank"[^>]*rel="noopener noreferrer"/);
@@ -810,4 +816,376 @@ test('Bloque 24.5: estándar Celestian en IAView y aiContextBuilder (cero azul r
   assert.match(html, /Ver exactamente qué se va a copiar/);
   assert.match(html, /aria-label="Vista previa del contexto generado"/);
   assert.doesNotMatch(html, /contrato JSON/i);
+});
+
+test('Bloque 24.2a: ícono Bot de lucide-react unificado en AppIcon (ai), Sidebar, GlobalSearchModal e IAView', () => {
+  const aiIconHtml = renderToStaticMarkup(<AppIcon name="ai" className="h-5 w-5" />);
+  assert.match(aiIconHtml, /lucide-bot/, 'AppIcon name="ai" debe renderizar el ícono Bot');
+  assert.doesNotMatch(aiIconHtml, /lucide-sparkles/, 'AppIcon name="ai" no debe renderizar Sparkles');
+
+  const state = createRichState();
+  const sidebarHtml = renderToStaticMarkup(
+    <Sidebar
+      currentView="ia"
+      state={state}
+      onNavigate={() => {}}
+      onToggleTheme={() => {}}
+      isOpenMobile={false}
+      onCloseMobile={() => {}}
+    />
+  );
+  assert.match(sidebarHtml, /data-app-icon="ai"/);
+  assert.match(sidebarHtml, /lucide-bot/);
+
+  const iaHtml = renderToStaticMarkup(<IAView state={state} onUpdateState={() => true} />);
+  assert.match(iaHtml, /lucide-bot/, 'IAView debe usar el ícono Bot');
+  assert.doesNotMatch(iaHtml, /lucide-sparkles/, 'IAView no debe usar Sparkles');
+
+  const globalSearchSrc = fs.readFileSync(path.resolve('src/components/GlobalSearchModal.tsx'), 'utf8');
+  assert.match(
+    globalSearchSrc,
+    /view:\s*'ia'[^\n]*icon:\s*'ai'/,
+    'La paleta de comandos (Ctrl+K) debe usar icon: "ai" (Bot) para el módulo IA'
+  );
+});
+
+test('Bloque 24.2b: Resumido vs Detallado amplía profundidad, evolución mensual, rutinas, volumen, peso, sueño/cierres, trabajo y notas', () => {
+  assert.deepEqual(
+    AI_CONTEXT_DETAIL_LEVELS.map((d) => d.id),
+    ['summary', 'detailed']
+  );
+
+  const state = createRichState();
+
+  // Finanzas: múltiples meses (sep, oct, nov) y 10 gastos individuales + ingreso esperado para proyección 30d
+  state.finance.transactions = [
+    { id: 'f-inc-sep', type: 'ingreso', amount: 80000, category: 'Sueldo', fixed: 'fijo', date: '2026-09-10', currency: 'UYU' },
+    { id: 'f-inc-oct', type: 'ingreso', amount: 85000, category: 'Sueldo', fixed: 'fijo', date: '2026-10-10', currency: 'UYU' },
+    { id: 'f-inc-nov', type: 'ingreso', amount: 90000, category: 'Sueldo', fixed: 'fijo', date: '2026-11-10', currency: 'UYU' },
+    { id: 'f-e1', type: 'gasto', amount: 28000, category: 'Vivienda', fixed: 'fijo', date: '2026-11-05', currency: 'UYU', note: 'Alquiler noviembre' },
+    { id: 'f-e2', type: 'gasto', amount: 15000, category: 'Alimentación', fixed: 'variable', date: '2026-10-20', currency: 'UYU', note: 'Supermercado grande' },
+    { id: 'f-e3', type: 'gasto', amount: 12000, category: 'Salud', fixed: 'variable', date: '2026-09-25', currency: 'UYU', note: 'Odontología' },
+    { id: 'f-e4', type: 'gasto', amount: 8500, category: 'Transporte', fixed: 'variable', date: '2026-11-12', currency: 'UYU', note: 'Combustible' },
+    { id: 'f-e5', type: 'gasto', amount: 6400, category: 'Ocio', fixed: 'variable', date: '2026-11-14', currency: 'UYU', note: 'Concierto' },
+    { id: 'f-e6', type: 'gasto', amount: 5300, category: 'Ropa', fixed: 'variable', date: '2026-10-12', currency: 'UYU', note: 'Zapatillas' },
+    { id: 'f-e7', type: 'gasto', amount: 4200, category: 'Tecnología', fixed: 'variable', date: '2026-11-16', currency: 'UYU', note: 'Teclado' },
+    { id: 'f-e8', type: 'gasto', amount: 3100, category: 'Estudio', fixed: 'variable', date: '2026-11-19', currency: 'UYU', note: 'Libros técnicos' },
+    { id: 'f-e9', type: 'gasto', amount: 1500, category: 'Otros', fixed: 'variable', date: '2026-11-21', currency: 'UYU', note: 'Ferretería' },
+  ];
+  state.finance.expectedIncomes = [
+    {
+      id: 'ei-1',
+      name: 'Sueldo mensual',
+      amount: 92000,
+      currency: 'UYU',
+      startDate: '2026-12-05',
+      frequency: 'monthly',
+      active: true,
+    },
+  ];
+
+  // Gimnasio: 18 sesiones en 90 días repartidas en 2 rutinas + 1 rutina con 0 sesiones + 3 pesajes
+  state.gym.routineTemplates = [
+    { id: 'rt-1', name: 'Pecho/tríceps', days: ['lunes'], exercises: [] },
+    { id: 'rt-2', name: 'Espalda/bíceps', days: ['miercoles'], exercises: [] },
+    { id: 'rt-3', name: 'Piernas', days: ['viernes'], exercises: [] },
+  ];
+  state.gym.sessions = Array.from({ length: 18 }, (_, i) => {
+    const dayOffset = i * 4;
+    const d = new Date('2026-11-23T12:00:00');
+    d.setDate(d.getDate() - dayOffset);
+    const iso = d.toISOString().slice(0, 10);
+    const routine = i % 2 === 0 ? 'Pecho/tríceps' : 'Espalda/bíceps';
+    return {
+      id: `sess-${i + 1}`,
+      date: iso,
+      weekLabel: routine,
+      status: 'completed' as const,
+      exercises: [
+        {
+          id: `ex-${i}`,
+          name: i % 2 === 0 ? 'Press banca' : 'Remo barra',
+          muscleGroup: i % 2 === 0 ? ('Pecho' as const) : ('Espalda' as const),
+          sets: [{ id: `st-${i}`, weight: 70 + i, reps: 8, completed: true }],
+        },
+      ],
+    };
+  });
+  state.gym.weight = [
+    { date: '2026-09-05', kg: 82.4 },
+    { date: '2026-10-15', kg: 80.1 },
+    { date: '2026-11-23', kg: 78.6 },
+  ];
+
+  // Sueño, energía y cierres del día
+  state.dailyContext = [
+    { date: '2026-11-10', sleepHours: 6.0, energy: 2, mood: 3, connection: null, stress: 'alto', note: 'Día muy cargado' },
+    { date: '2026-11-15', sleepHours: 6.5, energy: 3, mood: 3, connection: null, stress: 'moderado' },
+    { date: '2026-11-20', sleepHours: 7.5, energy: 4, mood: 4, connection: null, stress: 'bajo' },
+    { date: '2026-11-24', sleepHours: 8.0, energy: 5, mood: 5, connection: null, stress: 'bajo' },
+  ];
+  state.checkoutLog = {
+    '2026-11-22': { closedAt: '2026-11-22T22:15:00Z', dailyNote: 'Cerré la semana con foco y buen ritmo', sleepHours: 7.5, energyLevel: 4 },
+    '2026-11-23': { closedAt: '2026-11-23T22:30:00Z', dailyNote: 'Avancé en el informe anual', sleepHours: 8, energyLevel: 5 },
+  };
+
+  // Trabajo: procesos cerrados por estado además de activos
+  state.jobs.applications.push(
+    { id: 'job-c1', tipo: 'convencional', empresa: 'AlphaTech', puesto: 'React Dev', estado: 'rechazado', fecha: '2026-10-10' },
+    { id: 'job-c2', tipo: 'convencional', empresa: 'BetaCorp', puesto: 'Fullstack', estado: 'rechazado', fecha: '2026-10-18' },
+    { id: 'job-c3', tipo: 'concurso', empresa: 'BPS', puesto: 'Analista', estado: 'no_seleccionado', fecha: '2026-10-28' }
+  );
+
+  // Notas largas + posesiones relevantes
+  const longNoteBody =
+    'Plan trimestral completo: consolidar hábitos de descanso antes de las 23:00, sostener cuatro sesiones semanales con foco en tren inferior y ordenar la reserva de liquidez antes de fin de año con revisiones quincenales de presupuesto y objetivos.';
+  state.notes.postits = [
+    { id: 'n-long', title: 'Plan Q4', text: longNoteBody, date: REF_DATE, pinned: true },
+  ];
+  state.notes.possessions = [
+    { id: 'pos-1', name: 'Notebook ThinkPad T14', category: 'Tecnología', location: 'Escritorio', note: 'Garantía vigente' },
+  ];
+
+  const allModules = ['hoy_agenda', 'finanzas', 'gimnasio', 'trabajo', 'notas'] as const;
+
+  const summaryRes = buildAIContextPrompt(state, {
+    goalId: null,
+    mode: 'data_only',
+    selectedModules: allModules,
+    hideExactAmounts: false,
+    timeWindowDays: 90,
+    detailLevel: 'summary',
+    referenceDate: REF_DATE,
+  });
+
+  const detailedRes = buildAIContextPrompt(state, {
+    goalId: null,
+    mode: 'data_only',
+    selectedModules: allModules,
+    hideExactAmounts: false,
+    timeWindowDays: 90,
+    detailLevel: 'detailed',
+    referenceDate: REF_DATE,
+  });
+
+  assert.equal(summaryRes.detailLevel, 'summary');
+  assert.equal(detailedRes.detailLevel, 'detailed');
+  assert.ok(
+    detailedRes.wordCount > summaryRes.wordCount,
+    `Detallado (${detailedRes.wordCount}) debe ser más profundo que Resumido (${summaryRes.wordCount})`
+  );
+
+  // Finanzas: evolución mes a mes, mayores gastos top 3 vs top 8, balance proyectado 30d
+  assert.match(summaryRes.text, /Evolución mes a mes:/);
+  assert.match(summaryRes.text, /sep 2026:/);
+  assert.match(summaryRes.text, /oct 2026:/);
+  assert.match(summaryRes.text, /nov 2026:/);
+  assert.match(summaryRes.text, /Mayores gastos individuales \(top 3\):/);
+  assert.match(detailedRes.text, /Mayores gastos individuales \(top 8\):/);
+  assert.match(detailedRes.text, /Libros técnicos/);
+  assert.doesNotMatch(summaryRes.text, /Libros técnicos/);
+  assert.match(summaryRes.text, /Balance proyectado \(próximos 30 días, UYU\):/);
+
+  // Gimnasio: subtítulo honesto 6 de 18 vs 15 de 18, distribución de rutinas con Piernas: 0, evolución peso y volumen mensual
+  assert.match(summaryRes.text, /Últimas 6 de 18 sesiones \(últimos 90 días\):/);
+  assert.match(detailedRes.text, /Últimas 15 de 18 sesiones \(últimos 90 días\):/);
+  assert.match(summaryRes.text, /Distribución por rutina \(últimos 90 días\):.*Pecho\/tríceps: 9.*Espalda\/bíceps: 9.*Piernas: 0/);
+  assert.match(summaryRes.text, /Evolución de peso corporal \(últimos 90 días, 3 registros\): de 82\.4 kg \(5 sep\) a 78\.6 kg \(23 nov\) \(-3\.8 kg\)/);
+  assert.doesNotMatch(summaryRes.text, /Evolución de volumen mensual/);
+  assert.match(detailedRes.text, /Evolución de volumen mensual \(últimos 90 días\):/);
+
+  // Sueño, energía y cierres (4 dailyContext + 2 checkoutLog = 6 días: prom. 7.3 h y 3.8/5)
+  assert.match(summaryRes.text, /Sueño, energía y cierres \(últimos 90 días\):.*sueño prom\. 7\.3 h \(en suba\).*energía prom\. 3\.8\/5 \(en suba\)/);
+  assert.match(summaryRes.text, /2 cierres diarios/);
+  assert.match(detailedRes.text, /Cerré la semana con foco y buen ritmo/);
+  assert.match(detailedRes.text, /Avancé en el informe anual/);
+
+  // Trabajo: resultados de procesos cerrados por estado
+  assert.match(summaryRes.text, /Resultados de procesos cerrados \(3\): Rechazado: 2 · No seleccionado: 1/);
+  assert.match(detailedRes.text, /AlphaTech — React Dev \[Rechazado\]/);
+
+  // Notas: cuerpo completo sin truncar agresivamente y posesiones relevantes en Detallado
+  assert.match(detailedRes.text, /revisiones quincenales de presupuesto y objetivos/);
+  assert.match(detailedRes.text, /Posesiones y objetos relevantes \(1\):/);
+  assert.match(detailedRes.text, /Notebook ThinkPad T14/);
+  assert.doesNotMatch(summaryRes.text, /Posesiones y objetos relevantes/);
+
+  // IAView renderiza selector Detallado activo
+  const detailedHtml = renderToStaticMarkup(
+    <IAView state={state} onUpdateState={() => true} defaultDetailLevel="detailed" />
+  );
+  assert.match(
+    detailedHtml,
+    /data-ia-detail="detailed"[^>]*aria-pressed="true"|aria-pressed="true"[^>]*data-ia-detail="detailed"/
+  );
+});
+
+test('Bloque 24.2c: 6 fixes de higiene de datos (cero cat_*, frecuencias en español, ajuste de saldo separado, notas invisibles, exámenes limpios y objetivos descendentes/miles)', () => {
+  const state = defaultState();
+  state.settings.hiddenTabs = [];
+
+  // 1 & 2 & Ajuste de saldo: categoría válida por ID, categoría huérfana cat_*, ajuste de saldo, frecuencias en inglés
+  state.finance.categories = [
+    { id: 'cat_valid123', name: 'Salud y Farmacia', active: true },
+  ];
+  state.finance.transactions = [
+    { id: 't1', type: 'gasto', amount: 3000, category: 'cat_valid123', fixed: 'variable', date: '2026-11-20', currency: 'UYU' },
+    { id: 't2', type: 'gasto', amount: 2000, category: 'cat_orphan9999', fixed: 'variable', date: '2026-11-21', currency: 'UYU' },
+    { id: 't3', type: 'gasto', amount: 45000, category: 'Ajuste de saldo', fixed: 'variable', date: '2026-11-22', currency: 'UYU', origin: 'adjustment' },
+  ];
+  state.finance.expectedIncomes = [
+    { id: 'ei-once', name: 'Bono puntual', amount: 15000, currency: 'UYU', startDate: '2026-12-01', frequency: 'once', active: true },
+    { id: 'ei-mon', name: 'Honorarios', amount: 40000, currency: 'UYU', startDate: '2026-12-05', frequency: 'monthly', active: true },
+    { id: 'ei-wk', name: 'Clases', amount: 3500, currency: 'UYU', startDate: '2026-11-27', frequency: 'weekly', active: true },
+    { id: 'ei-bi', name: 'Consultoría', amount: 12000, currency: 'UYU', startDate: '2026-12-10', frequency: 'biweekly', active: true },
+    { id: 'ei-yr', name: 'Aguinaldo anual', amount: 60000, currency: 'UYU', startDate: '2026-12-20', frequency: 'yearly', active: true },
+  ];
+  state.finance.commitments = [
+    { id: 'cm-1', name: 'Seguro anual', amount: 18000, currency: 'UYU', frequency: 'yearly', nextDueDate: '2026-12-15', active: true },
+  ];
+
+  // 4. Notas con caracteres invisibles (U+3164 Hangul Filler, U+200B, NBSP)
+  state.notes.postits = [
+    { id: 'n-title-only', title: 'Recordatorio limpio', text: '\u3164\u200B\u00A0   ', date: REF_DATE },
+    { id: 'n-fully-empty', title: '\u3164', text: '\u200B\u00A0', date: REF_DATE },
+    { id: 'n-normal', title: 'Lista', text: 'Comprar café', date: REF_DATE },
+  ];
+
+  // 5. Exámenes sin prefijo redundante "Examen (Materia)"
+  state.study.subjects = [
+    { id: 's-fis', name: 'Física I', topics: [] },
+    { id: 's-qui', name: 'Química General', topics: [] },
+  ];
+  state.study.exams = [
+    { id: 'ex-fis', title: 'Examen', subjectId: 's-fis', date: '2026-12-02', status: 'pendiente' },
+    { id: 'ex-qui', title: 'Examen (Química General)', subjectId: 's-qui', date: '2026-12-08', status: 'pendiente' },
+  ];
+
+  // 6. Objetivos descendentes (peso) y formateo correcto de miles (163830 -> 163.830, nunca 163.83)
+  state.gym.weight = [
+    { date: '2026-10-01', kg: 85 },
+    { date: '2026-11-23', kg: 79 },
+  ];
+  state.goals = [
+    { id: 'g-weight', name: 'Bajar a 75 kg', initial: 85, current: 85, target: 75, linked: 'weight' },
+    { id: 'g-manual-miles', name: 'Ahorro viaje', initial: 0, current: 163830, target: 250000, linked: null },
+  ];
+
+  const res = buildAIContextPrompt(state, {
+    goalId: null,
+    mode: 'data_only',
+    selectedModules: ['finanzas', 'estudios', 'notas'],
+    hideExactAmounts: false,
+    timeWindowDays: 30,
+    referenceDate: REF_DATE,
+  });
+
+  // Cero IDs cat_* crudos; categoría válida resuelta y huérfana a Sin categoría
+  assert.doesNotMatch(res.text, /cat_[a-z0-9]+/i, 'Jamás debe imprimir IDs internos cat_*');
+  assert.match(res.text, /Salud y Farmacia: \$U 3\.000 \(60%\)/);
+  assert.match(res.text, /Sin categoría: \$U 2\.000 \(40%\)/);
+
+  // Ajuste de saldo separado y excluido de gastos reales (gastos reales = 5.000, no 50.000)
+  assert.match(res.text, /Resumen \(últimos 30 días, UYU\): ingresos \$U 0 · gastos \$U 5\.000/);
+  assert.match(res.text, /Ajustes contables de saldo \(últimos 30 días, UYU, excluidos de gastos reales\): 1 ajuste/);
+  assert.doesNotMatch(res.text, /Distribución por categorías:[\s\S]*Ajuste de saldo[\s\S]*Mayores gastos/);
+
+  // 100% en español: frecuencias traducidas
+  assert.match(res.text, /Bono puntual: \$U 15\.000 \(único\)/);
+  assert.match(res.text, /Honorarios: \$U 40\.000 \(mensual\)/);
+  assert.match(res.text, /Clases: \$U 3\.500 \(semanal\)/);
+  assert.match(res.text, /Consultoría: \$U 12\.000 \(quincenal\)/);
+  assert.match(res.text, /Aguinaldo anual: \$U 60\.000 \(anual\)/);
+  assert.doesNotMatch(res.text, /\((?:once|monthly|weekly|biweekly|yearly)\)/);
+
+  // Notas con relleno invisible: sin ":" colgando y nota totalmente invisible excluida
+  assert.match(res.text, /Notas recientes \(2\):/);
+  assert.match(res.text, /- Recordatorio limpio\n/);
+  assert.doesNotMatch(res.text, /Recordatorio limpio:/);
+  assert.doesNotMatch(res.text, /\u3164/);
+
+  // Exámenes sin prefijo redundante "Examen (Materia)"
+  assert.match(res.text, /- Física I: 2 dic 2026/);
+  assert.match(res.text, /- Química General: 8 dic 2026/);
+  assert.doesNotMatch(res.text, /Examen \(Física I\)/);
+  assert.doesNotMatch(res.text, /Examen \(Química General\)/);
+
+  // Objetivos descendentes (85 -> 79 hacia 75 = 60%) y miles bien formateados (163.830, nunca 163.83)
+  assert.match(res.text, /Bajar a 75 kg: 60% de avance \(desde 85 kg, actual 79 kg, meta 75 kg\)/);
+  assert.match(res.text, /Ahorro viaje: 66% de avance \(163\.830 \/ 250\.000\)/);
+  assert.doesNotMatch(res.text, /163\.83[^\d]/);
+});
+
+test('Bloque 24.2d: privacidad ampliada anonimiza nombres propios de forma determinista junto con montos y cuentas', () => {
+  const state = createRichState();
+  state.finance.expectedIncomes = [
+    {
+      id: 'ei-p1',
+      name: 'Devolución de Martín Gómez',
+      amount: 12000,
+      currency: 'UYU',
+      startDate: '2026-12-02',
+      frequency: 'once',
+      active: true,
+    },
+  ];
+  state.finance.agreements = [
+    {
+      id: 'ag-p1',
+      title: 'Préstamo a Martín',
+      creditorName: 'Martín Gómez',
+      currency: 'UYU',
+      initialRemainingBalance: 24000,
+      initialReferenceDate: '2026-11-01',
+      status: 'active',
+      createdAt: '2026-11-01T10:00:00Z',
+      updatedAt: '2026-11-01T10:00:00Z',
+    },
+  ];
+  state.finance.transactions.push({
+    id: 'tx-p1',
+    type: 'gasto',
+    amount: 18500,
+    category: 'Alimentación',
+    fixed: 'variable',
+    date: '2026-11-22',
+    currency: 'UYU',
+    note: 'Cena con Lucía Fernández',
+  });
+  state.notes.postits.push({
+    id: 'n-p1',
+    title: 'Regalo para Carlos',
+    text: 'Coordinar envío con Lucía Fernández y avisar a Martín',
+    date: REF_DATE,
+  });
+
+  const privateRes = buildAIContextPrompt(state, {
+    goalId: null,
+    mode: 'data_only',
+    selectedModules: ['finanzas', 'notas'],
+    hideExactAmounts: true,
+    timeWindowDays: 30,
+    referenceDate: REF_DATE,
+  });
+
+  // Determinismo: Lucía Fernández, Martín y Carlos se anonimizan como Persona 1, Persona 2, Persona 3
+  assert.match(privateRes.text, /Persona 1/);
+  assert.match(privateRes.text, /Persona 2/);
+  assert.match(privateRes.text, /Persona 3/);
+
+  // Ningún nombre propio ni monto sensible puede filtrarse
+  for (const leak of ['Martín', 'Gómez', 'Lucía', 'Fernández', 'Carlos', '12.000', '24.000', '18.500']) {
+    assert.ok(
+      !privateRes.text.includes(leak),
+      `Privacidad activa no debe filtrar "${leak}"`
+    );
+  }
+
+  // Consistencia determinista: la referencia repetida a la misma persona usa siempre el mismo identificador
+  const martinMatches = privateRes.text.match(/Devolución de (Persona \d+)/);
+  const loanMatches = privateRes.text.match(/Préstamo a (Persona \d+)/);
+  const noteMatches = privateRes.text.match(/avisar a (Persona \d+)/);
+  assert.ok(martinMatches && loanMatches && noteMatches, 'Todas las menciones deben quedar anonimizadas');
+  assert.equal(martinMatches[1], loanMatches[1], 'Martín debe mapear al mismo Persona N en acuerdos e ingresos');
+  assert.equal(loanMatches[1], noteMatches[1], 'Martín debe mapear al mismo Persona N en notas');
 });
