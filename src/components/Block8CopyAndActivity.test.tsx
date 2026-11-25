@@ -90,14 +90,14 @@ test('Block 8: ConfigView y PrivacySecuritySection eliminan sobretexto y Context
   assert.match(privacyHtml, /no quedan cifrados por esta función/);
 });
 
-test('Block 8: IAView quita el subtitle redundante del PageHeader y conserva el aviso honesto de privacidad', () => {
+test('Block 8 / 24: IAView conserva aviso honesto de privacidad sin envío automático', () => {
   const state = defaultState();
   const html = renderToStaticMarkup(
     <IAView state={state} onUpdateState={() => true} />
   );
 
   assert.doesNotMatch(html, /Usá una IA externa para investigar y traé los resultados para revisarlos acá/);
-  assert.match(html, /Celestian no le envía tus datos/);
+  assert.match(html, /Celestian no envía tus datos automáticamente/);
 });
 
 test('Block 8: GimnasioView elimina ContextualHelp y bajotextos redundantes en Rutinas y Progreso', () => {

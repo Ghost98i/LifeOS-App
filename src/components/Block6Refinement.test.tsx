@@ -64,7 +64,7 @@ test('Micro-pulido 5: GymStarterPanel evita truncamiento en 389px y protege RIR 
   assert.match(html, /<span class="whitespace-nowrap">RIR 3–4<\/span>/);
 });
 
-test('IAView: SurfaceCard plano, touch targets >= 40px, acento índigo y estados vacíos limpios', () => {
+test('IAView: SurfaceCard plano, touch targets >= 40px, acento índigo y retrocompatibilidad discreta', () => {
   const emptyState = defaultState();
   emptyState.jobs.opportunities = [];
   emptyState.resale.opportunities = [];
@@ -72,8 +72,9 @@ test('IAView: SurfaceCard plano, touch targets >= 40px, acento índigo y estados
 
   const emptyHtml = renderToStaticMarkup(<IAView state={emptyState} onUpdateState={() => true} />);
   assert.match(emptyHtml, /rounded-2xl border border-slate-200\/80/);
-  assert.match(emptyHtml, /No hay oportunidades pendientes\./);
-  assert.match(emptyHtml, /No hay ideas guardadas\./);
+  assert.match(emptyHtml, /Copiar contexto/);
+  assert.match(emptyHtml, /bg-\[#4F46E5\]/);
+  assert.doesNotMatch(emptyHtml, /Registros anteriores/, 'Sin registros previos no muestra la sección legacy');
   assert.doesNotMatch(emptyHtml, /max-h-\[60vh\]/);
 
   const populated = defaultState();
@@ -86,11 +87,10 @@ test('IAView: SurfaceCard plano, touch targets >= 40px, acento índigo y estados
   populated.ideas = [{ id: 'i1', text: 'Beca técnica', date: todayISO(), source: 'manual' }];
 
   const populatedHtml = renderToStaticMarkup(
-    <IAView state={populated} onUpdateState={() => true} onOpenBusiness={() => {}} />
+    <IAView state={populated} onUpdateState={() => true} onOpenBusiness={() => {}} defaultLegacyOpen />
   );
-  assert.match(populatedHtml, /min-h-10[^>]*bg-\[#4F46E5\][^>]*>Crear postulación/);
-  assert.match(populatedHtml, /min-h-10[^>]*bg-\[#4F46E5\][^>]*>Registrar en Mi negocio/);
-  assert.match(populatedHtml, /aria-label="Eliminar idea"[^>]*class="[^"]*min-h-10 min-w-10/);
+  assert.match(populatedHtml, /Registros anteriores \(3\)/);
+  assert.match(populatedHtml, /aria-label="Eliminar idea"[^>]*title="Eliminar"[^>]*class="[^"]*min-h-10 min-w-10/);
 });
 
 test('NotasView y ProjectsManager: lenguaje plano sin card-ception, sin emojis decorativos y filtros seguros en 389px', () => {
