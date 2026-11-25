@@ -4,9 +4,14 @@ import {
   ArrowRight,
   Check,
   ChevronDown,
+  Copy,
   Download,
+  Eye,
+  EyeOff,
   Key,
+  KeyRound,
   Lock,
+  LockOpen,
   RotateCcw,
   Shield,
   Trash2,
@@ -16,29 +21,33 @@ import {
 import type { LifeOSState } from '../types';
 import { UnlockDeviceModal } from './UnlockDeviceModal';
 import { SurfaceCard } from './ui/SurfacePrimitives';
+import { CelestianSwitch } from './ui/CelestianSwitch';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import { showToast } from '../lib/toast';
-import { SYNC_MODULES } from '../lib/syncModel';
+import { getHumanModuleLabel, SYNC_MODULES } from '../lib/syncModel';
 import {
   provisionZeroKnowledgeKeys,
-  unlockMdekWithRecoveryKey,
   loadWrappedKeyEnvelope,
   cryptoSession,
   parseRecoveryKey,
   base64ToBytes,
   deriveKekFromRecoveryKey,
   unwrapMdekWithKek,
+  hasVaultPassword,
   type WrappedKeyEnvelope,
 } from '../lib/cryptoCore';
 import {
+  disableE2EEProtection,
   executeE2EEMigration,
   executeKeyRotation,
   fetchAccountCapability,
   fetchCloudKeyEnvelope,
   setCloudKeyEnvelope,
+  setVaultPasswordForAccount,
   getRotationPendingState,
   resolvePendingRotation,
   type AccountSyncCapability,
+  type DisableE2EEProgress,
   type MigrationProgress,
   type RotationPendingState,
 } from '../lib/cryptoMigration';
@@ -56,7 +65,9 @@ interface PrivacySecuritySectionProps {
   state: LifeOSState;
   storageUserId: string | null;
   cloudConnected: boolean;
+  userEmail?: string | null;
   onForceSync?: () => void;
+  onE2EEDisabled?: (verifiedState: LifeOSState) => void;
   onDeleteCloudAccount?: () => Promise<void>;
   onDeleteLocalData?: () => void;
 }
@@ -65,13 +76,15 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
   state,
   storageUserId,
   cloudConnected,
+  userEmail,
   onForceSync,
+  onE2EEDisabled,
   onDeleteCloudAccount,
   onDeleteLocalData,
 }) => {
   const [capability, setCapability] = useState<AccountSyncCapability | null>(null);
   const [isLoadingCap, setIsLoadingCap] = useState(false);
-  const [cloudEnvelopeAvailable, setCloudEnvelopeAvailable] = useState<boolean>(false);
+  const [cloudEnvelope, setCloudEnvelope] = useState<WrappedKeyEnvelope | null>(null);
   const [localEnvelope, setLocalEnvelope] = useState<WrappedKeyEnvelope | null>(() =>
     loadWrappedKeyEnvelope(storageUserId)
   );
@@ -85,22 +98,41 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
   }, []);
 
   const isSessionUnlocked = cryptoSession.isUnlocked(storageUserId);
+  const activeEnvelope = localEnvelope || cloudEnvelope;
+  const accountHasPassword = hasVaultPassword(activeEnvelope);
 
-  // Wizard state: 0 = Closed, 1 = Intro/Explanation, 2 = Key Generation & Backup, 3 = Verification, 4 = Progress
-  const [wizardStep, setWizardStep] = useState<number>(0);
+  // 2-step guided activation wizard: 0 = Closed, 1 = Vault Password, 2 = Emergency Backup, 3 = Activating progress
+  const [wizardStep, setWizardStep] = useState<0 | 1 | 2 | 3>(0);
+  const [setupPassword, setSetupPassword] = useState('');
+  const [setupConfirm, setSetupConfirm] = useState('');
+  const [showSetupPassword, setShowSetupPassword] = useState(false);
+  const [setupError, setSetupError] = useState<string | null>(null);
+  const [isProvisioning, setIsProvisioning] = useState(false);
   const [generatedKey, setGeneratedKey] = useState<string>('');
   const [provisionedEnvelope, setProvisionedEnvelope] = useState<WrappedKeyEnvelope | null>(null);
   const [sessionKeyCandidate, setSessionKeyCandidate] = useState<CryptoKey | null>(null);
-
-  // Verification input
-  const [verifyKeyInput, setVerifyKeyInput] = useState<string>('');
-  const [verifyError, setVerifyError] = useState<string | null>(null);
+  const [backupAcknowledged, setBackupAcknowledged] = useState(false);
 
   // Migration running state
   const [isMigrating, setIsMigrating] = useState<boolean>(false);
   const [migrationProgress, setMigrationProgress] = useState<MigrationProgress | null>(null);
 
-  // Unlock Modal (when device needs MDEK from local envelope or cloud envelope)
+  // Safe deactivation modal state
+  const [isDisableModalOpen, setIsDisableModalOpen] = useState(false);
+  const [isDisabling, setIsDisabling] = useState(false);
+  const [disableProgress, setDisableProgress] = useState<DisableE2EEProgress | null>(null);
+  const [disableError, setDisableError] = useState<string | null>(null);
+
+  // Add / change vault password modal (for legacy accounts or password updates)
+  const [isVaultPwModalOpen, setIsVaultPwModalOpen] = useState(false);
+  const [vaultAuthSecret, setVaultAuthSecret] = useState('');
+  const [vaultNewPw, setVaultNewPw] = useState('');
+  const [vaultConfirmPw, setVaultConfirmPw] = useState('');
+  const [showVaultNewPw, setShowVaultNewPw] = useState(false);
+  const [vaultPwError, setVaultPwError] = useState<string | null>(null);
+  const [isSavingVaultPw, setIsSavingVaultPw] = useState(false);
+
+  // Unlock Modal
   const [isUnlockModalOpen, setIsUnlockModalOpen] = useState<boolean>(false);
 
   // Key Replacement Modal (Rewrap)
@@ -113,11 +145,11 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
   const [downloadKeyInput, setDownloadKeyInput] = useState('');
   const [downloadError, setDownloadError] = useState<string | null>(null);
 
-  // Plaintext Inventory & Purge State (Stage E)
+  // Plaintext Inventory & Purge State
   const [plaintextInventory, setPlaintextInventory] = useState<CloudPlaintextInventory | null>(null);
   const [isPurging, setIsPurging] = useState<boolean>(false);
 
-  // Account & cloud data deletion
+  // Account & cloud data deletion (logic preserved strictly)
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleteStage, setDeleteStage] = useState<'confirm' | 'local'>('confirm');
@@ -125,7 +157,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const deleteDialogRef = useRef<HTMLDivElement | null>(null);
 
-  // Rotation Pending Verification State (Stage E fail-safe)
+  // Rotation Pending Verification State
   const [pendingRotation, setPendingRotation] = useState<RotationPendingState | null>(() =>
     storageUserId ? getRotationPendingState(storageUserId) : null
   );
@@ -133,7 +165,6 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
   const [resolveKeyInput, setResolveKeyInput] = useState<string>('');
   const [resolveError, setResolveError] = useState<string | null>(null);
 
-  // Fetch capability, cloud keyEnvelope, and inventory when user or cloud status changes
   useEffect(() => {
     let active = true;
     if (storageUserId && cloudConnected) {
@@ -146,20 +177,24 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
         .then(([cap, remoteEnv, inv]) => {
           if (active) {
             setCapability(cap);
-            setCloudEnvelopeAvailable(Boolean(remoteEnv));
+            setCloudEnvelope(remoteEnv);
             setPlaintextInventory(inv);
             setPendingRotation(getRotationPendingState(storageUserId));
           }
         })
         .catch(() => {
-          if (active) { setCapability(null); setCloudEnvelopeAvailable(false); setPlaintextInventory(null); }
+          if (active) {
+            setCapability(null);
+            setCloudEnvelope(null);
+            setPlaintextInventory(null);
+          }
         })
         .finally(() => {
           if (active) setIsLoadingCap(false);
         });
     } else {
       setCapability(null);
-      setCloudEnvelopeAvailable(false);
+      setCloudEnvelope(null);
       setPlaintextInventory(null);
       setPendingRotation(null);
     }
@@ -181,96 +216,131 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
   const isEncrypted = encryptionState === 'encrypted';
   const isUnverified = encryptionState === 'unknown';
   const isMixed = encryptionState === 'mixed';
-  const isSecondDeviceNeedingRecovery = (isEncrypted || isMixed) && !localEnvelope && cloudEnvelopeAvailable;
+  const isLockOn = isEncrypted || isMixed;
+  const isSecondDeviceNeedingRecovery = (isEncrypted || isMixed) && !localEnvelope && Boolean(cloudEnvelope);
 
-  // Wizard: Step 1 -> Step 2 (Generate Keys)
-  const handleStartActivation = async () => {
-    try {
-      setVerifyError(null);
-      setVerifyKeyInput('');
-      const { recoveryKeyFormatted, envelope, sessionMdek } = await provisionZeroKnowledgeKeys(storageUserId);
-      setGeneratedKey(recoveryKeyFormatted);
-      setProvisionedEnvelope(envelope);
-      setSessionKeyCandidate(sessionMdek);
-      setWizardStep(2);
-    } catch (err: any) {
-      showToast(err?.message || 'Error al generar claves de cifrado.', 'error');
+  const openActivationWizard = () => {
+    setSetupPassword('');
+    setSetupConfirm('');
+    setShowSetupPassword(false);
+    setSetupError(null);
+    setGeneratedKey('');
+    setProvisionedEnvelope(null);
+    setSessionKeyCandidate(null);
+    setBackupAcknowledged(false);
+    setWizardStep(1);
+  };
+
+  const handleToggleExtraLock = (nextChecked: boolean) => {
+    if (!cloudConnected || isLoadingCap) return;
+    if (nextChecked) {
+      if (isMixed) {
+        const mdek = cryptoSession.getKey(storageUserId);
+        if (mdek) {
+          setWizardStep(3);
+          void runMigration(mdek);
+        } else {
+          setIsUnlockModalOpen(true);
+        }
+        return;
+      }
+      openActivationWizard();
+    } else {
+      setDisableError(null);
+      setDisableProgress(null);
+      setIsDisableModalOpen(true);
     }
   };
 
-  // Copy Recovery Key to Clipboard
+  // Wizard Step 1 -> Step 2: validate password & generate dual-wrapped keys
+  const handleCreateVaultPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isProvisioning) return;
+    setSetupError(null);
+    if (setupPassword.length < 8) {
+      setSetupError('Elegí una contraseña de al menos 8 caracteres.');
+      return;
+    }
+    if (setupPassword !== setupConfirm) {
+      setSetupError('Las contraseñas no coinciden.');
+      return;
+    }
+
+    setIsProvisioning(true);
+    try {
+      const { recoveryKeyFormatted, envelope, sessionMdek } = await provisionZeroKnowledgeKeys(
+        storageUserId,
+        { vaultPassword: setupPassword }
+      );
+      setGeneratedKey(recoveryKeyFormatted);
+      setProvisionedEnvelope(envelope);
+      setSessionKeyCandidate(sessionMdek);
+      setSetupPassword('');
+      setSetupConfirm('');
+      setWizardStep(2);
+    } catch (err: any) {
+      setSetupError(err?.message || 'No se pudo preparar tu contraseña de bóveda.');
+    } finally {
+      setIsProvisioning(false);
+    }
+  };
+
   const copyRecoveryKey = async (key: string) => {
     if (!key) return;
     try {
       await navigator.clipboard.writeText(key);
-      showToast('Clave de recuperación copiada al portapapeles.');
+      setBackupAcknowledged(true);
+      showToast('Código de respaldo copiado.', 'success');
     } catch {
-      showToast('No se pudo copiar la clave. Seleccionala y copiala manualmente antes de continuar.', 'error');
+      showToast('No se pudo copiar automáticamente. Seleccionalo manualmente antes de continuar.', 'error');
     }
   };
-  const handleCopyKey = () => copyRecoveryKey(generatedKey);
 
-  // Download Recovery Key as text file with explicit safety warning
-  const handleDownloadKeyFile = () => {
-    if (!generatedKey) return;
+  const handleDownloadKeyFile = (keyToDownload = generatedKey, envToInclude = provisionedEnvelope) => {
+    if (!keyToDownload) return;
     const blob = new Blob([
-      `CELESTIAN LIFEOS — CLAVE DE RECUPERACIÓN DE SEGURIDAD\n` +
-      `Generada: ${new Date().toLocaleString('es-UY')}\n\n` +
-      `Tu Clave de Recuperación:\n` +
-      `${generatedKey}\n\n` +
-      `AVISO DE SEGURIDAD:\n` +
-      `- Este archivo contiene la clave de recuperación completa de 256 bits.\n` +
-      `- Cualquier persona que tenga acceso a este archivo y a tu cuenta de Google puede descifrar tus datos personales.\n` +
-      `- Guardá este archivo en un pendrive cifrado, gestor de contraseñas o imprimilo en papel y borrá el archivo digital.\n` +
-      `- Ni Google, ni los servidores de Celestian LifeOS, ni terceros pueden restaurarla por ti.\n`
+      `CELESTIAN LIFEOS — RESPALDO DE EMERGENCIA\n` +
+      `Generado: ${new Date().toLocaleString('es-UY')}\n\n` +
+      `CLAVE DE RECUPERACIÓN:\n` +
+      `${keyToDownload}\n\n` +
+      (envToInclude ? `RESPALDO DE CUENTA (No modificar):\n${JSON.stringify(envToInclude, null, 2)}\n\n` : '') +
+      `AVISO:\n` +
+      `- Guardá este archivo en un lugar privado solo por si algún día olvidás tu contraseña de bóveda.\n` +
+      `- Ni Google ni Celestian pueden restaurar tu contraseña si perdés este respaldo.\n`
     ], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `celestian-recovery-key-${new Date().toISOString().slice(0, 10)}.txt`;
+    a.download = `celestian-respaldo-${new Date().toISOString().slice(0, 10)}.txt`;
     a.click();
     URL.revokeObjectURL(url);
-    showToast('Archivo descargado. Recordá mantenerlo en un lugar seguro y privado.');
+    setBackupAcknowledged(true);
+    showToast('Respaldo descargado. Guardalo en un lugar privado.', 'success');
   };
 
-  // Wizard: Step 3 (Verify User actually backed up the key via unwrap test & Cloud Envelope persistence)
-  const handleVerifyKey = async () => {
+  // Wizard Step 2 -> Step 3: Commit envelope to cloud & migrate all 15 modules
+  const handleConfirmAndActivate = async () => {
     if (!provisionedEnvelope || !sessionKeyCandidate || !storageUserId) return;
-    setVerifyError(null);
-
+    setSetupError(null);
     try {
-      // 1. Format validation
-      await parseRecoveryKey(verifyKeyInput);
-
-      // 2. Cryptographic unwrap test: prove the input actually unlocks the envelope!
-      const unlockedMdek = await unlockMdekWithRecoveryKey(verifyKeyInput, provisionedEnvelope, storageUserId);
-
-      // 3. Persist wrapped key envelope to Cloud Firestore BEFORE starting migration
       await setCloudKeyEnvelope(storageUserId, provisionedEnvelope);
-
-      // 4. Verify that cloud envelope can be retrieved and validated
-      const verifiedRemoteEnvelope = await fetchCloudKeyEnvelope(storageUserId);
-      if (!verifiedRemoteEnvelope) {
-        throw new Error('Fallo al verificar el WrappedKeyEnvelope en la nube. No se puede iniciar la migración.');
+      const verifiedRemote = await fetchCloudKeyEnvelope(storageUserId);
+      if (!verifiedRemote) {
+        throw new Error('No se pudo confirmar el respaldo en la nube. Intentá de nuevo.');
       }
-
-      // 5. Successfully unlocked and ready
-      cryptoSession.setUnlocked(unlockedMdek, storageUserId);
-      setLocalEnvelope(provisionedEnvelope);
-      setCloudEnvelopeAvailable(true);
-
-      // Proceed to Step 4 (Migration)
-      setWizardStep(4);
-      runMigration(unlockedMdek);
+      cryptoSession.setUnlocked(sessionKeyCandidate, storageUserId);
+      setLocalEnvelope(verifiedRemote);
+      setCloudEnvelope(verifiedRemote);
+      setWizardStep(3);
+      await runMigration(sessionKeyCandidate);
     } catch (err: any) {
-      setVerifyError(err?.message || 'La clave ingresada no es válida o no coincide con la generada. Verificá los caracteres.');
+      setSetupError(err?.message || 'No se pudo iniciar la activación. Revisá tu conexión e intentá de nuevo.');
     }
   };
 
-  // Run the 15-module resumable migration with safe per-module commits
   const runMigration = async (mdek: CryptoKey) => {
     if (!storageUserId) {
-      showToast('Sesión de usuario no detectada para migración cloud.', 'error');
+      showToast('Conectá tu cuenta de Google primero.', 'error');
       setWizardStep(0);
       return;
     }
@@ -284,34 +354,157 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       });
 
       setCapability(result.capability);
-      showToast('¡Privacidad de extremo a extremo activada exitosamente!');
-      if (onForceSync) onForceSync();
+      if (storageUserId) isDeviceEnrolled(storageUserId).then(setIsEnrolled).catch(() => {});
+      showToast('Candado privado activado. En otros dispositivos entrás con tu contraseña de bóveda.', 'success');
+      onForceSync?.();
       setTimeout(() => {
         setWizardStep(0);
         setIsMigrating(false);
         setMigrationProgress(null);
-      }, 1200);
+      }, 900);
     } catch (err: any) {
       console.error('[Migration] Error:', err);
-      showToast(`Error durante la migración: ${err?.message || 'Fallo de red'}`, 'error');
+      showToast(`No se pudo completar la activación: ${err?.message || 'Revisá tu conexión'}`, 'error');
       setIsMigrating(false);
     }
   };
 
+  // Safe deactivation handler
+  const handleConfirmDisableExtraLock = async () => {
+    if (!storageUserId || isDisabling) return;
+    const sessionMdek = cryptoSession.getKey(storageUserId);
+    if (!sessionMdek) {
+      setIsDisableModalOpen(false);
+      setIsUnlockModalOpen(true);
+      showToast('Desbloqueá tus datos primero para poder desactivar el candado privado.', 'info');
+      return;
+    }
+
+    setDisableError(null);
+    setIsDisabling(true);
+    try {
+      const result = await disableE2EEProtection(storageUserId, sessionMdek, state, {
+        onProgress: (prog) => setDisableProgress(prog),
+      });
+      setCapability({
+        version: 1,
+        minimumSyncProtocolVersion: 1,
+        encryptionState: 'plaintext',
+        encryptedModules: [],
+        updatedAt: new Date().toISOString(),
+      });
+      setLocalEnvelope(null);
+      setCloudEnvelope(null);
+      setIsEnrolled(false);
+      setPlaintextInventory(null);
+      onE2EEDisabled?.(result.verifiedState);
+      showToast('Candado privado desactivado. Tu cuenta ya abre en 1 clic con Google.', 'success');
+      setIsDisableModalOpen(false);
+      setDisableProgress(null);
+      onForceSync?.();
+    } catch (err: any) {
+      setDisableError(err?.message || 'No se pudo desactivar el candado privado. Tus datos siguen intactos.');
+    } finally {
+      setIsDisabling(false);
+    }
+  };
+
+  // Add or change vault password handler
+  const handleSaveVaultPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!storageUserId || isSavingVaultPw) return;
+    setVaultPwError(null);
+
+    if (vaultNewPw.length < 8) {
+      setVaultPwError('La nueva contraseña debe tener al menos 8 caracteres.');
+      return;
+    }
+    if (vaultNewPw !== vaultConfirmPw) {
+      setVaultPwError('Las contraseñas no coinciden.');
+      return;
+    }
+    if (!vaultAuthSecret.trim()) {
+      setVaultPwError(
+        accountHasPassword
+          ? 'Ingresá tu contraseña actual o tu código de recuperación.'
+          : 'Ingresá tu código de recuperación actual para confirmar.'
+      );
+      return;
+    }
+
+    setIsSavingVaultPw(true);
+    try {
+      let useAsRecovery = !accountHasPassword;
+      if (accountHasPassword) {
+        try {
+          await parseRecoveryKey(vaultAuthSecret.trim());
+          useAsRecovery = true;
+        } catch {
+          useAsRecovery = false;
+        }
+      }
+
+      const res = await setVaultPasswordForAccount(storageUserId, {
+        newVaultPassword: vaultNewPw,
+        ...(useAsRecovery
+          ? { currentRecoveryKey: vaultAuthSecret.trim() }
+          : { currentVaultPassword: vaultAuthSecret }),
+      });
+
+      setLocalEnvelope(res.envelope);
+      setCloudEnvelope(res.envelope);
+      setIsVaultPwModalOpen(false);
+      setVaultAuthSecret('');
+      setVaultNewPw('');
+      setVaultConfirmPw('');
+      showToast(
+        accountHasPassword
+          ? 'Contraseña de bóveda actualizada.'
+          : 'Contraseña de bóveda creada. En otros dispositivos entrás en 1 toque.',
+        'success'
+      );
+    } catch (err: any) {
+      setVaultPwError(err?.message || 'No pudimos verificar tu credencial actual.');
+    } finally {
+      setIsSavingVaultPw(false);
+    }
+  };
+
   useEffect(() => {
-    if (wizardStep === 0 && !isRewrapModalOpen && !isResolveModalOpen && !isDownloadModalOpen) return;
+    if (
+      wizardStep === 0 &&
+      !isRewrapModalOpen &&
+      !isResolveModalOpen &&
+      !isDownloadModalOpen &&
+      !isDisableModalOpen &&
+      !isVaultPwModalOpen
+    ) {
+      return;
+    }
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      if (wizardStep > 0 && !isMigrating) setWizardStep(0);
+      if (wizardStep > 0 && !isMigrating && !isProvisioning) setWizardStep(0);
       if (isRewrapModalOpen) setIsRewrapModalOpen(false);
       if (isResolveModalOpen) setIsResolveModalOpen(false);
       if (isDownloadModalOpen) setIsDownloadModalOpen(false);
+      if (isDisableModalOpen && !isDisabling) setIsDisableModalOpen(false);
+      if (isVaultPwModalOpen && !isSavingVaultPw) setIsVaultPwModalOpen(false);
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [wizardStep, isMigrating, isRewrapModalOpen, isResolveModalOpen, isDownloadModalOpen]);
+  }, [
+    wizardStep,
+    isMigrating,
+    isProvisioning,
+    isRewrapModalOpen,
+    isResolveModalOpen,
+    isDownloadModalOpen,
+    isDisableModalOpen,
+    isDisabling,
+    isVaultPwModalOpen,
+    isSavingVaultPw,
+  ]);
 
-  // Key Replacement (Rewrap) Flow with cloud synchronization and partial failure defense
   const handleRewrapKey = async () => {
     if (!storageUserId) return;
     setRewrapError(null);
@@ -320,76 +513,70 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
         storageUserId,
         currentKeyForRewrap
       );
-
       setLocalEnvelope(newEnvelope);
+      setCloudEnvelope(newEnvelope);
       setRewrapResultKey(newRecoveryKeyFormatted);
-      showToast('Clave de recuperación renovada con éxito.');
+      showToast('Código de respaldo renovado con éxito.', 'success');
     } catch (err: any) {
-      setRewrapError(err?.message || 'La clave actual no es correcta. No se pudo regenerar.');
+      setRewrapError(err?.message || 'El código actual no es correcto. No se pudo renovar.');
     }
   };
 
-  // Plaintext Purge Flow (Stage E)
   const handleExecutePurge = async () => {
     if (!storageUserId) return;
     const sessionMdek = cryptoSession.getKey(storageUserId);
     if (!sessionMdek) {
-      showToast('Desbloqueá la sesión antes de ejecutar la purga de datos antiguos.', 'error');
+      showToast('Desbloqueá tus datos antes de limpiar copias anteriores.', 'error');
       setIsUnlockModalOpen(true);
       return;
     }
 
     setIsPurging(true);
     try {
-      const result = await executeCloudPlaintextPurge(
-        storageUserId,
-        sessionMdek,
-        state
-      );
-
+      const result = await executeCloudPlaintextPurge(storageUserId, sessionMdek, state);
       if (result.success) {
-        showToast('Copia histórica en texto plano purgada con éxito de la nube.');
+        showToast('Copias anteriores limpiadas con éxito de la nube.', 'success');
         const updatedInv = await inventoryCloudPlaintext(storageUserId);
         setPlaintextInventory(updatedInv);
       } else {
-        showToast(`Purga parcial completada. Restantes: ${result.remainingPlaintextCount}`, 'info');
+        showToast(`Limpieza parcial completada. Restantes: ${result.remainingPlaintextCount}`, 'info');
       }
     } catch (err: any) {
-      showToast(`Error al purgar copia histórica: ${err?.message || err}`, 'error');
+      showToast(`No se pudo limpiar la copia anterior: ${err?.message || err}`, 'error');
     } finally {
       setIsPurging(false);
     }
   };
 
-  // Handle Resolution of Rotation Pending Verification
   const handleResolvePendingRotation = async () => {
     if (!storageUserId) return;
     setResolveError(null);
     try {
       const res = await resolvePendingRotation(storageUserId, resolveKeyInput);
       setLocalEnvelope(res.envelope);
+      setCloudEnvelope(res.envelope);
       setPendingRotation(null);
       setIsResolveModalOpen(false);
       setResolveKeyInput('');
-      showToast('Rotación de clave verificada y completada con éxito.');
-      if (onForceSync) onForceSync();
+      showToast('Código de respaldo verificado correctamente.', 'success');
+      onForceSync?.();
     } catch (err: any) {
-      setResolveError(err?.message || 'La clave ingresada no es correcta o no coincide con la rotación emitida.');
+      setResolveError(err?.message || 'El código ingresado no es correcto.');
     }
   };
 
   const handleForgetDevice = async () => {
     if (!storageUserId) return;
     const confirmed = window.confirm(
-      '¿Olvidar este dispositivo?\n\nSe eliminarán las credenciales locales de confianza en este navegador. Para volver a desbloquearlo o sincronizar en el futuro, necesitarás tu Clave de Recuperación.'
+      '¿Bloquear y olvidar este dispositivo?\n\nPara volver a ver o sincronizar tus datos acá, tendrás que ingresar tu contraseña de bóveda o tu código de respaldo.'
     );
     if (!confirmed) return;
 
     await forgetDeviceTrust(storageUserId);
     cryptoSession.lock();
     setIsEnrolled(false);
-    showToast('Dispositivo desvinculado. La sesión fue bloqueada en este navegador.');
-    if (onForceSync) onForceSync();
+    showToast('Dispositivo olvidado. Tu sesión quedó bloqueada en este navegador.');
+    onForceSync?.();
   };
 
   const openDeleteModal = () => {
@@ -434,25 +621,30 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
     showToast('Datos locales eliminados de este dispositivo.', 'success');
   };
 
+  const fieldClass =
+    'celestian-clean-field w-full min-h-11 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
   const primaryBtnClass =
-    'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
+    'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
   const secondaryBtnClass =
-    'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-transparent px-3.5 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:bg-white/[0.04] cursor-pointer';
+    'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-transparent px-3.5 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:bg-white/[0.04] cursor-pointer disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
 
   return (
     <SurfaceCard className="p-4 sm:p-5 space-y-4">
+      {/* Header */}
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div className="flex items-center gap-2">
           <Lock size={16} strokeWidth={1.75} className="shrink-0 text-slate-400 dark:text-slate-500" aria-hidden="true" />
-          <h2 className="text-[15px] font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100">Privacidad y seguridad</h2>
+          <h2 className="text-[15px] font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100">
+            Privacidad y seguridad
+          </h2>
         </div>
 
-        {/* State Badge */}
+        {/* Honest Status Badge */}
         <div className="flex items-center gap-2 self-start sm:self-auto">
           {isEncrypted ? (
             <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              {capability ? 'Protección activada' : 'Cifrado en la nube sin verificar'}
+              Candado privado activo
             </span>
           ) : isUnverified ? (
             <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
@@ -463,26 +655,31 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
               <span className="h-2 w-2 rounded-full bg-amber-500" />
               Activación en curso
             </span>
-          ) : (
+          ) : !cloudConnected || !capability ? (
             <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
               <span className="h-2 w-2 rounded-full bg-slate-400" />
-              {capability ? 'Cifrado no activado' : 'Cifrado en la nube sin verificar'}
+              Cifrado en la nube sin verificar
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              Protegido con Google
             </span>
           )}
         </div>
       </div>
 
-      {/* Main Status Panel */}
+      {/* Main Opt-in Panel */}
       <div className="border-t border-slate-100 pt-4 space-y-4 dark:border-white/[0.06]">
-        {/* Pending Rotation Fail-Safe Banner (Stage E) */}
+        {/* Pending Rotation Fail-Safe Banner */}
         {pendingRotation && (
           <div className="border-l-2 border-amber-500 pl-3.5 py-1 space-y-2">
             <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 dark:text-amber-400">
               <AlertTriangle size={15} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
-              <span>La renovación de tu clave quedó pendiente de verificación</span>
+              <span>Quedó pendiente verificar tu nuevo código de respaldo</span>
             </div>
             <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-              El cambio de clave se registró en la nube pero no se pudo confirmar la respuesta localmente. Para completar el proceso sin riesgos, ingresá la nueva clave de recuperación que guardaste.
+              El cambio se guardó en la nube pero se cortó la conexión antes de confirmarlo acá. Ingresá tu nuevo código para terminar sin riesgos.
             </p>
             <button
               type="button"
@@ -494,121 +691,192 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
               className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-semibold text-slate-950 transition-colors hover:bg-amber-600 cursor-pointer"
             >
               <Key size={14} strokeWidth={1.75} aria-hidden="true" />
-              <span>Verificar nueva clave</span>
+              <span>Verificar nuevo código</span>
             </button>
           </div>
         )}
 
+        {/* Second-device prompt */}
         {isSecondDeviceNeedingRecovery && (
           <div className="border-l-2 border-[#4F46E5] pl-3.5 py-1 space-y-2">
             <div className="flex items-center gap-2 text-xs font-semibold text-[#4F46E5] dark:text-indigo-400">
               <Lock size={15} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
-              <span>Nuevo dispositivo detectado: Cuenta protegida con cifrado</span>
+              <span>Tu cuenta tiene candado privado activo</span>
             </div>
             <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-              Los datos de tu cuenta están cifrados. Ingresá tu clave de recuperación para desbloquearlos y sincronizar desde este navegador.
+              {accountHasPassword
+                ? 'Ingresá tu contraseña de bóveda una sola vez para habilitar este dispositivo.'
+                : 'Ingresá tu código de recuperación para desbloquear tus datos en este dispositivo.'}
             </p>
             <button type="button" onClick={() => setIsUnlockModalOpen(true)} className={primaryBtnClass}>
               <Unlock size={14} strokeWidth={1.75} aria-hidden="true" />
-              <span>Ingresar Clave de Recuperación y Desbloquear</span>
+              <span>Desbloquear este dispositivo</span>
             </button>
           </div>
         )}
 
-        {isEncrypted || isUnverified ? (
-          <div className="space-y-3.5">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                  Datos sincronizados
-                </p>
-                <p className="max-w-xl text-xs text-slate-600 dark:text-slate-400">
-                  {isUnverified ? 'Hay una clave local. Todavía no se verificó qué módulos están cifrados en la nube.' : 'El contenido de los módulos protegidos usa AES-256-GCM. Los metadatos de sincronización permanecen legibles y pueden existir copias históricas sin cifrar, indicadas más abajo.'}
-                </p>
-              </div>
-              {capability && (
-                <div className="text-right">
-                  <span className="text-sm font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
-                    {`${SYNC_MODULES.filter((module) => capability.encryptedModules?.includes(module)).length} de ${SYNC_MODULES.length} módulos verificados`}
-                  </span>
-                </div>
-              )}
-            </div>
+        {/* Primary Switch Row: Candado privado adicional */}
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 space-y-1">
+            <label
+              htmlFor="extra-privacy-lock-switch"
+              className="block text-sm font-semibold text-slate-900 dark:text-slate-100 cursor-pointer"
+            >
+              Candado privado adicional
+            </label>
+            <p className="max-w-xl text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+              {isUnverified
+                ? 'Hay una clave local. Todavía no se verificó qué módulos están protegidos en la nube.'
+                : isEncrypted
+                ? 'Tus datos se protegen con tu propia contraseña antes de guardarse en la nube.'
+                : isMixed
+                ? `Activación en pausa (${capability?.encryptedModules?.length || 0} de ${SYNC_MODULES.length} módulos protegidos). Podés reanudarla cuando quieras.`
+                : 'Tu cuenta ya está protegida con Google y se abre en 1 clic en cualquier dispositivo.'}
+            </p>
+            {!cloudConnected && !isUnverified && (
+              <a
+                href="#config-account"
+                className="inline-block pt-1 text-xs font-medium text-[#4F46E5] hover:underline dark:text-indigo-400"
+              >
+                Conectá tu cuenta de Google para activar el candado privado.
+              </a>
+            )}
+          </div>
 
-            {/* Session status */}
-            <div className="border-t border-slate-100 pt-3.5 space-y-3 dark:border-white/[0.06]">
-              <div className="flex items-center gap-2 text-xs">
+          <div className="shrink-0 pt-0.5">
+            <CelestianSwitch
+              id="extra-privacy-lock-switch"
+              checked={isLockOn}
+              disabled={!cloudConnected || isLoadingCap || isMigrating || isDisabling}
+              onChange={handleToggleExtraLock}
+              ariaLabel="Candado privado adicional"
+            />
+          </div>
+        </div>
+
+        {/* Active / Unverified Lock Controls */}
+        {(isEncrypted || isUnverified) && (
+          <div className="border-t border-slate-100 pt-3.5 space-y-3.5 dark:border-white/[0.06]">
+            {/* Legacy upgrade banner: offer adding Vault Password */}
+            {isEncrypted && !accountHasPassword && (
+              <div className="rounded-xl border border-[#4F46E5]/30 bg-[#4F46E5]/[0.05] p-3.5 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between dark:bg-[#4F46E5]/10">
+                <div className="space-y-0.5 min-w-0">
+                  <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+                    Agregá una contraseña de bóveda
+                  </p>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Así podés entrar en otros dispositivos en 1 toque con tu navegador, sin buscar el código largo.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVaultAuthSecret('');
+                    setVaultNewPw('');
+                    setVaultConfirmPw('');
+                    setVaultPwError(null);
+                    setIsVaultPwModalOpen(true);
+                  }}
+                  className={`${primaryBtnClass} shrink-0`}
+                >
+                  <KeyRound size={14} strokeWidth={1.75} aria-hidden="true" />
+                  <span>Crear contraseña</span>
+                </button>
+              </div>
+            )}
+
+            {/* Session status & actions */}
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
                 <span className={`h-2 w-2 rounded-full ${isSessionUnlocked ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                 <span className="text-slate-600 dark:text-slate-400">
-                  Acceso en este navegador:{' '}
+                  Estado en este dispositivo:{' '}
                   <strong className="text-slate-900 dark:text-slate-100">
                     {isSessionUnlocked ? 'Desbloqueado' : 'Bloqueado'}
                   </strong>
                 </span>
               </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  {!isSessionUnlocked && (
-                    <button type="button" onClick={() => setIsUnlockModalOpen(true)} className={primaryBtnClass}>
-                      <Unlock size={14} strokeWidth={1.75} aria-hidden="true" />
-                      <span>Desbloquear con clave</span>
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDownloadKeyInput('');
-                      setDownloadError(null);
-                      setIsDownloadModalOpen(true);
-                    }}
-                    className={secondaryBtnClass}
-                  >
-                    <Download size={14} strokeWidth={1.75} aria-hidden="true" />
-                    <span>Descargar archivo de recuperación</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsRewrapModalOpen(true);
-                      setRewrapResultKey(null);
-                      setCurrentKeyForRewrap('');
-                      setRewrapError(null);
-                    }}
-                    className={secondaryBtnClass}
-                  >
-                    <RotateCcw size={14} strokeWidth={1.75} aria-hidden="true" />
-                    <span>Renovar clave de recuperación</span>
-                  </button>
-                </div>
-
-                {(isEnrolled || isSessionUnlocked) && (
-                  <button
-                    type="button"
-                    onClick={handleForgetDevice}
-                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-rose-500/25 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-500/20 dark:text-rose-400 cursor-pointer"
-                    title="Eliminar confianza de este navegador y bloquear sesión"
-                  >
-                    <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
-                    <span>Olvidar este dispositivo</span>
-                  </button>
-                )}
-              </div>
+              {capability && isEncrypted && (
+                <span className="text-xs font-medium tabular-nums text-emerald-700 dark:text-emerald-400">
+                  {`${SYNC_MODULES.filter((mod) => capability.encryptedModules?.includes(mod)).length} de ${SYNC_MODULES.length} áreas protegidas`}
+                </span>
+              )}
             </div>
 
-            {/* Stage E: Legacy Plaintext Warning & Purge Control */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {!isSessionUnlocked && (
+                  <button type="button" onClick={() => setIsUnlockModalOpen(true)} className={primaryBtnClass}>
+                    <Unlock size={14} strokeWidth={1.75} aria-hidden="true" />
+                    <span>Desbloquear</span>
+                  </button>
+                )}
+                {isEncrypted && accountHasPassword && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVaultAuthSecret('');
+                      setVaultNewPw('');
+                      setVaultConfirmPw('');
+                      setVaultPwError(null);
+                      setIsVaultPwModalOpen(true);
+                    }}
+                    className={secondaryBtnClass}
+                  >
+                    <KeyRound size={14} strokeWidth={1.75} aria-hidden="true" />
+                    <span>Cambiar contraseña de bóveda</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDownloadKeyInput('');
+                    setDownloadError(null);
+                    setIsDownloadModalOpen(true);
+                  }}
+                  className={secondaryBtnClass}
+                >
+                  <Download size={14} strokeWidth={1.75} aria-hidden="true" />
+                  <span>Descargar respaldo</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRewrapModalOpen(true);
+                    setRewrapResultKey(null);
+                    setCurrentKeyForRewrap('');
+                    setRewrapError(null);
+                  }}
+                  className={secondaryBtnClass}
+                >
+                  <RotateCcw size={14} strokeWidth={1.75} aria-hidden="true" />
+                  <span>Renovar código de respaldo</span>
+                </button>
+              </div>
+
+              {(isEnrolled || isSessionUnlocked) && (
+                <button
+                  type="button"
+                  onClick={handleForgetDevice}
+                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-rose-500/25 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-500/20 dark:text-rose-400 cursor-pointer"
+                  title="Bloquear este navegador y olvidar la sesión recordada"
+                >
+                  <Lock size={14} strokeWidth={1.75} aria-hidden="true" />
+                  <span>Olvidar este dispositivo</span>
+                </button>
+              )}
+            </div>
+
+            {/* Legacy Plaintext Cleanup Banner */}
             {plaintextInventory && !plaintextInventory.isClean && (
               <div className="flex flex-col justify-between gap-3 border-l-2 border-amber-500 pl-3.5 py-1 sm:flex-row sm:items-center">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
                     <AlertTriangle size={14} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
-                    <span>Copia histórica sin cifrar pendiente de limpieza</span>
+                    <span>Copias anteriores listas para limpiar</span>
                   </div>
                   <p className="text-xs text-slate-600 dark:text-slate-400">
-                    Existen {plaintextInventory.hasLegacyMonolithicState ? '1 copia de estado global v1 ' : ''}
-                    {plaintextInventory.plaintextRevisionsCount > 0
-                      ? `y ${plaintextInventory.plaintextRevisionsCount} revisiones anteriores en texto plano en la nube.`
-                      : 'en la nube.'}
+                    Quedan registros antiguos previos a activar el candado privado en la nube. Podés borrarlos con seguridad.
                   </p>
                 </div>
                 <button
@@ -618,77 +886,54 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                   className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-semibold text-slate-950 transition-colors hover:bg-amber-600 disabled:opacity-50 cursor-pointer"
                 >
                   <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
-                  <span>{isPurging ? 'Purgando...' : 'Purgar Copia Histórica'}</span>
+                  <span>{isPurging ? 'Limpiando…' : 'Limpiar copias antiguas'}</span>
                 </button>
               </div>
             )}
           </div>
-        ) : isMixed ? (
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">
-                Migración de privacidad incompleta o interrumpida
-              </p>
-              <p className="max-w-xl text-xs text-slate-600 dark:text-slate-400">
-                Se aseguraron {capability?.encryptedModules?.length || 0} de 15 módulos. Podés reanudar el proceso de forma segura sin duplicar datos ni perder revisiones.
-              </p>
-            </div>
-            <div className="border-t border-slate-100 pt-3 dark:border-white/[0.06]">
-              <button
-                type="button"
-                onClick={() => {
-                  const mdek = cryptoSession.getKey(storageUserId);
-                  if (mdek) {
-                    setWizardStep(4);
-                    runMigration(mdek);
-                  } else {
-                    setIsUnlockModalOpen(true);
-                  }
-                }}
-                className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-950 transition-colors hover:bg-amber-600 cursor-pointer"
-              >
-                <RotateCcw size={14} strokeWidth={1.75} aria-hidden="true" />
-                <span>Reanudar Migración a Cifrado Completo</span>
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-            <div className="max-w-xl space-y-1">
-              <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                Cifrado de los datos sincronizados
-              </p>
-              <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-                Al activarlo, los módulos se cifran antes de sincronizar. La copia de este navegador y los archivos exportados no quedan cifrados por esta función.
-              </p>
-            </div>
-            <div className="shrink-0 space-y-2">
-              <button
-                type="button"
-                disabled={isLoadingCap || !cloudConnected}
-                onClick={() => setWizardStep(1)}
-                title={!cloudConnected ? 'Conectá tu cuenta de Google primero' : 'Activar protección de extremo a extremo'}
-                className={cloudConnected ? primaryBtnClass : 'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-400 cursor-not-allowed dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-500'}
-              >
-                <Lock size={15} strokeWidth={1.75} aria-hidden="true" />
-                <span>Activar cifrado</span>
-              </button>
-              {!cloudConnected && (
-                <a href="#config-account" className="block max-w-52 text-xs font-medium text-[#4F46E5] hover:underline dark:text-indigo-400">
-                  Conectá Google para activar el cifrado.
-                </a>
-              )}
-            </div>
+        )}
+
+        {/* Resume interrupted migration */}
+        {isMixed && (
+          <div className="border-t border-slate-100 pt-3 flex flex-wrap items-center gap-2 dark:border-white/[0.06]">
+            <button
+              type="button"
+              onClick={() => {
+                const mdek = cryptoSession.getKey(storageUserId);
+                if (mdek) {
+                  setWizardStep(3);
+                  void runMigration(mdek);
+                } else {
+                  setIsUnlockModalOpen(true);
+                }
+              }}
+              className={primaryBtnClass}
+            >
+              <RotateCcw size={14} strokeWidth={1.75} aria-hidden="true" />
+              <span>Completar activación</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setDisableError(null);
+                setDisableProgress(null);
+                setIsDisableModalOpen(true);
+              }}
+              className={secondaryBtnClass}
+            >
+              <LockOpen size={14} strokeWidth={1.75} aria-hidden="true" />
+              <span>Cancelar y volver a acceso con Google</span>
+            </button>
           </div>
         )}
       </div>
 
-      {/* Security Scope Guarantee - Progressive Disclosure */}
+      {/* Informative Collapsible: Cómo funciona tu privacidad (all technical details live here) */}
       <details className="group border-t border-slate-100 pt-3 dark:border-white/[0.06]">
         <summary className="flex min-h-10 cursor-pointer items-center justify-between text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 select-none">
           <div className="flex items-center gap-2">
             <Shield size={15} strokeWidth={1.75} className="text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
-            <span>Qué protege el cifrado y cómo recuperar el acceso</span>
+            <span>Cómo funciona tu privacidad</span>
           </div>
           <ChevronDown size={15} strokeWidth={1.75} className="text-slate-400 transition-transform group-open:rotate-180" aria-hidden="true" />
         </summary>
@@ -696,13 +941,12 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
           <div className="space-y-1.5">
             <div className="flex items-center gap-1.5 font-semibold text-slate-900 dark:text-slate-100">
               <Check size={14} strokeWidth={2} className="text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-              <span>Alcance al activar</span>
+              <span>Protección estándar y candado opcional</span>
             </div>
             <ul className="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-400">
-              <li>Finanzas (cuentas, transacciones, compromisos).</li>
-              <li>Notas, ideas, tareas, proyectos y contexto personal.</li>
-              <li>Agenda, rutinas de gimnasio y registros de estudio.</li>
-              <li>Cifrado en reposo y en tránsito hacia la nube.</li>
+              <li>Por defecto, tu cuenta se protege con Google y se abre en 1 clic en cualquier dispositivo.</li>
+              <li>Con el candado privado adicional, tus finanzas, notas, tareas, gimnasio y estudios se cifran con AES-256-GCM antes de subir.</li>
+              <li>Tu contraseña de bóveda protege la clave mediante PBKDF2 y una envoltura de claves verificada en tu navegador.</li>
             </ul>
           </div>
           <div className="space-y-1.5">
@@ -711,22 +955,21 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
               <span>Transparencia y responsabilidades</span>
             </div>
             <ul className="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-400">
-              <li>La clave de recuperación solo existe en tu poder; no se almacena en servidores.</li>
-              <li>Si perdés la clave, nadie puede recuperarla en un dispositivo nuevo.</li>
-              <li>Metadatos no sensibles (versiones, marcas temporales) se conservan para sincronización.</li>
+              <li>Tu contraseña de bóveda y tu código de respaldo nunca se guardan en texto legible en servidores.</li>
+              <li>Los metadatos de sincronización (fechas y versiones) permanecen legibles para coordinar tus dispositivos.</li>
               <li>La base de datos local y los backups JSON exportados no quedan cifrados por esta función.</li>
             </ul>
           </div>
         </div>
       </details>
 
-      {/* Account & cloud data deletion */}
+      {/* Account & cloud data deletion (strictly preserving deletion behavior) */}
       <div className="border-t border-slate-100 pt-4 space-y-3 dark:border-white/[0.06]">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="max-w-xl space-y-1">
             <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Eliminar cuenta y datos en la nube</p>
             <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-              Borra de forma permanente los módulos, el historial de revisiones y la envoltura de claves asociados a tu cuenta de Google. La sincronización se detiene primero para que ningún guardado pendiente vuelva a crear esos documentos.
+              Borra de forma permanente todos tus datos sincronizados, historial y llaves de seguridad asociados a tu cuenta de Google. La sincronización se detiene primero para que ningún guardado pendiente vuelva a crearlos.
             </p>
             <a
               href="/eliminar-cuenta.html"
@@ -755,34 +998,43 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
         </div>
       </div>
 
-      {/* Wizard Modal: 4 Steps */}
+      {/* Guided 2-Step Activation Modal */}
       {wizardStep > 0 && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Activar cifrado" className="w-full max-w-xl p-5 sm:p-6 space-y-5 shadow-2xl">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 sm:p-4 backdrop-blur-xs"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !isMigrating && !isProvisioning) setWizardStep(0);
+          }}
+        >
+          <SurfaceCard
+            as="div"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Activar candado privado adicional"
+            className="w-full max-w-lg max-h-[90dvh] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 space-y-5 shadow-2xl"
+          >
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
-              <div className="space-y-1">
+              <div className="space-y-1 min-w-0">
                 <div className="flex items-center gap-2">
                   <Shield size={18} strokeWidth={1.75} className="shrink-0 text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
                   <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                    {wizardStep === 1 && 'Paso 1 de 4: ¿Cómo funciona la protección?'}
-                    {wizardStep === 2 && 'Paso 2 de 4: Guardá tu Clave de Recuperación'}
-                    {wizardStep === 3 && 'Paso 3 de 4: Verificá tu Clave de Recuperación'}
-                    {wizardStep === 4 && 'Paso 4 de 4: Migración reanudable por módulos'}
+                    {wizardStep === 1 && 'Paso 1 de 2: Creá tu contraseña de bóveda'}
+                    {wizardStep === 2 && 'Paso 2 de 2: Guardá tu respaldo de emergencia'}
+                    {wizardStep === 3 && 'Activando candado privado…'}
                   </h3>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {wizardStep === 1 && 'Información clara antes de comenzar'}
-                  {wizardStep === 2 && 'Es imprescindible que respaldes esta clave ahora mismo'}
-                  {wizardStep === 3 && 'Comprobemos que conservaste la clave correctamente'}
-                  {wizardStep === 4 && 'Commit seguro y verificación criptográfica por módulo'}
+                  {wizardStep === 1 && 'La vas a usar si algún día abrís tu cuenta en un dispositivo nuevo.'}
+                  {wizardStep === 2 && 'Solo lo vas a necesitar si alguna vez olvidás tu contraseña de bóveda.'}
+                  {wizardStep === 3 && 'Protegiendo tus áreas de forma segura…'}
                 </p>
               </div>
-              {!isMigrating && (
+              {!isMigrating && !isProvisioning && (
                 <button
                   type="button"
                   onClick={() => setWizardStep(0)}
                   aria-label="Cerrar"
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
                 >
                   <X size={16} strokeWidth={1.75} aria-hidden="true" />
                 </button>
@@ -790,110 +1042,158 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
             </div>
 
             {wizardStep === 1 && (
-              <div className="space-y-4 text-xs text-slate-600 dark:text-slate-400">
-                <p>
-                  Al completar la activación, los módulos se cifrarán en este navegador antes de sincronizarse. Guardá la clave de recuperación para poder acceder desde otro dispositivo.
-                </p>
-                <div className="border-l-2 border-[#4F46E5] pl-3.5 py-1 space-y-2">
-                  <p className="font-semibold text-slate-900 dark:text-slate-100">¿Qué significa en la práctica?</p>
-                  <ul className="list-disc list-inside space-y-1.5">
-                    <li>El contenido de los módulos migrados se guardará cifrado en Firebase. Los metadatos y las copias históricas pendientes de limpieza pueden permanecer legibles.</li>
-                    <li>Generaremos una <strong>Clave de Recuperación de 256 bits</strong> en tu navegador.</li>
-                    <li>
-                      <strong>Importante:</strong> Celestian LifeOS no tiene un botón de “Olvidé mi contraseña”. Si cambiás de dispositivo o borrás los datos del navegador sin esta clave, no podremos recuperar tus datos.
-                    </li>
-                  </ul>
+              <form onSubmit={handleCreateVaultPassword} className="space-y-4">
+                <input
+                  type="text"
+                  name="username"
+                  autoComplete="username"
+                  value={userEmail || storageUserId || 'celestian-vault'}
+                  readOnly
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  className="sr-only"
+                />
+
+                <div className="space-y-1.5">
+                  <label htmlFor="vault-setup-password" className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    Contraseña de bóveda (mínimo 8 caracteres)
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="vault-setup-password"
+                      name="new-password"
+                      type={showSetupPassword ? 'text' : 'password'}
+                      autoComplete="new-password"
+                      minLength={8}
+                      required
+                      value={setupPassword}
+                      onChange={(e) => {
+                        setSetupPassword(e.target.value);
+                        if (setupError) setSetupError(null);
+                      }}
+                      placeholder="Elegí una contraseña segura"
+                      className={`${fieldClass} pr-11`}
+                      disabled={isProvisioning}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowSetupPassword((v) => !v)}
+                      aria-label={showSetupPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                      className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      {showSetupPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </div>
-                <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
-                  <button type="button" onClick={() => setWizardStep(0)} className={secondaryBtnClass}>
+
+                <div className="space-y-1.5">
+                  <label htmlFor="vault-setup-confirm" className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    Repetí tu contraseña de bóveda
+                  </label>
+                  <input
+                    id="vault-setup-confirm"
+                    name="confirm-password"
+                    type={showSetupPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    minLength={8}
+                    required
+                    value={setupConfirm}
+                    onChange={(e) => {
+                      setSetupConfirm(e.target.value);
+                      if (setupError) setSetupError(null);
+                    }}
+                    placeholder="Repetí la misma contraseña"
+                    className={fieldClass}
+                    disabled={isProvisioning}
+                  />
+                </div>
+
+                <div className="rounded-xl border border-amber-500/25 bg-amber-500/8 px-3.5 py-2.5 text-xs text-amber-800 dark:text-amber-300 space-y-1">
+                  <p className="font-semibold">No uses tu PIN bancario ni la contraseña de tu banco.</p>
+                  <p className="text-[11px] opacity-90">
+                    Tu navegador o gestor de contraseñas puede guardarla para desbloquear en 1 toque desde otros dispositivos.
+                  </p>
+                </div>
+
+                {setupError && (
+                  <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                    {setupError}
+                  </p>
+                )}
+
+                <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:justify-end dark:border-white/[0.06]">
+                  <button type="button" onClick={() => setWizardStep(0)} disabled={isProvisioning} className={secondaryBtnClass}>
                     Cancelar
                   </button>
-                  <button type="button" onClick={handleStartActivation} className={primaryBtnClass}>
-                    Entendido, Generar mi Clave
+                  <button
+                    type="submit"
+                    disabled={isProvisioning || setupPassword.length < 8 || !setupConfirm}
+                    className={primaryBtnClass}
+                  >
+                    {isProvisioning ? 'Preparando…' : 'Continuar'}
                   </button>
                 </div>
-              </div>
+              </form>
             )}
 
             {wizardStep === 2 && (
               <div className="space-y-4">
-                <p className="text-xs text-slate-600 dark:text-slate-400">
-                  Esta es tu Clave de Recuperación. Guardala en un gestor de contraseñas seguro o imprimila en papel.
+                <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                  Guardá este respaldo en un lugar privado. Solo lo vas a necesitar si alguna vez olvidás tu contraseña de bóveda.
                 </p>
 
-                <div className="rounded-xl border border-[#4F46E5]/35 bg-slate-50 p-4 text-center space-y-2 select-all dark:bg-white/[0.03]">
-                  <span className="block font-mono text-[11px] text-slate-500 dark:text-slate-400">
-                    Clave de Recuperación Única (Base58Check)
+                <div className="rounded-xl border border-[#4F46E5]/30 bg-slate-50 p-4 text-center space-y-1.5 select-all dark:bg-white/[0.03]">
+                  <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                    Código de respaldo de emergencia
                   </span>
-                  <div className="font-mono text-sm sm:text-base font-bold text-[#4F46E5] dark:text-indigo-300 tracking-wide break-all">
+                  <div className="font-mono text-xs sm:text-sm font-bold text-[#4F46E5] dark:text-indigo-300 tracking-wide break-all">
                     {generatedKey}
                   </div>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <button type="button" onClick={handleCopyKey} className={secondaryBtnClass}>
-                    <span>Copiar al Portapapeles</span>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <button type="button" onClick={() => void copyRecoveryKey(generatedKey)} className={secondaryBtnClass}>
+                    <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
+                    <span>Copiar código</span>
                   </button>
-                  <button type="button" onClick={handleDownloadKeyFile} className={secondaryBtnClass}>
-                    <span>Descargar archivo de texto (.txt)</span>
+                  <button type="button" onClick={() => handleDownloadKeyFile(generatedKey, provisionedEnvelope)} className={secondaryBtnClass}>
+                    <Download size={14} strokeWidth={1.75} aria-hidden="true" />
+                    <span>Descargar archivo (.txt)</span>
                   </button>
                 </div>
 
-                <p className="border-l-2 border-amber-500 pl-3 py-1 text-xs text-amber-800 dark:text-amber-300">
-                  En el siguiente paso te pediremos que ingreses esta clave para certificar que la guardaste.
-                </p>
+                {setupError && (
+                  <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                    {setupError}
+                  </p>
+                )}
 
-                <div className="flex justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
-                  <button type="button" onClick={() => setWizardStep(3)} className={primaryBtnClass}>
-                    Ya la guardé, Continuar a Verificación
+                <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between dark:border-white/[0.06]">
+                  <button type="button" onClick={() => setWizardStep(1)} className={secondaryBtnClass}>
+                    Atrás
+                  </button>
+                  <button type="button" onClick={() => void handleConfirmAndActivate()} className={primaryBtnClass}>
+                    <Lock size={14} strokeWidth={1.75} aria-hidden="true" />
+                    <span>{backupAcknowledged ? 'Activar candado privado' : 'Ya lo guardé, activar candado'}</span>
                   </button>
                 </div>
               </div>
             )}
 
             {wizardStep === 3 && (
-              <div className="space-y-4">
-                <p className="text-xs text-slate-600 dark:text-slate-400">
-                  Pegá o escribí la clave de recuperación que acabás de guardar para confirmar:
-                </p>
-
-                <div>
-                  <textarea
-                    rows={3}
-                    value={verifyKeyInput}
-                    onChange={(e) => setVerifyKeyInput(e.target.value)}
-                    placeholder="Pegá tu clave de recuperación aquí..."
-                    className="w-full rounded-xl border border-slate-200/80 bg-white p-3 font-mono text-xs text-slate-900 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100"
-                  />
-                  {verifyError && (
-                    <p className="mt-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400">{verifyError}</p>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
-                  <button type="button" onClick={() => setWizardStep(2)} className={secondaryBtnClass}>
-                    Volver a ver la clave
-                  </button>
-                  <button type="button" disabled={!verifyKeyInput.trim()} onClick={handleVerifyKey} className={primaryBtnClass}>
-                    Verificar y Comenzar Migración
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {wizardStep === 4 && (
               <div className="space-y-4 py-2">
                 <div className="space-y-2">
                   <div className="flex justify-between text-xs font-semibold">
                     <span className="text-slate-900 dark:text-slate-100">
                       {isMigrating
-                        ? `Cifrando módulo: ${migrationProgress?.currentModule || 'Preparando...'}`
-                        : 'Migración completada'}
+                        ? `Protegiendo: ${migrationProgress?.currentModule ? getHumanModuleLabel(migrationProgress.currentModule) : 'Preparando…'}`
+                        : '¡Candado privado activado!'}
                     </span>
-                    <span className="font-mono text-[#4F46E5] dark:text-indigo-400">
+                    <span className="tabular-nums text-[#4F46E5] dark:text-indigo-400">
                       {migrationProgress
                         ? `${migrationProgress.currentIndex} / ${migrationProgress.totalModules}`
-                        : '0 / 15'}
+                        : `0 / ${SYNC_MODULES.length}`}
                     </span>
                   </div>
 
@@ -911,34 +1211,245 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-1.5 font-mono text-[11px] sm:grid-cols-5">
-                  {SYNC_MODULES.map((mod) => {
-                    const isDone = migrationProgress?.completedModules.includes(mod);
-                    const isCurrent = migrationProgress?.currentModule === mod && isMigrating;
-                    return (
-                      <div
-                        key={mod}
-                        className={`truncate rounded-lg border p-1.5 text-center ${
-                          isDone
-                            ? 'border-emerald-500/20 bg-emerald-500/10 font-semibold text-emerald-700 dark:text-emerald-400'
-                            : isCurrent
-                            ? 'border-[#4F46E5]/30 bg-[#4F46E5]/10 font-semibold text-[#4F46E5] dark:text-indigo-300 animate-pulse'
-                            : 'border-slate-200/80 bg-slate-50 text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-500'
-                        }`}
-                      >
-                        {mod}
-                      </div>
-                    );
-                  })}
-                </div>
-
                 <p className="text-center text-xs text-slate-500 dark:text-slate-400">
                   {isMigrating
-                    ? 'No cierres esta pestaña mientras se actualizan tus módulos de sincronización.'
-                    : 'Todos tus datos fueron migrados de forma segura. La nube ahora solo contiene ciphertext.'}
+                    ? 'Mantené esta pestaña abierta unos segundos mientras protegemos tus datos.'
+                    : 'Listo. Tus datos ya están protegidos con tu contraseña de bóveda.'}
                 </p>
               </div>
             )}
+          </SurfaceCard>
+        </div>
+      )}
+
+      {/* Safe Deactivation Confirmation Modal */}
+      {isDisableModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 sm:p-4 backdrop-blur-xs"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !isDisabling) setIsDisableModalOpen(false);
+          }}
+        >
+          <SurfaceCard
+            as="div"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Desactivar candado privado adicional"
+            className="w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#4F46E5]/12 text-[#4F46E5] dark:text-indigo-400">
+                  <LockOpen size={18} strokeWidth={1.75} aria-hidden="true" />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                    ¿Desactivar el candado privado adicional?
+                  </h3>
+                  <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                    Tus datos seguirán protegidos con tu cuenta de Google y podrás abrir tu cuenta en 1 clic desde cualquier dispositivo.
+                  </p>
+                </div>
+              </div>
+              {!isDisabling && (
+                <button
+                  type="button"
+                  onClick={() => setIsDisableModalOpen(false)}
+                  aria-label="Cerrar"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
+                >
+                  <X size={16} strokeWidth={1.75} aria-hidden="true" />
+                </button>
+              )}
+            </div>
+
+            <div className="rounded-xl bg-slate-50 px-3.5 py-2.5 text-xs leading-relaxed text-slate-600 dark:bg-white/[0.03] dark:text-slate-400">
+              Antes de actualizar la nube, desciframos y verificamos todos tus módulos en este dispositivo y guardamos una copia local de respaldo para que no se pierda nada.
+            </div>
+
+            {disableProgress && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs font-medium text-slate-700 dark:text-slate-300">
+                  <span>{disableProgress.message}</span>
+                  <span className="tabular-nums text-[#4F46E5] dark:text-indigo-400">
+                    {disableProgress.completed}/{disableProgress.total}
+                  </span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-white/[0.06]">
+                  <div
+                    className="h-full bg-[#4F46E5] transition-all duration-300"
+                    style={{ width: `${Math.round((disableProgress.completed / Math.max(1, disableProgress.total)) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {disableError && (
+              <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                {disableError}
+              </p>
+            )}
+
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:justify-end dark:border-white/[0.06]">
+              <button type="button" onClick={() => setIsDisableModalOpen(false)} disabled={isDisabling} className={secondaryBtnClass}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={isDisabling}
+                onClick={() => void handleConfirmDisableExtraLock()}
+                className={primaryBtnClass}
+              >
+                {isDisabling ? 'Actualizando cuenta…' : 'Sí, desactivar candado'}
+              </button>
+            </div>
+          </SurfaceCard>
+        </div>
+      )}
+
+      {/* Add / Change Vault Password Modal */}
+      {isVaultPwModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 sm:p-4 backdrop-blur-xs"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !isSavingVaultPw) setIsVaultPwModalOpen(false);
+          }}
+        >
+          <SurfaceCard
+            as="div"
+            role="dialog"
+            aria-modal="true"
+            aria-label={accountHasPassword ? 'Cambiar contraseña de bóveda' : 'Crear contraseña de bóveda'}
+            className="w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-0.5 min-w-0">
+                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                  {accountHasPassword ? 'Cambiar contraseña de bóveda' : 'Crear contraseña de bóveda'}
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Tu código de recuperación de emergencia seguirá funcionando como respaldo.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsVaultPwModalOpen(false)}
+                disabled={isSavingVaultPw}
+                aria-label="Cerrar"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
+              >
+                <X size={16} strokeWidth={1.75} aria-hidden="true" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveVaultPassword} className="space-y-3.5">
+              <input
+                type="text"
+                name="username"
+                autoComplete="username"
+                value={userEmail || storageUserId || 'celestian-vault'}
+                readOnly
+                tabIndex={-1}
+                aria-hidden="true"
+                className="sr-only"
+              />
+              <div className="space-y-1.5">
+                <label htmlFor="vault-current-secret" className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
+                  {accountHasPassword ? 'Contraseña actual (o código de recuperación)' : 'Código de recuperación actual'}
+                </label>
+                <input
+                  id="vault-current-secret"
+                  type="password"
+                  autoComplete="current-password"
+                  value={vaultAuthSecret}
+                  onChange={(e) => {
+                    setVaultAuthSecret(e.target.value);
+                    if (vaultPwError) setVaultPwError(null);
+                  }}
+                  placeholder={accountHasPassword ? 'Tu contraseña actual…' : 'Pegá tu código de recuperación…'}
+                  className={fieldClass}
+                  disabled={isSavingVaultPw}
+                  autoFocus
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="vault-new-secret" className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
+                  Nueva contraseña de bóveda (mínimo 8 caracteres)
+                </label>
+                <div className="relative">
+                  <input
+                    id="vault-new-secret"
+                    name="new-password"
+                    type={showVaultNewPw ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    minLength={8}
+                    required
+                    value={vaultNewPw}
+                    onChange={(e) => {
+                      setVaultNewPw(e.target.value);
+                      if (vaultPwError) setVaultPwError(null);
+                    }}
+                    placeholder="Elegí una nueva contraseña"
+                    className={`${fieldClass} pr-11`}
+                    disabled={isSavingVaultPw}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowVaultNewPw((v) => !v)}
+                    aria-label={showVaultNewPw ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    {showVaultNewPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="vault-confirm-secret" className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
+                  Repetí la nueva contraseña
+                </label>
+                <input
+                  id="vault-confirm-secret"
+                  name="confirm-password"
+                  type={showVaultNewPw ? 'text' : 'password'}
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                  value={vaultConfirmPw}
+                  onChange={(e) => {
+                    setVaultConfirmPw(e.target.value);
+                    if (vaultPwError) setVaultPwError(null);
+                  }}
+                  placeholder="Repetí la misma contraseña"
+                  className={fieldClass}
+                  disabled={isSavingVaultPw}
+                />
+              </div>
+
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                No uses tu PIN bancario ni la contraseña de tu banco.
+              </p>
+
+              {vaultPwError && (
+                <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                  {vaultPwError}
+                </p>
+              )}
+
+              <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:justify-end dark:border-white/[0.06]">
+                <button type="button" onClick={() => setIsVaultPwModalOpen(false)} disabled={isSavingVaultPw} className={secondaryBtnClass}>
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingVaultPw || !vaultAuthSecret.trim() || vaultNewPw.length < 8 || !vaultConfirmPw}
+                  className={primaryBtnClass}
+                >
+                  {isSavingVaultPw ? 'Guardando…' : 'Guardar contraseña'}
+                </button>
+              </div>
+            </form>
           </SurfaceCard>
         </div>
       )}
@@ -947,49 +1458,67 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       <UnlockDeviceModal
         isOpen={isUnlockModalOpen}
         onClose={() => setIsUnlockModalOpen(false)}
-        userId={storageUserId}
-        envelopeOverride={localEnvelope}
+        userId={storageUserId || ''}
+        userEmail={userEmail}
+        envelopeOverride={activeEnvelope}
         onUnlocked={(envelope) => {
           setLocalEnvelope(envelope);
+          setCloudEnvelope(envelope);
           if (storageUserId) isDeviceEnrolled(storageUserId).then(setIsEnrolled).catch(() => {});
-          if (onForceSync) onForceSync();
+          onForceSync?.();
+        }}
+        onRequestDisableLock={() => {
+          setDisableError(null);
+          setDisableProgress(null);
+          setIsDisableModalOpen(true);
         }}
         showToast={showToast}
       />
 
-      {/* Modal: Renovar clave de recuperación (Rewrap) */}
+      {/* Modal: Renovar código de respaldo (Rewrap) */}
       {isRewrapModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Renovar clave de recuperación" className="w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-2.5">
-              <RotateCcw size={18} strokeWidth={1.75} className="shrink-0 text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
-              <div>
-                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Renovar clave de recuperación</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Actualiza la credencial para recuperar esta cuenta en nuevos dispositivos</p>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 sm:p-4 backdrop-blur-xs"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setIsRewrapModalOpen(false);
+          }}
+        >
+          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Renovar código de respaldo" className="w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <RotateCcw size={18} strokeWidth={1.75} className="shrink-0 text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Renovar código de respaldo</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Genera un nuevo código de emergencia para tu cuenta</p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsRewrapModalOpen(false)}
+                aria-label="Cerrar"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
+              >
+                <X size={16} strokeWidth={1.75} aria-hidden="true" />
+              </button>
             </div>
 
             {!rewrapResultKey ? (
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-                    Necesitás tu clave actual para generar otra. La nueva clave se usará para desbloquear la cuenta en otros dispositivos; los datos cifrados no cambian.
-                  </p>
-                  <p className="border-l-2 border-slate-300 pl-3 py-1 text-xs leading-relaxed text-slate-500 dark:border-white/15 dark:text-slate-400">
-                    <strong>Alcance de la renovación:</strong> Cambia la clave de recuperación, pero no vuelve a cifrar todos los datos. Si alguien obtuvo la clave anterior junto con una copia del almacenamiento de tu dispositivo, revocar ese acceso requiere volver a cifrar los datos.
-                  </p>
-                </div>
+                <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                  Ingresá tu código de respaldo actual para generar uno nuevo. Tu contraseña de bóveda seguirá funcionando normalmente.
+                </p>
 
                 <div>
-                  <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Ingresá tu Clave de Recuperación actual:
+                  <label htmlFor="rewrap-current-key" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Código de respaldo actual:
                   </label>
                   <textarea
+                    id="rewrap-current-key"
                     rows={2}
                     value={currentKeyForRewrap}
                     onChange={(e) => setCurrentKeyForRewrap(e.target.value)}
-                    placeholder="Clave actual..."
-                    className="w-full rounded-xl border border-slate-200/80 bg-white p-2.5 font-mono text-xs text-slate-900 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100"
+                    placeholder="Pegá tu código actual…"
+                    className={`${fieldClass} font-mono text-xs resize-none`}
                   />
                   {rewrapError && (
                     <p className="mt-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400">{rewrapError}</p>
@@ -1001,39 +1530,39 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                     Cancelar
                   </button>
                   <button type="button" disabled={!currentKeyForRewrap.trim()} onClick={handleRewrapKey} className={primaryBtnClass}>
-                    Generar Nueva Clave
+                    Generar nuevo código
                   </button>
                 </div>
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <div className="border-l-2 border-emerald-500 pl-3 py-1 text-xs text-emerald-700 dark:text-emerald-400">
-                    Clave de recuperación actualizada. Se cambió la credencial requerida para recuperar esta cuenta en nuevos dispositivos.
-                  </div>
-                  <p className="px-1 text-xs text-slate-500 dark:text-slate-400">
-                    El keyEnvelope cloud actual sólo puede abrirse con la nueva Recovery Key. Guardala en un lugar seguro.
-                  </p>
+                <div className="border-l-2 border-emerald-500 pl-3 py-1 text-xs text-emerald-700 dark:text-emerald-400">
+                  Código de respaldo actualizado. Guardalo en un lugar seguro.
                 </div>
 
                 <div className="rounded-xl border border-[#4F46E5]/35 bg-slate-50 p-4 text-center space-y-2 select-all dark:bg-white/[0.03]">
-                  <span className="block font-mono text-[11px] text-slate-500 dark:text-slate-400">
-                    Nueva Clave de Recuperación
+                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                    Nuevo código de respaldo
                   </span>
-                  <div className="font-mono text-sm sm:text-base font-bold text-[#4F46E5] dark:text-indigo-300 tracking-wide break-all">
+                  <div className="font-mono text-xs sm:text-sm font-bold text-[#4F46E5] dark:text-indigo-300 tracking-wide break-all">
                     {rewrapResultKey}
                   </div>
                 </div>
 
                 <div className="flex justify-center gap-2">
-                  <button type="button" onClick={() => copyRecoveryKey(rewrapResultKey)} className={secondaryBtnClass}>
-                    Copiar
+                  <button type="button" onClick={() => void copyRecoveryKey(rewrapResultKey)} className={secondaryBtnClass}>
+                    <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
+                    <span>Copiar</span>
+                  </button>
+                  <button type="button" onClick={() => handleDownloadKeyFile(rewrapResultKey, localEnvelope)} className={secondaryBtnClass}>
+                    <Download size={14} strokeWidth={1.75} aria-hidden="true" />
+                    <span>Descargar (.txt)</span>
                   </button>
                 </div>
 
                 <div className="flex justify-end border-t border-slate-100 pt-3 dark:border-white/[0.06]">
                   <button type="button" onClick={() => setIsRewrapModalOpen(false)} className={primaryBtnClass}>
-                    Cerrar
+                    Listo
                   </button>
                 </div>
               </div>
@@ -1042,17 +1571,22 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
         </div>
       )}
 
-      {/* Resolve Pending Rotation Modal (Stage E) */}
+      {/* Resolve Pending Rotation Modal */}
       {isResolveModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Verificar nueva clave de recuperación" className="w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 sm:p-4 backdrop-blur-xs"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setIsResolveModalOpen(false);
+          }}
+        >
+          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Verificar nuevo código de respaldo" className="w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl">
             <div className="flex items-center gap-2">
               <Key size={18} strokeWidth={1.75} className="shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-              <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Verificar Renovación de Clave Pendiente</h3>
+              <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Verificar nuevo código de respaldo</h3>
             </div>
 
             <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-              Ingresá la nueva Clave de Recuperación que generaste para confirmar que coincide con el registro protegido en la nube y completar la activación.
+              Ingresá el nuevo código que generaste para confirmar que coincide con tu cuenta.
             </p>
 
             {resolveError && (
@@ -1063,15 +1597,15 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
 
             <div className="space-y-1.5">
               <label htmlFor="resolve-key-input" className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
-                Nueva Clave de Recuperación
+                Nuevo código de respaldo
               </label>
               <textarea
                 id="resolve-key-input"
                 rows={3}
                 value={resolveKeyInput}
                 onChange={(e) => setResolveKeyInput(e.target.value)}
-                placeholder="Ej: L8x9... (clave generada)"
-                className="w-full rounded-xl border border-slate-200/80 bg-white p-3 font-mono text-xs text-slate-900 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 resize-none"
+                placeholder="Pegá el código generado…"
+                className={`${fieldClass} font-mono text-xs resize-none`}
               />
             </div>
 
@@ -1085,33 +1619,49 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                 onClick={handleResolvePendingRotation}
                 className="inline-flex min-h-10 items-center justify-center rounded-xl bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-950 transition-colors hover:bg-amber-600 disabled:opacity-50 cursor-pointer"
               >
-                Confirmar y Completar
+                Confirmar
               </button>
             </div>
           </SurfaceCard>
         </div>
       )}
 
+      {/* Download Recovery File Modal */}
       {isDownloadModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Descargar archivo de recuperación" className="w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-2.5">
-              <Download size={18} strokeWidth={1.75} className="shrink-0 text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
-              <div>
-                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Descargar archivo de recuperación</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Ingresá tu clave actual para generar el archivo.</p>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 sm:p-4 backdrop-blur-xs"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setIsDownloadModalOpen(false);
+          }}
+        >
+          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Descargar archivo de respaldo" className="w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Download size={18} strokeWidth={1.75} className="shrink-0 text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Descargar archivo de respaldo</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Ingresá tu código actual para generar el archivo.</p>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsDownloadModalOpen(false)}
+                aria-label="Cerrar"
+                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
+              >
+                <X size={16} strokeWidth={1.75} aria-hidden="true" />
+              </button>
             </div>
             <p className="text-xs text-slate-600 dark:text-slate-400">
-              Este archivo contiene la clave para desbloquear tu cuenta en un dispositivo nuevo. Guardalo en un lugar seguro y privado.
+              Este archivo te sirve como respaldo de emergencia para desbloquear tu cuenta en un dispositivo nuevo.
             </p>
             <div>
               <textarea
                 rows={3}
                 value={downloadKeyInput}
                 onChange={(e) => setDownloadKeyInput(e.target.value)}
-                placeholder="Pegá tu Clave de Recuperación actual..."
-                className="w-full rounded-xl border border-slate-200/80 bg-white p-3 font-mono text-xs text-slate-900 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100"
+                placeholder="Pegá tu código de respaldo actual…"
+                className={`${fieldClass} font-mono text-xs resize-none`}
               />
               {downloadError && <p className="mt-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400">{downloadError}</p>}
             </div>
@@ -1123,39 +1673,24 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                 type="button"
                 disabled={!downloadKeyInput.trim()}
                 onClick={async () => {
-                  if (!localEnvelope || !storageUserId) {
-                    setDownloadError('No hay una clave local válida en este dispositivo.');
+                  const targetEnvelope = localEnvelope || cloudEnvelope;
+                  if (!targetEnvelope || !storageUserId) {
+                    setDownloadError('No encontramos el respaldo de claves de esta cuenta.');
                     return;
                   }
                   try {
-                    // Validar la clave haciendo un unwrap test
                     const rawRecovery = await parseRecoveryKey(downloadKeyInput.trim());
-                    const salt = base64ToBytes(localEnvelope.kdf.salt);
+                    const salt = base64ToBytes(targetEnvelope.kdf.salt);
                     const kek = await deriveKekFromRecoveryKey(rawRecovery, salt);
                     try {
-                      await unwrapMdekWithKek(localEnvelope.wrappedMdek, kek, localEnvelope.aad);
+                      await unwrapMdekWithKek(targetEnvelope.wrappedMdek, kek, targetEnvelope.aad);
                     } finally {
                       rawRecovery.fill(0);
                     }
-                    // Si llega acá, la clave es válida. Generar el archivo.
-                    const content = `CELESTIAN LIFEOS — ARCHIVO DE RECUPERACIÓN\nGenerado: ${new Date().toLocaleString('es-UY')}\n\n` +
-                      `CLAVE DE RECUPERACIÓN:\n${downloadKeyInput.trim()}\n\n` +
-                      `WRAPPED KEY ENVELOPE (No modificar):\n${JSON.stringify(localEnvelope, null, 2)}\n\n` +
-                      `AVISO DE SEGURIDAD:\n` +
-                      `- Cualquier persona que tenga este archivo y acceso a tu cuenta de Google puede descifrar tus datos.\n` +
-                      `- Guardalo en un pendrive cifrado o gestor de contraseñas.\n` +
-                      `- Si perdés este archivo y tu clave, tus datos cifrados no se podrán recuperar.\n`;
-                    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `celestian-recovery-key-${new Date().toISOString().slice(0, 10)}.txt`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                    showToast('Archivo descargado. Guardalo en un lugar seguro.');
+                    handleDownloadKeyFile(downloadKeyInput.trim(), targetEnvelope);
                     setIsDownloadModalOpen(false);
                   } catch {
-                    setDownloadError('La clave ingresada no es correcta o no coincide con este dispositivo.');
+                    setDownloadError('El código ingresado no es correcto o no coincide con esta cuenta.');
                   }
                 }}
                 className={primaryBtnClass}
@@ -1167,6 +1702,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
         </div>
       )}
 
+      {/* Account Deletion Confirmation Modal (untouched logic) */}
       {isDeleteOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
           <div ref={deleteDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Eliminar cuenta y datos" className="w-full max-w-lg space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-2xl dark:border-white/[0.07] dark:bg-[#0D111A]">
@@ -1183,8 +1719,8 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                 </div>
                 <ul className="list-inside list-disc space-y-1 border-l-2 border-rose-500/40 pl-3 py-1 text-xs text-slate-600 dark:text-slate-400">
                   <li>Módulos sincronizados y su historial de revisiones.</li>
-                  <li>Envoltura de claves de cifrado de extremo a extremo.</li>
-                  <li>Metadatos de sincronización de esta cuenta.</li>
+                  <li>Llaves de seguridad del candado privado.</li>
+                  <li>Registros de sincronización de esta cuenta.</li>
                 </ul>
                 <div className="space-y-1.5">
                   <label htmlFor="delete-account-confirmation" className="text-xs font-semibold text-slate-900 dark:text-slate-100">

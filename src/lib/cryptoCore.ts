@@ -654,22 +654,119 @@ export function isZeroKnowledgeProvisioned(userId?: string | null): boolean {
   return loadWrappedKeyEnvelope(userId) !== null;
 }
 
+export const RECOVERY_KDF_BASE_INFO = 'LifeOS-Recovery-KEK-v1' as const;
+export const VAULT_PASSWORD_INFO_MARKER = '|pw1:' as const;
+
+export interface VaultPasswordWrapMetadata {
+  iterations: number;
+  salt: string;
+  iv: string;
+  ciphertext: string;
+}
+
+export function buildVaultPasswordAad(envelopeAad: string): string {
+  return `${envelopeAad}|pw1`;
+}
+
+export function encodeVaultPasswordInfo(meta: VaultPasswordWrapMetadata): string {
+  const encoded = `${RECOVERY_KDF_BASE_INFO}${VAULT_PASSWORD_INFO_MARKER}${meta.iterations}:${meta.salt}:${meta.iv}:${meta.ciphertext}`;
+  if (encoded.length > 256) {
+    throw new CryptoKeyError('El descriptor de contraseña de bóveda excede el límite permitido.');
+  }
+  return encoded;
+}
+
+/**
+ * Parses PBKDF2 + AES-GCM vault password wrap metadata embedded in `envelope.kdf.info`.
+ * Compatible with Firestore's strict `isValidWrappedKeyEnvelope` (`kdf.info.size() <= 256`).
+ */
+export function parseVaultPasswordWrap(
+  envelope: WrappedKeyEnvelope | null | undefined
+): VaultPasswordWrapMetadata | null {
+  const info = envelope?.kdf?.info;
+  if (typeof info !== 'string') return null;
+  const markerIdx = info.indexOf(VAULT_PASSWORD_INFO_MARKER);
+  if (markerIdx < 0) return null;
+  const payload = info.slice(markerIdx + VAULT_PASSWORD_INFO_MARKER.length);
+  const parts = payload.split(':');
+  if (parts.length !== 4) return null;
+  const iterations = Number(parts[0]);
+  const [salt, iv, ciphertext] = parts.slice(1);
+  if (
+    !Number.isSafeInteger(iterations) ||
+    iterations < 10_000 ||
+    !salt ||
+    !iv ||
+    !ciphertext
+  ) {
+    return null;
+  }
+  return { iterations, salt, iv, ciphertext };
+}
+
+export function hasVaultPassword(envelope: WrappedKeyEnvelope | null | undefined): boolean {
+  return parseVaultPasswordWrap(envelope) !== null;
+}
+
+/**
+ * Extracts a valid Base58Check recovery key from either raw user input or
+ * a downloaded Celestian `.txt` recovery file.
+ */
+export async function extractRecoveryKeyFromText(text: string): Promise<string | null> {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return null;
+
+  // 1. Direct attempt on full trimmed text (raw pasted key)
+  try {
+    await parseRecoveryKey(trimmed);
+    return trimmed;
+  } catch {
+    // Fall through to structured file parsing
+  }
+
+  // 2. Look for lines matching Celestian's Base58Check key format (grouped with hyphens or solid)
+  const lines = trimmed.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (const line of lines) {
+    const candidate = line.replace(/^CLAVE DE RECUPERACI[ÓO]N:\s*/i, '').trim();
+    if (!candidate || candidate.length < 40 || candidate.length > 80) continue;
+    try {
+      await parseRecoveryKey(candidate);
+      return candidate;
+    } catch {
+      // keep scanning
+    }
+  }
+
+  return null;
+}
+
 /**
  * Initial Zero-Knowledge Provisioning Flow:
  * 1. Generates 32 bytes raw MDEK.
  * 2. Generates 32 bytes raw Recovery Key.
  * 3. Derives KEK via HKDF-SHA-256 with fresh 16-byte salt.
  * 4. Wraps MDEK using KEK with context-binding AAD.
+ * 4b. If `options.vaultPassword` is provided, also wraps the SAME MDEK with PBKDF2-SHA-256 + AES-256-GCM.
  * 5. Constructs and persists `WrappedKeyEnvelope`.
  * 6. Imports operational `sessionMdek` with `extractable: false`.
  * 7. Zeros raw MDEK memory.
  * 8. Returns formatted Recovery Key and non-extractable session MDEK.
  */
-export async function provisionZeroKnowledgeKeys(userId?: string | null): Promise<{
+export async function provisionZeroKnowledgeKeys(
+  userId?: string | null,
+  options?: {
+    vaultPassword?: string;
+    pbkdf2Iterations?: number;
+  }
+): Promise<{
   recoveryKeyFormatted: string;
   sessionMdek: CryptoKey;
   envelope: WrappedKeyEnvelope;
 }> {
+  if (options?.vaultPassword !== undefined && options.vaultPassword.length < 8) {
+    throw new CryptoKeyError('La contraseña de bóveda debe tener al menos 8 caracteres.');
+  }
+
   const rawMdek = new Uint8Array(32);
   globalThis.crypto.getRandomValues(rawMdek);
 
@@ -684,6 +781,21 @@ export async function provisionZeroKnowledgeKeys(userId?: string | null): Promis
     const kek = await deriveKekFromRecoveryKey(rawRecoveryKey, salt);
     const wrappedMdek = await wrapMdekWithKek(rawMdek, kek, aad);
 
+    let kdfInfo: string = RECOVERY_KDF_BASE_INFO;
+    if (options?.vaultPassword) {
+      const pwSalt = new Uint8Array(16);
+      globalThis.crypto.getRandomValues(pwSalt);
+      const iterations = options.pbkdf2Iterations ?? PBKDF2_RECOMMENDED_ITERATIONS;
+      const pwKek = await deriveKekFromPassphrase(options.vaultPassword, pwSalt, iterations);
+      const pwWrapped = await wrapMdekWithKek(rawMdek, pwKek, buildVaultPasswordAad(aad));
+      kdfInfo = encodeVaultPasswordInfo({
+        iterations,
+        salt: bytesToBase64(pwSalt),
+        iv: pwWrapped.iv,
+        ciphertext: pwWrapped.ciphertext,
+      });
+    }
+
     const envelope: WrappedKeyEnvelope = {
       keyFormatVersion: CURRENT_KEY_FORMAT_VERSION,
       cryptoVersion: CURRENT_CRYPTO_VERSION,
@@ -692,7 +804,7 @@ export async function provisionZeroKnowledgeKeys(userId?: string | null): Promis
       kdf: {
         algorithm: 'HKDF-SHA-256',
         salt: bytesToBase64(salt),
-        info: 'LifeOS-Recovery-KEK-v1',
+        info: kdfInfo,
       },
       aad,
       createdAt: new Date().toISOString(),
@@ -720,6 +832,153 @@ export async function provisionZeroKnowledgeKeys(userId?: string | null): Promis
     // LifeOS does not retain raw byte references or persist the KEK.
     rawMdek.fill(0);
     rawRecoveryKey.fill(0);
+  }
+}
+
+/**
+ * Unlocks the MDEK from a `WrappedKeyEnvelope` using the user's Vault Password
+ * (PBKDF2-SHA-256 + AES-256-GCM).
+ */
+export async function unlockMdekWithVaultPassword(
+  vaultPassword: string,
+  envelope: WrappedKeyEnvelope,
+  userId?: string | null
+): Promise<CryptoKey> {
+  if (!envelope || envelope.keyFormatVersion !== CURRENT_KEY_FORMAT_VERSION) {
+    throw new CryptoKeyError('El respaldo de claves no es válido o tiene una versión no soportada.');
+  }
+  const pwMeta = parseVaultPasswordWrap(envelope);
+  if (!pwMeta) {
+    throw new CryptoKeyError('Esta cuenta todavía no tiene una contraseña de bóveda configurada.');
+  }
+  if (!vaultPassword || vaultPassword.length < 8) {
+    throw new CryptoDecryptionError('Contraseña de bóveda incorrecta. Probá de nuevo o usá tu código de recuperación.');
+  }
+
+  const pwSalt = base64ToBytes(pwMeta.salt);
+  const pwKek = await deriveKekFromPassphrase(vaultPassword, pwSalt, pwMeta.iterations);
+
+  let rawMdek: Uint8Array;
+  try {
+    rawMdek = await unwrapMdekWithKek(
+      { iv: pwMeta.iv, ciphertext: pwMeta.ciphertext },
+      pwKek,
+      buildVaultPasswordAad(envelope.aad)
+    );
+  } catch {
+    throw new CryptoDecryptionError('Contraseña de bóveda incorrecta. Probá de nuevo o usá tu código de recuperación.');
+  }
+
+  try {
+    if (userId) {
+      try {
+        await enrollDevice(userId, rawMdek);
+      } catch (enrollErr) {
+        console.warn('[DeviceTrust] No se pudo enrolar el dispositivo al desbloquear con contraseña:', enrollErr);
+      }
+    }
+    return await importSessionKey(rawMdek);
+  } finally {
+    rawMdek.fill(0);
+  }
+}
+
+/**
+ * Adds or updates a Vault Password wrapper on an existing `WrappedKeyEnvelope`
+ * without altering the underlying MDEK or the Recovery Key backup wrapper.
+ */
+export async function addOrUpdateVaultPasswordOnEnvelope(params: {
+  envelope: WrappedKeyEnvelope;
+  newVaultPassword: string;
+  currentRecoveryKey?: string;
+  currentVaultPassword?: string;
+  userId?: string | null;
+  pbkdf2Iterations?: number;
+  persistLocally?: boolean;
+}): Promise<{
+  updatedEnvelope: WrappedKeyEnvelope;
+  sessionMdek: CryptoKey;
+}> {
+  const {
+    envelope,
+    newVaultPassword,
+    currentRecoveryKey,
+    currentVaultPassword,
+    userId,
+    pbkdf2Iterations = PBKDF2_RECOMMENDED_ITERATIONS,
+    persistLocally = true,
+  } = params;
+
+  if (!envelope || !isWrappedKeyEnvelope(envelope)) {
+    throw new CryptoKeyError('El respaldo de claves actual no es válido.');
+  }
+  if (!newVaultPassword || newVaultPassword.length < 8) {
+    throw new CryptoKeyError('La contraseña de bóveda debe tener al menos 8 caracteres.');
+  }
+  if (!currentRecoveryKey && !currentVaultPassword) {
+    throw new CryptoKeyError('Ingresá tu clave de recuperación o tu contraseña actual para continuar.');
+  }
+
+  const rawMdek = new Uint8Array(32);
+  let currentRecovery: Uint8Array | null = null;
+
+  try {
+    if (currentRecoveryKey) {
+      currentRecovery = await parseRecoveryKey(currentRecoveryKey);
+      const oldSalt = base64ToBytes(envelope.kdf.salt);
+      const recKek = await deriveKekFromRecoveryKey(currentRecovery, oldSalt);
+      const unwrapped = await unwrapMdekWithKek(envelope.wrappedMdek, recKek, envelope.aad);
+      rawMdek.set(unwrapped);
+      unwrapped.fill(0);
+    } else if (currentVaultPassword) {
+      const pwMeta = parseVaultPasswordWrap(envelope);
+      if (!pwMeta) {
+        throw new CryptoKeyError('Esta cuenta no tiene una contraseña de bóveda previa.');
+      }
+      const oldPwSalt = base64ToBytes(pwMeta.salt);
+      const oldPwKek = await deriveKekFromPassphrase(currentVaultPassword, oldPwSalt, pwMeta.iterations);
+      const unwrapped = await unwrapMdekWithKek(
+        { iv: pwMeta.iv, ciphertext: pwMeta.ciphertext },
+        oldPwKek,
+        buildVaultPasswordAad(envelope.aad)
+      );
+      rawMdek.set(unwrapped);
+      unwrapped.fill(0);
+    }
+
+    const newPwSalt = new Uint8Array(16);
+    globalThis.crypto.getRandomValues(newPwSalt);
+    const newPwKek = await deriveKekFromPassphrase(newVaultPassword, newPwSalt, pbkdf2Iterations);
+    const newPwWrapped = await wrapMdekWithKek(rawMdek, newPwKek, buildVaultPasswordAad(envelope.aad));
+
+    const updatedEnvelope: WrappedKeyEnvelope = {
+      ...envelope,
+      kdf: {
+        ...envelope.kdf,
+        info: encodeVaultPasswordInfo({
+          iterations: pbkdf2Iterations,
+          salt: bytesToBase64(newPwSalt),
+          iv: newPwWrapped.iv,
+          ciphertext: newPwWrapped.ciphertext,
+        }),
+      },
+      createdAt: new Date().toISOString(),
+    };
+
+    if (persistLocally) {
+      saveWrappedKeyEnvelope(updatedEnvelope, userId);
+      try {
+        await enrollDevice(userId || 'local', rawMdek);
+      } catch (enrollErr) {
+        console.warn('[DeviceTrust] No se pudo re-enrolar el dispositivo al actualizar contraseña:', enrollErr);
+      }
+    }
+
+    const sessionMdek = await importSessionKey(rawMdek);
+    return { updatedEnvelope, sessionMdek };
+  } finally {
+    rawMdek.fill(0);
+    if (currentRecovery) currentRecovery.fill(0);
   }
 }
 
@@ -767,18 +1026,7 @@ export async function unlockMdekWithRecoveryKey(
  * generates a brand new Recovery Key + fresh salt, rewraps the existing MDEK under the new KEK,
  * and produces a new `WrappedKeyEnvelope`.
  *
- * Security semantics:
- * - The new WrappedKeyEnvelope can only be unlocked with the new Recovery Key.
- * - The old Recovery Key cannot unlock the new WrappedKeyEnvelope.
- * - Existing encrypted data in the cloud is NOT modified because the MDEK remains the same.
- * - Crucial nuance: If an adversary possesses both the old Recovery Key and an old copy
- *   of the previous WrappedKeyEnvelope, that old envelope can still unwrap the same MDEK.
- *   Complete cryptographic revocation in compromise scenarios requires rotating the MDEK
- *   and re-encrypting all 15 cloud modules.
- * - LifeOS explicitly clears memory buffers controlled by application code (.fill(0)).
- *   While the JavaScript runtime / Garbage Collector does not guarantee absolute physical
- *   erasure of all transient copies in memory, LifeOS does not deliberately persist Recovery Key,
- *   KEK nor plaintext MDEK in any of its own stores.
+ * Preserves any existing Vault Password wrap in `kdf.info` when the user context AAD matches.
  */
 export async function rewrapMdekWithNewRecoveryKey(
   currentRecoveryKeyFormatted: string,
@@ -804,9 +1052,15 @@ export async function rewrapMdekWithNewRecoveryKey(
     const oldKek = await deriveKekFromRecoveryKey(currentRecovery, oldSalt);
     const unwrappedBytes = await unwrapMdekWithKek(envelope.wrappedMdek, oldKek, envelope.aad);
     rawMdek.set(unwrappedBytes);
+    unwrappedBytes.fill(0);
 
     const newKek = await deriveKekFromRecoveryKey(newRecoveryKey, newSalt);
     const newWrappedMdek = await wrapMdekWithKek(rawMdek, newKek, aad);
+
+    const preservedInfo =
+      envelope.aad === aad && hasVaultPassword(envelope)
+        ? envelope.kdf.info
+        : RECOVERY_KDF_BASE_INFO;
 
     const newEnvelope: WrappedKeyEnvelope = {
       keyFormatVersion: CURRENT_KEY_FORMAT_VERSION,
@@ -816,7 +1070,7 @@ export async function rewrapMdekWithNewRecoveryKey(
       kdf: {
         algorithm: 'HKDF-SHA-256',
         salt: bytesToBase64(newSalt),
-        info: 'LifeOS-Recovery-KEK-v1',
+        info: preservedInfo,
       },
       aad,
       createdAt: new Date().toISOString(),

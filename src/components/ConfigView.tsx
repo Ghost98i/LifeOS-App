@@ -83,6 +83,7 @@ interface ConfigViewProps {
   onDeleteCloudAccount?: () => Promise<void>;
   onDeleteLocalData?: () => void;
   onForceSync?: () => void;
+  onE2EEDisabled?: (verifiedState: LifeOSState) => void;
   initialTab?: ConfigTab;
 }
 
@@ -105,6 +106,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   onDeleteCloudAccount,
   onDeleteLocalData,
   onForceSync,
+  onE2EEDisabled,
   initialTab = 'cuenta',
 }) => {
   const [activeTab, setActiveTab] = useState<ConfigTab>(() => {
@@ -612,7 +614,9 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               state={state}
               storageUserId={effectiveUserId}
               cloudConnected={Boolean(cloudUser)}
+              userEmail={cloudUser?.email}
               onForceSync={onForceSync}
+              onE2EEDisabled={onE2EEDisabled}
               onDeleteCloudAccount={onDeleteCloudAccount}
               onDeleteLocalData={onDeleteLocalData}
             />

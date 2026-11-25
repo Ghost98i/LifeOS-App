@@ -1,5 +1,5 @@
 import type { LifeOSState } from '../types';
-import { defaultState, normalizeStoredState } from './storage';
+import { defaultState, hasMeaningfulData, normalizeStoredState } from './storage';
 import { mergeModuleData, mergeModuleDataWithConflicts, detectModuleConflicts } from './syncMerge';
 
 export const SYNC_MODULES = [
@@ -291,4 +291,198 @@ export function equivalentLifeOSState(a: LifeOSState, b: LifeOSState): boolean {
   return SYNC_MODULES.every((module) => (
     syncModuleFingerprint(a, module) === syncModuleFingerprint(b, module)
   ));
+}
+
+/**
+ * Human-facing module label for conflict and privacy UI.
+ * Avoids internal keys (`resale`, `tasks`, `context`, `checkout`) completely.
+ */
+export function getHumanModuleLabel(module: SyncModuleKey): string {
+  if (module === 'resale') return 'Mi negocio';
+  return SYNC_MODULE_LABELS[module] ?? module;
+}
+
+/**
+ * Distinguishes real user-authored content from a brand-new, empty, or
+ * onboarding-only device state (e.g. only profile name, onboardingCompleted,
+ * hiddenTabs, darkMode, or privacyMode changed, with zero user records).
+ *
+ * Used to guarantee zero phantom conflicts when signing in with Google on a
+ * fresh or clean device without prior sync baselines.
+ */
+export function hasRealLocalUserData(state: LifeOSState): boolean {
+  if (!state) return false;
+  const def = defaultState();
+  const agendaHasData = state.agenda
+    ? Object.values(state.agenda).some((blocks) => Array.isArray(blocks) && blocks.length > 0)
+    : false;
+  const recurringSignature = (items: LifeOSState['tasksRecurring']) =>
+    (items || []).map(({ name, freq, days }) => ({ name, freq, days: days || [] }));
+  const recurringModified =
+    JSON.stringify(recurringSignature(state.tasksRecurring)) !==
+    JSON.stringify(recurringSignature(def.tasksRecurring));
+
+  const accounts = state.finance?.accounts || [];
+  const accountsAreDefaultEmpty =
+    accounts.length === 0 ||
+    (accounts.length === 2 &&
+      accounts[0]?.name === 'Efectivo' &&
+      accounts[1]?.name === 'Banco' &&
+      accounts.every((account) => Number(account.balance || 0) === 0 && Number(account.initialBalance || 0) === 0));
+
+  const hasNonZeroBudget = Object.keys(state.finance?.budgets || {}).some(
+    (key) => Number(state.finance?.budgets?.[key]) !== 0
+  );
+  const hasMonthlyBudgets = Object.keys(state.finance?.monthlyBudgets || {}).length > 0;
+  const hasCommercial = Boolean(
+    state.resale && Object.prototype.hasOwnProperty.call(state.resale, 'commercial')
+  );
+
+  const collections = [
+    state.todayExtras || [],
+    state.dailyPriorities || [],
+    state.dailyContext || [],
+    state.finance?.transactions || [],
+    state.finance?.transfers || [],
+    state.finance?.reconciliations || [],
+    state.finance?.debts || [],
+    state.finance?.investments || [],
+    state.finance?.subscriptions || [],
+    state.finance?.expectedIncomes || [],
+    state.finance?.commitments || [],
+    state.finance?.agreements || [],
+    state.gym?.weight || [],
+    state.gym?.measurements || [],
+    state.gym?.sessions || [],
+    state.gym?.routineTemplates || [],
+    state.gym?.restDays || [],
+    state.study?.subjects || [],
+    state.study?.exams || [],
+    state.study?.studyLog || [],
+    state.study?.questions || [],
+    state.study?.practiceAttempts || [],
+    state.streaming?.sessions || [],
+    state.streaming?.contentPipeline || [],
+    state.jobs?.opportunities || [],
+    state.jobs?.applications || [],
+    state.resale?.opportunities || [],
+    state.resale?.inventory || [],
+    state.ideas || [],
+    state.calendarEvents || [],
+    state.goals || [],
+    state.projects || [],
+    state.inbox || [],
+    state.notes?.postits || [],
+    state.notes?.shopping || [],
+    state.notes?.links || [],
+    state.notes?.possessions || [],
+  ];
+
+  return Boolean(
+    hasCommercial ||
+      agendaHasData ||
+      recurringModified ||
+      !accountsAreDefaultEmpty ||
+      hasNonZeroBudget ||
+      hasMonthlyBudgets ||
+      collections.some((items) => items.length > 0) ||
+      Object.keys(state.checkoutLog || {}).length > 0 ||
+      Object.keys(state.taskLog || {}).length > 0
+  );
+}
+
+/**
+ * True when the local device has no real user content (empty template or only
+ * onboarding/UI preferences like name, hiddenTabs, or darkMode).
+ */
+export function isCleanOrOnboardingOnlyState(state: LifeOSState): boolean {
+  return !hasRealLocalUserData(state);
+}
+
+export type InitialSyncDecision =
+  | { action: 'download_remote'; cleanDeviceAutoDownload: boolean }
+  | { action: 'upload_local' }
+  | { action: 'conflict_unpaired'; changedModules: SyncModuleKey[] }
+  | {
+      action: 'reconcile_paired';
+      local: SyncModuleKey[];
+      remote: SyncModuleKey[];
+      conflicts: SyncModuleKey[];
+    }
+  | { action: 'already_synced' };
+
+/**
+ * Pure decision engine for initial cloud reconciliation when a user signs in.
+ * Guarantees that a fresh or onboarding-only device with no prior sync baseline
+ * automatically downloads cloud data with zero phantom conflicts.
+ */
+export function decideInitialSyncAction(params: {
+  localState: LifeOSState;
+  remoteState: LifeOSState;
+  paired: boolean;
+  knownRevisions: SyncRevisionMap;
+  baselines: SyncBaselineMap;
+  remoteRevisions: SyncRevisionMap;
+  needsMigration?: boolean;
+}): InitialSyncDecision {
+  const {
+    localState,
+    remoteState,
+    paired,
+    knownRevisions,
+    baselines,
+    remoteRevisions,
+    needsMigration = false,
+  } = params;
+
+  const statesDiffer = !equivalentLifeOSState(localState, remoteState);
+  const localHasRealData = hasRealLocalUserData(localState);
+  const remoteHasData = hasMeaningfulData(remoteState);
+
+  if (!paired) {
+    // Clean / onboarding-only device: NEVER trigger a phantom conflict.
+    if (!localHasRealData) {
+      if (remoteHasData) {
+        return { action: 'download_remote', cleanDeviceAutoDownload: true };
+      }
+      return { action: 'upload_local' };
+    }
+
+    // Local device has real user-created content.
+    if (!remoteHasData) {
+      return { action: 'upload_local' };
+    }
+    if (!statesDiffer) {
+      return { action: 'already_synced' };
+    }
+    return {
+      action: 'conflict_unpaired',
+      changedModules: changedSyncModules(localState, remoteState),
+    };
+  }
+
+  // Paired device with known sync baseline.
+  if (statesDiffer && !needsMigration) {
+    const classification = classifyInitialModuleChanges(
+      localState,
+      remoteState,
+      knownRevisions,
+      baselines,
+      remoteRevisions
+    );
+    return {
+      action: 'reconcile_paired',
+      local: classification.local,
+      remote: classification.remote,
+      conflicts: classification.conflicts,
+    };
+  }
+
+  if (localHasRealData && !remoteHasData) {
+    return { action: 'upload_local' };
+  }
+  if (remoteHasData) {
+    return { action: 'download_remote', cleanDeviceAutoDownload: false };
+  }
+  return { action: 'upload_local' };
 }

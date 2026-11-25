@@ -86,7 +86,7 @@ test('Block 8: ConfigView y PrivacySecuritySection eliminan sobretexto y Context
   );
   assert.doesNotMatch(privacyHtml, /Ayuda: Protección de extremo a extremo/);
   assert.doesNotMatch(privacyHtml, /Cifrado de la sincronización y recuperación de acceso/);
-  assert.match(privacyHtml, /Qué protege el cifrado y cómo recuperar el acceso/);
+  assert.match(privacyHtml, /Cómo funciona tu privacidad/);
   assert.match(privacyHtml, /no quedan cifrados por esta función/);
 });
 

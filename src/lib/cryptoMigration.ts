@@ -15,15 +15,29 @@
  *    - Persists WrappedKeyEnvelope locally and sets cryptoSession to unlocked.
  */
 
-import { doc, getDocFromServer, setDoc } from 'firebase/firestore';
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocFromServer,
+  getDocsFromServer,
+  serverTimestamp,
+  setDoc,
+  writeBatch,
+} from 'firebase/firestore';
 import type { LifeOSState } from '../types';
-import { saveRecoveryState } from './storage';
+import { CURRENT_SCHEMA_VERSION, saveRecoveryState, saveStoredState, uid } from './storage';
 import {
   SYNC_MODULES,
+  applySyncModule,
   extractPureModuleData,
+  isSyncModuleKey,
   syncDataFingerprint,
   syncModuleData,
+  syncModuleFingerprint,
+  type SyncBaselineMap,
   type SyncModuleKey,
+  type SyncRevisionMap,
 } from './syncModel';
 import {
   CURRENT_SYNC_PROTOCOL_VERSION,
@@ -33,13 +47,17 @@ import {
   cryptoSession,
   saveWrappedKeyEnvelope,
   loadWrappedKeyEnvelope,
+  clearWrappedKeyEnvelope,
   unlockMdekWithRecoveryKey,
+  unlockMdekWithVaultPassword,
+  addOrUpdateVaultPasswordOnEnvelope,
   type WrappedKeyEnvelope,
   isWrappedKeyEnvelope,
   validateEnvelopeUserBinding,
   decryptSyncModule,
   rewrapMdekWithNewRecoveryKey,
 } from './cryptoCore';
+import { forgetDeviceTrust } from './deviceTrust';
 
 export type { AccountSyncCapability };
 import {
@@ -48,8 +66,14 @@ import {
   writeCloudMigrationModule,
   loadCloudRevisions,
   saveCloudRevisions,
+  saveCloudBaselines,
+  saveCloudBaselineData,
   getOrCreateDeviceId,
   getFirestoreDb,
+  chunkSyncModulesForTransaction,
+  splitGymData,
+  suspendCloudSync,
+  resumeCloudSync,
 } from './cloudSync';
 
 export interface MigrationProgress {
@@ -695,4 +719,494 @@ export async function executeKeyRotation(
     newEnvelope: verifiedRemote,
     sessionMdek,
   };
+}
+
+/**
+ * Second-Device Unlock via Vault Password (PBKDF2-SHA-256 + AES-256-GCM):
+ * Allows unlocking on a new device in 1 tap with a browser password manager.
+ */
+export async function unlockDeviceWithVaultPassword(
+  userId: string,
+  vaultPassword: string,
+  envelopeOverride?: WrappedKeyEnvelope | null,
+  testModuleEnvelope?: { module: SyncModuleKey; envelope: any },
+  customDb?: any,
+  handlers?: CapabilityStorageHandlers
+): Promise<{ sessionMdek: CryptoKey; envelope: WrappedKeyEnvelope }> {
+  if (!userId) throw new Error('Usuario inválido.');
+
+  let envelope = envelopeOverride || null;
+  if (!envelope) {
+    envelope = await fetchCloudKeyEnvelope(userId, customDb, handlers);
+  }
+  if (!envelope) {
+    throw new Error('No se encontró el respaldo de claves de esta cuenta en la nube ni en este dispositivo.');
+  }
+  if (!isWrappedKeyEnvelope(envelope)) {
+    throw new Error('El respaldo de claves remoto está dañado o tiene un formato no válido.');
+  }
+  if (!validateEnvelopeUserBinding(envelope, userId)) {
+    throw new Error('El respaldo de claves no coincide con esta cuenta de usuario.');
+  }
+
+  const sessionMdek = await unlockMdekWithVaultPassword(vaultPassword, envelope, userId);
+
+  if (testModuleEnvelope) {
+    await decryptSyncModule(
+      testModuleEnvelope.envelope,
+      sessionMdek,
+      testModuleEnvelope.module,
+      userId
+    );
+  }
+
+  saveWrappedKeyEnvelope(envelope, userId);
+  cryptoSession.setUnlocked(sessionMdek, userId);
+
+  return { sessionMdek, envelope };
+}
+
+/**
+ * Adds or updates a Vault Password on an existing E2EE account (including legacy accounts
+ * that previously only had a Recovery Key).
+ * Preserves the exact same MDEK and Recovery Key backup wrapper.
+ */
+export async function setVaultPasswordForAccount(
+  userId: string,
+  params: {
+    newVaultPassword: string;
+    currentRecoveryKey?: string;
+    currentVaultPassword?: string;
+    pbkdf2Iterations?: number;
+  },
+  customDb?: any,
+  handlers?: CapabilityStorageHandlers
+): Promise<{ envelope: WrappedKeyEnvelope; sessionMdek: CryptoKey }> {
+  if (!userId) throw new Error('Usuario inválido.');
+
+  let envelope = loadWrappedKeyEnvelope(userId);
+  if (!envelope) {
+    envelope = await fetchCloudKeyEnvelope(userId, customDb, handlers);
+  }
+  if (!envelope) {
+    throw new Error('No se encontró el respaldo de claves de esta cuenta.');
+  }
+
+  const { updatedEnvelope, sessionMdek } = await addOrUpdateVaultPasswordOnEnvelope({
+    envelope,
+    newVaultPassword: params.newVaultPassword,
+    currentRecoveryKey: params.currentRecoveryKey,
+    currentVaultPassword: params.currentVaultPassword,
+    userId,
+    pbkdf2Iterations: params.pbkdf2Iterations,
+    persistLocally: false,
+  });
+
+  // Self-test before touching the cloud
+  await unlockMdekWithVaultPassword(params.newVaultPassword, updatedEnvelope);
+
+  // Commit to Firestore
+  await setCloudKeyEnvelope(userId, updatedEnvelope, customDb, handlers);
+
+  // Verify cloud roundtrip
+  const verifiedRemote = await fetchCloudKeyEnvelope(userId, customDb, handlers);
+  if (!verifiedRemote || verifiedRemote.kdf.info !== updatedEnvelope.kdf.info) {
+    throw new Error('No se pudo confirmar la contraseña de bóveda en la nube. Intentá de nuevo.');
+  }
+  await unlockMdekWithVaultPassword(params.newVaultPassword, verifiedRemote);
+
+  saveWrappedKeyEnvelope(verifiedRemote, userId);
+  cryptoSession.setUnlocked(sessionMdek, userId);
+
+  return { envelope: verifiedRemote, sessionMdek };
+}
+
+export const DISABLE_E2EE_CHECKPOINT_PREFIX = 'lifeos-e2ee-disable-recovery-v1:';
+
+export interface DisableE2EEProgress {
+  stage: 'verifying' | 'cleaning' | 'uploading' | 'confirming' | 'complete';
+  completed: number;
+  total: number;
+  message: string;
+}
+
+export interface DisableE2EEResult {
+  success: boolean;
+  verifiedState: LifeOSState;
+  uploadedModules: SyncModuleKey[];
+  revisions: SyncRevisionMap;
+}
+
+export interface DisableE2EEHandlers {
+  listRemoteModuleDocs: (userId: string) => Promise<Array<{ id: string; data: Record<string, any> }>>;
+  clearEncryptedCloudState: (userId: string) => Promise<void>;
+  uploadPlaintextModule: (
+    userId: string,
+    docId: string,
+    payload: Record<string, any>
+  ) => Promise<void>;
+  setPlaintextCapability: (userId: string, capability: AccountSyncCapability) => Promise<void>;
+  verifyPlaintextModules: (userId: string) => Promise<Array<{ id: string; isEncrypted?: boolean; data: unknown }>>;
+}
+
+function cleanPlaintextForFirestore<T>(data: T): T {
+  try {
+    return JSON.parse(JSON.stringify(data));
+  } catch {
+    return data;
+  }
+}
+
+/**
+ * Safely disables optional E2EE ("Candado privado adicional") and returns the account
+ * to standard 1-click Google Auth cloud sync without losing any module or history chunk:
+ *
+ * 1. Suspends background autosaves so no concurrent write interferes.
+ * 2. Reads, decrypts, and verifies EVERY remote module (all 15 SYNC_MODULES + gym chunks)
+ *    in memory BEFORE modifying anything in Firestore. Any decryption failure aborts cleanly.
+ * 3. Persists a mandatory local recovery snapshot + durable checkpoint. Aborts if local write fails.
+ * 4. Clears encrypted cloud docs + E2EE capability/keyEnvelope via Firestore's owner transition marker.
+ * 5. Immediately re-uploads all 15 verified modules (and gym chunks) in plaintext under Google Auth.
+ * 6. Sets capability to 'plaintext', verifies every module is readable without MDEK, then clears
+ *    local E2EE metadata (WrappedKeyEnvelope + DeviceTrust + session key).
+ */
+export async function disableE2EEProtection(
+  userId: string,
+  sessionMdek: CryptoKey,
+  currentState: LifeOSState,
+  options?: {
+    onProgress?: (progress: DisableE2EEProgress) => void;
+    customDb?: any;
+    handlers?: DisableE2EEHandlers;
+  }
+): Promise<DisableE2EEResult> {
+  if (!userId) throw new Error('Iniciá sesión con Google para desactivar el candado privado.');
+  if (!sessionMdek) throw new Error('Desbloqueá tus datos antes de desactivar el candado privado.');
+  if (currentState.resale && Object.prototype.hasOwnProperty.call(currentState.resale, 'commercial')) {
+    throw new Error(
+      'Tu cuenta tiene operaciones comerciales activas que requieren protección adicional. Conservamos tus datos sin cambios.'
+    );
+  }
+
+  const totalSteps = SYNC_MODULES.length;
+  const emit = (progress: DisableE2EEProgress) => {
+    options?.onProgress?.(progress);
+  };
+
+  suspendCloudSync();
+  try {
+    const handlers = options?.handlers;
+    const db = options?.customDb || (handlers ? null : getDbInstance());
+    const deviceId = getOrCreateDeviceId();
+
+    // STEP 1: Fetch, decrypt, and verify ALL remote modules + gym chunks in memory BEFORE any cloud mutation
+    emit({
+      stage: 'verifying',
+      completed: 0,
+      total: totalSteps,
+      message: 'Descifrando y verificando tus módulos en este dispositivo…',
+    });
+
+    const remoteDocs: Array<{ id: string; data: Record<string, any> }> = handlers
+      ? await handlers.listRemoteModuleDocs(userId)
+      : (await getDocsFromServer(collection(db, 'users', userId, 'lifeosModules'))).docs.map((snap) => ({
+          id: snap.id,
+          data: snap.data() as Record<string, any>,
+        }));
+
+    let verifiedState = structuredClone(currentState);
+    const decryptedGymChunks: Array<{ id: string; content: Record<string, unknown> }> = [];
+    let verifiedCount = 0;
+
+    for (const remoteDoc of remoteDocs) {
+      const docId = remoteDoc.id;
+      const docPayload = remoteDoc.data;
+      let plainContent: unknown = docPayload?.data;
+
+      if (docPayload?.isEncrypted === true || isCryptoEnvelope(docPayload?.data)) {
+        if (!isCryptoEnvelope(docPayload?.data)) {
+          throw new Error(`El módulo "${docId}" tiene un formato cifrado inválido. No se realizó ningún cambio en la nube.`);
+        }
+        try {
+          plainContent = await decryptSyncModule(docPayload.data, sessionMdek, docId, userId);
+        } catch {
+          throw new Error(
+            `No se pudo verificar el módulo "${docId}". Tus datos en la nube permanecen intactos.`
+          );
+        }
+      }
+
+      const pure = extractPureModuleData(plainContent);
+      if (isSyncModuleKey(docId)) {
+        verifiedState = applySyncModule(verifiedState, docId, pure);
+        verifiedCount += 1;
+        emit({
+          stage: 'verifying',
+          completed: Math.min(verifiedCount, totalSteps),
+          total: totalSteps,
+          message: `Verificando datos (${Math.min(verifiedCount, totalSteps)} de ${totalSteps})…`,
+        });
+      } else if (/^gym_(history|weight|measurements?)_chunk_[0-9]+$/.test(docId) && pure && typeof pure === 'object') {
+        decryptedGymChunks.push({ id: docId, content: pure as Record<string, unknown> });
+      }
+    }
+
+    // STEP 2: Mandatory local safety snapshot + durable checkpoint BEFORE touching Firestore
+    const recoveryOk = saveRecoveryState(
+      verifiedState,
+      userId,
+      'manual_snapshot',
+      'Respaldo automático previo a desactivar el candado privado'
+    );
+    if (!recoveryOk) {
+      throw new Error(
+        'No se pudo guardar una copia de seguridad local en este navegador. Liberá espacio e intentá de nuevo.'
+      );
+    }
+
+    const checkpointKey = `${DISABLE_E2EE_CHECKPOINT_PREFIX}${userId}`;
+    try {
+      localStorage.setItem(
+        checkpointKey,
+        JSON.stringify({
+          createdAt: new Date().toISOString(),
+          state: verifiedState,
+          gymChunks: decryptedGymChunks,
+        })
+      );
+    } catch {
+      throw new Error(
+        'No se pudo guardar el punto de recuperación temporal. Tus datos cifrados permanecen intactos.'
+      );
+    }
+
+    // Also persist the verified plaintext state locally
+    saveStoredState(verifiedState, userId);
+
+    // STEP 3: Clear encrypted cloud docs & E2EE capability/keyEnvelope
+    emit({
+      stage: 'cleaning',
+      completed: 0,
+      total: totalSteps,
+      message: 'Preparando tu cuenta para sincronización directa con Google…',
+    });
+
+    if (handlers) {
+      await handlers.clearEncryptedCloudState(userId);
+    } else {
+      const deletionMarkerRef = doc(db, 'users', userId, 'lifeosAccount', 'deletion');
+      await setDoc(deletionMarkerRef, {
+        requestedAt: new Date().toISOString(),
+        deviceId,
+      });
+
+      const deleteInBatches = async (colName: 'lifeosModules' | 'lifeosRevisions' | 'lifeosAccount') => {
+        const snap = await getDocsFromServer(collection(db, 'users', userId, colName));
+        const ids = snap.docs
+          .map((d) => d.id)
+          .filter((id) => !(colName === 'lifeosAccount' && id === 'deletion'));
+        for (let idx = 0; idx < ids.length; idx += 400) {
+          const slice = ids.slice(idx, idx + 400);
+          const batch = writeBatch(db);
+          for (const id of slice) {
+            batch.delete(doc(db, 'users', userId, colName, id));
+          }
+          await batch.commit();
+        }
+      };
+
+      const legacyRef = doc(db, 'users', userId, 'lifeos', 'state');
+      const legacySnap = await getDocFromServer(legacyRef);
+      if (legacySnap.exists()) {
+        await deleteDoc(legacyRef);
+      }
+
+      await deleteInBatches('lifeosModules');
+      await deleteInBatches('lifeosRevisions');
+      await deleteInBatches('lifeosAccount');
+      await deleteDoc(deletionMarkerRef);
+    }
+
+    // STEP 4: Re-upload all 15 verified modules (+ gym chunks) in plaintext under Google Auth
+    emit({
+      stage: 'uploading',
+      completed: 0,
+      total: totalSteps,
+      message: 'Subiendo tus datos protegidos con Google…',
+    });
+
+    const clientUpdatedAt = Date.now();
+    const nextRevisions: SyncRevisionMap = {};
+    const nextBaselines: SyncBaselineMap = {};
+    const nextBaselineData: Partial<Record<SyncModuleKey, unknown>> = {};
+    const preparedPayloads = new Map<SyncModuleKey, { revision: string; payload: Record<string, unknown> }>();
+
+    for (let i = 0; i < SYNC_MODULES.length; i++) {
+      const mod = SYNC_MODULES[i];
+      let rawModData = syncModuleData(verifiedState, mod) as Record<string, unknown>;
+      if (mod === 'gym') {
+        rawModData = splitGymData(rawModData).primaryGym;
+      }
+      const cleanData = cleanPlaintextForFirestore(rawModData);
+      const revision = `${clientUpdatedAt + i}-${deviceId}-${uid()}`;
+      const payload = {
+        schemaVersion: Math.round(Number(verifiedState.schemaVersion || CURRENT_SCHEMA_VERSION)),
+        syncProtocolVersion: 1,
+        isEncrypted: false,
+        module: mod,
+        data: cleanData,
+        revision,
+        parentRevision: null,
+        deviceId,
+        clientUpdatedAt: clientUpdatedAt + i,
+        updatedAt: handlers ? new Date().toISOString() : serverTimestamp(),
+      };
+      preparedPayloads.set(mod, { revision, payload });
+      nextRevisions[mod] = revision;
+      nextBaselines[mod] = syncModuleFingerprint(verifiedState, mod);
+      nextBaselineData[mod] = syncModuleData(verifiedState, mod);
+    }
+
+    let uploadedCount = 0;
+    if (handlers) {
+      for (const mod of SYNC_MODULES) {
+        const entry = preparedPayloads.get(mod)!;
+        await handlers.uploadPlaintextModule(userId, mod, entry.payload);
+        uploadedCount += 1;
+        emit({
+          stage: 'uploading',
+          completed: uploadedCount,
+          total: totalSteps,
+          message: `Guardando módulos (${uploadedCount} de ${totalSteps})…`,
+        });
+      }
+      for (let c = 0; c < decryptedGymChunks.length; c++) {
+        const chunk = decryptedGymChunks[c];
+        const rev = `${clientUpdatedAt + 100 + c}-${deviceId}-${uid()}`;
+        await handlers.uploadPlaintextModule(userId, chunk.id, {
+          schemaVersion: Math.round(Number(verifiedState.schemaVersion || CURRENT_SCHEMA_VERSION)),
+          syncProtocolVersion: 1,
+          isEncrypted: false,
+          module: chunk.id,
+          data: cleanPlaintextForFirestore(chunk.content),
+          revision: rev,
+          parentRevision: null,
+          deviceId,
+          clientUpdatedAt: clientUpdatedAt + 100 + c,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    } else {
+      const chunks = chunkSyncModulesForTransaction([...SYNC_MODULES], 5);
+      for (const group of chunks) {
+        const batch = writeBatch(db);
+        for (const mod of group) {
+          const entry = preparedPayloads.get(mod)!;
+          batch.set(doc(db, 'users', userId, 'lifeosModules', mod), entry.payload);
+          batch.set(doc(db, 'users', userId, 'lifeosRevisions', entry.revision), entry.payload);
+        }
+        await batch.commit();
+        uploadedCount += group.length;
+        emit({
+          stage: 'uploading',
+          completed: uploadedCount,
+          total: totalSteps,
+          message: `Guardando módulos (${uploadedCount} de ${totalSteps})…`,
+        });
+      }
+      for (let c = 0; c < decryptedGymChunks.length; c++) {
+        const chunk = decryptedGymChunks[c];
+        const rev = `${clientUpdatedAt + 100 + c}-${deviceId}-${uid()}`;
+        await setDoc(doc(db, 'users', userId, 'lifeosModules', chunk.id), {
+          schemaVersion: Math.round(Number(verifiedState.schemaVersion || CURRENT_SCHEMA_VERSION)),
+          syncProtocolVersion: 1,
+          isEncrypted: false,
+          module: chunk.id,
+          data: cleanPlaintextForFirestore(chunk.content),
+          revision: rev,
+          parentRevision: null,
+          deviceId,
+          clientUpdatedAt: clientUpdatedAt + 100 + c,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    }
+
+    // STEP 5: Record plaintext capability & verify readability without MDEK
+    emit({
+      stage: 'confirming',
+      completed: totalSteps,
+      total: totalSteps,
+      message: 'Confirmando que todos tus módulos quedaron legibles…',
+    });
+
+    const plaintextCap: AccountSyncCapability = {
+      version: 1,
+      minimumSyncProtocolVersion: 1,
+      encryptionState: 'plaintext',
+      encryptedModules: [],
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (handlers) {
+      await handlers.setPlaintextCapability(userId, plaintextCap);
+    } else {
+      await setAccountCapability(userId, plaintextCap, db);
+    }
+
+    const postDocs = handlers
+      ? await handlers.verifyPlaintextModules(userId)
+      : (await getDocsFromServer(collection(db, 'users', userId, 'lifeosModules'))).docs.map((snap) => ({
+          id: snap.id,
+          isEncrypted: Boolean(snap.data()?.isEncrypted),
+          data: snap.data()?.data,
+        }));
+
+    const postIds = new Set(postDocs.map((d) => d.id));
+    for (const mod of SYNC_MODULES) {
+      if (!postIds.has(mod)) {
+        throw new Error(`Faltó confirmar el módulo "${mod}" tras actualizar la nube. Conservamos tu copia local.`);
+      }
+    }
+    if (postDocs.some((d) => d.isEncrypted === true || isCryptoEnvelope(d.data))) {
+      throw new Error('Todavía quedaron módulos cifrados sin limpiar. Conservamos tu copia local.');
+    }
+
+    // STEP 6: Clean up local E2EE artifacts & update local sync metadata
+    saveCloudRevisions(userId, nextRevisions);
+    saveCloudBaselines(userId, nextBaselines);
+    saveCloudBaselineData(userId, nextBaselineData);
+    clearWrappedKeyEnvelope(userId);
+    await forgetDeviceTrust(userId);
+    cryptoSession.lock();
+    try {
+      localStorage.removeItem(checkpointKey);
+      if (isSyntheticTestingAllowed()) {
+        if ((window as any).__LIFEOS_SYNTHETIC_CLOUD_ENVELOPE__) {
+          delete (window as any).__LIFEOS_SYNTHETIC_CLOUD_ENVELOPE__[userId];
+        }
+        if ((window as any).__LIFEOS_SYNTHETIC_CAPABILITY__) {
+          (window as any).__LIFEOS_SYNTHETIC_CAPABILITY__[userId] = plaintextCap;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    emit({
+      stage: 'complete',
+      completed: totalSteps,
+      total: totalSteps,
+      message: 'Candado privado desactivado. Tu cuenta ya funciona en 1 clic con Google.',
+    });
+
+    return {
+      success: true,
+      verifiedState,
+      uploadedModules: [...SYNC_MODULES],
+      revisions: nextRevisions,
+    };
+  } finally {
+    resumeCloudSync();
+  }
 }
