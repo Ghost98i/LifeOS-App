@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   AlertTriangle,
-  ArrowRight,
   Check,
   ChevronDown,
   Copy,
   Download,
+  ExternalLink,
   Eye,
   EyeOff,
   Key,
@@ -803,62 +803,59 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
               )}
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                {!isSessionUnlocked && (
-                  <button type="button" onClick={() => setIsUnlockModalOpen(true)} className={primaryBtnClass}>
-                    <Unlock size={14} strokeWidth={1.75} aria-hidden="true" />
-                    <span>Desbloquear</span>
-                  </button>
-                )}
-                {isEncrypted && accountHasPassword && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setVaultAuthSecret('');
-                      setVaultNewPw('');
-                      setVaultConfirmPw('');
-                      setVaultPwError(null);
-                      setIsVaultPwModalOpen(true);
-                    }}
-                    className={secondaryBtnClass}
-                  >
-                    <KeyRound size={14} strokeWidth={1.75} aria-hidden="true" />
-                    <span>Cambiar contraseña de bóveda</span>
-                  </button>
-                )}
+            <div className="flex flex-wrap items-center gap-2">
+              {!isSessionUnlocked && (
+                <button type="button" onClick={() => setIsUnlockModalOpen(true)} className={primaryBtnClass}>
+                  <Unlock size={14} strokeWidth={1.75} aria-hidden="true" />
+                  <span>Desbloquear</span>
+                </button>
+              )}
+              {isEncrypted && accountHasPassword && (
                 <button
                   type="button"
                   onClick={() => {
-                    setDownloadKeyInput('');
-                    setDownloadError(null);
-                    setIsDownloadModalOpen(true);
+                    setVaultAuthSecret('');
+                    setVaultNewPw('');
+                    setVaultConfirmPw('');
+                    setVaultPwError(null);
+                    setIsVaultPwModalOpen(true);
                   }}
                   className={secondaryBtnClass}
                 >
-                  <Download size={14} strokeWidth={1.75} aria-hidden="true" />
-                  <span>Descargar respaldo</span>
+                  <KeyRound size={14} strokeWidth={1.75} aria-hidden="true" />
+                  <span>Cambiar contraseña de bóveda</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsRewrapModalOpen(true);
-                    setRewrapResultKey(null);
-                    setCurrentKeyForRewrap('');
-                    setRewrapError(null);
-                  }}
-                  className={secondaryBtnClass}
-                >
-                  <RotateCcw size={14} strokeWidth={1.75} aria-hidden="true" />
-                  <span>Renovar código de respaldo</span>
-                </button>
-              </div>
-
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setDownloadKeyInput('');
+                  setDownloadError(null);
+                  setIsDownloadModalOpen(true);
+                }}
+                className={secondaryBtnClass}
+              >
+                <Download size={14} strokeWidth={1.75} aria-hidden="true" />
+                <span>Descargar respaldo</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRewrapModalOpen(true);
+                  setRewrapResultKey(null);
+                  setCurrentKeyForRewrap('');
+                  setRewrapError(null);
+                }}
+                className={secondaryBtnClass}
+              >
+                <RotateCcw size={14} strokeWidth={1.75} aria-hidden="true" />
+                <span>Renovar código de respaldo</span>
+              </button>
               {(isEnrolled || isSessionUnlocked) && (
                 <button
                   type="button"
                   onClick={handleForgetDevice}
-                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-rose-500/25 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-500/20 dark:text-rose-400 cursor-pointer"
+                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-transparent px-3.5 py-2 text-xs font-semibold text-slate-600 transition-colors hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-600 dark:border-white/[0.08] dark:text-slate-300 dark:hover:border-rose-400/35 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70"
                   title="Bloquear este navegador y olvidar la sesión recordada"
                 >
                   <Lock size={14} strokeWidth={1.75} aria-hidden="true" />
@@ -969,16 +966,16 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
           <div className="max-w-xl space-y-1">
             <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Eliminar cuenta y datos en la nube</p>
             <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-              Borra de forma permanente todos tus datos sincronizados, historial y llaves de seguridad asociados a tu cuenta de Google. La sincronización se detiene primero para que ningún guardado pendiente vuelva a crearlos.
+              Elimina de forma permanente tu información sincronizada en la nube y desconecta tu cuenta de Google de Celestian. Tu cuenta de Google no se ve afectada y, al finalizar, podrás elegir si conservar o borrar los datos locales de este dispositivo.
             </p>
             <a
               href="/eliminar-cuenta.html"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex min-h-10 items-center gap-1.5 text-xs font-semibold text-[#4F46E5] hover:underline dark:text-indigo-400"
+              className="inline-flex min-h-10 items-center gap-1.5 text-xs font-semibold text-[#4F46E5] transition-colors hover:text-[#4338CA] hover:underline dark:text-[#818CF8] dark:hover:text-indigo-300"
             >
               <span>Instrucciones públicas, incluso si desinstalaste la app</span>
-              <ArrowRight size={14} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
+              <ExternalLink size={14} strokeWidth={1.75} className="shrink-0" aria-hidden="true" />
             </a>
           </div>
           <button
@@ -1713,14 +1710,14 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                   <div className="space-y-1">
                     <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Eliminar cuenta y datos en la nube</h3>
                     <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-                      Esta acción es permanente y no se puede deshacer. Se eliminarán de Firestore todos los módulos, las revisiones y las claves asociadas a tu cuenta de Google. Después cerraremos tu sesión.
+                      Esta acción es permanente y no se puede deshacer. Se eliminarán de la nube todos tus datos sincronizados, su historial y el acceso del candado privado si lo activaste. Luego cerraremos tu sesión en este dispositivo.
                     </p>
                   </div>
                 </div>
                 <ul className="list-inside list-disc space-y-1 border-l-2 border-rose-500/40 pl-3 py-1 text-xs text-slate-600 dark:text-slate-400">
-                  <li>Módulos sincronizados y su historial de revisiones.</li>
-                  <li>Llaves de seguridad del candado privado.</li>
-                  <li>Registros de sincronización de esta cuenta.</li>
+                  <li>Todos los módulos sincronizados en la nube y su historial.</li>
+                  <li>Tu configuración y acceso del candado privado adicional, si estaba activo.</li>
+                  <li>El vínculo de sincronización con este dispositivo (tu cuenta de Google sigue intacta).</li>
                 </ul>
                 <div className="space-y-1.5">
                   <label htmlFor="delete-account-confirmation" className="text-xs font-semibold text-slate-900 dark:text-slate-100">

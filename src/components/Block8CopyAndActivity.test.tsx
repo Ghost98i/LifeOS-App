@@ -50,8 +50,8 @@ test('Block 8: ConfigView y PrivacySecuritySection eliminan sobretexto y Context
   );
 
   assert.doesNotMatch(backupsHtml, /Ayuda: Copias de respaldo/);
-  assert.match(backupsHtml, /Archivo JSON local; no queda cifrado por la sincronización\./);
-  assert.match(backupsHtml, /Reemplaza los datos actuales por los valores iniciales\./);
+  assert.match(backupsHtml, /El archivo no lleva contraseña, así que conviene guardarlo en un lugar seguro\./);
+  assert.match(backupsHtml, /Antes de borrar, se guarda automáticamente una copia de emergencia en este navegador\./);
 
   const prefsHtml = renderToStaticMarkup(
     <ConfigView

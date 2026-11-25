@@ -7,8 +7,14 @@ import {
   Cloud,
   Download,
   Dumbbell,
+  ExternalLink,
+  Eye,
+  EyeOff,
+  FileText,
   HardDrive,
   Info,
+  KeyRound,
+  Lock,
   Radio,
   RotateCcw,
   Search,
@@ -34,7 +40,15 @@ import {
   todayISO,
 } from '../lib/storage';
 import { getOrCreateDeviceId, type CloudSyncStatus, type CloudUser } from '../lib/cloudSync';
-import { cryptoSession } from '../lib/cryptoCore';
+import {
+  cryptoSession,
+  hasVaultPassword,
+  loadWrappedKeyEnvelope,
+  unlockMdekWithRecoveryKey,
+  unlockMdekWithVaultPassword,
+  type WrappedKeyEnvelope,
+} from '../lib/cryptoCore';
+import { fetchAccountCapability, fetchCloudKeyEnvelope } from '../lib/cryptoMigration';
 import { compareMaterializedBalanceShadow } from '../lib/financeLedger';
 import { showToast } from '../lib/toast';
 import { PageHeader } from './PageHeader';
@@ -64,6 +78,105 @@ const resolveTabFromHash = (hash: string): ConfigTab | null => {
   return null;
 };
 
+export const formatRecoveryDateTime = (iso?: string): string => {
+  if (!iso) return 'Reciente';
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return 'Reciente';
+  return new Intl.DateTimeFormat('es-UY', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(parsed);
+};
+
+export const humanizeRecoveryReason = (description?: string, action?: string): string => {
+  const raw = (description || '').trim();
+  const lower = raw.toLowerCase();
+
+  if (lower.includes('versión remota descartada al elegir datos locales')) {
+    return 'Guardada antes de conservar los datos de este dispositivo';
+  }
+  if (lower.includes('versión local descartada al elegir datos de la nube')) {
+    return 'Guardada antes de cargar los datos de la nube';
+  }
+  if (lower.includes('reiniciar datos') || action === 'reset_data') {
+    return 'Guardada antes de reiniciar los datos';
+  }
+  if (lower.includes('restaurar copia')) {
+    return 'Guardada antes de restaurar una copia anterior';
+  }
+  if (lower.includes('reparación de saldos') || lower.includes('libro mayor') || action === 'repair_balances') {
+    return 'Guardada antes de corregir diferencias de saldo';
+  }
+  if (lower.startsWith('previo a importar') || action === 'import_backup') {
+    return 'Guardada antes de importar una copia de seguridad';
+  }
+  if (lower.includes('e2ee') || lower.includes('cifrado') || lower.includes('candado') || lower.includes('migraci')) {
+    return 'Guardada antes de cambiar la configuración de seguridad';
+  }
+  if (action === 'cloud_conflict' || lower.includes('conflicto')) {
+    return 'Guardada antes de resolver diferencias entre dispositivos';
+  }
+  if (raw && !/^(manual_snapshot|import_backup|reset_data|repair_balances|cloud_conflict)$/i.test(raw)) {
+    return raw;
+  }
+  return 'Guardada automáticamente antes de un cambio importante';
+};
+
+export interface ResetVerificationResult {
+  ok: boolean;
+  error?: string;
+}
+
+export async function verifyResetConfirmation(params: {
+  envelope: WrappedKeyEnvelope | null;
+  confirmationText?: string;
+  authMode?: 'password' | 'recovery';
+  secret?: string;
+}): Promise<ResetVerificationResult> {
+  const { envelope, confirmationText = '', authMode = 'password', secret = '' } = params;
+
+  if (!envelope) {
+    if (confirmationText.trim().toUpperCase() !== 'REINICIAR') {
+      return { ok: false, error: 'Escribí REINICIAR para confirmar el reinicio.' };
+    }
+    return { ok: true };
+  }
+
+  const effectiveMode: 'password' | 'recovery' = hasVaultPassword(envelope) ? authMode : 'recovery';
+  const cleanedSecret = effectiveMode === 'recovery' ? secret.trim() : secret;
+
+  if (!cleanedSecret.trim()) {
+    return {
+      ok: false,
+      error:
+        effectiveMode === 'password'
+          ? 'Ingresá tu contraseña de bóveda para confirmar.'
+          : 'Ingresá tu código de recuperación para confirmar.',
+    };
+  }
+
+  try {
+    if (effectiveMode === 'password') {
+      await unlockMdekWithVaultPassword(cleanedSecret, envelope);
+    } else {
+      await unlockMdekWithRecoveryKey(cleanedSecret, envelope);
+    }
+    return { ok: true };
+  } catch {
+    return {
+      ok: false,
+      error:
+        effectiveMode === 'password'
+          ? 'Contraseña de bóveda incorrecta. Probá de nuevo o usá tu código de recuperación.'
+          : 'El código de recuperación no es correcto o no coincide con esta cuenta.',
+    };
+  }
+}
+
 interface ConfigViewProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
@@ -85,6 +198,7 @@ interface ConfigViewProps {
   onForceSync?: () => void;
   onE2EEDisabled?: (verifiedState: LifeOSState) => void;
   initialTab?: ConfigTab;
+  defaultResetModalOpen?: boolean;
 }
 
 export const ConfigView: React.FC<ConfigViewProps> = ({
@@ -108,6 +222,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   onForceSync,
   onE2EEDisabled,
   initialTab = 'cuenta',
+  defaultResetModalOpen = false,
 }) => {
   const [activeTab, setActiveTab] = useState<ConfigTab>(() => {
     if (typeof window !== 'undefined') {
@@ -155,7 +270,20 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   // Safe Recovery & Modal States
   const [importPreview, setImportPreview] = useState<BackupPreviewSummary | null>(null);
   const [importFileName, setImportFileName] = useState('');
-  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(defaultResetModalOpen);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [resetSecret, setResetSecret] = useState('');
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resetEnvelope, setResetEnvelope] = useState<WrappedKeyEnvelope | null>(() =>
+    typeof localStorage !== 'undefined' ? loadWrappedKeyEnvelope(effectiveUserId) : null
+  );
+  const [resetAuthMode, setResetAuthMode] = useState<'password' | 'recovery'>(() => {
+    const initialEnv = typeof localStorage !== 'undefined' ? loadWrappedKeyEnvelope(effectiveUserId) : null;
+    return hasVaultPassword(initialEnv) ? 'password' : 'recovery';
+  });
+  const [isCheckingResetSecurity, setIsCheckingResetSecurity] = useState(false);
+  const [isVerifyingReset, setIsVerifyingReset] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
   const [isRepairModalOpen, setIsRepairModalOpen] = useState(false);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
@@ -226,12 +354,72 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
     return () => window.removeEventListener('hashchange', handleHashChange);
   }, []);
 
+  const closeResetModal = () => {
+    if (isVerifyingReset) return;
+    setIsResetModalOpen(false);
+    setResetConfirmText('');
+    setResetSecret('');
+    setShowResetPassword(false);
+    setResetError(null);
+  };
+
+  const openResetModal = () => {
+    const localEnv = typeof localStorage !== 'undefined' ? loadWrappedKeyEnvelope(effectiveUserId) : null;
+    setResetEnvelope(localEnv);
+    setResetAuthMode(hasVaultPassword(localEnv) ? 'password' : 'recovery');
+    setResetConfirmText('');
+    setResetSecret('');
+    setShowResetPassword(false);
+    setResetError(null);
+    setIsResetModalOpen(true);
+  };
+
+  useEffect(() => {
+    if (!isResetModalOpen || !cloudUser || !effectiveUserId) {
+      setIsCheckingResetSecurity(false);
+      return;
+    }
+    let active = true;
+    setIsCheckingResetSecurity(true);
+    const localEnv = typeof localStorage !== 'undefined' ? loadWrappedKeyEnvelope(effectiveUserId) : null;
+    Promise.all([
+      fetchAccountCapability(effectiveUserId),
+      fetchCloudKeyEnvelope(effectiveUserId),
+    ])
+      .then(([cap, remoteEnv]) => {
+        if (!active) return;
+        const resolvedEnv =
+          cap?.encryptionState === 'plaintext' && !remoteEnv
+            ? null
+            : (remoteEnv || localEnv);
+        setResetEnvelope(resolvedEnv);
+        setResetAuthMode(hasVaultPassword(resolvedEnv) ? 'password' : 'recovery');
+      })
+      .catch(() => {
+        if (!active) return;
+        setResetEnvelope(localEnv);
+        setResetAuthMode(hasVaultPassword(localEnv) ? 'password' : 'recovery');
+      })
+      .finally(() => {
+        if (active) setIsCheckingResetSecurity(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [isResetModalOpen, cloudUser, effectiveUserId]);
+
   useEffect(() => {
     if (!importPreview && !isResetModalOpen && !isRestoreModalOpen && !isRepairModalOpen && !isAboutModalOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (importPreview) setImportPreview(null);
-        if (isResetModalOpen) setIsResetModalOpen(false);
+        if (isResetModalOpen && !isVerifyingReset) {
+          setIsResetModalOpen(false);
+          setResetConfirmText('');
+          setResetSecret('');
+          setShowResetPassword(false);
+          setResetError(null);
+        }
         if (isRestoreModalOpen) setIsRestoreModalOpen(false);
         if (isRepairModalOpen) setIsRepairModalOpen(false);
         if (isAboutModalOpen) setIsAboutModalOpen(false);
@@ -239,7 +427,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [importPreview, isResetModalOpen, isRestoreModalOpen, isRepairModalOpen, isAboutModalOpen]);
+  }, [importPreview, isResetModalOpen, isVerifyingReset, isRestoreModalOpen, isRepairModalOpen, isAboutModalOpen]);
 
   const handleOpenRepairModal = () => {
     const diffs = (state.finance?.accounts || [])
@@ -271,7 +459,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
       .filter((d) => !d.repairable && d.computedBalance === null || d.difference !== 0 && d.difference !== null);
 
     if (diffs.length === 0) {
-      showToast('✨ Todas las cuentas coinciden exactamente con el libro mayor.');
+      showToast('Todas las cuentas coinciden con los movimientos registrados.');
       return;
     }
 
@@ -280,8 +468,8 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
   };
 
   const handleConfirmRepairBalances = () => {
-    if (!saveRecoveryState(state, storageUserId, 'repair_balances', 'Previo a reparación de saldos con libro mayor')) {
-      showToast('No se pudo guardar la copia preventiva. La reparación quedó detenida.', 'error');
+    if (!saveRecoveryState(state, storageUserId, 'repair_balances', 'Guardada antes de corregir diferencias de saldo')) {
+      showToast('No se pudo guardar la copia preventiva. La corrección quedó detenida.', 'error');
       return;
     }
     let corrected = 0;
@@ -301,7 +489,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
     });
     if (saved === false) return;
     setIsRepairModalOpen(false);
-    showToast(`✅ Se recalcularon ${corrected} cuenta(s) según el libro mayor cerrado. Copia anterior guardada en recuperación.`);
+    showToast(`Se actualizaron ${corrected} cuenta(s) según los movimientos registrados. Guardamos una copia de emergencia previa.`);
   };
 
   const streamingEnabled = isStreamingEnabled(state);
@@ -377,20 +565,44 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
     setImportPreview(null);
   };
 
-  const handleConfirmReset = () => {
-    if (onResetData) {
-      if (onResetData() === false) return;
-    } else {
-      if (!saveRecoveryState(state, storageUserId, 'reset_data', 'Previo a reiniciar datos a valores de fábrica')) {
-        showToast('No se pudo guardar una copia previa. El reinicio quedó detenido.', 'error'); return;
+  const handleConfirmReset = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (isVerifyingReset || isCheckingResetSecurity) return;
+    setResetError(null);
+    setIsVerifyingReset(true);
+    try {
+      const verification = await verifyResetConfirmation({
+        envelope: resetEnvelope,
+        confirmationText: resetConfirmText,
+        authMode: resetAuthMode,
+        secret: resetSecret,
+      });
+      if (!verification.ok) {
+        setResetError(verification.error || 'No pudimos validar tu confirmación.');
+        return;
       }
-      const def = defaultState();
-      if (onUpdateState((draft) => {
-        Object.assign(draft, def);
-      }) === false) return;
-      showToast('Datos reiniciados a los valores por defecto. Copia anterior guardada en recuperación.', 'info');
+
+      if (onResetData) {
+        if (onResetData() === false) return;
+      } else {
+        if (!saveRecoveryState(state, storageUserId, 'reset_data', 'Previo a reiniciar datos a valores de fábrica')) {
+          showToast('No se pudo guardar una copia previa. El reinicio quedó detenido.', 'error');
+          return;
+        }
+        const def = defaultState();
+        if (onUpdateState((draft) => {
+          Object.assign(draft, def);
+        }) === false) return;
+        showToast('Datos reiniciados a los valores por defecto. Copia anterior guardada en recuperación.', 'info');
+      }
+      setIsResetModalOpen(false);
+      setResetConfirmText('');
+      setResetSecret('');
+      setShowResetPassword(false);
+      setResetError(null);
+    } finally {
+      setIsVerifyingReset(false);
     }
-    setIsResetModalOpen(false);
   };
 
   const handleConfirmRestoreRecovery = () => {
@@ -472,8 +684,8 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
           <button
             type="button"
             onClick={() => setIsAboutModalOpen(true)}
-            aria-label="Créditos, privacidad y términos"
-            title="Créditos, privacidad y términos"
+            aria-label="Privacidad, condiciones y créditos"
+            title="Privacidad, condiciones y créditos"
             className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:text-slate-900 dark:border-white/[0.08] dark:bg-[#0D111A] dark:text-slate-400 dark:hover:text-slate-100 cursor-pointer"
           >
             <Info size={17} strokeWidth={1.75} aria-hidden="true" />
@@ -621,6 +833,77 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               onDeleteLocalData={onDeleteLocalData}
             />
           </div>
+
+          {/* Privacidad, condiciones y créditos */}
+          <SurfaceCard className="p-4 sm:p-5 space-y-3.5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="space-y-0.5">
+                <SectionHeader
+                  icon={<FileText size={16} strokeWidth={1.75} />}
+                  title="Privacidad, condiciones y créditos"
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Información pública sobre tus datos, reglas de uso y licencias de Celestian LifeOS.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAboutModalOpen(true)}
+                className={`${secondaryBtnClass} self-start sm:self-auto shrink-0 text-xs`}
+              >
+                <Info size={14} strokeWidth={1.75} className="text-[#4F46E5] dark:text-[#818CF8]" aria-hidden="true" />
+                <span>Ver resumen</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 border-t border-slate-100 pt-3.5 sm:grid-cols-2 dark:border-white/[0.06]">
+              {[
+                {
+                  href: '/privacidad.html',
+                  title: 'Política de privacidad',
+                  desc: 'Qué datos se guardan y cómo se protegen.',
+                },
+                {
+                  href: '/privacidad.html#condiciones',
+                  title: 'Condiciones de uso',
+                  desc: 'Propiedad de tus datos, copias y alcance del servicio.',
+                },
+                {
+                  href: '/eliminar-cuenta.html',
+                  title: 'Eliminar cuenta y datos',
+                  desc: 'Pasos desde la app o por correo electrónico.',
+                },
+                {
+                  href: '/creditos.html',
+                  title: 'Créditos y licencias',
+                  desc: 'Íconos, ilustraciones y animaciones.',
+                },
+              ].map((docLink) => (
+                <a
+                  key={docLink.href}
+                  href={docLink.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex min-h-11 items-center justify-between gap-3 rounded-xl border border-slate-200/80 px-3.5 py-2.5 transition-colors hover:border-[#4F46E5]/40 hover:bg-[#4F46E5]/[0.04] dark:border-white/[0.08] dark:hover:border-[#818CF8]/35 dark:hover:bg-indigo-500/[0.07]"
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-slate-900 transition-colors group-hover:text-[#4F46E5] dark:text-slate-100 dark:group-hover:text-[#818CF8]">
+                      {docLink.title}
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      {docLink.desc}
+                    </p>
+                  </div>
+                  <ExternalLink
+                    size={14}
+                    strokeWidth={1.75}
+                    aria-hidden="true"
+                    className="shrink-0 text-[#4F46E5] dark:text-[#818CF8]"
+                  />
+                </a>
+              ))}
+            </div>
+          </SurfaceCard>
         </div>
       )}
 
@@ -633,11 +916,11 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 icon={<HardDrive size={16} strokeWidth={1.75} />}
                 title="Copias de seguridad"
               />
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Archivo JSON local; no queda cifrado por la sincronización.
+              <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                Descargá una copia completa de tus datos en este equipo para resguardo o cambio de dispositivo. El archivo no lleva contraseña, así que conviene guardarlo en un lugar seguro.
               </p>
               {state.settings?.lastBackupAt && (
-                <p className="pt-0.5 text-xs font-medium tabular-nums text-[#4F46E5] dark:text-indigo-400">
+                <p className="pt-0.5 text-xs font-medium tabular-nums text-[#4F46E5] dark:text-[#818CF8]">
                   Última exportación registrada: {state.settings.lastBackupAt}
                 </p>
               )}
@@ -650,7 +933,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               </button>
 
               <label className={secondaryBtnClass}>
-                <RotateCcw size={15} strokeWidth={1.75} className="text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
+                <RotateCcw size={15} strokeWidth={1.75} className="text-[#4F46E5] dark:text-[#818CF8]" aria-hidden="true" />
                 <span>Importar copia</span>
                 <input
                   type="file"
@@ -673,15 +956,18 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                     Lista
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Capturada: {recoveryInfo.meta?.savedAt ? new Date(recoveryInfo.meta.savedAt).toLocaleString('es-UY') : 'Reciente'} · {recoveryInfo.meta?.description || recoveryInfo.meta?.action || 'Copia preventiva'}
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Respaldo automático que Celestian guarda antes de aplicar un cambio importante, por si necesitás volver atrás.
+                </p>
+                <p className="text-xs font-medium text-slate-700 dark:text-slate-300 tabular-nums">
+                  {formatRecoveryDateTime(recoveryInfo.meta?.savedAt)} · {humanizeRecoveryReason(recoveryInfo.meta?.description, recoveryInfo.meta?.action)}
                 </p>
                 <button
                   type="button"
                   onClick={() => setIsRestoreModalOpen(true)}
                   className={`${secondaryBtnClass} w-full sm:w-auto`}
                 >
-                  <RotateCcw size={15} strokeWidth={1.75} className="text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
+                  <RotateCcw size={15} strokeWidth={1.75} className="text-[#4F46E5] dark:text-[#818CF8]" aria-hidden="true" />
                   <span>Restaurar copia de emergencia</span>
                 </button>
               </div>
@@ -690,13 +976,15 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
           {/* Zona de peligro: Reiniciar datos */}
           <SurfaceCard className="border-rose-500/30 p-4 sm:p-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" aria-label="Reiniciar datos">
-            <div className="space-y-0.5">
+            <div className="space-y-1 max-w-xl">
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Reiniciar datos</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Reemplaza los datos actuales por los valores iniciales.</p>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                Vacía tus tareas, finanzas, notas, gimnasio y demás módulos para empezar desde cero. Antes de borrar, se guarda automáticamente una copia de emergencia en este navegador.
+              </p>
             </div>
             <button
               type="button"
-              onClick={() => setIsResetModalOpen(true)}
+              onClick={openResetModal}
               className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 self-start rounded-xl border border-rose-500/25 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-600 transition-colors hover:bg-rose-500/20 dark:text-rose-400 sm:self-auto cursor-pointer"
             >
               <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
@@ -763,13 +1051,15 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                       className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
                     />
                   </div>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Se guarda en tu perfil y se usa para fórmulas como RFM.</p>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Se usa solo para estimaciones opcionales en Gimnasio (como porcentaje estimado de grasa corporal).
+                  </p>
                 </div>
 
                 {streamingEnabled && (
                   <div className="min-w-0">
                     <label htmlFor="config-stream-goal" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                      Transmisiones por mes
+                      Meta mensual de streams
                     </label>
                     <input
                       id="config-stream-goal"
@@ -779,6 +1069,9 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                       placeholder="12"
                       className={`${fieldClass} tabular-nums`}
                     />
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Objetivo mensual para tu panel de Streaming y contenido en Notas.
+                    </p>
                   </div>
                 )}
               </div>
@@ -862,18 +1155,19 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
             </div>
           </SurfaceCard>
 
-          {/* Recordatorios de Atención ahora */}
+          {/* Avisos silenciados */}
           <SurfaceCard className="p-4 sm:p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 <SectionHeader
                   icon={<Bell size={16} strokeWidth={1.75} />}
-                  title="Recordatorios de «Atención ahora»"
+                  title="Avisos silenciados"
                 />
                 <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Acá podés volver a mostrar las alertas que ocultaste en Hoy.{' '}
                   {dismissedAttentionItems.length === 0
-                    ? 'No hay avisos silenciados.'
-                    : `Tenés ${dismissedAttentionItems.length === 1 ? '1 aviso silenciado' : `${dismissedAttentionItems.length} avisos silenciados`} para sus ocurrencias actuales.`}
+                    ? 'No tenés avisos silenciados en este momento.'
+                    : `Tenés ${dismissedAttentionItems.length === 1 ? '1 aviso silenciado' : `${dismissedAttentionItems.length} avisos silenciados`}.`}
                 </p>
               </div>
               {dismissedAttentionItems.length > 0 && (
@@ -882,7 +1176,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                   onClick={() => setShowDismissedModal(true)}
                   className={`${secondaryBtnClass} shrink-0 self-start sm:self-auto`}
                 >
-                  <RotateCcw size={14} strokeWidth={1.75} className="text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
+                  <RotateCcw size={14} strokeWidth={1.75} className="text-[#4F46E5] dark:text-[#818CF8]" aria-hidden="true" />
                   <span>Gestionar avisos silenciados</span>
                 </button>
               )}
@@ -900,12 +1194,12 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               </h2>
             </div>
 
-            {/* Consistencia de Finanzas */}
+            {/* Revisión de Finanzas */}
             <div className="border-t border-slate-100 pt-4 space-y-3 dark:border-white/[0.06]">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Wallet size={16} strokeWidth={1.75} className="text-slate-400 dark:text-slate-500" aria-hidden="true" />
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Consistencia de Finanzas</h3>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Revisión de Finanzas</h3>
                 </div>
                 {discrepantShadows.length === 0 ? (
                   <span className="rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
@@ -913,34 +1207,34 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                   </span>
                 ) : (
                   <span className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400">
-                    {discrepantShadows.length} {discrepantShadows.length === 1 ? 'cuenta divergente' : 'cuentas divergentes'}
+                    {discrepantShadows.length} {discrepantShadows.length === 1 ? 'cuenta con diferencia' : 'cuentas con diferencia'}
                   </span>
                 )}
               </div>
 
               <ListDivider className="text-sm">
                 <div className="flex items-center justify-between py-2">
-                  <span className="text-slate-500 dark:text-slate-400">Cuentas auditadas</span>
+                  <span className="text-slate-500 dark:text-slate-400">Cuentas revisadas</span>
                   <strong className="tabular-nums text-slate-900 dark:text-slate-100">
                     {financeShadows.length} cuenta{financeShadows.length === 1 ? '' : 's'}
                   </strong>
                 </div>
                 <div className="flex items-center justify-between py-2">
-                  <span className="text-slate-500 dark:text-slate-400">Estado contable</span>
+                  <span className="text-slate-500 dark:text-slate-400">Saldos</span>
                   <strong className="tabular-nums text-emerald-700 dark:text-emerald-400">
                     {financeShadows.length - discrepantShadows.length} coincidente{financeShadows.length - discrepantShadows.length === 1 ? '' : 's'}
                   </strong>
                 </div>
                 <div className="flex items-center justify-between py-2">
-                  <span className="text-slate-500 dark:text-slate-400">Transacciones registradas</span>
+                  <span className="text-slate-500 dark:text-slate-400">Movimientos</span>
                   <strong className="tabular-nums text-slate-900 dark:text-slate-100">{state.finance?.transactions?.length || 0}</strong>
                 </div>
                 <div className="flex items-center justify-between py-2">
-                  <span className="text-slate-500 dark:text-slate-400">Transferencias registradas</span>
+                  <span className="text-slate-500 dark:text-slate-400">Transferencias</span>
                   <strong className="tabular-nums text-slate-900 dark:text-slate-100">{state.finance?.transfers?.length || 0}</strong>
                 </div>
                 <div className="flex items-center justify-between py-2">
-                  <span className="text-slate-500 dark:text-slate-400">Conciliaciones / Arqueos</span>
+                  <span className="text-slate-500 dark:text-slate-400">Ajustes de saldo</span>
                   <strong className="tabular-nums text-slate-900 dark:text-slate-100">{state.finance?.reconciliations?.length || 0}</strong>
                 </div>
               </ListDivider>
@@ -966,16 +1260,16 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
               )}
             </div>
 
-            {/* Consistencia de Gimnasio */}
+            {/* Revisión de Gimnasio */}
             {(!isModuleHidden(state, 'gimnasio') || staleGymCount > 0) && (
               <div className="border-t border-slate-100 pt-4 space-y-2.5 dark:border-white/[0.06]">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <Dumbbell size={16} strokeWidth={1.75} className="text-slate-400 dark:text-slate-500" aria-hidden="true" />
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Consistencia de Gimnasio</h3>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Revisión de Gimnasio</h3>
                   </div>
                   <span className="rounded-md border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-xs font-semibold tabular-nums text-slate-600 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-400">
-                    {sortedGymSessions.length} sesiones
+                    {sortedGymSessions.length} {sortedGymSessions.length === 1 ? 'sesión' : 'sesiones'}
                   </span>
                 </div>
 
@@ -991,9 +1285,14 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                     </strong>
                   </div>
                   {staleGymCount > 0 && (
-                    <div className="flex items-center justify-between py-2 text-amber-700 dark:text-amber-400">
-                      <span>Sesiones previas incompletas</span>
-                      <strong className="tabular-nums font-semibold">{staleGymCount}</strong>
+                    <div className="py-2 space-y-1">
+                      <div className="flex items-center justify-between text-amber-700 dark:text-amber-400">
+                        <span>Sesiones previas incompletas</span>
+                        <strong className="tabular-nums font-semibold">{staleGymCount}</strong>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Son entrenamientos abiertos de días anteriores que podés cerrar o descartar en Gimnasio.
+                      </p>
                     </div>
                   )}
                 </ListDivider>
@@ -1004,20 +1303,19 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
             <details className="group border-t border-slate-100 pt-3 dark:border-white/[0.06]">
               <summary className="flex min-h-10 cursor-pointer items-center justify-between gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 select-none list-none">
                 <span className="flex items-center gap-2">
-                  <Shield size={15} strokeWidth={1.75} className="text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
+                  <Shield size={15} strokeWidth={1.75} className="text-[#4F46E5] dark:text-[#818CF8]" aria-hidden="true" />
                   <span>Almacenamiento y detalles técnicos</span>
                 </span>
-                <span className="flex items-center gap-2">
-                  <span className="font-mono text-xs text-slate-400 dark:text-slate-500">
-                    Dispositivo: {deviceId.slice(0, 8)}…
-                  </span>
-                  <ChevronDown size={15} strokeWidth={1.75} className="shrink-0 text-slate-400 transition-transform group-open:rotate-180" aria-hidden="true" />
-                </span>
+                <ChevronDown size={15} strokeWidth={1.75} className="shrink-0 text-slate-400 transition-transform group-open:rotate-180" aria-hidden="true" />
               </summary>
               <div className="pt-3 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 text-xs dark:border-white/[0.06]">
+                  <span className="text-slate-500 dark:text-slate-400">Identificador de este dispositivo</span>
+                  <code className="font-mono text-xs text-slate-700 dark:text-slate-300">{deviceId.slice(0, 8)}…</code>
+                </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Almacenamiento Local</h3>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Almacenamiento local</h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400">IndexedDB / LocalStorage</p>
                   </div>
                   <button
@@ -1025,7 +1323,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                     onClick={() => setDiagnostics(getStorageDiagnostics(storageUserId))}
                     className={secondaryBtnClass}
                   >
-                    <Search size={14} strokeWidth={1.75} className="text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
+                    <Search size={14} strokeWidth={1.75} className="text-[#4F46E5] dark:text-[#818CF8]" aria-hidden="true" />
                     <span>Diagnosticar</span>
                   </button>
                 </div>
@@ -1140,43 +1438,197 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
       )}
 
       {/* Modal 2: Confirmar Reinicio de Datos */}
-      {isResetModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Reiniciar datos" className="w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-2.5">
-              <Shield size={20} strokeWidth={1.75} className="shrink-0 text-rose-600 dark:text-rose-400" aria-hidden="true" />
-              <div>
-                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Reiniciar datos</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Operación destructiva</p>
+      {isResetModalOpen && (() => {
+        const requiresE2EE = Boolean(resetEnvelope);
+        const envelopeSupportsPassword = hasVaultPassword(resetEnvelope);
+        const effectiveAuthMode: 'password' | 'recovery' = envelopeSupportsPassword ? resetAuthMode : 'recovery';
+        const isResetSubmitDisabled =
+          isVerifyingReset ||
+          isCheckingResetSecurity ||
+          (requiresE2EE
+            ? !resetSecret.trim()
+            : resetConfirmText.trim().toUpperCase() !== 'REINICIAR');
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget && !isVerifyingReset) closeResetModal();
+            }}
+          >
+            <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Reiniciar datos" className="w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 sm:p-6 space-y-4 shadow-2xl">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <Shield size={20} strokeWidth={1.75} className="shrink-0 text-rose-600 dark:text-rose-400" aria-hidden="true" />
+                  <div className="min-w-0">
+                    <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Reiniciar datos</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Volver a empezar desde cero</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={closeResetModal}
+                  disabled={isVerifyingReset}
+                  aria-label="Cerrar"
+                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 disabled:opacity-50 cursor-pointer"
+                >
+                  <X size={16} strokeWidth={1.75} aria-hidden="true" />
+                </button>
               </div>
-            </div>
 
-            <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-              <p>
-                Esta acción reemplazará todas las tareas, finanzas, notas y registros de este dispositivo por el estado inicial en blanco de Celestian LifeOS.
-              </p>
-              <ul className="list-disc list-inside space-y-1 text-xs">
-                <li>Tu sesión de Google <strong>no</strong> se cerrará.</li>
-                <li>Antes del reinicio se guardará una copia de emergencia en este navegador.</li>
-                <li>Si estás conectado a la nube, los datos limpios se propagarán a tus otros dispositivos.</li>
-              </ul>
-            </div>
+              <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+                <p>
+                  Esta acción vacía tus tareas, finanzas, notas, gimnasio y demás módulos para dejar Celestian LifeOS en blanco.
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-xs">
+                  <li>Tu sesión de Google <strong>no</strong> se cierra.</li>
+                  <li>Antes de reiniciar se guarda automáticamente una copia de emergencia en este navegador.</li>
+                  <li>Si tenés sincronización activa, los datos en blanco se actualizarán en tus otros dispositivos.</li>
+                </ul>
+              </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
-              <button type="button" onClick={() => setIsResetModalOpen(false)} className={secondaryBtnClass}>
-                Cancelar
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmReset}
-                className="inline-flex min-h-10 items-center justify-center rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-700 cursor-pointer"
-              >
-                Sí, reiniciar todo
-              </button>
-            </div>
-          </SurfaceCard>
-        </div>
-      )}
+              <form onSubmit={(e) => { void handleConfirmReset(e); }} className="space-y-3 border-t border-slate-100 pt-3.5 dark:border-white/[0.06]">
+                {requiresE2EE ? (
+                  <div className="space-y-2.5">
+                    <input
+                      type="text"
+                      name="username"
+                      autoComplete="username"
+                      value={cloudUser?.email || effectiveUserId || 'celestian-vault'}
+                      readOnly
+                      tabIndex={-1}
+                      aria-hidden="true"
+                      className="sr-only"
+                    />
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-800 dark:text-slate-200">
+                      {effectiveAuthMode === 'password' ? (
+                        <Lock size={14} strokeWidth={1.75} className="shrink-0 text-[#4F46E5] dark:text-[#818CF8]" aria-hidden="true" />
+                      ) : (
+                        <KeyRound size={14} strokeWidth={1.75} className="shrink-0 text-[#4F46E5] dark:text-[#818CF8]" aria-hidden="true" />
+                      )}
+                      <label htmlFor="reset-data-secret">
+                        {effectiveAuthMode === 'password'
+                          ? 'Ingresá tu contraseña de bóveda para confirmar'
+                          : 'Ingresá tu código de recuperación para confirmar'}
+                      </label>
+                    </div>
+
+                    {effectiveAuthMode === 'password' ? (
+                      <div className="relative">
+                        <input
+                          id="reset-data-secret"
+                          type={showResetPassword ? 'text' : 'password'}
+                          autoComplete="current-password"
+                          value={resetSecret}
+                          onChange={(e) => {
+                            setResetSecret(e.target.value);
+                            if (resetError) setResetError(null);
+                          }}
+                          placeholder="Tu contraseña de bóveda…"
+                          disabled={isVerifyingReset || isCheckingResetSecurity}
+                          className={`${fieldClass} pr-11`}
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowResetPassword((v) => !v)}
+                          aria-label={showResetPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                        >
+                          {showResetPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+                        </button>
+                      </div>
+                    ) : (
+                      <textarea
+                        id="reset-data-secret"
+                        rows={2}
+                        value={resetSecret}
+                        onChange={(e) => {
+                          setResetSecret(e.target.value);
+                          if (resetError) setResetError(null);
+                        }}
+                        placeholder="Pegá tu código de recuperación…"
+                        disabled={isVerifyingReset || isCheckingResetSecurity}
+                        spellCheck={false}
+                        autoComplete="off"
+                        className={`${fieldClass} font-mono text-xs resize-none`}
+                        autoFocus
+                      />
+                    )}
+
+                    {envelopeSupportsPassword && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setResetAuthMode(effectiveAuthMode === 'password' ? 'recovery' : 'password');
+                          setResetSecret('');
+                          setResetError(null);
+                          setShowResetPassword(false);
+                        }}
+                        disabled={isVerifyingReset}
+                        className="inline-flex min-h-9 items-center gap-1.5 text-xs font-semibold text-[#4F46E5] transition-colors hover:text-[#4338CA] hover:underline dark:text-[#818CF8] dark:hover:text-indigo-300 cursor-pointer"
+                      >
+                        {effectiveAuthMode === 'password'
+                          ? 'Usar código de recuperación en su lugar'
+                          : 'Usar contraseña de bóveda'}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <label htmlFor="reset-data-confirmation" className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
+                      Escribí <strong>REINICIAR</strong> para habilitar el reinicio
+                    </label>
+                    <input
+                      id="reset-data-confirmation"
+                      type="text"
+                      value={resetConfirmText}
+                      onChange={(e) => {
+                        setResetConfirmText(e.target.value);
+                        if (resetError) setResetError(null);
+                      }}
+                      placeholder="REINICIAR"
+                      autoComplete="off"
+                      spellCheck={false}
+                      disabled={isVerifyingReset || isCheckingResetSecurity}
+                      className={`${fieldClass} font-semibold uppercase tracking-widest`}
+                      autoFocus
+                    />
+                  </div>
+                )}
+
+                {resetError && (
+                  <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                    {resetError}
+                  </p>
+                )}
+
+                <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-end dark:border-white/[0.06]">
+                  <button
+                    type="button"
+                    onClick={closeResetModal}
+                    disabled={isVerifyingReset}
+                    className={`${secondaryBtnClass} disabled:opacity-50`}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isResetSubmitDisabled}
+                    className="inline-flex min-h-10 items-center justify-center rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                  >
+                    {isCheckingResetSecurity
+                      ? 'Verificando seguridad…'
+                      : isVerifyingReset
+                      ? 'Validando…'
+                      : 'Sí, reiniciar todo'}
+                  </button>
+                </div>
+              </form>
+            </SurfaceCard>
+          </div>
+        );
+      })()}
 
       {/* Modal 3: Confirmar Restauración de Copia de Recuperación */}
       {isRestoreModalOpen && recoveryInfo && (
@@ -1192,15 +1644,15 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
             <ListDivider className="border-t border-slate-100 text-sm dark:border-white/[0.06]">
               <div className="flex justify-between gap-2 py-2">
-                <span className="text-slate-500 dark:text-slate-400">Fecha de captura</span>
-                <strong className="text-right text-slate-900 dark:text-slate-100">
-                  {recoveryInfo.meta?.savedAt ? new Date(recoveryInfo.meta.savedAt).toLocaleString('es-UY') : 'Desconocida'}
+                <span className="text-slate-500 dark:text-slate-400">Guardada</span>
+                <strong className="text-right tabular-nums text-slate-900 dark:text-slate-100">
+                  {formatRecoveryDateTime(recoveryInfo.meta?.savedAt)}
                 </strong>
               </div>
               <div className="flex justify-between gap-2 py-2">
-                <span className="text-slate-500 dark:text-slate-400">Motivo registrado</span>
+                <span className="text-slate-500 dark:text-slate-400">Motivo</span>
                 <strong className="text-right text-slate-900 dark:text-slate-100">
-                  {recoveryInfo.meta?.description || recoveryInfo.meta?.action || 'Manual'}
+                  {humanizeRecoveryReason(recoveryInfo.meta?.description, recoveryInfo.meta?.action)}
                 </strong>
               </div>
               <div className="flex justify-between gap-2 py-2">
@@ -1228,15 +1680,15 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
       {/* Modal 4: Reparación de Saldos */}
       {isRepairModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Auditoría y Reparación de Saldos" className="w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl">
+          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Revisión y corrección de saldos" className="w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <Wallet size={18} strokeWidth={1.75} className="text-amber-600 dark:text-amber-400" aria-hidden="true" />
-                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Auditoría y Reparación de Saldos</h3>
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Revisión y corrección de saldos</h3>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Se detectaron discrepancias entre el saldo de las cuentas y el libro contable cerrado.
+                  Se encontraron diferencias entre el saldo guardado y la suma de tus movimientos registrados.
                 </p>
               </div>
               <button
@@ -1271,7 +1723,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                           </strong>
                         </div>
                         <div className="flex justify-between sm:block">
-                          <span className="text-slate-500 dark:text-slate-400">Libro contable:</span>
+                          <span className="text-slate-500 dark:text-slate-400">Según movimientos:</span>
                           <strong className="block tabular-nums text-emerald-700 dark:text-emerald-400">
                             <PrivacyAmount>{curPrefix}{diff.computedBalance.toLocaleString('es-UY', { minimumFractionDigits: 2 })}</PrivacyAmount>
                           </strong>
@@ -1289,7 +1741,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                       </div>
                     ) : (
                       <div className="border-l-2 border-amber-500 pl-2.5 text-xs text-amber-800 dark:text-amber-300">
-                        <strong>Protegida:</strong> {diff.unrepairableReason || 'No se puede reparar automáticamente para evitar pérdida de datos.'}
+                        <strong>Protegida:</strong> {diff.unrepairableReason || 'No se puede ajustar automáticamente para evitar pérdida de datos.'}
                       </div>
                     )}
                   </div>
@@ -1298,8 +1750,8 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
             </ListDivider>
 
             <p className="flex items-start gap-2 border-l-2 border-[#4F46E5] pl-3 py-1 text-xs text-slate-600 dark:text-slate-400">
-              <Shield size={14} strokeWidth={1.75} className="mt-0.5 shrink-0 text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
-              <span>Antes de aplicar la corrección de saldos, Celestian guardará automáticamente una copia en recuperación.</span>
+              <Shield size={14} strokeWidth={1.75} className="mt-0.5 shrink-0 text-[#4F46E5] dark:text-[#818CF8]" aria-hidden="true" />
+              <span>Antes de corregir los saldos, Celestian guardará automáticamente una copia de emergencia en este navegador.</span>
             </p>
 
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
@@ -1312,22 +1764,22 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 disabled={accountDiffs.every((d) => !d.repairable)}
                 className="inline-flex min-h-10 items-center justify-center rounded-xl bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
-                Aplicar reparación de saldos
+                Aplicar corrección
               </button>
             </div>
           </SurfaceCard>
         </div>
       )}
 
-      {/* Modal 5: Privacidad y términos */}
+      {/* Modal 5: Privacidad, condiciones y créditos */}
       {isAboutModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs" onClick={() => setIsAboutModalOpen(false)}>
-          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Privacidad y términos" className="w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Privacidad, condiciones y créditos" className="w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
-                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Privacidad, términos y créditos</h3>
+                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Privacidad, condiciones y créditos</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Organización personal con almacenamiento local y sincronización opcional con Google.
+                  Tus datos viven primero en tu dispositivo, con sincronización opcional con Google y sin publicidad ni rastreo.
                 </p>
               </div>
               <button
@@ -1342,26 +1794,36 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
             <div className="max-h-[60dvh] overflow-y-auto space-y-3 pr-1 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
               <div className="border-t border-slate-100 pt-3 space-y-1.5 dark:border-white/[0.06]">
-                <h4 className="font-semibold text-slate-900 dark:text-slate-100">Privacidad, seguridad y tratamiento de datos</h4>
-                <p>La base de datos local se guarda de forma autónoma en el almacenamiento del navegador. El cifrado de sincronización E2EE protege tus módulos antes de subirlos a Firebase, pero no altera los backups JSON descargados. Recordá guardar periódicamente un respaldo fuera de este dispositivo.</p>
-                <p>Al conectar tu cuenta de Google, la sincronización se realiza mediante Firebase. Si activás la protección de extremo a extremo, la clave de recuperación nunca sale de tu navegador.</p>
-                <p>El clima consulta Open-Meteo según la ubicación seleccionada. Las funciones de asistencia no envían datos sin tu consentimiento.</p>
+                <h4 className="font-semibold text-slate-900 dark:text-slate-100">Cómo cuidamos tus datos</h4>
+                <p>Celestian guarda tu información en este dispositivo para que puedas usarla incluso sin cuenta. Si conectás Google, se sincroniza en un espacio privado asociado solo a tu usuario y podés abrirla en 1 clic desde otros dispositivos.</p>
+                <p>Si querés una capa extra, en <strong>Cuenta y Seguridad</strong> podés activar el <strong>Candado privado adicional</strong> con tu propia contraseña de bóveda y un respaldo de emergencia.</p>
+                <p>El módulo de <strong>IA</strong> arma el contexto en tu dispositivo (con opción para ocultar montos y anonimizar nombres de terceros) y nunca envía tus datos por su cuenta. Las copias descargadas en tu equipo no llevan contraseña: guardalas en un lugar seguro.</p>
+              </div>
+
+              <div className="border-t border-slate-100 pt-3 space-y-2 dark:border-white/[0.06]">
+                <h4 className="font-semibold text-slate-900 dark:text-slate-100">Páginas públicas y condiciones</h4>
+                <div className="flex flex-col gap-1">
+                  <a href="/privacidad.html" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center gap-1.5 text-xs font-semibold text-[#4F46E5] hover:text-[#4338CA] hover:underline dark:text-[#818CF8] dark:hover:text-indigo-300">
+                    <span>Política de privacidad</span>
+                    <ExternalLink size={13} strokeWidth={1.75} aria-hidden="true" />
+                  </a>
+                  <a href="/privacidad.html#condiciones" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center gap-1.5 text-xs font-semibold text-[#4F46E5] hover:text-[#4338CA] hover:underline dark:text-[#818CF8] dark:hover:text-indigo-300">
+                    <span>Condiciones de uso</span>
+                    <ExternalLink size={13} strokeWidth={1.75} aria-hidden="true" />
+                  </a>
+                  <a href="/eliminar-cuenta.html" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center gap-1.5 text-xs font-semibold text-[#4F46E5] hover:text-[#4338CA] hover:underline dark:text-[#818CF8] dark:hover:text-indigo-300">
+                    <span>Eliminar cuenta y datos</span>
+                    <ExternalLink size={13} strokeWidth={1.75} aria-hidden="true" />
+                  </a>
+                </div>
               </div>
 
               <div className="border-t border-slate-100 pt-3 space-y-1.5 dark:border-white/[0.06]">
-                <h4 className="font-semibold text-slate-900 dark:text-slate-100">Política de privacidad y términos y condiciones</h4>
-                <p>Esta descripción refleja el funcionamiento técnico actual de la aplicación. Celestian es una herramienta de productividad personal diseñada con principios de soberanía de datos del usuario.</p>
-                <p>Qué datos se guardan, cómo se sincronizan con Firebase y cómo eliminarlos:</p>
-                <a href="/privacidad.html" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center text-xs font-semibold text-[#4F46E5] underline underline-offset-2 hover:text-[#4338CA] dark:text-indigo-400">
-                  Ver política de privacidad completa (nueva pestaña)
-                </a>
-              </div>
-
-              <div className="border-t border-slate-100 pt-3 space-y-1 dark:border-white/[0.06]">
                 <h4 className="font-semibold text-slate-900 dark:text-slate-100">Créditos y licencias</h4>
-                <p>Iconos de interfaz por Lucide (licencia ISC) e iconos de gimnasio propios de Celestian.</p>
-                <a href="/creditos.html" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center text-xs font-semibold text-[#4F46E5] underline underline-offset-2 hover:text-[#4338CA] dark:text-indigo-400">
-                  Ver atribución y licencias (nueva pestaña)
+                <p>Íconos de interfaz por Lucide Icons (licencia ISC), ilustraciones de Gimnasio y micro-animaciones originales de Celestian LifeOS y animaciones comunitarias opcionales bajo Lottie Simple License.</p>
+                <a href="/creditos.html" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-9 items-center gap-1.5 text-xs font-semibold text-[#4F46E5] hover:text-[#4338CA] hover:underline dark:text-[#818CF8] dark:hover:text-indigo-300">
+                  <span>Ver créditos y licencias completos</span>
+                  <ExternalLink size={13} strokeWidth={1.75} aria-hidden="true" />
                 </a>
               </div>
             </div>

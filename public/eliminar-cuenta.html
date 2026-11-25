@@ -1,82 +1,106 @@
 <!doctype html>
-<!--
-  ANTES DE PUBLICAR:
-  1. Reemplazar correachristian03@gmail.com por el correo real de soporte/privacidad.
-  2. Mantener esta página disponible públicamente en /eliminar-cuenta.html
-     (Google Play la exige para la eliminación de cuentas y datos).
-  3. Si cambiás el flujo dentro de la app, actualizá los pasos de la sección 2.
--->
 <html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
-  <meta name="theme-color" content="#07090E">
+  <meta name="theme-color" content="#0B0F19" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#F8FAFC" media="(prefers-color-scheme: light)">
   <meta name="robots" content="index,follow">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <title>Eliminar cuenta y datos — Celestian LifeOS</title>
   <style>
     :root {
       color-scheme: dark light;
-      font-family: "Instrument Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      --bg: #07090E;
-      --card: #15181E;
+      font-family: "Instrument Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --bg: #0B0F19;
+      --card: #111827;
+      --surface-soft: rgba(255, 255, 255, 0.03);
       --border: rgba(255, 255, 255, 0.08);
-      --text: #F1F5F9;
-      --text-soft: #94A3B8;
+      --text: #F8FAFC;
+      --text-soft: #CBD5E1;
+      --text-muted: #94A3B8;
       --accent: #4F46E5;
-      --accent-hover: #6366F1;
-      --accent-text: #A5B4FC;
+      --accent-hover: #4338CA;
+      --accent-text: #818CF8;
+      --accent-text-hover: #A5B4FC;
+      --summary-bg: rgba(79, 70, 229, 0.10);
+      --summary-border: rgba(129, 140, 248, 0.30);
       --note-bg: rgba(79, 70, 229, 0.08);
-      --warn-bg: rgba(245, 158, 11, 0.08);
-      --warn-border: rgba(245, 158, 11, 0.35);
-      --danger-bg: rgba(244, 63, 94, 0.08);
-      --danger-border: rgba(244, 63, 94, 0.35);
+      --warn-bg: rgba(245, 158, 11, 0.09);
+      --warn-border: #F59E0B;
+      --danger-bg: rgba(244, 63, 94, 0.09);
+      --danger-border: #F43F5E;
       --btn-bg: rgba(79, 70, 229, 0.14);
-      --btn-border: rgba(99, 102, 241, 0.35);
+      --btn-border: rgba(129, 140, 248, 0.32);
+      --badge-bg: rgba(129, 140, 248, 0.12);
+      --badge-border: rgba(129, 140, 248, 0.28);
+      --shadow: 0 24px 48px -28px rgba(0, 0, 0, 0.65);
     }
     @media (prefers-color-scheme: light) {
       :root {
         --bg: #F8FAFC;
         --card: #FFFFFF;
+        --surface-soft: #F8FAFC;
         --border: #E2E8F0;
         --text: #0F172A;
-        --text-soft: #475569;
+        --text-soft: #334155;
+        --text-muted: #475569;
         --accent: #4F46E5;
         --accent-hover: #4338CA;
         --accent-text: #4F46E5;
-        --note-bg: rgba(79, 70, 229, 0.06);
+        --accent-text-hover: #4338CA;
+        --summary-bg: rgba(79, 70, 229, 0.05);
+        --summary-border: rgba(79, 70, 229, 0.24);
+        --note-bg: rgba(79, 70, 229, 0.05);
         --warn-bg: rgba(245, 158, 11, 0.08);
+        --warn-border: #D97706;
         --danger-bg: rgba(244, 63, 94, 0.06);
-        --btn-bg: rgba(79, 70, 229, 0.08);
-        --btn-border: rgba(79, 70, 229, 0.25);
+        --danger-border: #E11D48;
+        --btn-bg: rgba(79, 70, 229, 0.07);
+        --btn-border: rgba(79, 70, 229, 0.22);
+        --badge-bg: rgba(79, 70, 229, 0.08);
+        --badge-border: rgba(79, 70, 229, 0.20);
+        --shadow: 0 18px 40px -28px rgba(15, 23, 42, 0.14);
       }
     }
     * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
     body {
       margin: 0;
       min-height: 100vh;
       background: var(--bg);
       color: var(--text);
-      padding: clamp(1.25rem, 4vw, 3rem) 1rem;
+      padding: clamp(1rem, 4vw, 2.75rem) clamp(0.75rem, 3vw, 1.25rem);
       display: flex;
       justify-content: center;
       align-items: flex-start;
       line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
     }
     main {
       width: 100%;
-      max-width: 46rem;
+      max-width: 760px;
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 1.25rem;
-      padding: clamp(1.5rem, 4vw, 2.75rem);
-      box-shadow: 0 20px 45px -24px rgba(0, 0, 0, 0.45);
+      padding: clamp(1.25rem, 4vw, 2.5rem);
+      box-shadow: var(--shadow);
+      overflow-wrap: break-word;
+    }
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 1.75rem;
     }
     .back {
       display: inline-flex;
       align-items: center;
-      gap: 0.4rem;
-      margin-bottom: 1.75rem;
+      gap: 0.45rem;
+      min-height: 40px;
       padding: 0.5rem 0.9rem;
       border-radius: 0.75rem;
       background: var(--btn-bg);
@@ -85,193 +109,278 @@
       font-size: 0.85rem;
       font-weight: 600;
       text-decoration: none;
-      transition: background 0.15s ease, border-color 0.15s ease;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
     }
     .back:hover {
       background: var(--accent);
       border-color: var(--accent);
       color: #FFFFFF;
     }
+    .back svg { flex-shrink: 0; }
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      background: var(--badge-bg);
+      border: 1px solid var(--badge-border);
+      color: var(--accent-text);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    .brand-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
     h1 {
-      margin: 0 0 0.35rem;
-      font-size: clamp(1.5rem, 3.5vw, 1.95rem);
+      margin: 0 0 0.4rem;
+      font-size: clamp(1.5rem, 3.8vw, 2rem);
+      font-weight: 750;
       letter-spacing: -0.025em;
       line-height: 1.2;
+      color: var(--text);
     }
     .updated {
+      margin: 0 0 1.35rem;
+      font-size: 0.84rem;
+      color: var(--text-muted);
+    }
+    .summary {
       margin: 0 0 1.5rem;
-      font-size: 0.82rem;
+      padding: 1rem 1.15rem;
+      border-radius: 0.9rem;
+      border: 1px solid var(--summary-border);
+      border-left: 3px solid var(--accent);
+      background: var(--summary-bg);
+    }
+    .summary-title {
+      margin: 0 0 0.3rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--accent-text);
+    }
+    .summary p {
+      margin: 0;
+      font-size: 0.92rem;
       color: var(--text-soft);
     }
     h2 {
-      margin: 1.9rem 0 0.5rem;
-      font-size: 1.05rem;
-      font-weight: 700;
-      color: var(--text);
-      padding-top: 1.35rem;
+      margin: 2rem 0 0.6rem;
+      padding-top: 1.4rem;
       border-top: 1px solid var(--border);
-      letter-spacing: -0.01em;
-    }
-    h3 {
-      margin: 1.25rem 0 0.35rem;
-      font-size: 0.92rem;
+      font-size: 1.08rem;
       font-weight: 700;
+      letter-spacing: -0.015em;
       color: var(--text);
     }
     p {
       margin: 0.65rem 0;
+      font-size: 0.94rem;
       color: var(--text-soft);
-      font-size: 0.9375rem;
     }
     ul, ol {
       margin: 0.65rem 0;
-      padding-left: 1.35rem;
+      padding-left: 1.3rem;
+      font-size: 0.94rem;
       color: var(--text-soft);
-      font-size: 0.9375rem;
     }
-    li { margin: 0.35rem 0; }
+    li { margin: 0.4rem 0; }
+    strong { color: var(--text); }
     a {
       color: var(--accent-text);
+      font-weight: 600;
       text-underline-offset: 0.2em;
-      font-weight: 500;
       overflow-wrap: anywhere;
     }
-    a:hover { color: var(--accent-hover); }
-    strong { color: var(--text); }
+    a:hover { color: var(--accent-text-hover); }
     code {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 0.85em;
-      padding: 0.1em 0.35em;
+      font-size: 0.86em;
+      padding: 0.12em 0.4em;
       border-radius: 0.35rem;
       background: var(--note-bg);
       color: var(--text);
     }
-    .note {
-      margin-top: 1.25rem;
-      padding: 0.9rem 1rem;
-      border-radius: 0.75rem;
-      border-left: 3px solid var(--accent);
-      background: var(--note-bg);
-      font-size: 0.875rem;
-      color: var(--text-soft);
+    .path {
+      font-weight: 600;
+      color: var(--text);
     }
-    .warn {
-      margin-top: 1.25rem;
-      padding: 0.9rem 1rem;
-      border-radius: 0.75rem;
-      border-left: 3px solid #F59E0B;
-      background: var(--warn-bg);
-      font-size: 0.875rem;
-      color: var(--text-soft);
-    }
-    .danger {
-      margin-top: 1.25rem;
-      padding: 0.9rem 1rem;
-      border-radius: 0.75rem;
-      border-left: 3px solid #F43F5E;
-      background: var(--danger-bg);
-      font-size: 0.875rem;
-      color: var(--text-soft);
-    }
-    .summary {
-      margin: 1.25rem 0 0.5rem;
-      padding: 1rem 1.1rem;
-      border-radius: 0.9rem;
-      border: 1px solid var(--border);
-      background: var(--note-bg);
-    }
-    .summary p { margin: 0.3rem 0; font-size: 0.9rem; }
     .steps {
       margin: 0.9rem 0;
-      padding: 1rem 1.1rem 1rem 2.6rem;
+      padding: 1rem 1.15rem 1rem 2.35rem;
       border-radius: 0.9rem;
       border: 1px solid var(--border);
+      background: var(--surface-soft);
+    }
+    .steps li { margin: 0.55rem 0; }
+    .note, .warn, .danger {
+      margin-top: 1.1rem;
+      padding: 0.9rem 1.05rem;
+      border-radius: 0.8rem;
+      font-size: 0.89rem;
+      color: var(--text-soft);
+    }
+    .note {
+      border-left: 3px solid var(--accent);
       background: var(--note-bg);
     }
-    .steps li { margin: 0.5rem 0; }
+    .warn {
+      border-left: 3px solid var(--warn-border);
+      background: var(--warn-bg);
+    }
+    .danger {
+      border-left: 3px solid var(--danger-border);
+      background: var(--danger-bg);
+    }
     .contact {
-      display: inline-block;
-      margin-top: 0.35rem;
-      padding: 0.55rem 0.85rem;
-      border-radius: 0.65rem;
+      display: inline-flex;
+      align-items: center;
+      min-height: 40px;
+      margin-top: 0.4rem;
+      padding: 0.5rem 0.9rem;
+      border-radius: 0.75rem;
       background: var(--btn-bg);
       border: 1px solid var(--btn-border);
+      color: var(--accent-text);
+      font-size: 0.9rem;
       font-weight: 600;
       text-decoration: none;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+    .contact:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #FFFFFF;
     }
     footer {
-      margin-top: 2rem;
-      padding-top: 1.1rem;
+      margin-top: 2.25rem;
+      padding-top: 1.25rem;
       border-top: 1px solid var(--border);
-      font-size: 0.8rem;
-      color: var(--text-soft);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    .footer-nav {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.75rem 1.25rem;
+      gap: 0.55rem 1.15rem;
+      align-items: center;
     }
-    footer a { font-size: 0.8rem; }
+    .footer-nav a {
+      font-size: 0.82rem;
+      text-decoration: none;
+    }
+    .footer-nav a:hover {
+      text-decoration: underline;
+    }
+    .footer-nav a[aria-current="page"] {
+      color: var(--text);
+      text-decoration: underline;
+    }
+    .footer-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 0.4rem 1rem;
+      font-size: 0.8rem;
+    }
   </style>
 </head>
 <body>
   <main>
-    <a class="back" href="/">← Volver a Celestian LifeOS</a>
+    <header>
+      <div class="topbar">
+        <a class="back" href="/">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m12 19-7-7 7-7"></path>
+            <path d="M19 12H5"></path>
+          </svg>
+          <span>Volver a Celestian LifeOS</span>
+        </a>
+        <span class="brand-badge">
+          <span class="brand-dot" aria-hidden="true"></span>
+          <span>Celestian LifeOS</span>
+        </span>
+      </div>
 
-    <h1>Eliminar tu cuenta y tus datos</h1>
-    <p class="updated">Celestian LifeOS · Última actualización: 18 de noviembre de 2026</p>
+      <h1>Eliminar cuenta y datos</h1>
+      <p class="updated">Última actualización: 25 de noviembre de 2026</p>
 
-    <div class="summary">
-      <p><strong>En resumen:</strong> podés borrar tu cuenta y todos los datos sincronizados desde la propia app, en unos segundos y sin escribir a nadie. Si ya desinstalaste la app o no podés ingresar, escribinos desde la misma cuenta de Google y lo procesamos en un plazo máximo de 30 días.</p>
-    </div>
+      <div class="summary" role="region" aria-label="Resumen de eliminación de cuenta">
+        <p class="summary-title">En resumen</p>
+        <p>Podés eliminar tu cuenta de Celestian LifeOS y todos tus datos sincronizados directamente desde la app, de forma inmediata y permanente. Si ya desinstalaste la app o no podés ingresar, podés solicitarlo por correo desde la misma cuenta de Google y lo completamos en un plazo máximo de <strong>30 días</strong>.</p>
+      </div>
+    </header>
 
-    <h2>1. Qué se elimina</h2>
-    <p>Celestian LifeOS no tiene un sistema de contraseñas propio: la cuenta de la app es el vínculo con la cuenta de Google que usaste para activar la sincronización. Al eliminarla se borran de forma permanente los documentos asociados a tu identificador de usuario (UID) en Cloud Firestore. <strong>No se elimina tu cuenta de Google</strong>: solo los datos y el vínculo de LifeOS con ella.</p>
-    <p>Estos son los datos que se eliminan:</p>
+    <h2>1. Qué se elimina de la nube de inmediato y permanentemente</h2>
+    <p>El inicio de sesión en Celestian LifeOS se realiza únicamente con tu cuenta de Google. Al eliminar tu cuenta en la app, <strong>no se elimina tu cuenta de Google</strong>: solo se desconecta y se borran por completo los datos que Celestian guardaba en la nube para esa cuenta.</p>
+    <p>Si además habías activado el <strong>Candado privado adicional</strong>, tu contraseña de bóveda, la configuración de seguridad y todos tus datos cifrados en la nube también se eliminan por completo.</p>
     <ul>
-      <li><strong>Módulos sincronizados:</strong> finanzas, agenda, gimnasio, estudios, trabajo, reventa, notas y cualquier otro módulo que hayas activado.</li>
-      <li><strong>Revisiones:</strong> el historial de versiones que se usa para resolver conflictos entre dispositivos.</li>
-      <li><strong>Cuenta y cifrado:</strong> la capacidad de sincronización y la envoltura cifrada de tu clave maestra (E2EE), si la habías activado.</li>
-      <li><strong>Metadatos de sincronización:</strong> el registro local de revisiones, bases y dispositivos vinculados a esa cuenta.</li>
+      <li><strong>Todos tus módulos sincronizados:</strong> Hoy, Finanzas, Agenda, Calendario, Gimnasio, Estudios, Trabajo, Mi negocio, Notas, IA y tu configuración.</li>
+      <li><strong>Historial de sincronización:</strong> versiones previas que la app usa para evitar pérdidas entre dispositivos.</li>
+      <li><strong>Candado privado adicional:</strong> tu contraseña de bóveda, la configuración del candado y las copias cifradas en la nube, si lo habías activado.</li>
+      <li><strong>Vínculo de cuenta:</strong> los registros de sincronización asociados a tu cuenta de Google en Celestian.</li>
     </ul>
 
-    <h2>2. Eliminar la cuenta desde la app</h2>
+    <h2>2. Cómo eliminar tu cuenta desde la app</h2>
     <ol class="steps">
-      <li>Abrí Celestian LifeOS e iniciá sesión con la misma cuenta de Google que usás para sincronizar.</li>
-      <li>Entrá a <strong>Configuración</strong> y abrí la pestaña <strong>Cuenta</strong>.</li>
-      <li>En <strong>Privacidad y seguridad</strong>, tocá <strong>Eliminar cuenta y datos en la nube</strong>.</li>
-      <li>Escribí <code>ELIMINAR</code> para confirmar y esperá el mensaje de confirmación. La sincronización se detiene antes de borrar, así que ningún guardado pendiente puede volver a crear los datos.</li>
-      <li>Después vas a poder elegir si querés <strong>conservar los datos locales de este dispositivo</strong> o <strong>eliminarlos también</strong>.</li>
+      <li>Abrí Celestian LifeOS e iniciá sesión con la misma cuenta de Google que usabas para sincronizar.</li>
+      <li>Ingresá en <span class="path">Configuración › Cuenta y Seguridad</span>.</li>
+      <li>En la sección <strong>Privacidad y seguridad</strong>, seleccioná <strong>Eliminar cuenta y datos en la nube</strong>.</li>
+      <li>Escribí <code>ELIMINAR</code> para confirmar y aguardá el mensaje de confirmación. La app detiene la sincronización, borra todos tus datos de la nube y cierra tu sesión.</li>
+      <li>Al terminar, elegí si preferís <strong>conservar los datos locales de este dispositivo</strong> o <strong>eliminarlos también</strong>.</li>
     </ol>
-    <div class="note"><strong>Importante:</strong> eliminar la cuenta en la nube cierra tu sesión de Google en la app. Tus datos locales no se borran automáticamente: la app te pregunta qué hacer con ellos para que no pierdas información sin querer.</div>
+    <div class="note"><strong>Tu control sobre el dispositivo:</strong> los datos guardados localmente en tu teléfono o navegador no se borran sin preguntarte. Al finalizar la eliminación en la nube, podés decidir en el momento si dejarlos en modo local o borrarlos por completo.</div>
 
-    <h2>3. Si desinstalaste la app o no podés ingresar</h2>
-    <p>Escribí a <strong>correachristian03@gmail.com</strong> desde la <strong>misma cuenta de Google</strong> que usabas en la app, con el asunto <strong>“Eliminar cuenta y datos de LifeOS”</strong>. Incluí el correo de la cuenta y, si lo recordás, la fecha aproximada del último uso.</p>
+    <h2>3. Cómo solicitarlo por correo si desinstalaste la app</h2>
+    <p>Si ya desinstalaste Celestian LifeOS o no podés abrir tu sesión, escribinos desde la <strong>misma cuenta de Google</strong> que usabas en la aplicación:</p>
     <ul>
-      <li>La solicitud se procesa en un plazo máximo de <strong>30 días</strong>.</li>
-      <li>Te confirmamos por correo cuando la eliminación esté completa.</li>
-      <li>Si no podemos verificar que la cuenta te pertenece, te pediremos un dato adicional antes de borrar nada.</li>
+      <li><strong>Correo de contacto:</strong> <a href="mailto:correachristian03@gmail.com">correachristian03@gmail.com</a></li>
+      <li><strong>Asunto sugerido:</strong> “Eliminar cuenta y datos de Celestian LifeOS”</li>
+      <li><strong>Qué incluir:</strong> la dirección de correo de tu cuenta de Google y, si la recordás, la fecha aproximada de tu último acceso.</li>
+    </ul>
+    <p>Verificaremos que la solicitud provenga del titular de la cuenta, eliminaremos permanentemente todos los datos sincronizados en la nube en un plazo máximo de <strong>30 días</strong> y te enviaremos un correo de confirmación cuando el borrado esté completo.</p>
+    <a class="contact" href="mailto:correachristian03@gmail.com?subject=Eliminar%20cuenta%20y%20datos%20de%20Celestian%20LifeOS">Solicitar eliminación por correo</a>
+
+    <h2>4. Qué queda solo en tu dispositivo o en archivos exportados</h2>
+    <p>La información que nunca se subió a la nube o que descargaste manualmente vive solo bajo tu control:</p>
+    <ul>
+      <li><strong>Datos locales del dispositivo:</strong> si al eliminar la cuenta elegiste conservarlos, quedan guardados solo en ese navegador o teléfono sin conexión a la nube. Podés borrarlos desde <span class="path">Configuración › Copias y Datos › Reiniciar datos</span>, borrando los datos del sitio en tu navegador o desinstalando la app en Android.</li>
+      <li><strong>Copias de seguridad descargadas:</strong> si descargaste copias desde <span class="path">Configuración › Copias y Datos › Descargar copia</span>, son archivos guardados en tu equipo que Celestian no puede borrar; eliminalos manualmente si ya no los necesitás.</li>
+      <li><strong>Respaldo de emergencia del Candado privado:</strong> si descargaste el archivo de respaldo al activar el candado, también podés eliminarlo manualmente de tu equipo.</li>
+    </ul>
+    <div class="warn"><strong>Antes de eliminar:</strong> si querés conservar un respaldo de tu historial, descargá una copia desde <span class="path">Configuración › Copias y Datos › Descargar copia</span> antes de confirmar la eliminación.</div>
+
+    <h2>5. Borrar datos puntuales sin eliminar tu cuenta</h2>
+    <p>No hace falta borrar tu cuenta para limpiar información específica:</p>
+    <ul>
+      <li>Podés editar o eliminar movimientos, tareas, notas, rutinas o registros de Mi negocio directamente dentro de cada módulo.</li>
+      <li>Si querés empezar desde cero manteniendo tu cuenta conectada, usá <span class="path">Configuración › Copias y Datos › Reiniciar datos</span> (antes de vaciar, la app guarda una copia de emergencia local).</li>
+      <li>Si solo querés pausar la sincronización en este dispositivo sin borrar tus datos de la nube, usá <strong>Cerrar sesión</strong> en <span class="path">Configuración › Cuenta y Seguridad</span>.</li>
     </ul>
 
-    <h2>4. Qué no se elimina con la cuenta</h2>
-    <p>Los datos que nunca se sincronizaron viven únicamente en tu dispositivo.</p>
-    <ul>
-      <li><strong>Datos locales:</strong> si elegís conservarlos, quedan en este navegador o teléfono y dejan de estar vinculados a la nube. Podés borrarlos desde la misma pantalla o desinstalando la app.</li>
-      <li><strong>Backups JSON exportados:</strong> son archivos que vos guardaste fuera de la app. LifeOS no puede borrarlos; eliminalos manualmente si contienen información sensible.</li>
-      <li><strong>Copias de recuperación locales:</strong> se borran junto con los datos locales del dispositivo.</li>
-    </ul>
-    <div class="warn"><strong>Antes de eliminar:</strong> si querés conservar un historial, exportá un backup en JSON desde Configuración → Copias. Una vez eliminada la cuenta en la nube, esa información no se puede recuperar.</div>
-
-    <h2>5. Eliminar solo algunos datos</h2>
-    <p>No hace falta eliminar toda la cuenta para borrar información puntual. Podés editar o borrar registros desde cada módulo y, si necesitás reiniciar la app, usar <strong>Configuración → Copias → Reiniciar datos</strong>. Esa acción guarda una copia de recuperación local antes de continuar.</p>
-    <p>Para detener la sincronización sin borrar nada, usá <strong>Cerrar sesión</strong> en Configuración → Cuenta. Eso no elimina lo que ya está en la nube: para eso usá el flujo de esta página.</p>
-
-    <div class="danger"><strong>Eliminación permanente:</strong> una vez confirmada, la eliminación de la cuenta y sus datos en la nube no se puede deshacer. No conservamos copias de seguridad de los datos sincronizados.</div>
-
-    <p style="margin-top:1.5rem;">¿Dudas sobre el tratamiento de tus datos? Consultá la <a href="/privacidad.html">Política de privacidad</a> o escribí a <a class="contact" href="mailto:correachristian03@gmail.com">correachristian03@gmail.com</a>.</p>
+    <div class="danger"><strong>Acción permanente:</strong> una vez confirmada la eliminación de la cuenta y los datos en la nube, no es posible deshacerla. No conservamos copias ocultas ni archivos de respaldo de tu cuenta eliminada.</div>
 
     <footer>
-      <a href="/">Inicio</a>
-      <a href="/privacidad.html">Política de privacidad</a>
-      <span>Celestian LifeOS</span>
+      <nav class="footer-nav" aria-label="Centro legal de Celestian LifeOS">
+        <a href="/">Ir a Celestian LifeOS</a>
+        <a href="/privacidad.html">Política de privacidad</a>
+        <a href="/eliminar-cuenta.html" aria-current="page">Eliminar cuenta y datos</a>
+        <a href="/creditos.html">Créditos y licencias</a>
+      </nav>
+      <div class="footer-meta">
+        <span>Celestian LifeOS</span>
+        <span>Contacto: <a href="mailto:correachristian03@gmail.com">correachristian03@gmail.com</a></span>
+      </div>
     </footer>
   </main>
 </body>
