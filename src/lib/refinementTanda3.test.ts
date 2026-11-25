@@ -12,11 +12,9 @@ test('external research is honest and unsafe opportunity URLs never become execu
   state.jobs.opportunities = [{ id: 'unsafe', empresa: '<script>test()</script>', puesto: 'Soporte', link: 'javascript:window.pwned=true', rating: 3, fecha: '2026-10-29', status: 'nueva' }];
   state.resale.opportunities = [{ id: 'buy', item: 'Equipo', buyPrice: 100, marketPrice: 180, fecha: '2026-10-29', status: 'nueva' }];
   const original = structuredClone(state);
-  const html = renderToStaticMarkup(React.createElement(IAView, { state, onUpdateState: () => { throw Error('Unauthorized write'); } }));
-  assert.match(html, /Celestian no le envía tus datos/);
-  assert.match(html, /Revisar resultados/);
-  assert.match(html, /Crear postulación/);
-  assert.match(html.replace(/<[^>]+>/g, ''), /Prioridad: 5\/5/);
+  const html = renderToStaticMarkup(React.createElement(IAView, { state, onUpdateState: () => { throw Error('Unauthorized write'); }, defaultLegacyOpen: true }));
+  assert.match(html, /Celestian no envía tus datos automáticamente/);
+  assert.match(html, /Registros anteriores \(2\)/);
   assert.match(html, /&lt;script&gt;/);
   assert.doesNotMatch(html, /href="javascript:/);
   assert.doesNotMatch(html, /<script>/);

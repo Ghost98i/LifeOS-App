@@ -7,7 +7,8 @@ import { isStreamingEnabled } from '../lib/moduleVisibility';
 import type { DayCyclePeriod } from '../lib/alpineDayCycle';
 import { AlpineDayCycleBackdrop } from './visual/AlpineDayCycleBackdrop';
 import { DashboardView } from './DashboardView';
-import { IAView, AI_JSON_CONTRACT, buildDefaultAIInstructions } from './IAView';
+import { IAView } from './IAView';
+import { getVisibleContextModules } from '../lib/aiContextBuilder';
 import { NotasView } from './NotasView';
 import { ConfigView } from './ConfigView';
 
@@ -43,26 +44,25 @@ test('Block 10: DashboardView usa composición Hero Horizonte y Lago con reloj p
   assert.doesNotMatch(html, /rgba\(9,12,20,0\.88\)/);
 });
 
-test('Block 10: IAView adapta instrucciones según módulos visibles y conserva contrato JSON y privacidad', () => {
+test('Block 10 / 24: IAView adapta módulos según visibilidad, elimina contrato JSON y conserva privacidad', () => {
   const allVisible = defaultState();
   allVisible.settings.hiddenTabs = [];
-  const fullInstructions = buildDefaultAIInstructions(allVisible);
-  assert.match(fullInstructions, /Oportunidades laborales/i);
-  assert.match(fullInstructions, /negocio o reventa/i);
-  assert.match(fullInstructions, /Becas, cursos/i);
-  assert.doesNotMatch(fullInstructions, /soporte técnico/i);
+  const fullModules = getVisibleContextModules(allVisible).map((m) => m.id);
+  assert.ok(fullModules.includes('trabajo'));
+  assert.ok(fullModules.includes('negocio'));
+  assert.ok(fullModules.includes('finanzas'));
 
-  const onlyIdeas = defaultState();
-  onlyIdeas.settings.hiddenTabs = ['trabajo', 'reventa'];
-  const reducedInstructions = buildDefaultAIInstructions(onlyIdeas);
-  assert.doesNotMatch(reducedInstructions, /Oportunidades laborales/i);
-  assert.doesNotMatch(reducedInstructions, /negocio o reventa/i);
-  assert.match(reducedInstructions, /1\. Becas, cursos/i);
+  const onlyCore = defaultState();
+  onlyCore.settings.hiddenTabs = ['trabajo', 'reventa'];
+  const reducedModules = getVisibleContextModules(onlyCore).map((m) => m.id);
+  assert.ok(!reducedModules.includes('trabajo'));
+  assert.ok(!reducedModules.includes('negocio'));
+  assert.ok(reducedModules.includes('hoy_agenda'));
 
-  const html = renderToStaticMarkup(<IAView state={onlyIdeas} onUpdateState={() => true} />);
-  assert.match(html, /Celestian no le envía tus datos/);
-  assert.match(html, /Contrato JSON \(no editable\)/);
-  assert.ok(AI_JSON_CONTRACT.includes('Respondé ÚNICAMENTE con JSON válido'));
+  const html = renderToStaticMarkup(<IAView state={onlyCore} onUpdateState={() => true} />);
+  assert.match(html, /Celestian no envía tus datos automáticamente/);
+  assert.doesNotMatch(html, /Contrato JSON/i);
+  assert.doesNotMatch(html, /Respuesta de la IA \(JSON\)/i);
 });
 
 test('Block 10: isStreamingEnabled oculta por defecto en cuentas nuevas, preserva legacy y respeta el toggle en NotasView y ConfigView', () => {
