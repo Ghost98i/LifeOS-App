@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
+  Bot,
   Briefcase,
   CalendarClock,
   CalendarRange,
@@ -12,23 +13,26 @@ import {
   ExternalLink,
   Eye,
   GraduationCap,
+  Layers,
   Shield,
   SlidersHorizontal,
-  Sparkles,
   Store,
   Trash2,
   Wallet,
 } from 'lucide-react';
 import type { LifeOSState } from '../types';
 import {
+  AI_CONTEXT_DETAIL_LEVELS,
   AI_CONTEXT_TIME_WINDOWS,
   AI_GOALS,
   buildAIContextPrompt,
   buildContextMarkdownFilename,
+  DEFAULT_AI_DETAIL_LEVEL,
   DEFAULT_AI_TIME_WINDOW_DAYS,
   getDefaultModulesForGoal,
   getGoalDataIndicator,
   getVisibleContextModules,
+  type AIContextDetailLevel,
   type AIContextMode,
   type AIContextModuleId,
   type AIContextTimeWindowDays,
@@ -96,6 +100,7 @@ export interface IAViewProps {
   defaultLegacyOpen?: boolean;
   defaultMode?: AIContextMode;
   defaultTimeWindowDays?: AIContextTimeWindowDays;
+  defaultDetailLevel?: AIContextDetailLevel;
 }
 
 const CLEAN_FOCUS =
@@ -114,6 +119,7 @@ export const IAView: React.FC<IAViewProps> = ({
   defaultLegacyOpen = false,
   defaultMode = 'guided',
   defaultTimeWindowDays = DEFAULT_AI_TIME_WINDOW_DAYS,
+  defaultDetailLevel = DEFAULT_AI_DETAIL_LEVEL,
 }) => {
   const visibleModules = useMemo(() => getVisibleContextModules(state), [state]);
   const visibleModuleIds = useMemo(
@@ -129,6 +135,7 @@ export const IAView: React.FC<IAViewProps> = ({
     getDefaultModulesForGoal('organizar_dia', state)
   );
   const [timeWindowDays, setTimeWindowDays] = useState<AIContextTimeWindowDays>(defaultTimeWindowDays);
+  const [detailLevel, setDetailLevel] = useState<AIContextDetailLevel>(defaultDetailLevel);
   const [hideExactAmounts, setHideExactAmounts] = useState<boolean>(() =>
     Boolean(state.settings?.privacyMode)
   );
@@ -175,9 +182,10 @@ export const IAView: React.FC<IAViewProps> = ({
         selectedModules: effectiveSelectedModules,
         hideExactAmounts,
         timeWindowDays,
+        detailLevel,
         customQuestion,
       }),
-    [state, selectedGoalId, mode, effectiveSelectedModules, hideExactAmounts, timeWindowDays, customQuestion]
+    [state, selectedGoalId, mode, effectiveSelectedModules, hideExactAmounts, timeWindowDays, detailLevel, customQuestion]
   );
 
   // Retrocompatibilidad: registros guardados con el formato anterior
@@ -338,7 +346,7 @@ export const IAView: React.FC<IAViewProps> = ({
         <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-2">
             <span className="shrink-0 text-slate-400 dark:text-slate-500" aria-hidden="true">
-              <Sparkles size={16} strokeWidth={1.75} />
+              <Bot size={16} strokeWidth={1.75} />
             </span>
             <h2
               id="ia-goals-heading"
@@ -562,6 +570,56 @@ export const IAView: React.FC<IAViewProps> = ({
           </div>
         </div>
 
+        {/* Nivel de detalle */}
+        <div className="flex flex-col gap-2.5 border-t border-slate-100 pt-3.5 sm:flex-row sm:items-center sm:justify-between dark:border-white/[0.06]">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <span
+              className="mt-0.5 shrink-0 text-slate-400 dark:text-slate-500"
+              aria-hidden="true"
+            >
+              <Layers size={16} strokeWidth={1.75} />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                Nivel de detalle
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Resumido mantiene el contexto ágil; Detallado amplía sesiones, notas y desgloses.
+              </p>
+            </div>
+          </div>
+
+          <div
+            role="group"
+            aria-label="Nivel de detalle"
+            className="inline-flex w-full sm:w-auto items-center rounded-xl border border-slate-200/80 bg-slate-100/80 p-1 dark:border-white/[0.08] dark:bg-white/[0.04]"
+          >
+            {AI_CONTEXT_DETAIL_LEVELS.map((option) => {
+              const active = detailLevel === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-pressed={active}
+                  data-ia-detail={option.id}
+                  onClick={(event) => {
+                    blurOnMouseClick(event);
+                    setDetailLevel(option.id);
+                    setCopiedKey(null);
+                  }}
+                  className={`flex-1 sm:flex-initial min-h-9 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${CLEAN_FOCUS} ${
+                    active
+                      ? 'bg-[#4F46E5] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Switch de privacidad */}
         <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-3.5 dark:border-white/[0.06]">
           <div className="flex min-w-0 items-start gap-2.5">
@@ -580,10 +638,10 @@ export const IAView: React.FC<IAViewProps> = ({
                 htmlFor="ia-hide-exact-amounts"
                 className="block text-sm font-medium text-slate-900 dark:text-slate-100 cursor-pointer"
               >
-                Ocultar montos exactos
+                Ocultar montos y datos personales
               </label>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Reemplaza cifras por porcentajes y oculta nombres de cuentas bancarias.
+                Reemplaza cifras por porcentajes, oculta nombres de cuentas bancarias y anonimiza nombres propios de terceros.
               </p>
             </div>
           </div>
@@ -591,7 +649,7 @@ export const IAView: React.FC<IAViewProps> = ({
             id="ia-hide-exact-amounts"
             checked={hideExactAmounts}
             onChange={setHideExactAmounts}
-            ariaLabel="Ocultar montos exactos"
+            ariaLabel="Ocultar montos y datos personales"
           />
         </div>
 

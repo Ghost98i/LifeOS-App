@@ -3,6 +3,7 @@ import type {
   DayKey,
   Exam,
   FinancialCommitment,
+  Goal,
   LifeOSState,
   TodayExtra,
   Transaction,
@@ -31,6 +32,9 @@ import {
   isPerformedGymSession,
   selectBestPerformedSet,
 } from './gymMetrics';
+import { getCategoryName } from './financeCategories';
+import { deriveCashflowProjection } from './financeCashflow';
+import { goalCurrentValue } from './calculations';
 
 export type AIGoalId =
   | 'organizar_dia'
@@ -44,6 +48,8 @@ export type AIContextMode = 'guided' | 'data_only';
 
 export type AIContextTimeWindowDays = 7 | 30 | 90;
 
+export type AIContextDetailLevel = 'summary' | 'detailed';
+
 export const AI_CONTEXT_TIME_WINDOWS: readonly {
   days: AIContextTimeWindowDays;
   label: string;
@@ -54,6 +60,16 @@ export const AI_CONTEXT_TIME_WINDOWS: readonly {
 ] as const;
 
 export const DEFAULT_AI_TIME_WINDOW_DAYS: AIContextTimeWindowDays = 30;
+
+export const AI_CONTEXT_DETAIL_LEVELS: readonly {
+  id: AIContextDetailLevel;
+  label: string;
+}[] = [
+  { id: 'summary', label: 'Resumido' },
+  { id: 'detailed', label: 'Detallado' },
+] as const;
+
+export const DEFAULT_AI_DETAIL_LEVEL: AIContextDetailLevel = 'summary';
 
 export type AIContextModuleId =
   | 'hoy_agenda'
@@ -88,6 +104,7 @@ export interface AIContextPromptOptions {
   selectedModules: readonly AIContextModuleId[];
   hideExactAmounts: boolean;
   timeWindowDays?: AIContextTimeWindowDays;
+  detailLevel?: AIContextDetailLevel;
   customQuestion?: string;
   referenceDate?: string;
 }
@@ -96,6 +113,7 @@ export interface AIContextPromptResult {
   mode: AIContextMode;
   goal: AIGoalDefinition | null;
   timeWindowDays: AIContextTimeWindowDays;
+  detailLevel: AIContextDetailLevel;
   includedModules: AIContextModuleId[];
   text: string;
   charCount: number;
@@ -192,6 +210,179 @@ const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 's
 
 const FINANCIAL_LINKED_GOAL_SOURCES = new Set(['available', 'resale_profit', 'net_worth']);
 
+const FREQUENCY_LABELS_ES: Record<string, string> = {
+  once: 'único',
+  weekly: 'semanal',
+  biweekly: 'quincenal',
+  monthly: 'mensual',
+  yearly: 'anual',
+};
+
+const ADJUSTMENT_CATEGORY_NAMES = new Set([
+  'ajuste de saldo',
+  'ajuste contable',
+  'reconciliacion',
+  'balance adjustment',
+]);
+
+const INTERNAL_CATEGORY_ID_REGEX = /^cat[_-][a-z0-9_-]{3,}$/i;
+
+const INVISIBLE_UNICODE_REGEX =
+  /[\u00A0\u115F\u1160\u1680\u180E\u2000-\u200F\u2028-\u202F\u205F-\u206F\u2800\u3000\u3164\uFEFF\uFFA0]+/g;
+
+const NON_PERSON_CAPITALIZED_WORDS = new Set([
+  // Meses y días
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'setiembre', 'octubre', 'noviembre', 'diciembre',
+  'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo',
+  // Monedas, bancos, marcas, plataformas
+  'uyu', 'usd', 'eur', 'ars', 'brl', 'banco', 'brou', 'itau', 'santander', 'bbva',
+  'scotia', 'scotiabank', 'hsbc', 'bandes', 'heritage', 'prex', 'oca', 'visa',
+  'mastercard', 'amex', 'mercadopago', 'mercadolibre', 'mercado', 'paypal', 'stripe',
+  'spotify', 'netflix', 'youtube', 'google', 'apple', 'amazon', 'microsoft', 'adobe',
+  'antel', 'ute', 'ose', 'bps', 'dgi', 'fonasa', 'caja', 'fondo', 'centenario',
+  'sony', 'keychron', 'nike', 'adidas', 'samsung', 'iphone', 'macbook', 'windows',
+  'linux', 'react', 'typescript', 'linkedin', 'github', 'celestian', 'lifeos',
+  // Lugares y entidades
+  'uruguay', 'montevideo', 'canelones', 'maldonado', 'colonia', 'argentina',
+  'buenos', 'aires', 'espana', 'madrid', 'chile', 'brasil', 'facultad',
+  'universidad', 'liceo', 'colegio', 'hospital', 'clinica', 'farmacia',
+  'supermercado', 'tienda', 'oficina', 'gimnasio', 'gym', 'studio', 'nubesur',
+  'norte', 'sur', 'este', 'oeste', 'acme',
+  // Materias y conceptos frecuentes en mayúscula
+  'calculo', 'fisica', 'quimica', 'algoritmos', 'historia', 'derecho', 'economia',
+  'matematica', 'matematicas', 'biologia', 'medicina', 'ingenieria', 'ingles',
+  'english', 'frontend', 'backend', 'proyecto', 'trabajo', 'negocio', 'estudios',
+  'finanzas', 'agenda', 'calendario', 'notas', 'persona', 'cuenta', 'posicion',
+  'tarjeta', 'cuota', 'cuotas', 'alquiler', 'sueldo', 'salario', 'internet',
+  'emergencia', 'ahorro', 'ahorros', 'inversion', 'inversiones', 'viajes', 'viaje',
+  'salud', 'hogar', 'vivienda', 'comida', 'alimentacion', 'transporte', 'ocio',
+  'compras', 'ropa', 'tecnologia', 'auto', 'casa', 'apartamento', 'depto',
+  'equipo', 'clientes', 'cliente', 'ventas', 'stock', 'producto', 'productos',
+  'servicios', 'servicio', 'impuestos', 'seguros', 'seguro', 'pension', 'prestamo',
+  'credito', 'debito', 'efectivo', 'dolares', 'pesos', 'parcial', 'examen',
+  'entrega', 'reunion', 'control', 'dentista', 'pasaporte', 'pecho', 'espalda',
+  'piernas', 'hombros', 'brazos', 'torso', 'fuerza', 'cardio', 'triceps', 'biceps',
+]);
+
+interface PersonAnonymizer {
+  enabled: boolean;
+  anonymizeText: (text: string) => string;
+  anonymizeDirectName: (name: string) => string;
+}
+
+function normalizeTextKey(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function createPersonAnonymizer(enabled: boolean): PersonAnonymizer {
+  if (!enabled) {
+    return {
+      enabled: false,
+      anonymizeText: (text: string) => text,
+      anonymizeDirectName: (name: string) => name,
+    };
+  }
+
+  let counter = 0;
+  const exactMap = new Map<string, string>();
+  const firstNameMap = new Map<string, string>();
+
+  const getOrAssignLabel = (rawCandidate: string): { label: string; trailing: string } | null => {
+    const tokens = rawCandidate.trim().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return null;
+
+    const firstKey = normalizeTextKey(tokens[0]);
+    if (!firstKey || firstKey.length < 3 || NON_PERSON_CAPITALIZED_WORDS.has(firstKey)) {
+      return null;
+    }
+
+    let nameTokens = [tokens[0]];
+    let trailing = '';
+    if (tokens.length >= 2) {
+      const secondKey = normalizeTextKey(tokens[1]);
+      if (secondKey && secondKey.length >= 2 && !NON_PERSON_CAPITALIZED_WORDS.has(secondKey)) {
+        nameTokens = [tokens[0], tokens[1]];
+      } else {
+        trailing = ` ${tokens.slice(1).join(' ')}`;
+      }
+    }
+
+    const fullKey = normalizeTextKey(nameTokens.join(' '));
+    const existingExact = exactMap.get(fullKey);
+    if (existingExact) {
+      return { label: existingExact, trailing };
+    }
+
+    const existingFirst = firstNameMap.get(firstKey);
+    if (nameTokens.length === 1 && existingFirst && existingFirst !== '__ambiguous__') {
+      exactMap.set(fullKey, existingFirst);
+      return { label: existingFirst, trailing };
+    }
+
+    if (nameTokens.length === 2 && existingFirst && existingFirst !== '__ambiguous__') {
+      // If only the bare first name was registered so far, unify with full name
+      const hasOtherFullWithSameFirst = Array.from(exactMap.keys()).some(
+        (key) => key !== firstKey && key !== fullKey && key.startsWith(`${firstKey} `)
+      );
+      if (!hasOtherFullWithSameFirst) {
+        exactMap.set(fullKey, existingFirst);
+        return { label: existingFirst, trailing };
+      }
+      firstNameMap.set(firstKey, '__ambiguous__');
+    }
+
+    counter += 1;
+    const label = `Persona ${counter}`;
+    exactMap.set(fullKey, label);
+    if (!firstNameMap.has(firstKey)) {
+      firstNameMap.set(firstKey, label);
+    } else if (firstNameMap.get(firstKey) !== label) {
+      firstNameMap.set(firstKey, '__ambiguous__');
+    }
+
+    return { label, trailing };
+  };
+
+  const PREPOSITIONAL_NAME_REGEX =
+    /(^|[\s([{"'¿¡,;:–—-])((?:[Aa]|[Dd][Ee]|[Cc][Oo][Nn]|[Pp][Aa][Rr][Aa])\s+)([A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,}(?:\s+[A-ZÁÉÍÓÚÜÑ][a-záéíóúüñ]{2,})?)/g;
+
+  const anonymizeText = (text: string): string => {
+    if (!text) return text;
+    return text.replace(
+      PREPOSITIONAL_NAME_REGEX,
+      (fullMatch, boundary: string, prep: string, candidate: string) => {
+        const resolved = getOrAssignLabel(candidate);
+        if (!resolved) return fullMatch;
+        return `${boundary}${prep}${resolved.label}${resolved.trailing}`;
+      }
+    );
+  };
+
+  const anonymizeDirectName = (name: string): string => {
+    const clean = cleanInlineText(name, 80);
+    if (!clean) return '';
+    const resolved = getOrAssignLabel(clean);
+    if (!resolved) return clean;
+    return `${resolved.label}${resolved.trailing}`.trim();
+  };
+
+  return {
+    enabled: true,
+    anonymizeText,
+    anonymizeDirectName,
+  };
+}
+
+function stripInvisibleUnicode(value?: string | null): string {
+  return String(value || '').replace(INVISIBLE_UNICODE_REGEX, ' ');
+}
+
 function parseISODate(iso: string): Date {
   const clean = iso.slice(0, 10);
   return new Date(`${clean}T12:00:00`);
@@ -215,6 +406,13 @@ function formatShortDayMonth(iso?: string | null): string {
   return `${dayNum} ${monthName}`;
 }
 
+function formatMonthYear(ym: string): string {
+  const [year, monthStr] = ym.split('-');
+  const monthIdx = Number(monthStr) - 1;
+  const monthName = MONTHS_SHORT[monthIdx] || monthStr;
+  return `${monthName} ${year}`;
+}
+
 function formatRelativeDays(delta: number): string {
   if (delta === 0) return 'hoy';
   if (delta === 1) return 'mañana';
@@ -224,10 +422,22 @@ function formatRelativeDays(delta: number): string {
 }
 
 function cleanInlineText(value?: string | null, maxLen = 140): string {
-  const normalized = String(value || '').replace(/\s+/g, ' ').trim();
+  const normalized = stripInvisibleUnicode(value).replace(/\s+/g, ' ').trim();
   if (!normalized) return '';
   if (normalized.length <= maxLen) return normalized;
   return `${normalized.slice(0, maxLen - 1).trimEnd()}…`;
+}
+
+function cleanMultilineText(value?: string | null, maxLen = 2000): string {
+  const raw = stripInvisibleUnicode(value).replace(/\r\n?/g, '\n');
+  const cleanedLines = raw
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+    .filter(Boolean);
+  const joined = cleanedLines.join(' · ');
+  if (!joined) return '';
+  if (joined.length <= maxLen) return joined;
+  return `${joined.slice(0, maxLen - 1).trimEnd()}…`;
 }
 
 function formatPct(part: number, total: number): string {
@@ -237,6 +447,32 @@ function formatPct(part: number, total: number): string {
 
 function pluralize(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function translateFrequency(freq?: string | null): string {
+  if (!freq) return 'sin frecuencia';
+  const normalized = normalizeTextKey(freq);
+  return FREQUENCY_LABELS_ES[normalized] || cleanInlineText(freq, 30);
+}
+
+function resolveSafeCategoryName(state: LifeOSState, rawCategory?: string | null): string {
+  const cleanedRaw = cleanInlineText(rawCategory, 80);
+  if (!cleanedRaw) return 'Sin categoría';
+
+  const resolved = cleanInlineText(getCategoryName(state.finance?.categories, cleanedRaw), 60);
+  if (!resolved || INTERNAL_CATEGORY_ID_REGEX.test(resolved)) {
+    return 'Sin categoría';
+  }
+  return resolved;
+}
+
+function isBalanceAdjustmentTransaction(tx: Transaction, resolvedCategory: string): boolean {
+  if (tx.origin === 'adjustment') return true;
+  return ADJUSTMENT_CATEGORY_NAMES.has(normalizeTextKey(resolvedCategory));
+}
+
+function normalizeDetailLevel(level?: AIContextDetailLevel): AIContextDetailLevel {
+  return level === 'detailed' ? 'detailed' : DEFAULT_AI_DETAIL_LEVEL;
 }
 
 function resolveCalendarEventDate(event: CalendarEvent, referenceDate: string): string | null {
@@ -556,11 +792,31 @@ export function getGoalDataIndicator(
   }
 }
 
-function buildHoyAgendaSection(state: LifeOSState, referenceDate: string): string | null {
+function describeNumericTrend(values: number[], threshold: number): string | null {
+  if (values.length < 4) return null;
+  const mid = Math.floor(values.length / 2);
+  const early = values.slice(0, mid);
+  const recent = values.slice(mid);
+  const avgEarly = early.reduce((s, v) => s + v, 0) / early.length;
+  const avgRecent = recent.reduce((s, v) => s + v, 0) / recent.length;
+  const diff = avgRecent - avgEarly;
+  if (diff >= threshold) return 'en suba';
+  if (diff <= -threshold) return 'en baja';
+  return 'estable';
+}
+
+function buildHoyAgendaSection(
+  state: LifeOSState,
+  referenceDate: string,
+  timeWindowDays: AIContextTimeWindowDays,
+  detailLevel: AIContextDetailLevel,
+  anonymizer: PersonAnonymizer
+): string | null {
   const lines: string[] = [];
+  const isDetailed = detailLevel === 'detailed';
   const todayKey: DayKey = dayKeyFromDate(parseISODate(referenceDate));
 
-  // Daily check-in context
+  // Daily check-in context for today
   const todayCheckin = (state.dailyContext || []).find((entry) => entry.date === referenceDate);
   if (todayCheckin) {
     const bits: string[] = [];
@@ -571,17 +827,147 @@ function buildHoyAgendaSection(state: LifeOSState, referenceDate: string): strin
     if (bits.length > 0) {
       lines.push(`- Estado de hoy: ${bits.join(' · ')}`);
     }
-    const note = cleanInlineText(todayCheckin.note, 120);
+    const note = anonymizer.anonymizeText(cleanInlineText(todayCheckin.note, isDetailed ? 300 : 120));
     if (note) lines.push(`- Nota del día: ${note}`);
+  }
+
+  // Sleep, energy, mood & daily checkouts across the selected window
+  const recentContext = (state.dailyContext || [])
+    .filter((entry) => isWithinLookbackWindow(entry.date, referenceDate, timeWindowDays))
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  const checkoutEntries = Object.entries(state.checkoutLog || {})
+    .filter(([date, log]) => {
+      if (!log || !isWithinLookbackWindow(date, referenceDate, timeWindowDays)) return false;
+      return Boolean(
+        log.closedAt ||
+        cleanInlineText(log.dailyNote) ||
+        typeof log.sleepHours === 'number' ||
+        typeof log.energyLevel === 'number' ||
+        log.trainedSkipped ||
+        log.studiedSkipped ||
+        log.expensesSkipped
+      );
+    })
+    .sort(([dateA], [dateB]) => dateA.localeCompare(dateB));
+
+  const shouldShowWellbeingBlock =
+    checkoutEntries.length > 0 ||
+    recentContext.length >= 2 ||
+    (recentContext.length === 1 && recentContext[0].date !== referenceDate);
+
+  if (shouldShowWellbeingBlock) {
+    const byDate = new Map<
+      string,
+      {
+        date: string;
+        sleepHours: number | null;
+        energy: number | null;
+        mood: number | null;
+        stress?: string | null;
+        note: string;
+        closed: boolean;
+      }
+    >();
+
+    for (const ctx of recentContext) {
+      byDate.set(ctx.date, {
+        date: ctx.date,
+        sleepHours: typeof ctx.sleepHours === 'number' && Number.isFinite(ctx.sleepHours) ? ctx.sleepHours : null,
+        energy: typeof ctx.energy === 'number' && Number.isFinite(ctx.energy) ? ctx.energy : null,
+        mood: typeof ctx.mood === 'number' && Number.isFinite(ctx.mood) ? ctx.mood : null,
+        stress: ctx.stress || null,
+        note: anonymizer.anonymizeText(cleanInlineText(ctx.note, isDetailed ? 240 : 120)),
+        closed: false,
+      });
+    }
+
+    for (const [date, log] of checkoutEntries) {
+      const existing = byDate.get(date);
+      const checkoutNote = anonymizer.anonymizeText(cleanInlineText(log.dailyNote, isDetailed ? 240 : 120));
+      const sleep =
+        existing?.sleepHours ??
+        (typeof log.sleepHours === 'number' && Number.isFinite(log.sleepHours) ? log.sleepHours : null);
+      const energy =
+        existing?.energy ??
+        (typeof log.energyLevel === 'number' && Number.isFinite(log.energyLevel) ? log.energyLevel : null);
+      const mergedNote =
+        existing?.note && checkoutNote && existing.note !== checkoutNote
+          ? `${existing.note} / Cierre: ${checkoutNote}`
+          : checkoutNote || existing?.note || '';
+
+      byDate.set(date, {
+        date,
+        sleepHours: sleep,
+        energy,
+        mood: existing?.mood ?? null,
+        stress: existing?.stress ?? null,
+        note: mergedNote,
+        closed: Boolean(log.closedAt || checkoutNote),
+      });
+    }
+
+    const sortedDays = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+    const sleepValues = sortedDays.map((d) => d.sleepHours).filter((v): v is number => v !== null);
+    const energyValues = sortedDays.map((d) => d.energy).filter((v): v is number => v !== null);
+    const moodValues = sortedDays.map((d) => d.mood).filter((v): v is number => v !== null);
+    const highStressDays = sortedDays.filter((d) => d.stress === 'alto').length;
+
+    const summaryBits: string[] = [];
+    if (sleepValues.length > 0) {
+      const avgSleep = (sleepValues.reduce((s, v) => s + v, 0) / sleepValues.length).toFixed(1).replace(/\.0$/, '');
+      const trend = describeNumericTrend(sleepValues, 0.4);
+      summaryBits.push(`sueño prom. ${avgSleep} h${trend ? ` (${trend})` : ''}`);
+    }
+    if (energyValues.length > 0) {
+      const avgEnergy = (energyValues.reduce((s, v) => s + v, 0) / energyValues.length).toFixed(1).replace(/\.0$/, '');
+      const trend = describeNumericTrend(energyValues, 0.35);
+      summaryBits.push(`energía prom. ${avgEnergy}/5${trend ? ` (${trend})` : ''}`);
+    }
+    if (moodValues.length > 0) {
+      const avgMood = (moodValues.reduce((s, v) => s + v, 0) / moodValues.length).toFixed(1).replace(/\.0$/, '');
+      summaryBits.push(`ánimo prom. ${avgMood}/5`);
+    }
+    if (highStressDays > 0) {
+      summaryBits.push(`estrés alto en ${pluralize(highStressDays, 'día', 'días')}`);
+    }
+    if (checkoutEntries.length > 0) {
+      summaryBits.push(`${pluralize(checkoutEntries.length, 'cierre diario', 'cierres diarios')}`);
+    }
+
+    if (summaryBits.length > 0) {
+      lines.push(`- Sueño, energía y cierres (últimos ${timeWindowDays} días): ${summaryBits.join(' · ')}`);
+    }
+
+    if (isDetailed) {
+      const recentDetailedDays = sortedDays.slice(-7).reverse();
+      for (const day of recentDetailedDays) {
+        const dayBits: string[] = [];
+        if (day.sleepHours !== null) dayBits.push(`sueño ${day.sleepHours} h`);
+        if (day.energy !== null) dayBits.push(`energía ${day.energy}/5`);
+        if (day.mood !== null) dayBits.push(`ánimo ${day.mood}/5`);
+        if (day.stress) dayBits.push(`estrés ${day.stress}`);
+        if (day.note) dayBits.push(`"${day.note}"`);
+        if (dayBits.length > 0) {
+          lines.push(`  - ${formatShortDayMonth(day.date)}: ${dayBits.join(' · ')}`);
+        }
+      }
+    } else {
+      const latestWithNote = [...sortedDays].reverse().find((d) => d.closed && d.note);
+      if (latestWithNote) {
+        lines.push(`  - Último cierre (${formatShortDayMonth(latestWithNote.date)}): ${latestWithNote.note}`);
+      }
+    }
   }
 
   // Daily priorities for today
   const priorities = (state.dailyPriorities || []).filter((p) => p.date === referenceDate);
   if (priorities.length > 0) {
     lines.push('- Prioridades de hoy:');
-    for (const p of priorities.slice(0, 5)) {
+    for (const p of priorities.slice(0, isDetailed ? 10 : 5)) {
       const status = p.done ? 'hecha' : 'pendiente';
-      lines.push(`  - [${status}] ${cleanInlineText(p.text, 120)}`);
+      lines.push(`  - [${status}] ${anonymizer.anonymizeText(cleanInlineText(p.text, 120))}`);
     }
   }
 
@@ -597,9 +983,10 @@ function buildHoyAgendaSection(state: LifeOSState, referenceDate: string): strin
       return (a.dueDate || '9999-99-99').localeCompare(b.dueDate || '9999-99-99');
     });
 
+  const taskLimit = isDetailed ? 25 : 12;
   if (pendingExtras.length > 0) {
     lines.push(`- Tareas pendientes (${pendingExtras.length}):`);
-    for (const task of pendingExtras.slice(0, 12)) {
+    for (const task of pendingExtras.slice(0, taskLimit)) {
       const meta: string[] = [`prioridad ${task.priority}`];
       if (task.dueDate && /^\d{4}-\d{2}-\d{2}/.test(task.dueDate)) {
         const delta = daysBetween(referenceDate, task.dueDate.slice(0, 10));
@@ -607,10 +994,10 @@ function buildHoyAgendaSection(state: LifeOSState, referenceDate: string): strin
       }
       if (task.time) meta.push(task.time);
       if (task.durationMinutes) meta.push(`${task.durationMinutes} min`);
-      lines.push(`  - ${cleanInlineText(task.text, 120)} (${meta.join(', ')})`);
+      lines.push(`  - ${anonymizer.anonymizeText(cleanInlineText(task.text, 120))} (${meta.join(', ')})`);
     }
-    if (pendingExtras.length > 12) {
-      lines.push(`  - … y ${pendingExtras.length - 12} tareas más.`);
+    if (pendingExtras.length > taskLimit) {
+      lines.push(`  - … y ${pendingExtras.length - taskLimit} tareas más.`);
     }
   }
 
@@ -621,8 +1008,11 @@ function buildHoyAgendaSection(state: LifeOSState, referenceDate: string): strin
     const pendingHabits = recurring.filter((r) => !todayLog[r.id]);
     const doneHabits = recurring.length - pendingHabits.length;
     const habitPreview = pendingHabits
-      .slice(0, 6)
-      .map((h) => (h.time ? `${cleanInlineText(h.name, 60)} (${h.time})` : cleanInlineText(h.name, 60)))
+      .slice(0, isDetailed ? 15 : 6)
+      .map((h) => {
+        const label = anonymizer.anonymizeText(cleanInlineText(h.name, 60));
+        return h.time ? `${label} (${h.time})` : label;
+      })
       .join(', ');
     lines.push(
       `- Rutinas activas: ${doneHabits}/${recurring.length} hechas hoy${habitPreview ? ` · pendientes: ${habitPreview}` : ''}`
@@ -636,25 +1026,39 @@ function buildHoyAgendaSection(state: LifeOSState, referenceDate: string): strin
       .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
     if (todayBlocks.length > 0) {
       lines.push(`- Bloques de Agenda para hoy (${DAY_LABELS[todayKey]}):`);
-      for (const block of todayBlocks.slice(0, 10)) {
-        lines.push(`  - ${block.time || 'Sin hora'}: ${cleanInlineText(block.activity, 100)}`);
+      for (const block of todayBlocks.slice(0, isDetailed ? 20 : 10)) {
+        lines.push(`  - ${block.time || 'Sin hora'}: ${anonymizer.anonymizeText(cleanInlineText(block.activity, 100))}`);
       }
     }
-    const otherBusyDays = DAYS.filter((day) => day !== todayKey && (state.agenda?.[day]?.length || 0) > 0)
-      .map((day) => `${DAY_LABELS[day]} (${state.agenda[day].length})`);
+    const otherBusyDays = DAYS.filter((day) => day !== todayKey && (state.agenda?.[day]?.length || 0) > 0);
     if (otherBusyDays.length > 0) {
-      lines.push(`- Carga de Agenda resto de la semana: ${otherBusyDays.join(', ')}`);
+      if (isDetailed) {
+        lines.push('- Bloques de Agenda resto de la semana:');
+        for (const day of otherBusyDays) {
+          const dayBlocks = (state.agenda?.[day] || [])
+            .slice()
+            .sort((a, b) => (a.time || '').localeCompare(b.time || ''))
+            .slice(0, 8)
+            .map((b) => `${b.time || 'Sin hora'} ${anonymizer.anonymizeText(cleanInlineText(b.activity, 70))}`)
+            .join(' · ');
+          lines.push(`  - ${DAY_LABELS[day]}: ${dayBlocks}`);
+        }
+      } else {
+        const summary = otherBusyDays.map((day) => `${DAY_LABELS[day]} (${state.agenda[day].length})`);
+        lines.push(`- Carga de Agenda resto de la semana: ${summary.join(', ')}`);
+      }
     }
   }
 
-  // Calendar events (next 14 days)
-  const upcomingEvents = getUpcomingCalendarEvents(state, referenceDate, 14);
+  // Calendar events
+  const eventHorizon = isDetailed ? 30 : 14;
+  const upcomingEvents = getUpcomingCalendarEvents(state, referenceDate, eventHorizon);
   if (upcomingEvents.length > 0) {
-    lines.push('- Próximos eventos de Calendario (14 días):');
-    for (const item of upcomingEvents.slice(0, 10)) {
+    lines.push(`- Próximos eventos de Calendario (${eventHorizon} días):`);
+    for (const item of upcomingEvents.slice(0, isDetailed ? 20 : 10)) {
       const timeLabel = item.event.time ? ` ${item.event.time}` : '';
       lines.push(
-        `  - ${formatShortDayMonth(item.effectiveDate)}${timeLabel} (${formatRelativeDays(item.delta)}): ${cleanInlineText(item.event.name, 100)}`
+        `  - ${formatShortDayMonth(item.effectiveDate)}${timeLabel} (${formatRelativeDays(item.delta)}): ${anonymizer.anonymizeText(cleanInlineText(item.event.name, 100))}`
       );
     }
   }
@@ -663,11 +1067,12 @@ function buildHoyAgendaSection(state: LifeOSState, referenceDate: string): strin
   const activeProjects = (state.projects || []).filter((p) => p.status === 'activo');
   if (activeProjects.length > 0) {
     lines.push('- Proyectos activos:');
-    for (const proj of activeProjects.slice(0, 5)) {
+    for (const proj of activeProjects.slice(0, isDetailed ? 10 : 5)) {
       const openTasks = (proj.tasks || []).filter((t) => !t.done).length;
-      const nextStep = cleanInlineText(proj.nextStep, 90);
+      const nextStep = anonymizer.anonymizeText(cleanInlineText(proj.nextStep, 90));
+      const objective = isDetailed ? anonymizer.anonymizeText(cleanInlineText(proj.objective, 120)) : '';
       lines.push(
-        `  - ${cleanInlineText(proj.name, 80)} (${pluralize(openTasks, 'tarea pendiente', 'tareas pendientes')}${nextStep ? ` · próximo paso: ${nextStep}` : ''})`
+        `  - ${anonymizer.anonymizeText(cleanInlineText(proj.name, 80))} (${pluralize(openTasks, 'tarea pendiente', 'tareas pendientes')}${nextStep ? ` · próximo paso: ${nextStep}` : ''}${objective ? ` · objetivo: ${objective}` : ''})`
       );
     }
   }
@@ -679,12 +1084,15 @@ function buildFinanzasSection(
   state: LifeOSState,
   referenceDate: string,
   hideExactAmounts: boolean,
-  timeWindowDays: AIContextTimeWindowDays
+  timeWindowDays: AIContextTimeWindowDays,
+  detailLevel: AIContextDetailLevel,
+  anonymizer: PersonAnonymizer
 ): string | null {
   const lines: string[] = [];
   const finance = state.finance;
   if (!finance) return null;
 
+  const isDetailed = detailLevel === 'detailed';
   const recentTx = getRecentTransactions(state, referenceDate, timeWindowDays);
   const windowLabel = `últimos ${timeWindowDays} días`;
 
@@ -702,77 +1110,174 @@ function buildFinanzasSection(
       let fixedExpense = 0;
       let variableExpense = 0;
       const categoryTotals = new Map<string, number>();
+      const realTxList: Array<{ tx: Transaction; category: string; amount: number }> = [];
+      const adjustmentTxList: Array<{ tx: Transaction; amount: number }> = [];
 
       for (const tx of txList) {
         const amount = Math.abs(Number(tx.amount) || 0);
+        const resolvedCat = resolveSafeCategoryName(state, tx.category);
+        if (isBalanceAdjustmentTransaction(tx, resolvedCat)) {
+          adjustmentTxList.push({ tx, amount });
+          continue;
+        }
+
+        realTxList.push({ tx, category: resolvedCat, amount });
         if (tx.type === 'ingreso') {
           totalIncome += amount;
         } else {
           totalExpense += amount;
           if (tx.fixed === 'fijo') fixedExpense += amount;
           else variableExpense += amount;
-          const cat = cleanInlineText(tx.category || 'Sin categoría', 60);
-          categoryTotals.set(cat, (categoryTotals.get(cat) || 0) + amount);
+          categoryTotals.set(resolvedCat, (categoryTotals.get(resolvedCat) || 0) + amount);
         }
       }
 
-      if (hideExactAmounts) {
-        lines.push(`- Movimientos (${windowLabel}, ${currency}): ${pluralize(txList.length, 'movimiento', 'movimientos')}`);
-        if (totalIncome > 0 && totalExpense > 0) {
-          if (totalExpense > totalIncome) {
-            lines.push(
-              '  - Relación ingresos/gastos: balance negativo: gastos por encima de los ingresos del período'
-            );
-          } else {
-            const expenseRatio = Math.round((totalExpense / totalIncome) * 100);
-            const savingsRatio = Math.round(((totalIncome - totalExpense) / totalIncome) * 100);
-            lines.push(
-              `  - Relación ingresos/gastos: los gastos equivalen al ${expenseRatio}% de los ingresos (margen de ahorro aprox. ${savingsRatio}%)`
-            );
-          }
-        } else if (totalExpense > 0) {
-          lines.push('  - Solo se registraron egresos en este período (montos ocultos por privacidad).');
-        } else if (totalIncome > 0) {
-          lines.push('  - Solo se registraron ingresos en este período (montos ocultos por privacidad).');
-        }
-      } else {
-        const net = totalIncome - totalExpense;
-        let savingsNote = '';
-        if (totalExpense > totalIncome) {
-          savingsNote = ' · balance negativo: gastos por encima de los ingresos del período';
-        } else if (totalIncome > 0) {
-          savingsNote = ` · tasa de ahorro ${Math.round((net / totalIncome) * 100)}%`;
-        }
-        lines.push(
-          `- Resumen (${windowLabel}, ${currency}): ingresos ${formatMoney(totalIncome, currency)} · gastos ${formatMoney(totalExpense, currency)} · neto ${formatMoney(net, currency)}${savingsNote}`
-        );
-      }
-
-      if (totalExpense > 0) {
-        if (fixedExpense > 0 || variableExpense > 0) {
-          if (hideExactAmounts) {
-            lines.push(
-              `  - Estructura de gastos: ${formatPct(fixedExpense, totalExpense)} fijos · ${formatPct(variableExpense, totalExpense)} variables`
-            );
-          } else {
-            lines.push(
-              `  - Estructura de gastos: fijos ${formatMoney(fixedExpense, currency)} (${formatPct(fixedExpense, totalExpense)}) · variables ${formatMoney(variableExpense, currency)} (${formatPct(variableExpense, totalExpense)})`
-            );
-          }
-        }
-
-        const sortedCategories = [...categoryTotals.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 8);
-        if (sortedCategories.length > 0) {
-          lines.push('  - Distribución por categorías:');
-          for (const [cat, amount] of sortedCategories) {
-            if (hideExactAmounts) {
-              lines.push(`    - ${cat}: ${formatPct(amount, totalExpense)} del gasto`);
+      if (realTxList.length > 0) {
+        if (hideExactAmounts) {
+          lines.push(`- Movimientos (${windowLabel}, ${currency}): ${pluralize(realTxList.length, 'movimiento', 'movimientos')}`);
+          if (totalIncome > 0 && totalExpense > 0) {
+            if (totalExpense > totalIncome) {
+              lines.push(
+                '  - Relación ingresos/gastos: balance negativo: gastos por encima de los ingresos del período'
+              );
             } else {
-              lines.push(`    - ${cat}: ${formatMoney(amount, currency)} (${formatPct(amount, totalExpense)})`);
+              const expenseRatio = Math.round((totalExpense / totalIncome) * 100);
+              const savingsRatio = Math.round(((totalIncome - totalExpense) / totalIncome) * 100);
+              lines.push(
+                `  - Relación ingresos/gastos: los gastos equivalen al ${expenseRatio}% de los ingresos (margen de ahorro aprox. ${savingsRatio}%)`
+              );
+            }
+          } else if (totalExpense > 0) {
+            lines.push('  - Solo se registraron egresos en este período (montos ocultos por privacidad).');
+          } else if (totalIncome > 0) {
+            lines.push('  - Solo se registraron ingresos en este período (montos ocultos por privacidad).');
+          }
+        } else {
+          const net = totalIncome - totalExpense;
+          let savingsNote = '';
+          if (totalExpense > totalIncome) {
+            savingsNote = ' · balance negativo: gastos por encima de los ingresos del período';
+          } else if (totalIncome > 0) {
+            savingsNote = ` · tasa de ahorro ${Math.round((net / totalIncome) * 100)}%`;
+          }
+          lines.push(
+            `- Resumen (${windowLabel}, ${currency}): ingresos ${formatMoney(totalIncome, currency)} · gastos ${formatMoney(totalExpense, currency)} · neto ${formatMoney(net, currency)}${savingsNote}`
+          );
+        }
+
+        if (totalExpense > 0) {
+          if (fixedExpense > 0 || variableExpense > 0) {
+            if (hideExactAmounts) {
+              lines.push(
+                `  - Estructura de gastos: ${formatPct(fixedExpense, totalExpense)} fijos · ${formatPct(variableExpense, totalExpense)} variables`
+              );
+            } else {
+              lines.push(
+                `  - Estructura de gastos: fijos ${formatMoney(fixedExpense, currency)} (${formatPct(fixedExpense, totalExpense)}) · variables ${formatMoney(variableExpense, currency)} (${formatPct(variableExpense, totalExpense)})`
+              );
             }
           }
+
+          const sortedCategories = [...categoryTotals.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, isDetailed ? 25 : 8);
+          if (sortedCategories.length > 0) {
+            lines.push('  - Distribución por categorías:');
+            for (const [cat, amount] of sortedCategories) {
+              if (hideExactAmounts) {
+                lines.push(`    - ${cat}: ${formatPct(amount, totalExpense)} del gasto`);
+              } else {
+                lines.push(`    - ${cat}: ${formatMoney(amount, currency)} (${formatPct(amount, totalExpense)})`);
+              }
+            }
+          }
+
+          // Top individual expenses (top 3 in Resumido, top 8 in Detallado)
+          const topExpenses = realTxList
+            .filter((item) => item.tx.type === 'gasto' && item.amount > 0)
+            .slice()
+            .sort((a, b) => b.amount - a.amount || b.tx.date.localeCompare(a.tx.date))
+            .slice(0, isDetailed ? 8 : 3);
+
+          if (topExpenses.length > 0) {
+            lines.push(`  - Mayores gastos individuales (top ${topExpenses.length}):`);
+            for (const item of topExpenses) {
+              const rawNote = cleanInlineText(item.tx.note, 60);
+              const safeNote = anonymizer.anonymizeText(rawNote);
+              const notePart =
+                safeNote && normalizeTextKey(safeNote) !== normalizeTextKey(item.category)
+                  ? ` (${safeNote})`
+                  : '';
+              if (hideExactAmounts) {
+                lines.push(
+                  `    - ${formatShortDayMonth(item.tx.date)} · ${item.category}${notePart}: ${formatPct(item.amount, totalExpense)} del gasto`
+                );
+              } else {
+                lines.push(
+                  `    - ${formatShortDayMonth(item.tx.date)} · ${item.category}${notePart}: ${formatMoney(item.amount, currency)}`
+                );
+              }
+            }
+          }
+        }
+
+        // Month-by-month evolution for windows >= 30 days
+        if (timeWindowDays >= 30) {
+          const byMonth = new Map<string, { income: number; expense: number; count: number }>();
+          for (const item of realTxList) {
+            const ym = item.tx.date.slice(0, 7);
+            const bucket = byMonth.get(ym) || { income: 0, expense: 0, count: 0 };
+            if (item.tx.type === 'ingreso') bucket.income += item.amount;
+            else bucket.expense += item.amount;
+            bucket.count += 1;
+            byMonth.set(ym, bucket);
+          }
+
+          const sortedMonths = [...byMonth.entries()].sort(([a], [b]) => a.localeCompare(b));
+          if (sortedMonths.length > 0) {
+            lines.push('  - Evolución mes a mes:');
+            for (const [ym, bucket] of sortedMonths) {
+              const monthLabel = formatMonthYear(ym);
+              if (hideExactAmounts) {
+                let relation = `${pluralize(bucket.count, 'movimiento', 'movimientos')}`;
+                if (bucket.income > 0 && bucket.expense > 0) {
+                  if (bucket.expense > bucket.income) {
+                    relation += ' · balance negativo';
+                  } else {
+                    const savePct = Math.round(((bucket.income - bucket.expense) / bucket.income) * 100);
+                    relation += ` · margen de ahorro aprox. ${savePct}%`;
+                  }
+                } else if (bucket.expense > 0) {
+                  relation += ' · solo egresos';
+                } else if (bucket.income > 0) {
+                  relation += ' · solo ingresos';
+                }
+                lines.push(`    - ${monthLabel}: ${relation}`);
+              } else {
+                const netMonth = bucket.income - bucket.expense;
+                lines.push(
+                  `    - ${monthLabel}: ingresos ${formatMoney(bucket.income, currency)} · gastos ${formatMoney(bucket.expense, currency)} · neto ${formatMoney(netMonth, currency)}`
+                );
+              }
+            }
+          }
+        }
+      }
+
+      // Separate accounting line for balance adjustments (never mixed into consumption categories)
+      if (adjustmentTxList.length > 0) {
+        const adjNet = adjustmentTxList.reduce(
+          (sum, item) => sum + (item.tx.type === 'ingreso' ? item.amount : -item.amount),
+          0
+        );
+        if (hideExactAmounts) {
+          lines.push(
+            `- Ajustes contables de saldo (${windowLabel}, ${currency}, excluidos de gastos reales): ${pluralize(adjustmentTxList.length, 'ajuste', 'ajustes')} (montos ocultos por privacidad)`
+          );
+        } else {
+          lines.push(
+            `- Ajustes contables de saldo (${windowLabel}, ${currency}, excluidos de gastos reales): ${pluralize(adjustmentTxList.length, 'ajuste', 'ajustes')} (efecto neto ${formatMoney(adjNet, currency)})`
+          );
         }
       }
     }
@@ -818,6 +1323,42 @@ function buildFinanzasSection(
     }
   }
 
+  // Projected balance for the next 30 days (expected incomes vs. upcoming commitments/subscriptions)
+  const projection30 = deriveCashflowProjection(state, '30d', referenceDate);
+  if (projection30.events.length > 0) {
+    const projectedCurrencies = Object.values(projection30.summariesByCurrency).filter(
+      (summary) => summary.expectedIncomes > 0 || summary.committedExpenses > 0
+    );
+    if (projectedCurrencies.length > 0) {
+      for (const summary of projectedCurrencies) {
+        const net30 = summary.expectedIncomes - summary.committedExpenses;
+        if (hideExactAmounts) {
+          const incCount = projection30.events.filter(
+            (ev) => ev.type === 'expected_income' && (ev.currency || 'UYU').toUpperCase() === summary.currency
+          ).length;
+          const expCount = projection30.events.filter(
+            (ev) => ev.type === 'committed_expense' && (ev.currency || 'UYU').toUpperCase() === summary.currency
+          ).length;
+          let flowLabel = 'flujo proyectado equilibrado';
+          if (summary.expectedIncomes === 0 && summary.committedExpenses > 0) {
+            flowLabel = 'solo compromisos por vencer sin ingresos esperados registrados';
+          } else if (net30 > 0) {
+            flowLabel = 'flujo proyectado positivo (ingresos esperados cubren los compromisos)';
+          } else if (net30 < 0) {
+            flowLabel = 'flujo proyectado negativo (compromisos superan los ingresos esperados)';
+          }
+          lines.push(
+            `- Balance proyectado (próximos 30 días, ${summary.currency}): ${pluralize(incCount, 'ingreso esperado', 'ingresos esperados')} vs. ${pluralize(expCount, 'compromiso/suscripción por vencer', 'compromisos/suscripciones por vencer')} · ${flowLabel} (montos ocultos por privacidad)`
+          );
+        } else {
+          lines.push(
+            `- Balance proyectado (próximos 30 días, ${summary.currency}): ingresos esperados ${formatMoney(summary.expectedIncomes, summary.currency)} · compromisos/suscripciones ${formatMoney(summary.committedExpenses, summary.currency)} · flujo neto proyectado ${formatMoney(net30, summary.currency)} · saldo proyectado ${formatMoney(summary.projectedBalance, summary.currency)}`
+          );
+        }
+      }
+    }
+  }
+
   // Commitments & upcoming obligations
   const commitments = getActiveCommitments(state);
   const subscriptions = finance.subscriptions || [];
@@ -828,50 +1369,60 @@ function buildFinanzasSection(
     lines.push('- Compromisos, suscripciones y deudas:');
     const totalCommitmentWeight = commitments.reduce((sum, c) => sum + Math.max(0, Number(c.amount) || 0), 0);
 
-    for (const c of commitments.slice(0, 8)) {
+    for (const c of commitments.slice(0, isDetailed ? 16 : 8)) {
       const curr = (c.currency || 'UYU').toUpperCase();
       const dueLabel = c.nextDueDate
         ? `vence ${formatShortDayMonth(c.nextDueDate)} (${formatRelativeDays(daysBetween(referenceDate, c.nextDueDate.slice(0, 10)))})`
         : 'sin fecha';
+      const freqLabel = c.frequency ? ` · ${translateFrequency(c.frequency)}` : '';
       const instLabel =
         c.currentInstallment && c.totalInstallments
           ? ` · cuota ${c.currentInstallment}/${c.totalInstallments}`
           : '';
+      const safeName = anonymizer.anonymizeText(cleanInlineText(c.name, 70));
       if (hideExactAmounts) {
         const shareLabel =
           totalCommitmentWeight > 0 && commitments.length > 1
             ? ` · ${formatPct(Math.max(0, Number(c.amount) || 0), totalCommitmentWeight)} de los compromisos`
             : '';
-        lines.push(`  - ${cleanInlineText(c.name, 70)} (${dueLabel}${instLabel}${shareLabel})`);
+        lines.push(`  - ${safeName} (${dueLabel}${freqLabel}${instLabel}${shareLabel})`);
       } else {
-        lines.push(`  - ${cleanInlineText(c.name, 70)}: ${formatMoney(c.amount, curr)} (${dueLabel}${instLabel})`);
+        lines.push(`  - ${safeName}: ${formatMoney(c.amount, curr)} (${dueLabel}${freqLabel}${instLabel})`);
       }
     }
 
-    for (const sub of subscriptions.slice(0, 6)) {
+    for (const sub of subscriptions.slice(0, isDetailed ? 15 : 6)) {
       const due = sub.dueDay ? ` · día ${sub.dueDay}` : '';
+      const safeName = anonymizer.anonymizeText(cleanInlineText(sub.name, 70));
       if (hideExactAmounts) {
-        lines.push(`  - Suscripción: ${cleanInlineText(sub.name, 70)}${due} (monto oculto)`);
+        lines.push(`  - Suscripción: ${safeName}${due} (monto oculto)`);
       } else {
-        lines.push(`  - Suscripción: ${cleanInlineText(sub.name, 70)} (${formatMoney(sub.amount, 'UYU')}${due})`);
+        lines.push(`  - Suscripción: ${safeName} (${formatMoney(sub.amount, 'UYU')}${due})`);
       }
     }
 
-    for (const debt of debts.slice(0, 5)) {
+    for (const debt of debts.slice(0, isDetailed ? 12 : 5)) {
       const due = debt.dueDate ? ` · vence ${formatShortDayMonth(debt.dueDate)}` : '';
+      const safeName = anonymizer.anonymizeText(cleanInlineText(debt.name, 70));
       if (hideExactAmounts) {
-        lines.push(`  - Deuda activa: ${cleanInlineText(debt.name, 70)}${due} (saldo oculto)`);
+        lines.push(`  - Deuda activa: ${safeName}${due} (saldo oculto)`);
       } else {
-        lines.push(`  - Deuda: ${cleanInlineText(debt.name, 70)} (${formatMoney(debt.amount, 'UYU')}${due})`);
+        lines.push(`  - Deuda: ${safeName} (${formatMoney(debt.amount, 'UYU')}${due})`);
       }
     }
 
-    for (const ag of agreements.slice(0, 5)) {
+    for (const ag of agreements.slice(0, isDetailed ? 10 : 5)) {
+      const safeTitle = anonymizer.anonymizeText(cleanInlineText(ag.title, 70));
+      const safeCreditor = ag.creditorName ? anonymizer.anonymizeDirectName(ag.creditorName) : '';
+      const creditorNote =
+        safeCreditor && !normalizeTextKey(safeTitle).includes(normalizeTextKey(safeCreditor))
+          ? ` con ${safeCreditor}`
+          : '';
       if (hideExactAmounts) {
-        lines.push(`  - Acuerdo de financiación activo: ${cleanInlineText(ag.title, 70)} (${ag.currency} · saldo oculto)`);
+        lines.push(`  - Acuerdo de financiación activo: ${safeTitle}${creditorNote} (${ag.currency} · saldo oculto)`);
       } else {
         lines.push(
-          `  - Acuerdo de financiación: ${cleanInlineText(ag.title, 70)} (saldo base ${formatMoney(ag.initialRemainingBalance, ag.currency)})`
+          `  - Acuerdo de financiación: ${safeTitle}${creditorNote} (saldo base ${formatMoney(ag.initialRemainingBalance, ag.currency)})`
         );
       }
     }
@@ -881,12 +1432,14 @@ function buildFinanzasSection(
   const expectedIncomes = (finance.expectedIncomes || []).filter((inc) => inc.active !== false);
   if (expectedIncomes.length > 0) {
     lines.push('- Ingresos esperados:');
-    for (const inc of expectedIncomes.slice(0, 5)) {
+    for (const inc of expectedIncomes.slice(0, isDetailed ? 12 : 5)) {
       const curr = (inc.currency || 'UYU').toUpperCase();
+      const freqEs = translateFrequency(inc.frequency);
+      const safeName = anonymizer.anonymizeText(cleanInlineText(inc.name, 70));
       if (hideExactAmounts) {
-        lines.push(`  - ${cleanInlineText(inc.name, 70)} (${inc.frequency} · monto oculto)`);
+        lines.push(`  - ${safeName} (${freqEs} · monto oculto)`);
       } else {
-        lines.push(`  - ${cleanInlineText(inc.name, 70)}: ${formatMoney(inc.amount, curr)} (${inc.frequency})`);
+        lines.push(`  - ${safeName}: ${formatMoney(inc.amount, curr)} (${freqEs})`);
       }
     }
   }
@@ -897,13 +1450,13 @@ function buildFinanzasSection(
     const totalInv = investments.reduce((sum, inv) => sum + Number(inv.amount || 0), 0);
     if (hideExactAmounts) {
       const shares = investments
-        .slice(0, 5)
+        .slice(0, isDetailed ? 10 : 5)
         .map((inv, idx) => `Posición ${idx + 1}: ${formatPct(Number(inv.amount || 0), totalInv)}`)
         .join(', ');
       lines.push(`- Inversiones: ${pluralize(investments.length, 'posición', 'posiciones')} (${shares} · montos ocultos)`);
     } else {
       const detail = investments
-        .slice(0, 5)
+        .slice(0, isDetailed ? 10 : 5)
         .map((inv) => `${cleanInlineText(inv.name, 50)}: ${formatMoney(inv.amount, 'UYU')}`)
         .join(' · ');
       lines.push(`- Inversiones (${formatMoney(totalInv, 'UYU')}): ${detail}`);
@@ -913,18 +1466,49 @@ function buildFinanzasSection(
   return lines.length > 0 ? lines.join('\n') : null;
 }
 
+function formatExamLabel(exam: Exam, subjectName: string | null): string {
+  const cleanTitle = cleanInlineText(exam.title, 80);
+  const cleanSubject = cleanInlineText(subjectName, 60);
+
+  const isGenericExamTitle = !cleanTitle || /^ex[aá]men$/i.test(cleanTitle);
+  if (isGenericExamTitle) {
+    return cleanSubject || 'Sin materia';
+  }
+
+  const stripped = cleanTitle
+    .replace(/^ex[aá]men(?:\s*(?:de|del|:|-|—|\|))?\s*/i, '')
+    .replace(/^\(([^)]+)\)$/, '$1')
+    .trim();
+
+  const effectiveTitle = stripped || cleanTitle;
+
+  if (cleanSubject) {
+    const lowerTitle = effectiveTitle.toLowerCase();
+    const lowerSubject = cleanSubject.toLowerCase();
+    if (lowerTitle === lowerSubject || lowerTitle.includes(lowerSubject)) {
+      return effectiveTitle;
+    }
+    return `${cleanSubject} — ${effectiveTitle}`;
+  }
+
+  return effectiveTitle;
+}
+
 function buildEstudiosSection(
   state: LifeOSState,
   referenceDate: string,
-  timeWindowDays: AIContextTimeWindowDays
+  timeWindowDays: AIContextTimeWindowDays,
+  detailLevel: AIContextDetailLevel,
+  anonymizer: PersonAnonymizer
 ): string | null {
   const lines: string[] = [];
   const study = state.study;
   if (!study) return null;
 
+  const isDetailed = detailLevel === 'detailed';
   const subjectById = new Map((study.subjects || []).map((s) => [s.id, s]));
 
-  // Pending exams sorted by proximity
+  // Pending exams sorted by proximity (no redundant "Examen (Materia)" prefix)
   const pendingExams: Exam[] = (study.exams || [])
     .filter((exam) => exam.status === 'pendiente')
     .slice()
@@ -932,25 +1516,20 @@ function buildEstudiosSection(
 
   if (pendingExams.length > 0) {
     lines.push(`- Exámenes próximos (${pendingExams.length}):`);
-    for (const exam of pendingExams.slice(0, 8)) {
-      const subjectName = exam.subjectId ? subjectById.get(exam.subjectId)?.name : null;
-      const title = cleanInlineText(exam.title || subjectName || 'Examen', 80);
-      const subjectSuffix =
-        subjectName &&
-        exam.title &&
-        !exam.title.toLowerCase().includes(subjectName.toLowerCase())
-          ? ` (${cleanInlineText(subjectName, 50)})`
-          : '';
+    for (const exam of pendingExams.slice(0, isDetailed ? 15 : 8)) {
+      const subjectName = exam.subjectId ? subjectById.get(exam.subjectId)?.name || null : null;
+      const label = anonymizer.anonymizeText(formatExamLabel(exam, subjectName));
       const delta = exam.date ? daysBetween(referenceDate, exam.date.slice(0, 10)) : null;
       const dateInfo = exam.date
         ? `${formatReadableDate(exam.date)}${exam.time ? ` ${exam.time}` : ''} · ${formatRelativeDays(delta ?? 0)}`
         : 'sin fecha';
       const pendingExamTopics = (exam.topics || []).filter((t) => !t.done).map((t) => cleanInlineText(t.title, 50));
+      const maxExamTopics = isDetailed ? 10 : 4;
       const topicsNote =
         pendingExamTopics.length > 0
-          ? ` · temas pendientes: ${pendingExamTopics.slice(0, 4).join(', ')}${pendingExamTopics.length > 4 ? ` (+${pendingExamTopics.length - 4})` : ''}`
+          ? ` · temas pendientes: ${pendingExamTopics.slice(0, maxExamTopics).join(', ')}${pendingExamTopics.length > maxExamTopics ? ` (+${pendingExamTopics.length - maxExamTopics})` : ''}`
           : '';
-      lines.push(`  - ${title}${subjectSuffix}: ${dateInfo}${topicsNote}`);
+      lines.push(`  - ${label}: ${dateInfo}${topicsNote}`);
     }
   }
 
@@ -958,7 +1537,8 @@ function buildEstudiosSection(
   const subjects = study.subjects || [];
   if (subjects.length > 0) {
     lines.push(`- Materias activas (${subjects.length}):`);
-    for (const subject of subjects.slice(0, 10)) {
+    const maxTopics = isDetailed ? 12 : 5;
+    for (const subject of subjects.slice(0, isDetailed ? 15 : 10)) {
       const topics = subject.topics || [];
       const doneTopics = topics.filter((t) => t.done).length;
       const pendingTopics = topics.filter((t) => !t.done);
@@ -966,11 +1546,11 @@ function buildEstudiosSection(
         lines.push(`  - ${cleanInlineText(subject.name, 70)} (sin temario cargado)`);
       } else {
         const preview = pendingTopics
-          .slice(0, 5)
+          .slice(0, maxTopics)
           .map((t) => cleanInlineText(t.title, 55))
           .join(', ');
         lines.push(
-          `  - ${cleanInlineText(subject.name, 70)}: ${doneTopics}/${topics.length} temas listos${preview ? ` · pendientes: ${preview}${pendingTopics.length > 5 ? ` (+${pendingTopics.length - 5})` : ''}` : ' · temario al día'}`
+          `  - ${cleanInlineText(subject.name, 70)}: ${doneTopics}/${topics.length} temas listos${preview ? ` · pendientes: ${preview}${pendingTopics.length > maxTopics ? ` (+${pendingTopics.length - maxTopics})` : ''}` : ' · temario al día'}`
         );
       }
     }
@@ -986,6 +1566,21 @@ function buildEstudiosSection(
     lines.push(
       `- Estudio reciente (últimos ${timeWindowDays} días): ${hours} h en ${pluralize(recentLogs.length, 'sesión', 'sesiones')}`
     );
+
+    if (isDetailed) {
+      const minsBySubject = new Map<string, number>();
+      for (const log of recentLogs) {
+        const subName = log.subjectId ? subjectById.get(log.subjectId)?.name || 'General' : 'General';
+        minsBySubject.set(subName, (minsBySubject.get(subName) || 0) + (Number(log.minutes) || 0));
+      }
+      const breakdown = [...minsBySubject.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([name, mins]) => `${cleanInlineText(name, 45)}: ${(mins / 60).toFixed(1).replace(/\.0$/, '')} h`)
+        .join(' · ');
+      if (breakdown) {
+        lines.push(`  - Horas por materia: ${breakdown}`);
+      }
+    }
   } else if ((study.studyLog || []).length > 0) {
     lines.push(`- Estudio reciente (últimos ${timeWindowDays} días): sin sesiones registradas en este período.`);
   }
@@ -993,7 +1588,7 @@ function buildEstudiosSection(
   // Practice attempts filtered by chosen time window
   const attempts = (study.practiceAttempts || [])
     .filter((a) => isWithinLookbackWindow(a.date, referenceDate, timeWindowDays))
-    .slice(-5);
+    .slice(isDetailed ? -12 : -5);
   if (attempts.length > 0) {
     const avgScore = Math.round(
       attempts.reduce((sum, a) => sum + (Number(a.score) || 0), 0) / attempts.length
@@ -1009,12 +1604,14 @@ function buildEstudiosSection(
 function buildGimnasioSection(
   state: LifeOSState,
   referenceDate: string,
-  timeWindowDays: AIContextTimeWindowDays
+  timeWindowDays: AIContextTimeWindowDays,
+  detailLevel: AIContextDetailLevel
 ): string | null {
   const lines: string[] = [];
   const gym = state.gym;
   if (!gym) return null;
 
+  const isDetailed = detailLevel === 'detailed';
   const performedSessions = (gym.sessions || [])
     .filter(isPerformedGymSession)
     .slice()
@@ -1042,13 +1639,49 @@ function buildGimnasioSection(
       );
     }
 
+    // Routine distribution across the full selected window (including 0-count configured routines)
+    if (windowSessions.length > 0 || routines.length > 0) {
+      const routineCounts = new Map<string, { label: string; count: number }>();
+      for (const r of routines) {
+        const label = cleanInlineText(r.name, 50);
+        if (!label) continue;
+        const key = normalizeTextKey(label);
+        if (!routineCounts.has(key)) {
+          routineCounts.set(key, { label, count: 0 });
+        }
+      }
+      for (const session of windowSessions) {
+        const label = cleanInlineText(session.weekLabel || 'Sesión libre', 50) || 'Sesión libre';
+        const key = normalizeTextKey(label);
+        const existing = routineCounts.get(key);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          routineCounts.set(key, { label, count: 1 });
+        }
+      }
+      const distributionEntries = [...routineCounts.values()];
+      if (distributionEntries.length > 0) {
+        const distText = distributionEntries.map((entry) => `${entry.label}: ${entry.count}`).join(' · ');
+        lines.push(`- Distribución por rutina (últimos ${timeWindowDays} días): ${distText}`);
+      }
+    }
+
     if (windowSessions.length > 0) {
-      lines.push(`- Sesiones registradas (últimos ${timeWindowDays} días):`);
-      for (const session of windowSessions.slice(0, 6)) {
+      const sessionLimit = isDetailed ? 15 : 6;
+      const shownSessions = windowSessions.slice(0, sessionLimit);
+      const listHeading =
+        windowSessions.length > shownSessions.length
+          ? `- Últimas ${shownSessions.length} de ${windowSessions.length} sesiones (últimos ${timeWindowDays} días):`
+          : `- Sesiones registradas (${windowSessions.length} en los últimos ${timeWindowDays} días):`;
+      lines.push(listHeading);
+
+      const exLimit = isDetailed ? 8 : 4;
+      for (const session of shownSessions) {
         const volume = Math.round(getPerformedGymVolume(session));
         const label = cleanInlineText(session.weekLabel || 'Sesión libre', 50);
         const exSummaries: string[] = [];
-        for (const ex of (session.exercises || []).slice(0, 4)) {
+        for (const ex of (session.exercises || []).slice(0, exLimit)) {
           const sets = getPerformedExerciseSets(session, ex);
           const best = selectBestPerformedSet(sets);
           if (best) {
@@ -1061,7 +1694,7 @@ function buildGimnasioSection(
       }
 
       const windowProgress = getGymProgressMetrics(windowSessions, referenceDate);
-      const improved = windowProgress.exercises.filter((ex) => ex.state === 'improved').slice(0, 5);
+      const improved = windowProgress.exercises.filter((ex) => ex.state === 'improved').slice(0, isDetailed ? 10 : 5);
       if (improved.length > 0) {
         const improvedText = improved
           .map((ex) =>
@@ -1072,6 +1705,29 @@ function buildGimnasioSection(
           .join(', ');
         lines.push(`- Progresión destacada (últimos ${timeWindowDays} días): ${improvedText}`);
       }
+
+      // Monthly volume evolution in Detallado mode
+      if (isDetailed) {
+        const volByMonth = new Map<string, { sessions: number; totalVolume: number }>();
+        for (const session of windowSessions) {
+          const ym = session.date.slice(0, 7);
+          const bucket = volByMonth.get(ym) || { sessions: 0, totalVolume: 0 };
+          bucket.sessions += 1;
+          bucket.totalVolume += getPerformedGymVolume(session);
+          volByMonth.set(ym, bucket);
+        }
+        const sortedVolMonths = [...volByMonth.entries()].sort(([a], [b]) => a.localeCompare(b));
+        if (sortedVolMonths.length > 0) {
+          lines.push(`- Evolución de volumen mensual (últimos ${timeWindowDays} días):`);
+          for (const [ym, bucket] of sortedVolMonths) {
+            const totalKg = Math.round(bucket.totalVolume);
+            const avgKg = Math.round(bucket.totalVolume / bucket.sessions);
+            lines.push(
+              `  - ${formatMonthYear(ym)}: ${pluralize(bucket.sessions, 'sesión', 'sesiones')} · volumen total ${totalKg.toLocaleString('es-UY')} kg (prom. ${avgKg.toLocaleString('es-UY')} kg/sesión)`
+            );
+          }
+        }
+      }
     } else {
       lines.push(`- Sesiones registradas (últimos ${timeWindowDays} días): sin sesiones en este período.`);
     }
@@ -1079,7 +1735,7 @@ function buildGimnasioSection(
 
   if (routines.length > 0) {
     const routineText = routines
-      .slice(0, 6)
+      .slice(0, isDetailed ? 12 : 6)
       .map((r) => {
         const days = r.days && r.days.length > 0 ? ` (${r.days.map((d) => DAY_LABELS[d]).join(', ')})` : '';
         return `${cleanInlineText(r.name, 45)}${days} · ${pluralize((r.exercises || []).length, 'ejercicio', 'ejercicios')}`;
@@ -1088,8 +1744,28 @@ function buildGimnasioSection(
     lines.push(`- Rutinas configuradas: ${routineText}`);
   }
 
-  const weights = (gym.weight || []).slice().sort((a, b) => a.date.localeCompare(b.date));
-  if (weights.length > 0) {
+  // Body weight evolution in the window (>= 2 entries) or latest recorded weight
+  const weights = (gym.weight || [])
+    .filter((w) => typeof w.kg === 'number' && Number.isFinite(w.kg))
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const windowWeights = weights.filter((w) => isWithinLookbackWindow(w.date, referenceDate, timeWindowDays));
+
+  if (windowWeights.length >= 2) {
+    const first = windowWeights[0];
+    const latest = windowWeights[windowWeights.length - 1];
+    const delta = Number((latest.kg - first.kg).toFixed(1));
+    const deltaStr = delta === 0 ? 'sin variación' : `${delta > 0 ? '+' : ''}${delta} kg`;
+    let rangeNote = '';
+    if (isDetailed && windowWeights.length >= 3) {
+      const minKg = Math.min(...windowWeights.map((w) => w.kg));
+      const maxKg = Math.max(...windowWeights.map((w) => w.kg));
+      rangeNote = ` · rango ${minKg} kg a ${maxKg} kg`;
+    }
+    lines.push(
+      `- Evolución de peso corporal (últimos ${timeWindowDays} días, ${windowWeights.length} registros): de ${first.kg} kg (${formatShortDayMonth(first.date)}) a ${latest.kg} kg (${formatShortDayMonth(latest.date)}) (${deltaStr})${rangeNote}`
+    );
+  } else if (weights.length > 0) {
     const latest = weights[weights.length - 1];
     const prev = weights.length >= 2 ? weights[weights.length - 2] : null;
     const diff = prev ? Number((latest.kg - prev.kg).toFixed(1)) : null;
@@ -1100,16 +1776,22 @@ function buildGimnasioSection(
   return lines.length > 0 ? lines.join('\n') : null;
 }
 
-function buildTrabajoSection(state: LifeOSState, referenceDate: string): string | null {
+function buildTrabajoSection(
+  state: LifeOSState,
+  referenceDate: string,
+  detailLevel: AIContextDetailLevel,
+  anonymizer: PersonAnonymizer
+): string | null {
   const lines: string[] = [];
   const applications = state.jobs?.applications || [];
   if (applications.length === 0) return null;
 
+  const isDetailed = detailLevel === 'detailed';
   const active = applications.filter(isJobApplicationActive);
-  const closedCount = applications.length - active.length;
+  const closed = applications.filter((app) => !isJobApplicationActive(app));
 
   lines.push(
-    `- Estado general: ${pluralize(active.length, 'postulación activa', 'postulaciones activas')}${closedCount > 0 ? ` · ${pluralize(closedCount, 'proceso cerrado', 'procesos cerrados')}` : ''}`
+    `- Estado general: ${pluralize(active.length, 'postulación activa', 'postulaciones activas')}${closed.length > 0 ? ` · ${pluralize(closed.length, 'proceso cerrado', 'procesos cerrados')}` : ''}`
   );
 
   if (active.length > 0) {
@@ -1120,36 +1802,78 @@ function buildTrabajoSection(state: LifeOSState, referenceDate: string): string 
       return nextA.localeCompare(nextB) || (b.fecha || '').localeCompare(a.fecha || '');
     });
 
-    for (const app of sortedActive.slice(0, 10)) {
+    const activeLimit = isDetailed ? 25 : 10;
+    for (const app of sortedActive.slice(0, activeLimit)) {
       const tipo = getJobApplicationType(app);
       const stageLabel = getJobStageLabel(tipo, app.estado);
       const next = getNextJobKeyDate(app, referenceDate);
       const nextInfo = next
         ? ` · próximo hito: ${JOB_KEY_DATE_LABELS[next.keyDate.kind]} ${formatShortDayMonth(next.keyDate.date)} (${formatRelativeDays(next.daysUntil)})`
         : '';
-      const actionNote = cleanInlineText(app.nextAction || app.followUpNotes, 80);
+      const actionNote = anonymizer.anonymizeText(cleanInlineText(app.nextAction || app.followUpNotes, isDetailed ? 140 : 80));
+      const recruiterNote =
+        isDetailed && app.reclutador
+          ? ` · contacto: ${anonymizer.anonymizeDirectName(app.reclutador)}`
+          : '';
+      const extraNotes =
+        isDetailed && app.notas
+          ? ` · notas: ${anonymizer.anonymizeText(cleanInlineText(app.notas, 140))}`
+          : '';
       lines.push(
-        `  - ${cleanInlineText(app.empresa, 50)} — ${cleanInlineText(app.puesto, 60)} [${stageLabel}${tipo === 'concurso' ? ' · concurso' : ''}]${nextInfo}${actionNote ? ` · ${actionNote}` : ''}`
+        `  - ${cleanInlineText(app.empresa, 50)} — ${cleanInlineText(app.puesto, 60)} [${stageLabel}${tipo === 'concurso' ? ' · concurso' : ''}]${nextInfo}${actionNote ? ` · ${actionNote}` : ''}${recruiterNote}${extraNotes}`
       );
     }
-    if (sortedActive.length > 10) {
-      lines.push(`  - … y ${sortedActive.length - 10} postulaciones activas más.`);
+    if (sortedActive.length > activeLimit) {
+      lines.push(`  - … y ${sortedActive.length - activeLimit} postulaciones activas más.`);
     }
   }
 
-  return lines.join('\n');
+  // Summary of closed processes by outcome/status
+  if (closed.length > 0) {
+    const countsByStatus = new Map<string, number>();
+    for (const app of closed) {
+      const tipo = getJobApplicationType(app);
+      const label = getJobStageLabel(tipo, app.estado);
+      countsByStatus.set(label, (countsByStatus.get(label) || 0) + 1);
+    }
+    const statusSummary = [...countsByStatus.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([label, count]) => `${label}: ${count}`)
+      .join(' · ');
+    lines.push(`- Resultados de procesos cerrados (${closed.length}): ${statusSummary}`);
+
+    if (isDetailed) {
+      const recentClosed = closed
+        .slice()
+        .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))
+        .slice(0, 10);
+      for (const app of recentClosed) {
+        const tipo = getJobApplicationType(app);
+        const stageLabel = getJobStageLabel(tipo, app.estado);
+        const datePart = app.fecha ? ` (${formatShortDayMonth(app.fecha)})` : '';
+        lines.push(
+          `  - ${cleanInlineText(app.empresa, 50)} — ${cleanInlineText(app.puesto, 60)} [${stageLabel}]${datePart}`
+        );
+      }
+    }
+  }
+
+  return lines.length > 0 ? lines.join('\n') : null;
 }
 
 function buildNegocioSection(
   state: LifeOSState,
   referenceDate: string,
   hideExactAmounts: boolean,
-  timeWindowDays: AIContextTimeWindowDays
+  timeWindowDays: AIContextTimeWindowDays,
+  detailLevel: AIContextDetailLevel,
+  anonymizer: PersonAnonymizer
 ): string | null {
   const lines: string[] = [];
   const inventory = state.resale?.inventory || [];
   const commercial = state.resale?.commercial;
   const windowLabel = `últimos ${timeWindowDays} días`;
+  const isDetailed = detailLevel === 'detailed';
 
   if (inventory.length > 0) {
     const inStock = inventory.filter((item) => item.status === 'comprado');
@@ -1187,16 +1911,35 @@ function buildNegocioSection(
       );
     }
 
+    const stockLimit = isDetailed ? 15 : 6;
     if (inStock.length > 0) {
       const preview = inStock
-        .slice(0, 6)
-        .map((item) =>
-          hideExactAmounts
-            ? cleanInlineText(item.item, 50)
-            : `${cleanInlineText(item.item, 50)} (compra ${formatMoney(item.buyPrice, item.purchaseCurrency || 'UYU')})`
-        )
+        .slice(0, stockLimit)
+        .map((item) => {
+          const safeItem = anonymizer.anonymizeText(cleanInlineText(item.item, 50));
+          return hideExactAmounts
+            ? safeItem
+            : `${safeItem} (compra ${formatMoney(item.buyPrice, item.purchaseCurrency || 'UYU')})`;
+        })
         .join(', ');
-      lines.push(`  - En stock: ${preview}${inStock.length > 6 ? ` (+${inStock.length - 6})` : ''}`);
+      lines.push(`  - En stock: ${preview}${inStock.length > stockLimit ? ` (+${inStock.length - stockLimit})` : ''}`);
+    }
+
+    if (isDetailed && soldInWindow.length > 0) {
+      lines.push(`  - Ventas concretadas recientes (${soldInWindow.length}):`);
+      for (const item of soldInWindow.slice(0, 10)) {
+        const safeItem = anonymizer.anonymizeText(cleanInlineText(item.item, 50));
+        const dateLabel = formatShortDayMonth(item.sellDate || item.buyDate);
+        if (hideExactAmounts) {
+          const profit = (Number(item.sellPrice) || 0) - (Number(item.buyPrice) || 0);
+          const margin = Number(item.sellPrice) > 0 ? ` (margen ${formatPct(profit, Number(item.sellPrice))})` : '';
+          lines.push(`    - ${dateLabel} · ${safeItem}${margin}`);
+        } else {
+          lines.push(
+            `    - ${dateLabel} · ${safeItem}: venta ${formatMoney(Number(item.sellPrice) || 0, item.saleCurrency || 'UYU')}`
+          );
+        }
+      }
     }
   }
 
@@ -1256,41 +1999,221 @@ function buildNegocioSection(
   return lines.length > 0 ? lines.join('\n') : null;
 }
 
-function buildNotasSection(state: LifeOSState, hideExactAmounts: boolean): string | null {
+function parseGoalNumber(value: unknown): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return 0;
+    // Detect Spanish thousands-grouped integers like "163.830" or "1.250.000"
+    if (/^-?\d{1,3}(\.\d{3})+$/.test(trimmed)) {
+      return Number(trimmed.replace(/\./g, ''));
+    }
+    // Detect Spanish formatted decimals like "163.830,50" or "77,9"
+    if (/^-?\d{1,3}(\.\d{3})*,\d+$/.test(trimmed)) {
+      return Number(trimmed.replace(/\./g, '').replace(',', '.'));
+    }
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function formatGoalValue(val: number, goal: Goal, isWeightGoal: boolean): string {
+  if (!Number.isFinite(val)) return 'N/D';
+  const isFinancialGoal = Boolean(goal.linked && FINANCIAL_LINKED_GOAL_SOURCES.has(goal.linked));
+  if (isFinancialGoal) {
+    return formatMoney(val, 'UYU');
+  }
+  if (isWeightGoal) {
+    const rounded = Number(val.toFixed(1));
+    return `${rounded} kg`;
+  }
+  if (goal.linked === 'study_hours') {
+    const rounded = Number(val.toFixed(1));
+    return `${rounded} h`;
+  }
+  if (goal.linked === 'gym_sessions') {
+    return `${Math.round(val).toLocaleString('es-UY')}`;
+  }
+  if (Number.isInteger(val)) {
+    return val.toLocaleString('es-UY', { maximumFractionDigits: 0 });
+  }
+  return val.toLocaleString('es-UY', { maximumFractionDigits: 2 });
+}
+
+function resolveGoalProgress(state: LifeOSState, goal: Goal): {
+  initial: number;
+  current: number;
+  target: number;
+  pct: number | null;
+  isWeightGoal: boolean;
+  isFinancialGoal: boolean;
+} {
+  const rawInitial = parseGoalNumber(goal.initial);
+  const rawCurrent = parseGoalNumber(goal.current);
+  const target = parseGoalNumber(goal.target);
+  const isFinancialGoal = Boolean(goal.linked && FINANCIAL_LINKED_GOAL_SOURCES.has(goal.linked));
+  const isWeightGoal =
+    goal.linked === 'weight' ||
+    (!goal.linked && /\b(peso|kg|kilos?|adelgazar|bajar de peso)\b/i.test(goal.name || ''));
+
+  const sortedWeights = (state.gym?.weight || [])
+    .filter((w) => typeof w.kg === 'number' && Number.isFinite(w.kg))
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  let effectiveInitial = rawInitial;
+  let effectiveCurrent = rawCurrent;
+
+  if (isWeightGoal && sortedWeights.length > 0) {
+    const earliestWeight = sortedWeights[0].kg;
+    const latestWeight = sortedWeights[sortedWeights.length - 1].kg;
+    if (goal.linked === 'weight' || rawCurrent === rawInitial || rawCurrent <= 0) {
+      effectiveCurrent = latestWeight;
+    }
+    if (effectiveInitial <= 0) {
+      effectiveInitial = earliestWeight;
+    }
+  } else if (goal.linked && (rawCurrent === 0 || rawCurrent === rawInitial)) {
+    const derived = goalCurrentValue(state, goal);
+    if (Number.isFinite(derived)) {
+      effectiveCurrent = derived;
+    }
+  }
+
+  // Descending goal with missing initial baseline (e.g. initial=0, current=84, target=75)
+  if (effectiveInitial === 0 && isWeightGoal && effectiveCurrent > target) {
+    return {
+      initial: effectiveInitial,
+      current: effectiveCurrent,
+      target,
+      pct: null,
+      isWeightGoal,
+      isFinancialGoal,
+    };
+  }
+
+  const span = target - effectiveInitial;
+  let pct = 0;
+  if (span === 0) {
+    pct = effectiveCurrent === target ? 100 : 0;
+  } else {
+    // Works accurately for both ascending (target > initial) and descending (target < initial) goals
+    const rawPct = ((effectiveCurrent - effectiveInitial) / span) * 100;
+    pct = Math.max(0, Math.min(100, Math.round(rawPct)));
+  }
+
+  return {
+    initial: effectiveInitial,
+    current: effectiveCurrent,
+    target,
+    pct,
+    isWeightGoal,
+    isFinancialGoal,
+  };
+}
+
+function buildNotasSection(
+  state: LifeOSState,
+  hideExactAmounts: boolean,
+  detailLevel: AIContextDetailLevel,
+  anonymizer: PersonAnonymizer
+): string | null {
   const lines: string[] = [];
+  const isDetailed = detailLevel === 'detailed';
 
   const activeNotes = (state.notes?.postits || [])
-    .filter((n) => !n.archived && (cleanInlineText(n.title) || cleanInlineText(n.text)))
+    .filter((n) => {
+      if (n.archived) return false;
+      const t = cleanInlineText(n.title);
+      const b = isDetailed ? cleanMultilineText(n.text, 2000) : cleanInlineText(n.text, 180);
+      return Boolean(t || b);
+    })
     .slice()
     .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || (b.date || '').localeCompare(a.date || ''));
 
   if (activeNotes.length > 0) {
     lines.push(`- Notas recientes (${activeNotes.length}):`);
-    for (const note of activeNotes.slice(0, 6)) {
-      const title = cleanInlineText(note.title, 60);
-      const body = cleanInlineText(note.text, 120);
+    for (const note of activeNotes.slice(0, isDetailed ? 20 : 6)) {
+      const title = anonymizer.anonymizeText(cleanInlineText(note.title, 80));
+      const body = anonymizer.anonymizeText(
+        isDetailed ? cleanMultilineText(note.text, 2000) : cleanInlineText(note.text, 180)
+      );
       const prefix = note.pinned ? '[Fijada] ' : '';
-      lines.push(`  - ${prefix}${title ? `${title}: ` : ''}${body}`);
+      if (title && body) {
+        lines.push(`  - ${prefix}${title}: ${body}`);
+      } else if (title) {
+        lines.push(`  - ${prefix}${title}`);
+      } else if (body) {
+        lines.push(`  - ${prefix}${body}`);
+      }
     }
   }
 
   const pendingShopping = (state.notes?.shopping || []).filter((item) => !item.done && cleanInlineText(item.text));
   if (pendingShopping.length > 0) {
-    const items = pendingShopping.slice(0, 8).map((i) => cleanInlineText(i.text, 40)).join(', ');
-    lines.push(`- Lista de compras pendiente (${pendingShopping.length}): ${items}`);
+    const shoppingLimit = isDetailed ? 40 : 8;
+    const items = pendingShopping
+      .slice(0, shoppingLimit)
+      .map((i) => anonymizer.anonymizeText(cleanInlineText(i.text, 60)))
+      .join(', ');
+    lines.push(
+      `- Lista de compras pendiente (${pendingShopping.length}): ${items}${pendingShopping.length > shoppingLimit ? ` (+${pendingShopping.length - shoppingLimit})` : ''}`
+    );
+  }
+
+  if (isDetailed) {
+    const possessions = (state.notes?.possessions || []).filter((p) => cleanInlineText(p.name));
+    if (possessions.length > 0) {
+      lines.push(`- Posesiones y objetos relevantes (${possessions.length}):`);
+      for (const item of possessions.slice(0, 20)) {
+        const meta: string[] = [];
+        const cat = cleanInlineText(item.category, 40);
+        const loc = cleanInlineText(item.location, 50);
+        const note = anonymizer.anonymizeText(cleanInlineText(item.note, 90));
+        if (cat) meta.push(cat);
+        if (loc) meta.push(`ubicación: ${loc}`);
+        if (note) meta.push(note);
+        lines.push(
+          `  - ${anonymizer.anonymizeText(cleanInlineText(item.name, 70))}${meta.length > 0 ? ` (${meta.join(' · ')})` : ''}`
+        );
+      }
+    }
+
+    const links = (state.notes?.links || []).filter((l) => cleanInlineText(l.name));
+    if (links.length > 0) {
+      const linkSummary = links
+        .slice(0, 10)
+        .map((l) => cleanInlineText(l.name, 50))
+        .join(', ');
+      lines.push(`- Enlaces guardados (${links.length}): ${linkSummary}`);
+    }
   }
 
   const goals = state.goals || [];
   if (goals.length > 0) {
     lines.push('- Objetivos personales:');
-    for (const goal of goals.slice(0, 5)) {
-      const span = goal.target - goal.initial;
-      const pct = span !== 0 ? Math.max(0, Math.min(100, Math.round(((goal.current - goal.initial) / span) * 100))) : 0;
-      const isFinancialGoal = Boolean(goal.linked && FINANCIAL_LINKED_GOAL_SOURCES.has(goal.linked));
-      if (hideExactAmounts && isFinancialGoal) {
-        lines.push(`  - ${cleanInlineText(goal.name, 70)}: ${pct}% de avance (montos ocultos por privacidad)`);
+    for (const goal of goals.slice(0, isDetailed ? 15 : 5)) {
+      const resolved = resolveGoalProgress(state, goal);
+      const safeName = anonymizer.anonymizeText(cleanInlineText(goal.name, 70));
+      if (hideExactAmounts && resolved.isFinancialGoal) {
+        const pctPart = resolved.pct !== null ? `${resolved.pct}% de avance` : 'en curso';
+        lines.push(`  - ${safeName}: ${pctPart} (montos ocultos por privacidad)`);
       } else {
-        lines.push(`  - ${cleanInlineText(goal.name, 70)}: ${pct}% de avance (${goal.current}/${goal.target})`);
+        const curFormatted = formatGoalValue(resolved.current, goal, resolved.isWeightGoal);
+        const targetFormatted = formatGoalValue(resolved.target, goal, resolved.isWeightGoal);
+        const isDescending = resolved.target < resolved.initial;
+        const initNote =
+          isDescending && resolved.initial > 0
+            ? `desde ${formatGoalValue(resolved.initial, goal, resolved.isWeightGoal)}, actual ${curFormatted}, meta ${targetFormatted}`
+            : `${curFormatted} / ${targetFormatted}`;
+        if (resolved.pct !== null) {
+          lines.push(`  - ${safeName}: ${resolved.pct}% de avance (${initNote})`);
+        } else {
+          lines.push(`  - ${safeName}: en curso (actual ${curFormatted}, meta ${targetFormatted})`);
+        }
       }
     }
   }
@@ -1304,6 +2227,7 @@ export function buildAIContextPrompt(
 ): AIContextPromptResult {
   const referenceDate = options.referenceDate || todayISO();
   const timeWindowDays = normalizeTimeWindowDays(options.timeWindowDays);
+  const detailLevel = normalizeDetailLevel(options.detailLevel);
   const isDataOnly = options.mode === 'data_only' || options.goalId === null;
   const mode: AIContextMode = isDataOnly ? 'data_only' : 'guided';
   const goal = isDataOnly || !options.goalId ? null : getGoalDefinition(options.goalId);
@@ -1312,19 +2236,22 @@ export function buildAIContextPrompt(
   const selectedSet = new Set(options.selectedModules);
 
   const includedModules = moduleOrder.filter((id) => selectedSet.has(id) && visibleIds.has(id));
+  const anonymizer = createPersonAnonymizer(options.hideExactAmounts);
 
   const dayName = DAY_LABELS[dayKeyFromDate(parseISODate(referenceDate))];
+  const detailLabel = detailLevel === 'detailed' ? 'Detallado' : 'Resumido';
   const blocks: string[] = [
     isDataOnly || !goal
       ? '# Datos personales — Celestian LifeOS'
       : `# Contexto personal — ${goal.title}`,
     `Fecha de referencia: ${formatReadableDate(referenceDate)} (${dayName})`,
     `Período de datos: últimos ${timeWindowDays} días`,
+    `Nivel de detalle: ${detailLabel}`,
   ];
 
   if (options.hideExactAmounts) {
     blocks.push(
-      '> Privacidad activa: los montos exactos y nombres de cuentas bancarias fueron omitidos o expresados en porcentajes.'
+      '> Privacidad activa: los montos exactos, nombres de cuentas bancarias y nombres propios de terceros fueron omitidos o anonimizados.'
     );
   }
 
@@ -1350,31 +2277,45 @@ export function buildAIContextPrompt(
     switch (modId) {
       case 'hoy_agenda':
         sectionTitle = 'Hoy y agenda';
-        content = buildHoyAgendaSection(state, referenceDate);
+        content = buildHoyAgendaSection(state, referenceDate, timeWindowDays, detailLevel, anonymizer);
         break;
       case 'finanzas':
         sectionTitle = 'Finanzas';
-        content = buildFinanzasSection(state, referenceDate, options.hideExactAmounts, timeWindowDays);
+        content = buildFinanzasSection(
+          state,
+          referenceDate,
+          options.hideExactAmounts,
+          timeWindowDays,
+          detailLevel,
+          anonymizer
+        );
         break;
       case 'estudios':
         sectionTitle = 'Estudios';
-        content = buildEstudiosSection(state, referenceDate, timeWindowDays);
+        content = buildEstudiosSection(state, referenceDate, timeWindowDays, detailLevel, anonymizer);
         break;
       case 'gimnasio':
         sectionTitle = 'Gimnasio';
-        content = buildGimnasioSection(state, referenceDate, timeWindowDays);
+        content = buildGimnasioSection(state, referenceDate, timeWindowDays, detailLevel);
         break;
       case 'trabajo':
         sectionTitle = 'Trabajo';
-        content = buildTrabajoSection(state, referenceDate);
+        content = buildTrabajoSection(state, referenceDate, detailLevel, anonymizer);
         break;
       case 'negocio':
         sectionTitle = 'Mi negocio';
-        content = buildNegocioSection(state, referenceDate, options.hideExactAmounts, timeWindowDays);
+        content = buildNegocioSection(
+          state,
+          referenceDate,
+          options.hideExactAmounts,
+          timeWindowDays,
+          detailLevel,
+          anonymizer
+        );
         break;
       case 'notas':
         sectionTitle = 'Notas y objetivos';
-        content = buildNotasSection(state, options.hideExactAmounts);
+        content = buildNotasSection(state, options.hideExactAmounts, detailLevel, anonymizer);
         break;
     }
 
@@ -1401,6 +2342,7 @@ export function buildAIContextPrompt(
     mode,
     goal,
     timeWindowDays,
+    detailLevel,
     includedModules,
     text,
     charCount: text.length,
