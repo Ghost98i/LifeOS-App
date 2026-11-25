@@ -1,79 +1,102 @@
 <!doctype html>
-<!--
-  ANTES DE PUBLICAR:
-  1. Reemplazar correachristian03@gmail.com por el correo real de soporte/privacidad.
-  2. Confirmar que la fecha de "Última actualización" sea la correcta.
-  3. Mantener esta página disponible públicamente en /privacidad.html (Play Console la exige).
--->
 <html lang="es">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
-  <meta name="theme-color" content="#07090E">
+  <meta name="theme-color" content="#0B0F19" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#F8FAFC" media="(prefers-color-scheme: light)">
   <meta name="robots" content="index,follow">
-  <title>Política de privacidad — Celestian LifeOS</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <title>Política de privacidad y condiciones — Celestian LifeOS</title>
   <style>
     :root {
       color-scheme: dark light;
-      font-family: "Instrument Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      --bg: #07090E;
-      --card: #15181E;
+      font-family: "Instrument Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --bg: #0B0F19;
+      --card: #111827;
+      --surface-soft: rgba(255, 255, 255, 0.03);
       --border: rgba(255, 255, 255, 0.08);
-      --text: #F1F5F9;
-      --text-soft: #94A3B8;
+      --text: #F8FAFC;
+      --text-soft: #CBD5E1;
+      --text-muted: #94A3B8;
       --accent: #4F46E5;
-      --accent-hover: #6366F1;
-      --accent-text: #A5B4FC;
+      --accent-hover: #4338CA;
+      --accent-text: #818CF8;
+      --accent-text-hover: #A5B4FC;
+      --summary-bg: rgba(79, 70, 229, 0.10);
+      --summary-border: rgba(129, 140, 248, 0.30);
       --note-bg: rgba(79, 70, 229, 0.08);
-      --warn-bg: rgba(245, 158, 11, 0.08);
-      --warn-border: rgba(245, 158, 11, 0.35);
+      --warn-bg: rgba(245, 158, 11, 0.09);
+      --warn-border: #F59E0B;
       --btn-bg: rgba(79, 70, 229, 0.14);
-      --btn-border: rgba(99, 102, 241, 0.35);
+      --btn-border: rgba(129, 140, 248, 0.32);
+      --badge-bg: rgba(129, 140, 248, 0.12);
+      --badge-border: rgba(129, 140, 248, 0.28);
+      --shadow: 0 24px 48px -28px rgba(0, 0, 0, 0.65);
     }
     @media (prefers-color-scheme: light) {
       :root {
         --bg: #F8FAFC;
         --card: #FFFFFF;
+        --surface-soft: #F8FAFC;
         --border: #E2E8F0;
         --text: #0F172A;
-        --text-soft: #475569;
+        --text-soft: #334155;
+        --text-muted: #475569;
         --accent: #4F46E5;
         --accent-hover: #4338CA;
         --accent-text: #4F46E5;
-        --note-bg: rgba(79, 70, 229, 0.06);
+        --accent-text-hover: #4338CA;
+        --summary-bg: rgba(79, 70, 229, 0.05);
+        --summary-border: rgba(79, 70, 229, 0.24);
+        --note-bg: rgba(79, 70, 229, 0.05);
         --warn-bg: rgba(245, 158, 11, 0.08);
-        --warn-border: rgba(245, 158, 11, 0.4);
-        --btn-bg: rgba(79, 70, 229, 0.08);
-        --btn-border: rgba(79, 70, 229, 0.25);
+        --warn-border: #D97706;
+        --btn-bg: rgba(79, 70, 229, 0.07);
+        --btn-border: rgba(79, 70, 229, 0.22);
+        --badge-bg: rgba(79, 70, 229, 0.08);
+        --badge-border: rgba(79, 70, 229, 0.20);
+        --shadow: 0 18px 40px -28px rgba(15, 23, 42, 0.14);
       }
     }
     * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
     body {
       margin: 0;
       min-height: 100vh;
       background: var(--bg);
       color: var(--text);
-      padding: clamp(1.25rem, 4vw, 3rem) 1rem;
+      padding: clamp(1rem, 4vw, 2.75rem) clamp(0.75rem, 3vw, 1.25rem);
       display: flex;
       justify-content: center;
       align-items: flex-start;
       line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
     }
     main {
       width: 100%;
-      max-width: 46rem;
+      max-width: 760px;
       background: var(--card);
       border: 1px solid var(--border);
       border-radius: 1.25rem;
-      padding: clamp(1.5rem, 4vw, 2.75rem);
-      box-shadow: 0 20px 45px -24px rgba(0, 0, 0, 0.45);
+      padding: clamp(1.25rem, 4vw, 2.5rem);
+      box-shadow: var(--shadow);
+      overflow-wrap: break-word;
+    }
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      margin-bottom: 1.75rem;
     }
     .back {
       display: inline-flex;
       align-items: center;
-      gap: 0.4rem;
-      margin-bottom: 1.75rem;
+      gap: 0.45rem;
+      min-height: 40px;
       padding: 0.5rem 0.9rem;
       border-radius: 0.75rem;
       background: var(--btn-bg);
@@ -82,226 +105,396 @@
       font-size: 0.85rem;
       font-weight: 600;
       text-decoration: none;
-      transition: background 0.15s ease, border-color 0.15s ease;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
     }
     .back:hover {
       background: var(--accent);
       border-color: var(--accent);
       color: #FFFFFF;
     }
+    .back svg {
+      flex-shrink: 0;
+    }
+    .brand-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.35rem 0.75rem;
+      border-radius: 999px;
+      background: var(--badge-bg);
+      border: 1px solid var(--badge-border);
+      color: var(--accent-text);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    .brand-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
     h1 {
-      margin: 0 0 0.35rem;
-      font-size: clamp(1.5rem, 3.5vw, 1.95rem);
+      margin: 0 0 0.4rem;
+      font-size: clamp(1.5rem, 3.8vw, 2rem);
+      font-weight: 750;
       letter-spacing: -0.025em;
       line-height: 1.2;
+      color: var(--text);
     }
     .updated {
+      margin: 0 0 1.35rem;
+      font-size: 0.84rem;
+      color: var(--text-muted);
+    }
+    .summary {
       margin: 0 0 1.5rem;
-      font-size: 0.82rem;
+      padding: 1rem 1.15rem;
+      border-radius: 0.9rem;
+      border: 1px solid var(--summary-border);
+      border-left: 3px solid var(--accent);
+      background: var(--summary-bg);
+    }
+    .summary-title {
+      margin: 0 0 0.3rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--accent-text);
+    }
+    .summary p {
+      margin: 0;
+      font-size: 0.92rem;
       color: var(--text-soft);
     }
     h2 {
-      margin: 1.9rem 0 0.5rem;
-      font-size: 1.05rem;
-      font-weight: 700;
-      color: var(--text);
-      padding-top: 1.35rem;
+      margin: 2rem 0 0.6rem;
+      padding-top: 1.4rem;
       border-top: 1px solid var(--border);
-      letter-spacing: -0.01em;
+      font-size: 1.08rem;
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      color: var(--text);
     }
     h3 {
-      margin: 1.25rem 0 0.35rem;
-      font-size: 0.92rem;
+      margin: 1.2rem 0 0.35rem;
+      font-size: 0.94rem;
       font-weight: 700;
       color: var(--text);
     }
     p {
       margin: 0.65rem 0;
+      font-size: 0.94rem;
       color: var(--text-soft);
-      font-size: 0.9375rem;
     }
     ul, ol {
       margin: 0.65rem 0;
-      padding-left: 1.35rem;
+      padding-left: 1.3rem;
+      font-size: 0.94rem;
       color: var(--text-soft);
-      font-size: 0.9375rem;
     }
-    li { margin: 0.35rem 0; }
+    li { margin: 0.4rem 0; }
+    strong { color: var(--text); }
     a {
       color: var(--accent-text);
+      font-weight: 600;
       text-underline-offset: 0.2em;
-      font-weight: 500;
       overflow-wrap: anywhere;
     }
-    a:hover { color: var(--accent-hover); }
-    strong { color: var(--text); }
-    code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 0.85em;
-      padding: 0.1em 0.35em;
-      border-radius: 0.35rem;
-      background: var(--note-bg);
+    a:hover { color: var(--accent-text-hover); }
+    .path {
+      font-weight: 600;
       color: var(--text);
     }
+    .table-wrap {
+      margin: 0.9rem 0;
+      border: 1px solid var(--border);
+      border-radius: 0.85rem;
+      overflow: hidden;
+      background: var(--surface-soft);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.7rem 0.9rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    th {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: var(--text-muted);
+    }
+    td:first-child {
+      font-weight: 600;
+      color: var(--text);
+      width: 32%;
+    }
+    td { color: var(--text-soft); }
+    .note, .warn {
+      margin-top: 1.1rem;
+      padding: 0.9rem 1.05rem;
+      border-radius: 0.8rem;
+      font-size: 0.89rem;
+      color: var(--text-soft);
+    }
     .note {
-      margin-top: 1.25rem;
-      padding: 0.9rem 1rem;
-      border-radius: 0.75rem;
       border-left: 3px solid var(--accent);
       background: var(--note-bg);
-      font-size: 0.875rem;
-      color: var(--text-soft);
     }
     .warn {
-      margin-top: 1.25rem;
-      padding: 0.9rem 1rem;
-      border-radius: 0.75rem;
-      border-left: 3px solid #F59E0B;
+      border-left: 3px solid var(--warn-border);
       background: var(--warn-bg);
-      font-size: 0.875rem;
-      color: var(--text-soft);
     }
-    .summary {
-      margin: 1.25rem 0 0.5rem;
-      padding: 1rem 1.1rem;
-      border-radius: 0.9rem;
-      border: 1px solid var(--border);
-      background: var(--note-bg);
-    }
-    .summary p { margin: 0.3rem 0; font-size: 0.9rem; }
     .contact {
-      display: inline-block;
-      margin-top: 0.35rem;
-      padding: 0.55rem 0.85rem;
-      border-radius: 0.65rem;
+      display: inline-flex;
+      align-items: center;
+      min-height: 40px;
+      margin-top: 0.4rem;
+      padding: 0.5rem 0.9rem;
+      border-radius: 0.75rem;
       background: var(--btn-bg);
       border: 1px solid var(--btn-border);
+      color: var(--accent-text);
+      font-size: 0.9rem;
       font-weight: 600;
       text-decoration: none;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+    .contact:hover {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #FFFFFF;
     }
     footer {
-      margin-top: 2rem;
-      padding-top: 1.1rem;
+      margin-top: 2.25rem;
+      padding-top: 1.25rem;
       border-top: 1px solid var(--border);
-      font-size: 0.8rem;
-      color: var(--text-soft);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+    .footer-nav {
       display: flex;
       flex-wrap: wrap;
-      gap: 0.75rem 1.25rem;
+      gap: 0.55rem 1.15rem;
+      align-items: center;
     }
-    footer a { font-size: 0.8rem; }
+    .footer-nav a {
+      font-size: 0.82rem;
+      text-decoration: none;
+    }
+    .footer-nav a:hover {
+      text-decoration: underline;
+    }
+    .footer-nav a[aria-current="page"] {
+      color: var(--text);
+      text-decoration: underline;
+    }
+    .footer-meta {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 0.4rem 1rem;
+      font-size: 0.8rem;
+    }
+    @media (max-width: 560px) {
+      th, td {
+        padding: 0.6rem 0.75rem;
+        font-size: 0.86rem;
+      }
+      td:first-child { width: 38%; }
+    }
   </style>
 </head>
 <body>
   <main>
-    <a class="back" href="/">← Volver a Celestian LifeOS</a>
+    <header>
+      <div class="topbar">
+        <a class="back" href="/">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="m12 19-7-7 7-7"></path>
+            <path d="M19 12H5"></path>
+          </svg>
+          <span>Volver a Celestian LifeOS</span>
+        </a>
+        <span class="brand-badge">
+          <span class="brand-dot" aria-hidden="true"></span>
+          <span>Celestian LifeOS</span>
+        </span>
+      </div>
 
-    <h1>Política de privacidad</h1>
-    <p class="updated">Celestian LifeOS · Última actualización: 18 de noviembre de 2026</p>
+      <h1>Política de privacidad y condiciones de uso</h1>
+      <p class="updated">Última actualización: 25 de noviembre de 2026</p>
 
-    <div class="summary">
-      <p><strong>En resumen:</strong> LifeOS guarda tus datos primero en tu dispositivo. Solo se sincronizan con la nube si conectás tu cuenta de Google, y quedan asociados exclusivamente a tu usuario. No hay publicidad, analítica, rastreo ni venta de datos. Podés usar la app sin iniciar sesión y podés eliminar lo que guardaste.</p>
+      <div class="summary" role="region" aria-label="Resumen de privacidad">
+        <p class="summary-title">En resumen</p>
+        <p>Celestian LifeOS guarda tus datos primero en tu dispositivo. Solo se sincronizan en la nube si conectás tu cuenta de Google, quedan aislados bajo tu usuario y podés sumar un <strong>Candado privado adicional</strong> con tu propia contraseña de bóveda. No hay publicidad, analítica, rastreo ni venta de datos, y podés borrar tu cuenta y tus datos en cualquier momento.</p>
+      </div>
+    </header>
+
+    <h2>1. Responsable y alcance</h2>
+    <p>Celestian LifeOS es una aplicación de organización personal desarrollada y operada por el titular de la cuenta de desarrollador que la publica en Google Play. Para consultas sobre privacidad, tus datos o estas condiciones, escribí a <a href="mailto:correachristian03@gmail.com">correachristian03@gmail.com</a>.</p>
+    <p>Esta política aplica a la aplicación web instalable (PWA) disponible en <a href="https://lifeosanywhere.web.app" target="_blank" rel="noopener noreferrer">lifeosanywhere.web.app</a> y a la aplicación Android distribuida en Google Play.</p>
+
+    <h2>2. Qué datos guarda Celestian LifeOS</h2>
+    <p>La aplicación almacena únicamente la información que vos decidís registrar en sus módulos. No recolecta datos en segundo plano ni arma perfiles publicitarios.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Módulo</th>
+            <th>Información que podés registrar</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Hoy</td>
+            <td>Progreso del día, tareas prioritarias, hábitos, sueño, energía, bienestar y avisos activos o silenciados.</td>
+          </tr>
+          <tr>
+            <td>Finanzas</td>
+            <td>Cuentas, saldos, movimientos, transferencias, presupuestos, compromisos, ingresos esperados y ajustes de saldo.</td>
+          </tr>
+          <tr>
+            <td>Agenda y Calendario</td>
+            <td>Bloques semanales, horarios, acontecimientos, recordatorios y fechas importantes.</td>
+          </tr>
+          <tr>
+            <td>Gimnasio</td>
+            <td>Rutinas, entrenamientos, series, pesos, marcas personales, días de descanso y medidas corporales opcionales.</td>
+          </tr>
+          <tr>
+            <td>Estudios</td>
+            <td>Materias, temarios, exámenes, sesiones de estudio y evolución académica.</td>
+          </tr>
+          <tr>
+            <td>Trabajo</td>
+            <td>Postulaciones, empresas, entrevistas, notas y objetivos laborales.</td>
+          </tr>
+          <tr>
+            <td>Mi negocio</td>
+            <td>Productos, compras, ventas, inventario, costos y márgenes comerciales.</td>
+          </tr>
+          <tr>
+            <td>Notas</td>
+            <td>Notas personales, proyectos, ideas, capturas rápidas y herramientas opcionales de contenido.</td>
+          </tr>
+          <tr>
+            <td>IA y Configuración</td>
+            <td>Preferencias de contexto de IA, apariencia, módulos visibles, perfil básico y opciones de seguridad.</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
-    <h2>1. Quién es responsable</h2>
-    <p>Celestian LifeOS es una aplicación de organización personal desarrollada y mantenida por el titular de la cuenta de desarrollador que la publica en Google Play. Para cualquier consulta sobre esta política o sobre tus datos, escribí a <strong>correachristian03@gmail.com</strong>.</p>
-    <p>Esta política aplica a la aplicación web instalable (PWA) disponible en <a href="https://lifeosanywhere.web.app" target="_blank" rel="noopener noreferrer">lifeosanywhere.web.app</a>, a la aplicación Android publicada en Google Play y a la versión portable de un solo archivo HTML.</p>
+    <p>Celestian LifeOS <strong>no solicita</strong> tu documento de identidad, domicilio, contactos del teléfono, cámara, micrófono, mensajes SMS ni datos bancarios o de tarjetas. Tampoco accede a tus correos ni a otros archivos del dispositivo.</p>
 
-    <h2>2. Qué datos guarda LifeOS</h2>
-    <p>LifeOS guarda únicamente la información que vos ingresás o generás dentro de la app. No crea perfiles publicitarios ni recolecta datos en segundo plano. Los datos pueden incluir:</p>
-    <ul>
-      <li><strong>Finanzas:</strong> cuentas, movimientos, ingresos, gastos, presupuestos, compromisos, acuerdos y conciliaciones.</li>
-      <li><strong>Agenda, tareas y rutinas:</strong> eventos, tareas, recordatorios, progreso diario, sueño, energía y contacto social.</li>
-      <li><strong>Gimnasio y cuerpo:</strong> rutinas, sesiones, series, pesos, medidas corporales, historial de entrenamiento y marcas personales.</li>
-      <li><strong>Estudios:</strong> materias, temarios, exámenes, sesiones de práctica y estadísticas de estudio.</li>
-      <li><strong>Trabajo y proyectos:</strong> postulaciones, empresas, puestos, notas, proyectos y metas.</li>
-      <li><strong>Reventa e inventario:</strong> productos, compras, ventas, costos y ganancias.</li>
-      <li><strong>Notas, ideas y capturas rápidas:</strong> texto libre que decidas guardar.</li>
-      <li><strong>Configuración:</strong> preferencias de la interfaz, módulos visibles, apariencia y ajustes de privacidad.</li>
-      <li><strong>Datos técnicos de la sesión:</strong> si activás la protección de extremo a extremo, un registro de los dispositivos habilitados y la envoltura cifrada de tu clave. No se guarda tu clave de recuperación en texto plano.</li>
-    </ul>
-    <p>LifeOS no solicita tu nombre legal, documento, domicilio, contactos del teléfono, cámara, micrófono ni datos de pago. Tampoco accede a tus correos ni a otros archivos del dispositivo.</p>
-
-    <h2>3. Dónde se guardan los datos</h2>
+    <h2>3. Almacenamiento local y copias de seguridad</h2>
     <h3>En tu dispositivo</h3>
-    <p>La base de datos principal se guarda en el almacenamiento local del navegador o de la app (localStorage e IndexedDB). Sin iniciar sesión, la app funciona de forma totalmente local y esos datos no se envían a ningún servidor. El almacenamiento está ligado al navegador, al dispositivo y, cuando hay sesión, a la cuenta de Google utilizada.</p>
-    <h3>Copias y backups</h3>
-    <p>LifeOS conserva copias locales de recuperación antes de reemplazar datos y antes de reiniciarlos. También podés exportar un backup en JSON desde Configuración. Ese archivo se guarda donde vos elijas y <strong>no está cifrado por LifeOS</strong>: contiene tu información completa, así que conviene tratarlo como un documento sensible.</p>
+    <p>Tus datos viven primero en el almacenamiento local del navegador o de la app. Si no conectás una cuenta de Google, todo funciona de manera local y no se envía nada a servidores externos.</p>
+    <h3>Copias de seguridad y recuperación automática</h3>
+    <p>Antes de cambios importantes (como importar una copia o reiniciar datos), Celestian guarda automáticamente una copia de emergencia en el mismo navegador. Además, desde <span class="path">Configuración › Copias y Datos</span> podés descargar una copia completa en tu equipo para resguardo o cambio de dispositivo. Ese archivo descargado <strong>no lleva contraseña</strong>, por lo que conviene guardarlo en un lugar seguro.</p>
 
-    <h2>4. Sincronización con Google y Firebase</h2>
-    <p>La sincronización es <strong>opcional</strong>. Se activa solo cuando tocás “Conectar con Google” y completás el inicio de sesión. En ese caso:</p>
+    <h2>4. Sincronización con Google</h2>
+    <p>La sincronización en la nube es <strong>opcional</strong> y se activa únicamente si elegís iniciar sesión con Google desde <span class="path">Configuración › Cuenta y Seguridad</span>:</p>
     <ul>
-      <li><strong>Firebase Authentication</strong> (un servicio de Google) verifica tu identidad mediante tu cuenta de Google y devuelve un identificador de usuario (UID). LifeOS no recibe ni almacena tu contraseña de Google.</li>
-      <li><strong>Cloud Firestore</strong> (un servicio de Google) guarda los módulos de LifeOS bajo una ruta privada asociada a tu UID: <code>users/{uid}/…</code>. Las reglas de seguridad del proyecto permiten leer y escribir únicamente al usuario autenticado con ese mismo UID.</li>
-      <li>La sincronización es por módulos. Se conservan revisiones para resolver conflictos entre dispositivos y una copia de recuperación si dos dispositivos modifican el mismo módulo.</li>
-      <li>El tráfico viaja cifrado en tránsito mediante HTTPS/TLS.</li>
+      <li><strong>Acceso en 1 clic con Google:</strong> Firebase Authentication (servicio de Google) verifica tu identidad para abrir tu espacio sin contraseñas adicionales. Celestian nunca recibe ni guarda tu contraseña de Google.</li>
+      <li><strong>Espacio privado por usuario:</strong> Cloud Firestore guarda tus módulos bajo un espacio privado asociado exclusivamente a tu cuenta, protegido por reglas de acceso por usuario.</li>
+      <li><strong>Cifrado en tránsito:</strong> toda comunicación entre tu dispositivo y la nube viaja cifrada mediante HTTPS/TLS.</li>
+      <li><strong>Sincronización por módulos:</strong> cada área se sincroniza de forma independiente y conserva un historial breve para evitar pérdida de datos si usás más de un dispositivo.</li>
     </ul>
-    <p>El proyecto de Firebase es operado por el desarrollador de LifeOS y alojado en la infraestructura de Google. Google procesa estos datos como proveedor de infraestructura según su propia <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">política de privacidad</a> y las condiciones de <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer">Firebase</a>.</p>
+    <p>Google procesa la infraestructura de autenticación y base de datos conforme a su <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Política de privacidad</a> y a las garantías de privacidad de <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer">Firebase</a>.</p>
 
-    <h2>5. Cifrado de extremo a extremo (opcional)</h2>
-    <p>Desde Configuración podés activar la <strong>protección de extremo a extremo</strong>. Cuando está activa, los módulos se cifran en tu dispositivo con AES-256-GCM antes de subirse a Firestore. La clave maestra se guarda envuelta y la clave de recuperación nunca se envía al servidor: solo vos la conservás.</p>
-    <p>Con esta protección activa, el contenido de tus módulos no puede ser descifrado por el desarrollador ni por el proveedor de infraestructura. La contrapartida es que, si perdés la clave de recuperación y los dispositivos habilitados, no es posible recuperar los datos cifrados.</p>
-    <div class="warn"><strong>Importante:</strong> si no activás esta protección, tus datos siguen protegidos por las reglas de acceso y por TLS, pero quedan almacenados de forma legible para el proyecto de Firebase. En ese caso, el administrador técnico del proyecto podría acceder a ellos. Los backups JSON exportados tampoco se cifran automáticamente.</div>
-
-    <h2>6. Servicios de terceros</h2>
+    <h2>5. Candado privado adicional (cifrado de extremo a extremo opcional)</h2>
+    <p>Por defecto, tu cuenta sincronizada está protegida con Google y se abre en 1 clic en cualquier dispositivo. Si buscás una capa adicional de privacidad, desde <span class="path">Configuración › Cuenta y Seguridad</span> podés activar voluntariamente el <strong>Candado privado adicional</strong>:</p>
     <ul>
-      <li><strong>Google Firebase / Google Cloud</strong> — autenticación, base de datos y alojamiento web. Solo si conectás tu cuenta.</li>
-      <li><strong>Open-Meteo</strong> — pronóstico del tiempo. La app envía coordenadas o el nombre de la ciudad únicamente cuando pedís el clima o usás “Ubicación (opcional)”. No se envía ningún otro dato ni se usa una cuenta. Consultá su <a href="https://open-meteo.com/en/terms" target="_blank" rel="noopener noreferrer">política</a>.</li>
-      <li><strong>Google Play</strong> — distribución de la app Android, sujeta a la política de privacidad de Google.</li>
+      <li>Elegís una <strong>contraseña de bóveda</strong> propia y recibís un <strong>código y archivo de respaldo de emergencia</strong>.</li>
+      <li>Todos tus módulos sincronizados se cifran en tu dispositivo con AES-256-GCM antes de subirse a la nube.</li>
+      <li>Ni tu contraseña de bóveda ni tu código de respaldo se guardan en texto legible en los servidores: con el candado activo, ni el desarrollador ni el proveedor de infraestructura pueden leer el contenido de tus módulos.</li>
+      <li>Podés desactivar el Candado privado adicional en cualquier momento desde <span class="path">Configuración › Cuenta y Seguridad</span> para volver al acceso en 1 clic con Google, manteniendo tus datos intactos.</li>
     </ul>
-    <p>No se usan servicios de publicidad, analítica, crash reporting, redes sociales, mapas, pagos ni rastreo de terceros.</p>
+    <div class="warn"><strong>Importante sobre el Candado privado adicional:</strong> si lo activás y luego olvidás tu contraseña de bóveda y perdés tu respaldo de emergencia, nadie puede recuperar los datos cifrados. Si preferís mantener el acceso estándar sin candado adicional, tus datos siguen protegidos por HTTPS y reglas de acceso por usuario en Firestore, aunque almacenados de forma legible para el proyecto de Firebase.</div>
 
-    <h2>7. Lo que LifeOS no hace</h2>
+    <h2>6. Módulo de IA y privacidad de tus datos</h2>
+    <p>El módulo <strong>IA</strong> genera un resumen de contexto localmente dentro de tu dispositivo para que vos puedas copiarlo o descargarlo en un archivo Markdown (<code>.md</code>) y pegarlo en la herramienta de inteligencia artificial que prefieras.</p>
     <ul>
-      <li>No vende, alquila ni comparte tus datos con anunciantes.</li>
-      <li>No muestra publicidad ni usa identificadores publicitarios.</li>
-      <li>No incluye analítica ni telemetría de uso.</li>
-      <li>No lee tus contactos, mensajes, cámara, micrófono ni archivos ajenos a la app.</li>
-      <li>No envía tu información a herramientas de inteligencia artificial. El módulo de IA solo genera un texto que vos copiás y pegás en la herramienta que elijas; la app no transmite nada por su cuenta.</li>
-      <li>No toma decisiones automatizadas sobre vos ni elabora perfiles.</li>
+      <li>Celestian LifeOS <strong>nunca envía tus datos</strong> a ningún servicio de inteligencia artificial por su cuenta.</li>
+      <li>Antes de copiar o descargar el contexto, podés activar la opción de privacidad para <strong>ocultar montos exactos</strong> y <strong>anonimizar nombres propios de terceros</strong> (cuentas, clientes o contactos).</li>
+    </ul>
+
+    <h2>7. Servicios de terceros y lo que NO hacemos</h2>
+    <h3>Servicios que utiliza la app</h3>
+    <ul>
+      <li><strong>Google Firebase / Google Cloud:</strong> alojamiento web, inicio de sesión con Google y sincronización opcional en la nube.</li>
+      <li><strong>Google Play:</strong> distribución y actualización de la aplicación Android, bajo la política de privacidad de Google.</li>
+    </ul>
+    <h3>Compromisos claros</h3>
+    <ul>
+      <li>No vendemos, alquilamos ni compartimos tus datos con anunciantes ni intermediarios.</li>
+      <li>No mostramos publicidad ni usamos identificadores publicitarios.</li>
+      <li>No incluimos analítica de comportamiento, rastreadores ni telemetría de uso.</li>
+      <li>No accedemos a tu ubicación, contactos, cámara, micrófono, llamadas ni archivos ajenos a la app.</li>
     </ul>
 
     <h2>8. Permisos de la app</h2>
     <ul>
-      <li><strong>Ubicación (opcional):</strong> se solicita solo si tocás “Usar mi ubicación” para el clima. Podés denegarla y buscar una ciudad manualmente.</li>
-      <li><strong>Mantener la pantalla activa:</strong> se usa durante un entrenamiento o una sesión de estudio. No recopila información.</li>
-      <li><strong>Almacenamiento y red:</strong> necesarios para guardar tus datos localmente y, si lo elegís, sincronizarlos.</li>
+      <li><strong>Mantener la pantalla activa:</strong> se usa solo durante entrenamientos en Gimnasio o sesiones de Estudios para evitar que la pantalla se apague. No recopila datos.</li>
+      <li><strong>Almacenamiento y red:</strong> necesarios para guardar tu información localmente y, si decidís conectar Google, sincronizarla entre dispositivos.</li>
     </ul>
-    <p>La app no solicita permiso de cámara, micrófono, contactos, SMS, llamadas ni ubicación en segundo plano.</p>
+    <p>Celestian LifeOS <strong>no solicita</strong> permiso de ubicación (ni en primer ni en segundo plano), cámara, micrófono, contactos, SMS ni llamadas.</p>
 
-    <h2>9. Cuánto tiempo se conservan</h2>
-    <p>Los datos locales permanecen en tu dispositivo hasta que los borres, reinicies la app o elimines los datos del sitio desde el navegador. Los datos sincronizados permanecen en Firestore mientras mantengas la cuenta conectada o hasta que solicites su eliminación. Las revisiones históricas se conservan para permitir la recuperación y se eliminan junto con los datos de tu usuario.</p>
+    <h2>9. Conservación y eliminación de datos</h2>
+    <p>Los datos locales permanecen en tu dispositivo hasta que los borres o reinicies la app. Los datos sincronizados permanecen en tu cuenta mientras decidas mantenerla conectada o hasta que solicites su eliminación.</p>
+    <ul>
+      <li><strong>Eliminar datos locales:</strong> desde <span class="path">Configuración › Copias y Datos › Reiniciar datos</span>, o borrando los datos del sitio desde tu navegador o desde los ajustes de Android.</li>
+      <li><strong>Eliminar cuenta y datos en la nube desde la app:</strong> desde <span class="path">Configuración › Cuenta y Seguridad › Eliminar cuenta y datos en la nube</span>. La eliminación en la nube es inmediata y permanente; luego elegís si conservar o borrar los datos locales.</li>
+      <li><strong>Si desinstalaste la app o no podés ingresar:</strong> seguí los pasos en <a href="/eliminar-cuenta.html">Eliminar cuenta y datos</a> o escribí desde tu misma cuenta de Google a <a href="mailto:correachristian03@gmail.com">correachristian03@gmail.com</a>. Procesamos la eliminación en un plazo máximo de <strong>30 días</strong> y te confirmamos por correo.</li>
+    </ul>
+    <div class="note"><strong>Recordatorio:</strong> cerrar sesión detiene la sincronización en ese dispositivo, pero no borra los datos guardados en la nube. Para eliminarlos definitivamente, usá la opción de eliminación dentro de la app o seguí la guía de <a href="/eliminar-cuenta.html">Eliminar cuenta y datos</a>.</div>
 
-    <h2>10. Cómo eliminar tus datos</h2>
-    <h3>Datos locales (inmediato)</h3>
-    <ol>
-      <li>Abrí <strong>Configuración → Reiniciar datos</strong> y confirmá. LifeOS guarda una copia de recuperación local antes de reiniciar.</li>
-      <li>Si querés borrar también esa copia, eliminá los datos del sitio desde la configuración del navegador (Chrome: Configuración → Privacidad y seguridad → Borrar datos de navegación → Cookies y datos de sitios).</li>
-      <li>Si usás la app Android, también podés borrar el almacenamiento desde Ajustes de Android → Apps → Celestian LifeOS → Almacenamiento.</li>
-    </ol>
-    <h3>Datos sincronizados en la nube</h3>
-    <p>Podés eliminar tu cuenta y todos los datos sincronizados <strong>directamente desde la app</strong>: Configuración → Cuenta → Privacidad y seguridad → <strong>Eliminar cuenta y datos en la nube</strong>. La sincronización se detiene primero, se borran los módulos, las revisiones y la envoltura de claves asociados a tu UID, y luego se cierra la sesión. Después elegís si querés conservar o eliminar los datos locales del dispositivo.</p>
-    <p>Si ya desinstalaste la app o no podés ingresar, seguí las instrucciones públicas de <a href="/eliminar-cuenta.html"><strong>Eliminar cuenta y datos</strong></a> o escribí a <strong>correachristian03@gmail.com</strong> desde la misma cuenta de Google, con el asunto “Eliminar mis datos de LifeOS”. La solicitud se procesa en un plazo máximo de <strong>30 días</strong> y se confirma por correo.</p>
-    <div class="note"><strong>Tené en cuenta:</strong> cerrar sesión detiene la sincronización, pero no borra lo que ya está en la nube. Eliminar tu cuenta de Google tampoco elimina automáticamente los documentos de LifeOS: usá el flujo dentro de la app o la página <a href="/eliminar-cuenta.html">Eliminar cuenta y datos</a>.</div>
+    <h2>10. Menores de edad y cambios en esta política</h2>
+    <p><strong>Menores de 13 años:</strong> Celestian LifeOS no está dirigida a menores de 13 años y no recopila intencionalmente datos de menores. Si creés que un menor registró información, escribinos para eliminarla de inmediato.</p>
+    <p><strong>Actualizaciones:</strong> cuando cambie la forma en que tratamos los datos, actualizaremos esta página y la fecha del encabezado. Los cambios relevantes se comunicarán dentro de la app o en la ficha de Google Play.</p>
 
-    <h2>11. Seguridad</h2>
-    <p>LifeOS aplica HTTPS, reglas de acceso por usuario en Firestore, y ofrece cifrado de extremo a extremo opcional con AES-256-GCM. Ningún sistema es infalible: la seguridad también depende de que protejas el acceso a tu dispositivo y a tu cuenta de Google, y de que guardes tu clave de recuperación en un lugar seguro si activás el cifrado.</p>
+    <section id="condiciones">
+      <h2>11. Condiciones de uso</h2>
+      <p>Al utilizar Celestian LifeOS aceptás estas condiciones básicas, pensadas en lenguaje directo:</p>
+      <ul>
+        <li><strong>Uso personal:</strong> la aplicación está diseñada para tu organización personal y seguimiento cotidiano. Te comprometés a utilizarla de forma lícita y sin intentar interferir con su funcionamiento o infraestructura.</li>
+        <li><strong>Propiedad de tus datos:</strong> toda la información que ingresás te pertenece exclusivamente a vos. Podés exportarla o eliminarla cuando quieras.</li>
+        <li><strong>Copias y contraseña de bóveda:</strong> sos responsable de resguardar los archivos de copia de seguridad que descargues y, si activás el Candado privado adicional, de conservar tu contraseña de bóveda o respaldo de emergencia en un lugar seguro.</li>
+        <li><strong>Alcance y disponibilidad:</strong> la aplicación se ofrece “tal cual”, haciendo esfuerzos razonables por mantenerla estable y disponible. Las estimaciones de Gimnasio (como composición corporal) y los resúmenes de Finanzas o Mi negocio son herramientas de organización personal y no sustituyen asesoramiento médico, contable ni financiero profesional.</li>
+      </ul>
+    </section>
 
-    <h2>12. Menores de edad</h2>
-    <p>LifeOS no está dirigida a menores de 13 años y no recopila conscientemente datos de menores. Si creés que un menor nos proporcionó datos, escribí al correo de contacto para eliminarlos.</p>
-
-    <h2>13. Cambios en esta política</h2>
-    <p>Si la app cambia la forma en que trata los datos, esta página se actualizará y se modificará la fecha del encabezado. Los cambios importantes se comunicarán dentro de la app o en la ficha de Google Play antes de aplicarse.</p>
-
-    <h2>14. Contacto</h2>
-    <p>Para ejercer tus derechos de acceso, rectificación o eliminación, o para cualquier duda sobre privacidad:</p>
+    <h2>12. Contacto</h2>
+    <p>Para ejercer tus derechos de acceso, corrección o eliminación, o ante cualquier duda sobre privacidad y condiciones:</p>
     <a class="contact" href="mailto:correachristian03@gmail.com">correachristian03@gmail.com</a>
 
     <footer>
-      <a href="/">Inicio</a>
-      <a href="/eliminar-cuenta.html">Eliminar cuenta y datos</a>
-      <a href="/creditos.html">Créditos y licencias</a>
-      <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Privacidad de Google</a>
+      <nav class="footer-nav" aria-label="Centro legal de Celestian LifeOS">
+        <a href="/">Ir a Celestian LifeOS</a>
+        <a href="/privacidad.html" aria-current="page">Política de privacidad</a>
+        <a href="/eliminar-cuenta.html">Eliminar cuenta y datos</a>
+        <a href="/creditos.html">Créditos y licencias</a>
+      </nav>
+      <div class="footer-meta">
+        <span>Celestian LifeOS</span>
+        <span>Contacto: <a href="mailto:correachristian03@gmail.com">correachristian03@gmail.com</a></span>
+      </div>
     </footer>
   </main>
 </body>

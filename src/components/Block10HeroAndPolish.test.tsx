@@ -96,17 +96,17 @@ test('Block 10: isStreamingEnabled oculta por defecto en cuentas nuevas, preserv
   );
   assert.match(notesEnabledHtml, /Streaming y contenido/);
 
-  // ConfigView oculta "Transmisiones por mes" cuando streaming está desactivado, y lo muestra cuando está activo
+  // ConfigView oculta "Meta mensual de streams" cuando streaming está desactivado, y lo muestra cuando está activo
   const configFreshHtml = renderToStaticMarkup(
     <ConfigView state={fresh} onUpdateState={() => true} onExportJSON={() => {}} initialTab="preferencias" />
   );
-  assert.doesNotMatch(configFreshHtml, /Transmisiones por mes/);
+  assert.doesNotMatch(configFreshHtml, /Meta mensual de streams/);
   assert.match(configFreshHtml, /Streaming y contenido/);
 
   const configEnabledHtml = renderToStaticMarkup(
     <ConfigView state={enabledState} onUpdateState={() => true} onExportJSON={() => {}} initialTab="preferencias" />
   );
-  assert.match(configEnabledHtml, /Transmisiones por mes/);
+  assert.match(configEnabledHtml, /Meta mensual de streams/);
 });
 
 test('Block 10: ConfigView ya no contiene referencias a Icons8 ni a Andrew Bossi', () => {
