@@ -52,9 +52,9 @@ import {
   applySyncModule,
   buildStateFromModules,
   changedSyncModules,
-  classifyInitialModuleChanges,
-  equivalentLifeOSState,
+  decideInitialSyncAction,
   extractPureModuleData,
+  isCleanOrOnboardingOnlyState,
   mergeSyncModuleWithConflicts,
   syncDataFingerprint,
   syncModuleData,
@@ -70,6 +70,8 @@ import {
   loadWrappedKeyEnvelope,
   saveWrappedKeyEnvelope,
   clearWrappedKeyEnvelope,
+  encodeVaultPasswordInfo,
+  RECOVERY_KDF_BASE_INFO,
   type WrappedKeyEnvelope,
   CURRENT_KEY_FORMAT_VERSION,
   CURRENT_CRYPTO_VERSION,
@@ -184,7 +186,9 @@ export default function App() {
     localModules?: SyncModuleKey[];
     needsMigration?: boolean;
     conflicts?: SyncConflictItem[];
+    recommendedSide?: 'cloud' | 'local';
   } | null>(null);
+  const [isCloudConflictDismissed, setIsCloudConflictDismissed] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
 
   useEffect(() => {
@@ -202,15 +206,28 @@ export default function App() {
         lastSyncedAt?: string | null;
         e2eeActive?: boolean;
         e2eeUnlocked?: boolean;
+        e2eeHasVaultPassword?: boolean;
+        openUnlockModal?: boolean;
+        openConflictModal?: boolean;
       }) => {
         const uid = opts.cloudUser?.uid ?? (cloudUserRef.current?.uid || 'usr-demo');
         if ('cloudUser' in opts) {
           cloudUserRef.current = opts.cloudUser ?? null;
+          storageUserIdRef.current = opts.cloudUser?.uid ?? null;
+          setStorageUserId(opts.cloudUser?.uid ?? null);
           setCloudUser(opts.cloudUser ?? null);
         }
         if ('syncStatus' in opts && opts.syncStatus) setSyncStatus(opts.syncStatus);
         if ('lastSyncedAt' in opts) setLastSyncedAt(opts.lastSyncedAt ?? null);
         if (opts.e2eeActive) {
+          const info = opts.e2eeHasVaultPassword === false
+            ? RECOVERY_KDF_BASE_INFO
+            : encodeVaultPasswordInfo({
+                iterations: 600000,
+                salt: 'c3ludGhldGljLXB3LXNhbHQ=',
+                iv: 'c3ludGhldGljLXB3LWl2',
+                ciphertext: 'c3ludGhldGljLXB3LWNpcGhlcnRleHQtZGF0YS1iYXNlNjQ=',
+              });
           const envelope: WrappedKeyEnvelope = {
             keyFormatVersion: CURRENT_KEY_FORMAT_VERSION,
             cryptoVersion: CURRENT_CRYPTO_VERSION,
@@ -222,7 +239,7 @@ export default function App() {
             kdf: {
               algorithm: 'HKDF-SHA-256',
               salt: 'c3ludGhldGljLXNhbHQtMTZi',
-              info: 'Celestian LifeOS Master Data Encryption Key Wrap v1',
+              info,
             },
             aad: `keyFormatVersion:1|userId:${uid}`,
             createdAt: new Date().toISOString(),
@@ -236,9 +253,9 @@ export default function App() {
             ...((window as any).__LIFEOS_SYNTHETIC_CAPABILITY__ || {}),
             [uid]: {
               version: 1,
-              minimumSyncProtocolVersion: 1,
+              minimumSyncProtocolVersion: 2,
               encryptionState: 'encrypted',
-              encryptedModules: ['agenda', 'finance', 'gym', 'notes', 'study', 'tasks', 'resale', 'ia'],
+              encryptedModules: [...SYNC_MODULES],
               updatedAt: new Date().toISOString(),
             },
           };
@@ -253,9 +270,50 @@ export default function App() {
           if ((window as any).__LIFEOS_SYNTHETIC_CLOUD_ENVELOPE__) {
             delete (window as any).__LIFEOS_SYNTHETIC_CLOUD_ENVELOPE__[uid];
           }
-          if ((window as any).__LIFEOS_SYNTHETIC_CAPABILITY__) {
-            delete (window as any).__LIFEOS_SYNTHETIC_CAPABILITY__[uid];
-          }
+          (window as any).__LIFEOS_SYNTHETIC_CAPABILITY__ = {
+            ...((window as any).__LIFEOS_SYNTHETIC_CAPABILITY__ || {}),
+            [uid]: {
+              version: 1,
+              minimumSyncProtocolVersion: 1,
+              encryptionState: 'plaintext',
+              encryptedModules: [],
+              updatedAt: new Date().toISOString(),
+            },
+          };
+        }
+        if (typeof opts.openUnlockModal === 'boolean') {
+          setIsCryptoUnlockOpen(opts.openUnlockModal);
+        }
+        if (opts.openConflictModal === true) {
+          const remoteSample = defaultState();
+          remoteSample.profile.name = 'Cuenta en la nube';
+          remoteSample.notes.postits = [
+            { id: 'syn-n1', text: 'Nota guardada en la nube', date: todayISO(), createdAt: new Date().toISOString() },
+            { id: 'syn-n2', text: 'Lista de ideas', date: todayISO(), createdAt: new Date().toISOString() },
+          ];
+          remoteSample.finance.transactions = [
+            {
+              id: 'syn-t1',
+              date: todayISO(),
+              type: 'ingreso',
+              amount: 15000,
+              category: 'Otros',
+              fixed: 'variable',
+              note: 'Movimiento en la nube',
+              currency: 'UYU',
+            },
+          ];
+          setIsCloudConflictDismissed(false);
+          setCloudConflict({
+            remoteState: remoteSample,
+            modules: ['finance', 'notes', 'tasks', 'profile'],
+            remoteRevisions: { finance: 'rev-1', notes: 'rev-2', tasks: 'rev-3', profile: 'rev-4' },
+            recommendedSide: 'cloud',
+          });
+          setSyncStatus('conflict');
+        } else if (opts.openConflictModal === false) {
+          setCloudConflict(null);
+          setIsCloudConflictDismissed(false);
         }
       };
     }
@@ -265,8 +323,6 @@ export default function App() {
     ? 'Los datos comerciales locales no superan la validación; permanecen guardados en este dispositivo.' : '');
   const [resaleResolutionPending, setResaleResolutionPending] = useState(false);
   const [resaleReconcilePreview, setResaleReconcilePreview] = useState<ResaleConflictReconciliationPreview | null>(null);
-  const [resaleReconcileChoices, setResaleReconcileChoices] = useState<Partial<Record<SyncModuleKey, 'local' | 'remote'>>>({});
-  const [resaleReconcileAuthorized, setResaleReconcileAuthorized] = useState(false);
 
   const stateRef = useRef(state);
   const cloudUserRef = useRef<CloudUser | null>(null);
@@ -322,7 +378,8 @@ export default function App() {
       saveSyncRecoverySnapshot(userId, 'remote', remoteState);
       if (baselineDataRef.current.finance) saveSyncRecoverySnapshot(userId, 'base', buildStateFromModules(baselineDataRef.current));
     }
-    setCloudConflict({ remoteState, modules: ['finance'], remoteRevisions, conflicts });
+    setIsCloudConflictDismissed(false);
+    setCloudConflict({ remoteState, modules: ['finance'], remoteRevisions, conflicts, recommendedSide: 'local' });
     setSyncStatus('conflict');
     showToast('La versión recibida de Finanzas podría perder movimientos o restaurar datos anteriores. Conservamos la copia local; revisá el conflicto.', 'error');
   }, [traceFinanceSync]);
@@ -468,7 +525,8 @@ export default function App() {
         saveSyncRecoverySnapshot(userId, 'base', buildStateFromModules({ gym: baselineDataRef.current.gym }));
       }
     }
-    setCloudConflict({ remoteState, modules: ['gym'], remoteRevisions, conflicts });
+    setIsCloudConflictDismissed(false);
+    setCloudConflict({ remoteState, modules: ['gym'], remoteRevisions, conflicts, recommendedSide: 'local' });
     setSyncStatus('conflict');
   };
 
@@ -1093,38 +1151,54 @@ export default function App() {
           { resale: syncModuleData(remoteState, 'resale') }, remoteRevisions);
         return;
       }
-      const statesDiffer = !equivalentLifeOSState(localState, remoteState);
-      const localHasData = hasMeaningfulData(localState);
-      const remoteHasData = hasMeaningfulData(remoteState);
+
       const hasKnownRevisions = Object.keys(revisionsRef.current).length > 0;
       const paired = isCloudPaired(cloudUser.uid) && hasKnownRevisions;
+      const decision = decideInitialSyncAction({
+        localState,
+        remoteState,
+        paired,
+        knownRevisions: revisionsRef.current,
+        baselines: baselinesRef.current,
+        remoteRevisions,
+        needsMigration,
+      });
 
-      if (statesDiffer && localHasData && remoteHasData && !paired) {
-        const changedModules = changedSyncModules(localState, remoteState);
+      if (decision.action === 'conflict_unpaired') {
+        const changedModules = decision.changedModules;
         if (changedModules.includes('resale')) {
-          blockResaleConflict(changedModules, 'Los datos locales y remotos de Mi negocio difieren.',
-            Object.fromEntries(changedModules.map((module) => [module, syncModuleData(remoteState, module)])), remoteRevisions);
+          const diagnostic =
+            changedModules.length > 1
+              ? 'Hay cambios distintos entre este dispositivo y la nube.'
+              : 'Los datos locales y de la nube en Mi negocio difieren.';
+          blockResaleConflict(
+            changedModules,
+            diagnostic,
+            Object.fromEntries(changedModules.map((module) => [module, syncModuleData(remoteState, module)])),
+            remoteRevisions
+          );
           return;
         }
         if (!conflictPendingRef.current) {
           conflictPendingRef.current = true;
           if (changedModules.includes('gym')) gymWriteBlockedRef.current = true;
+          setIsCloudConflictDismissed(false);
           setCloudConflict({
             remoteState,
             modules: changedModules,
             remoteRevisions,
             needsMigration,
+            recommendedSide: 'cloud',
           });
           setSyncStatus('conflict');
         }
         return;
       }
 
-      if (statesDiffer && paired && !needsMigration) {
-        const classification = classifyInitialModuleChanges(localState, remoteState, revisionsRef.current, baselinesRef.current, remoteRevisions);
-        const localModules = classification.local;
-        const conflictModules = classification.conflicts;
-        if (classification.remote.includes('finance')) {
+      if (decision.action === 'reconcile_paired') {
+        const localModules = decision.local;
+        const conflictModules = decision.conflicts;
+        if (decision.remote.includes('finance')) {
           const financeConflicts = detectFinanceSnapshotRegression(localState.finance, remoteState.finance, tombstonesRef.current);
           if (financeConflicts.length) {
             blockFinanceConflict(remoteState, remoteRevisions, financeConflicts);
@@ -1132,8 +1206,16 @@ export default function App() {
           }
         }
         if (conflictModules.includes('resale')) {
-          blockResaleConflict(conflictModules, 'Cambios simultáneos de Mi negocio requieren revisión.',
-            Object.fromEntries(conflictModules.map((module) => [module, syncModuleData(remoteState, module)])), remoteRevisions);
+          const diagnostic =
+            conflictModules.length > 1
+              ? 'Hay cambios distintos entre este dispositivo y la nube.'
+              : 'Hay cambios simultáneos en Mi negocio que requieren revisión.';
+          blockResaleConflict(
+            conflictModules,
+            diagnostic,
+            Object.fromEntries(conflictModules.map((module) => [module, syncModuleData(remoteState, module)])),
+            remoteRevisions
+          );
           return;
         }
         const nextRevisions = { ...revisionsRef.current };
@@ -1141,7 +1223,7 @@ export default function App() {
         const nextBaselineData = { ...baselineDataRef.current };
         let mergedState = localState;
 
-        if (classification.remote.includes('gym')) {
+        if (decision.remote.includes('gym')) {
           const gymConflicts = detectGymSessionConflicts(localState.gym, remoteState.gym, (baselineDataRef.current.gym as { gym: LifeOSState['gym'] } | undefined)?.gym, true);
           if (gymConflicts.length) {
             blockGymConflict(remoteState, remoteRevisions, gymConflicts);
@@ -1149,7 +1231,7 @@ export default function App() {
           }
         }
 
-        classification.remote.forEach((module) => {
+        decision.remote.forEach((module) => {
           mergedState = applySyncModule(mergedState, module, syncModuleData(remoteState, module));
           nextRevisions[module] = remoteRevisions[module];
           nextBaselines[module] = syncModuleFingerprint(module === 'finance' ? remoteState : mergedState, module);
@@ -1180,11 +1262,13 @@ export default function App() {
           saveSyncRecoverySnapshot(cloudUser.uid, 'local', localState);
           saveSyncRecoverySnapshot(cloudUser.uid, 'remote', remoteState);
           saveSyncRecoverySnapshot(cloudUser.uid, 'base', buildStateFromModules(baselineDataRef.current));
+          setIsCloudConflictDismissed(false);
           setCloudConflict({
             remoteState,
             modules: conflictModules,
             remoteRevisions,
             conflicts: initialConflicts,
+            recommendedSide: 'local',
           });
           setSyncStatus('conflict');
           return;
@@ -1207,28 +1291,32 @@ export default function App() {
         return;
       }
 
-      if (localHasData && !remoteHasData) {
-        uploadAll(localState);
-      } else if (remoteHasData) {
-        const financeConflicts = detectFinanceSnapshotRegression(localState.finance, remoteState.finance, tombstonesRef.current);
-        if (financeConflicts.length) {
-          blockFinanceConflict(remoteState, remoteRevisions, financeConflicts);
-          return;
-        }
-        const gymConflicts = detectGymSessionConflicts(localState.gym, remoteState.gym, (baselineDataRef.current.gym as { gym: LifeOSState['gym'] } | undefined)?.gym, true);
-        if (gymConflicts.length) {
-          blockGymConflict(remoteState, remoteRevisions, gymConflicts);
-          return;
+      if (decision.action === 'download_remote') {
+        if (!decision.cleanDeviceAutoDownload) {
+          const financeConflicts = detectFinanceSnapshotRegression(localState.finance, remoteState.finance, tombstonesRef.current);
+          if (financeConflicts.length) {
+            blockFinanceConflict(remoteState, remoteRevisions, financeConflicts);
+            return;
+          }
+          const gymConflicts = detectGymSessionConflicts(localState.gym, remoteState.gym, (baselineDataRef.current.gym as { gym: LifeOSState['gym'] } | undefined)?.gym, true);
+          if (gymConflicts.length) {
+            blockGymConflict(remoteState, remoteRevisions, gymConflicts);
+            return;
+          }
         }
         if (!applyRemoteState(remoteState, cloudUser.uid)) return;
         if (needsMigration) uploadAll(remoteState);
         else setSyncStatus(navigator.onLine ? 'synced' : 'offline');
-      } else {
+      } else if (decision.action === 'upload_local') {
         uploadAll(localState);
+      } else {
+        setSyncStatus(navigator.onLine ? 'synced' : 'offline');
       }
+
+      const baselineState = decision.action === 'upload_local' ? localState : remoteState;
       storeRevisions(remoteRevisions);
-      persistBaselines(cloudUser.uid, Object.fromEntries(SYNC_MODULES.map((module) => [module, syncModuleFingerprint(remoteState, module)])) as SyncBaselineMap);
-      saveCloudBaselineData(cloudUser.uid, Object.fromEntries(SYNC_MODULES.map((module) => [module, syncModuleData(remoteState, module)])));
+      persistBaselines(cloudUser.uid, Object.fromEntries(SYNC_MODULES.map((module) => [module, syncModuleFingerprint(baselineState, module)])) as SyncBaselineMap);
+      saveCloudBaselineData(cloudUser.uid, Object.fromEntries(SYNC_MODULES.map((module) => [module, syncModuleData(baselineState, module)])));
       markCloudPaired(cloudUser.uid);
       initializedUserRef.current = cloudUser.uid;
     };
@@ -1534,11 +1622,13 @@ export default function App() {
               saveSyncRecoverySnapshot(cloudUser.uid, 'remote', remoteStateBuilt);
               if (baseStateBuilt) saveSyncRecoverySnapshot(cloudUser.uid, 'base', baseStateBuilt);
 
+              setIsCloudConflictDismissed(false);
               setCloudConflict({
                 remoteState: remoteStateBuilt,
                 modules: [head.module],
                 remoteRevisions: { [head.module]: head.revision },
                 conflicts: moduleConflicts,
+                recommendedSide: 'local',
               });
               setSyncStatus('conflict');
               return;
@@ -1757,7 +1847,6 @@ export default function App() {
       resaleConflictRecordRef.current = null;
       resaleWriteBlockedRef.current = false;
       setResaleReconcilePreview(null);
-      setResaleReconcileAuthorized(false);
       setResaleRecoveryStatus('none');
       setResaleConflictReason('');
       if (queuedModulesRef.current.size > 0) queueCloudSave(stateRef.current, [...queuedModulesRef.current]);
@@ -1767,11 +1856,11 @@ export default function App() {
         setSyncStatus(otherRemoteDifferences ? 'connecting' : navigator.onLine ? 'synced' : 'offline');
         if (!otherRemoteDifferences) setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       }
-      showToast('Mi negocio volvió a sincronizarse; se conservó una copia local del conflicto.', 'success');
+      showToast('Tus datos volvieron a sincronizarse correctamente.', 'success');
     } catch (error) {
       setResaleConflictReason(error instanceof ResaleRevisionConflict
-        ? 'La revisión remota cambió durante la confirmación. El conflicto sigue bloqueado.'
-        : 'No se pudo confirmar la publicación. Los datos y el respaldo siguen pendientes en este dispositivo.');
+        ? 'La nube volvió a cambiar mientras confirmábamos. Revisá nuevamente.'
+        : 'No se pudo completar la confirmación. Tus datos siguen guardados en este dispositivo.');
       setSyncStatus('conflict');
     } finally {
       resaleResolutionInProgressRef.current = false;
@@ -1782,7 +1871,7 @@ export default function App() {
   const handleOpenResaleReconcilePreview = async () => {
     const record = resaleConflictRecordRef.current;
     if (!record) {
-      showToast('No hay un registro de conflicto disponible para previsualizar.', 'error');
+      showToast('No hay un registro de conflicto disponible para revisar.', 'error');
       return;
     }
     let activeRecord = record;
@@ -1803,45 +1892,47 @@ export default function App() {
           }
         }
       } catch {
-        // Conserva la previsualización sobre las versiones remotas ya almacenadas en el registro.
+        // Conserva la vista sobre las versiones remotas ya guardadas.
       }
     }
     const preview = buildResaleConflictReconciliationPreview(activeRecord, stateRef.current);
-    const defaultChoices: Partial<Record<SyncModuleKey, 'local' | 'remote'>> = {};
-    preview.modules.forEach((item) => {
-      defaultChoices[item.module] = item.recommendedChoice;
-    });
-    setResaleReconcileChoices(defaultChoices);
-    setResaleReconcileAuthorized(false);
     setResaleReconcilePreview(preview);
   };
 
-  const handleToggleResaleReconcileChoice = (module: SyncModuleKey, choice: 'local' | 'remote') => {
-    setResaleReconcileChoices((prev) => {
-      const next = { ...prev, [module]: choice };
-      if (module === 'resale' || module === 'finance') {
-        next.resale = choice;
-        next.finance = choice;
-      }
-      return next;
-    });
+  const handleExportGenericConflict = () => {
+    if (!cloudConflict) return;
+    try {
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        modules: cloudConflict.modules,
+        local: Object.fromEntries(cloudConflict.modules.map((mod) => [mod, syncModuleData(stateRef.current, mod)])),
+        remote: Object.fromEntries(cloudConflict.modules.map((mod) => [mod, syncModuleData(cloudConflict.remoteState, mod)])),
+      };
+      const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `celestian-conflicto-${todayISO()}.json`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showToast('Copia del conflicto exportada en este dispositivo.', 'info');
+    } catch {
+      showToast('No se pudo exportar la copia del conflicto.', 'error');
+    }
   };
 
-  const handleExecuteAuthorizedResaleReconcile = async () => {
+  const handleExecuteAuthorizedResaleReconcile = async (
+    selectedChoices: Partial<Record<SyncModuleKey, 'local' | 'remote'>>
+  ) => {
     const user = cloudUserRef.current;
     const record = resaleConflictRecordRef.current;
     if (!user || !record || !resaleWriteBlockedRef.current || resaleResolutionInProgressRef.current) return;
-    if (!resaleReconcileAuthorized) {
-      showToast('Debes confirmar explícitamente la autorización antes de publicar o reemplazar módulos.', 'error');
-      return;
-    }
     resaleResolutionInProgressRef.current = true;
     setResaleResolutionPending(true);
     try {
       const fresh = await fetchFreshCloudModules(user.uid);
       if (cloudUserRef.current?.uid !== user.uid) return;
       if (fresh.lockedModules.length || fresh.corruptedModules.length) {
-        setResaleConflictReason('No se pudo leer con seguridad la versión remota de todos los módulos.');
+        setResaleConflictReason('No se pudo leer con seguridad la versión de la nube en todos los módulos.');
         return;
       }
       const relevantRemote = Object.fromEntries(
@@ -1854,8 +1945,8 @@ export default function App() {
         record,
         localSnapshot,
         {
-          authorized: resaleReconcileAuthorized,
-          choices: resaleReconcileChoices,
+          authorized: true,
+          choices: selectedChoices,
           latestRemoteData: relevantRemote,
           latestRemoteRevisions: fresh.remoteRevisions,
         },
@@ -1868,7 +1959,7 @@ export default function App() {
               remoteSnap,
               user.uid,
               'cloud_conflict',
-              'Respaldo previo a conciliación autorizada de conflicto multimódulo'
+              'Respaldo previo a resolución de conflicto'
             );
             return savedLocal && savedRemote && savedRecovery;
           },
@@ -1886,7 +1977,7 @@ export default function App() {
             persistBaselines(user.uid, partialBaselines);
             saveCloudBaselineData(user.uid, baselineDataRef.current);
             setResaleConflictReason(
-              `Progreso parcial: ${completedModules.length}/${record.modules.length} módulos listos (${pendingModules.length} pendientes)…`
+              `Aplicando cambios: ${completedModules.length} de ${record.modules.length} áreas listas (${pendingModules.length} pendientes)…`
             );
           },
           publish: (reconciledState, modules, expectedRevisions) =>
@@ -1921,16 +2012,15 @@ export default function App() {
       resaleConflictRecordRef.current = null;
       resaleWriteBlockedRef.current = false;
       setResaleReconcilePreview(null);
-      setResaleReconcileAuthorized(false);
       setResaleRecoveryStatus('none');
       setResaleConflictReason('');
       setSyncStatus(navigator.onLine ? 'synced' : 'offline');
       setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-      showToast('Conciliación autorizada completada. Se conservaron copias de recuperación locales y remotas.', 'success');
+      showToast('Listo. Se aplicó tu elección y guardamos un respaldo automático en este dispositivo.', 'success');
     } catch (error) {
       setResaleConflictReason(error instanceof ResaleRevisionConflict
-        ? 'La revisión remota cambió durante la conciliación. El conflicto sigue bloqueado.'
-        : 'No se pudo completar la conciliación autorizada. Los datos y el respaldo siguen intactos en este dispositivo.');
+        ? 'La nube volvió a cambiar mientras aplicábamos tu elección. Intentá nuevamente.'
+        : 'No se pudo completar el cambio. Tus datos siguen a salvo en este dispositivo.');
       setSyncStatus('conflict');
     } finally {
       resaleResolutionInProgressRef.current = false;
@@ -1948,14 +2038,14 @@ export default function App() {
     const isCurrentSession = () => sessionEpoch === cloudSessionEpochRef.current && cloudUserRef.current?.uid === cloudUser?.uid;
     if (resaleWriteBlockedRef.current) {
       setSyncStatus('conflict');
-      showToast('Mi negocio tiene cambios locales sin sincronizar que requieren revisión.', 'error');
+      showToast('Hay cambios pendientes de revisión antes de sincronizar.', 'error');
       return;
     }
     if (!cloudUser) {
       void handleCloudSignIn();
       return;
     }
-    showToast('Consultando estado remoto fresco...', 'info');
+    showToast('Consultando tus datos en la nube…', 'info');
     try {
       setSyncStatus('connecting');
       const fresh = await fetchFreshCloudModules(cloudUser.uid);
@@ -1964,7 +2054,7 @@ export default function App() {
         [...fresh.lockedModules, ...fresh.corruptedModules].forEach(module => failedSyncModulesRef.current.add(module));
         setFailedSyncModules([...failedSyncModulesRef.current]);
         setSyncStatus(fresh.corruptedModules.length ? 'error' : 'locked');
-        showToast('No se pudo verificar el contenido de todos los módulos. La copia local se conserva.', 'error');
+        showToast('Desbloqueá tus datos para continuar sincronizando.', 'error');
         return;
       }
       const localState = stateRef.current;
@@ -1976,11 +2066,32 @@ export default function App() {
         return;
       }
 
-      if (fresh.lockedModules.length > 0) {
-        fresh.lockedModules.forEach((m) => failedSyncModulesRef.current.add(m));
-        setFailedSyncModules([...failedSyncModulesRef.current]);
-        setSyncStatus('locked');
-        showToast('Hay módulos protegidos por una versión o clave no disponible.', 'error');
+      // Dispositivo limpio/nuevo sin emparejar + nube con datos => descargar automáticamente sin conflicto
+      const paired = isCloudPaired(cloudUser.uid) && Object.keys(revisionsRef.current).length > 0;
+      if (!paired && isCleanOrOnboardingOnlyState(localState) && hasMeaningfulData(remoteState)) {
+        if (!applyRemoteState(remoteState, cloudUser.uid)) return;
+        const nextRevisions = { ...revisionsRef.current, ...fresh.remoteRevisions };
+        const nextBaselines = Object.fromEntries(
+          SYNC_MODULES.map((mod) => [mod, syncModuleFingerprint(remoteState, mod)])
+        ) as SyncBaselineMap;
+        const nextBaselineData = Object.fromEntries(
+          SYNC_MODULES.map((mod) => [mod, syncModuleData(remoteState, mod)])
+        );
+        persistRevisionMap(cloudUser.uid, nextRevisions);
+        persistBaselines(cloudUser.uid, nextBaselines);
+        baselineDataRef.current = nextBaselineData;
+        saveCloudBaselineData(cloudUser.uid, nextBaselineData);
+        pendingRevisionsRef.current = {};
+        failedSyncModulesRef.current.clear();
+        setFailedSyncModules([]);
+        conflictPendingRef.current = false;
+        setCloudConflict(null);
+        setIsCloudConflictDismissed(false);
+        markCloudPaired(cloudUser.uid);
+        initializedUserRef.current = cloudUser.uid;
+        setSyncStatus(navigator.onLine ? 'synced' : 'offline');
+        setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        showToast('Datos descargados desde tu cuenta de Google.', 'success');
         return;
       }
 
@@ -1998,8 +2109,6 @@ export default function App() {
       }
 
       if (contentDivergences.length === 0) {
-        // CASO A: Contenido semánticamente idéntico.
-        // Adoptar la revisión remota actual como baseline, limpiar trackers y volver a 'synced'.
         const nextRevisions = { ...revisionsRef.current, ...fresh.remoteRevisions };
         const nextBaselines = { ...baselinesRef.current };
         for (const mod of remoteModulesPresent) {
@@ -2015,21 +2124,20 @@ export default function App() {
         conflictPendingRef.current = false;
         gymWriteBlockedRef.current = false;
         setCloudConflict(null);
+        setIsCloudConflictDismissed(false);
         setFailedSyncModules([...failedSyncModulesRef.current]);
         markCloudPaired(cloudUser.uid);
         initializedUserRef.current = cloudUser.uid;
         const missingModules = SYNC_MODULES.filter(module => !(module in fresh.moduleData));
         if (missingModules.length) {
           queueCloudSave(localState, missingModules);
-          showToast('Publicando los módulos pendientes.', 'info');
+          showToast('Subiendo áreas pendientes…', 'info');
         } else {
           setSyncStatus('synced');
           setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-          showToast('Los módulos coinciden con la nube.', 'success');
+          showToast('Tus datos están al día con la nube.', 'success');
         }
       } else {
-        // CASO B: Contenido realmente diferente.
-        // Preservar snapshots y presentar resolución explícita sin sobrescribir.
         saveSyncRecoverySnapshot(cloudUser.uid, 'local', localState);
         saveSyncRecoverySnapshot(cloudUser.uid, 'remote', remoteState);
         const baseBuilt = Object.keys(baselineDataRef.current).length > 0
@@ -2041,13 +2149,15 @@ export default function App() {
 
         conflictPendingRef.current = true;
         if (contentDivergences.includes('gym')) gymWriteBlockedRef.current = true;
+        setIsCloudConflictDismissed(false);
         setCloudConflict({
           remoteState,
           modules: contentDivergences,
           remoteRevisions: fresh.remoteRevisions,
+          recommendedSide: paired ? 'local' : 'cloud',
         });
         setSyncStatus('conflict');
-        showToast('Se detectaron diferencias reales. Elige qué versión conservar.', 'info');
+        showToast('Hay cambios distintos entre este dispositivo y la nube. Elegí qué versión conservar.', 'info');
       }
     } catch (err) {
       if (!isCurrentSession()) return;
@@ -2110,6 +2220,7 @@ export default function App() {
     failedSyncModulesRef.current.clear();
     setFailedSyncModules([]);
     setCloudConflict(null);
+    setIsCloudConflictDismissed(false);
     queueCloudSave(stateRef.current, [...SYNC_MODULES]);
   };
 
@@ -2145,6 +2256,7 @@ export default function App() {
     financeWriteBlockedRef.current = false;
     const needsMigration = cloudConflict.needsMigration;
     setCloudConflict(null);
+    setIsCloudConflictDismissed(false);
     if (needsMigration) queueCloudSave(remoteWithLocalResale, [...SYNC_MODULES]);
     else if (cloudConflict.localModules?.length) queueCloudSave(remoteWithLocalResale, cloudConflict.localModules);
     else setSyncStatus(navigator.onLine ? 'synced' : 'offline');
@@ -2604,22 +2716,56 @@ export default function App() {
         />
 
         <main className={`mx-auto w-full flex-1 space-y-5 sm:space-y-6 px-4 py-4 sm:px-6 sm:py-5 lg:px-8 lg:py-7 ${mainBottomPadding} max-w-[1360px]`}>
-          {resaleWriteBlockedRef.current && (
-            <div role="alert" className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-[var(--text)]">
-              <strong>Mi negocio: sincronización detenida.</strong> Los cambios siguen en este dispositivo y aún no se sincronizaron. Requieren revisión antes de volver a subirlos.
-              {resaleConflictReason && <span className="block mt-1">{resaleConflictReason}</span>}
-              {resaleRecoveryStatus === 'failed' && <span className="block mt-1 font-medium">No se pudo guardar una copia recuperable del conflicto. Mantené esta sesión abierta y exportá una copia de seguridad de tus datos.</span>}
-              {resaleRecoveryStatus === 'saved' && <span className="block mt-1">Se conservó una copia local del conflicto en este dispositivo. {resaleConflictRecordRef.current?.remoteVersions.length ? 'También se conservó la versión remota recibida.' : 'La versión remota aún no está disponible en este dispositivo.'}</span>}
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" onClick={() => void handleOpenResaleReconcilePreview()} disabled={resaleResolutionPending || !resaleConflictRecordRef.current} className="rounded-xl bg-amber-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50">
-                  Previsualizar conciliación
-                </button>
-                <button type="button" onClick={() => void handleResolveResaleConflict()} disabled={resaleResolutionPending || !resaleConflictRecordRef.current} className="rounded-xl border border-amber-500/40 px-3 py-2 text-xs font-semibold disabled:opacity-50">
-                  {resaleResolutionPending ? 'Verificando…' : 'Verificar y cerrar si coinciden'}
-                </button>
-                <button type="button" onClick={handleExportResaleConflict} disabled={!resaleConflictRecordRef.current} className="rounded-xl border border-amber-500/40 px-3 py-2 text-xs font-semibold disabled:opacity-50">
-                  Exportar versiones del conflicto
-                </button>
+          {(resaleWriteBlockedRef.current || (cloudConflict && isCloudConflictDismissed)) && (
+            <div role="alert" className="rounded-2xl border border-amber-500/35 bg-amber-500/10 px-4 py-3.5 text-xs sm:text-sm text-[var(--text)]">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1 min-w-0">
+                  <strong className="block text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    {resaleWriteBlockedRef.current &&
+                    (resaleConflictRecordRef.current?.modules?.length ?? 0) === 1 &&
+                    resaleConflictRecordRef.current?.modules?.[0] === 'resale'
+                      ? 'Revisá los cambios pendientes en Mi negocio.'
+                      : 'Hay cambios distintos entre este dispositivo y la nube.'}
+                  </strong>
+                  <span className="block text-xs leading-relaxed text-slate-700 dark:text-slate-300">
+                    Tus cambios de este dispositivo están a salvo, pero la sincronización quedó en pausa hasta que elijas qué versión usar.
+                  </span>
+                  {resaleWriteBlockedRef.current && resaleRecoveryStatus === 'failed' && (
+                    <span className="block text-xs font-medium text-amber-800 dark:text-amber-300">
+                      No se pudo guardar una copia automática del conflicto. Mantené esta pestaña abierta y exportá un respaldo.
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  {resaleWriteBlockedRef.current ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => void handleOpenResaleReconcilePreview()}
+                        disabled={resaleResolutionPending || !resaleConflictRecordRef.current}
+                        className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] disabled:opacity-50 cursor-pointer"
+                      >
+                        Elegir qué versión conservar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleResolveResaleConflict()}
+                        disabled={resaleResolutionPending || !resaleConflictRecordRef.current}
+                        className="inline-flex min-h-10 items-center justify-center rounded-xl border border-amber-500/40 bg-transparent px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-amber-500/10 dark:text-slate-200 disabled:opacity-50 cursor-pointer"
+                      >
+                        {resaleResolutionPending ? 'Verificando…' : 'Verificar si ya coinciden'}
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsCloudConflictDismissed(false)}
+                      className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer"
+                    >
+                      Elegir qué versión conservar
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -2628,28 +2774,28 @@ export default function App() {
               <div className="flex-1">
                 <strong className="block text-sm">
                   {isCryptoLockError
-                    ? `Sesión bloqueada: no se pudo sincronizar ${failedSyncModules.length === 1 && failedSyncModules[0] === 'gym' ? 'Gimnasio' : 'los cambios protegidos'}`
+                    ? 'Tus datos están bloqueados en este dispositivo'
                     : `No se pudo subir ${failedSyncModules.length === 1 && failedSyncModules[0] === 'gym' ? 'Gimnasio' : 'los últimos cambios'}`}
                 </strong>
                 <span className="mt-0.5 block">
                   {isCryptoLockError
-                    ? 'Desbloqueá la sesión con tu Clave de Recuperación para reanudar la sincronización cifrada de extremo a extremo.'
-                    : 'Siguen guardados en este dispositivo. No vuelvas a cargarlos en la PC: reintentá la sincronización.'}
+                    ? 'Ingresá tu contraseña de bóveda o código de respaldo para volver a sincronizar.'
+                    : 'Siguen guardados en este dispositivo. No vuelvas a cargarlos en otro lado: reintentá la sincronización.'}
                 </span>
               </div>
               {isCryptoLockError ? (
                 <button
                   type="button"
                   onClick={() => setIsCryptoUnlockOpen(true)}
-                  className="rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] px-4 py-2.5 text-xs font-bold text-white transition-colors cursor-pointer shrink-0 shadow-2xs"
+                  className="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] px-4 py-2 text-xs font-semibold text-white transition-colors cursor-pointer shrink-0"
                 >
-                  Desbloquear y Sincronizar
+                  Desbloquear
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={handleRetrySync}
-                  className="rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2.5 text-xs font-bold text-white transition-colors cursor-pointer shrink-0"
+                  className="inline-flex min-h-10 items-center justify-center rounded-xl bg-rose-600 hover:bg-rose-700 px-4 py-2 text-xs font-semibold text-white transition-colors cursor-pointer shrink-0"
                 >
                   Reintentar
                 </button>
@@ -2784,6 +2930,10 @@ export default function App() {
                   onDeleteCloudAccount={handleDeleteCloudAccount}
                   onDeleteLocalData={handleDeleteLocalData}
                   onForceSync={handleForceSync}
+                  onE2EEDisabled={(verifiedState) => {
+                    applyRemoteState(verifiedState, storageUserIdRef.current);
+                    setSyncStatus(navigator.onLine ? 'synced' : 'offline');
+                  }}
                 />
               )}
             </Suspense>
@@ -2831,191 +2981,49 @@ export default function App() {
         </Suspense>
       )}
 
-      {cloudConflict && !cloudConflict.modules.includes('resale') && !resaleWriteBlockedRef.current && (
-        <Suspense fallback={dialogLoading('Hay un conflicto pendiente. Cargando opciones…')}><CloudConflictModal
-          modules={cloudConflict.modules}
-          conflicts={cloudConflict.conflicts}
-          onUseLocal={handleUseLocalState}
-          onUseCloud={handleUseCloudState}
-        /></Suspense>
+      {cloudConflict && !isCloudConflictDismissed && !cloudConflict.modules.includes('resale') && !resaleWriteBlockedRef.current && (
+        <Suspense fallback={dialogLoading('Hay un conflicto pendiente. Cargando opciones…')}>
+          <CloudConflictModal
+            modules={cloudConflict.modules}
+            localState={state}
+            remoteState={cloudConflict.remoteState}
+            conflicts={cloudConflict.conflicts}
+            recommendedSide={cloudConflict.recommendedSide ?? 'cloud'}
+            onUseLocal={handleUseLocalState}
+            onUseCloud={handleUseCloudState}
+            onExportConflict={handleExportGenericConflict}
+            onClose={() => setIsCloudConflictDismissed(true)}
+          />
+        </Suspense>
       )}
 
       {resaleReconcilePreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-xs">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Previsualización de conciliación de conflicto"
-            className="flex max-h-[90dvh] w-full max-w-4xl flex-col rounded-2xl border border-amber-500/40 bg-[var(--card)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl"
-          >
-            <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] pb-3">
-              <div>
-                <h2 className="text-base font-extrabold text-[var(--text)]">
-                  Previsualización de conciliación ({resaleReconcilePreview.modules.length} módulos)
-                </h2>
-                <p className="mt-1 text-xs text-[var(--text-soft)]">
-                  {resaleReconcilePreview.diagnostic}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-1.5 text-[11px]">
-                  <span className="rounded-md bg-amber-500/15 px-2 py-0.5 font-semibold text-amber-400">
-                    {resaleReconcilePreview.differingCount} pendiente(s) con diferencias
-                  </span>
-                  <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-400">
-                    {resaleReconcilePreview.identicalCount} idéntico(s)/sincronizado(s)
-                  </span>
-                  {resaleReconcilePreview.reconciledCount > 0 && (
-                    <span className="rounded-md bg-cyan-500/15 px-2 py-0.5 font-semibold text-cyan-400">
-                      Progreso parcial: {resaleReconcilePreview.reconciledCount} confirmado(s) · {resaleReconcilePreview.pendingCount} pendiente(s)
-                    </span>
-                  )}
-                  <span className="rounded-md bg-blue-500/15 px-2 py-0.5 font-semibold text-blue-400">
-                    {resaleReconcilePreview.allLocalMatchCurrentLocal
-                      ? 'Local archivado = Local actual (100%)'
-                      : 'Local actual cambió tras el bloqueo'}
-                  </span>
-                  <span className="rounded-md bg-purple-500/15 px-2 py-0.5 font-semibold text-purple-400">
-                    {resaleReconcilePreview.allBaseRevisionsMatchRemote
-                      ? 'Revisiones base = Revisiones remotas'
-                      : 'Revisiones remotas cambiaron'}
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setResaleReconcilePreview(null)}
-                className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs font-bold text-[var(--text-soft)] hover:text-[var(--text)]"
-              >
-                Cerrar
-              </button>
-            </div>
-
-            <div className="mt-3 flex-1 space-y-2 overflow-y-auto pr-1">
-              {resaleReconcilePreview.modules.map((item) => {
-                const choice = resaleReconcileChoices[item.module] ?? item.recommendedChoice;
-                const isIdentical = item.status === 'identical';
-                return (
-                  <div
-                    key={item.module}
-                    className={`rounded-xl border p-3 text-xs ${
-                      isIdentical
-                        ? 'border-emerald-500/25 bg-emerald-500/5'
-                        : 'border-amber-500/30 bg-amber-500/5'
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-extrabold text-[var(--text)]">{item.label}</span>
-                        <code className="rounded bg-black/20 px-1.5 py-0.5 text-[10px] text-[var(--text-soft)]">
-                          {item.module}
-                        </code>
-                        <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                            isIdentical
-                              ? 'bg-emerald-500/20 text-emerald-400'
-                              : item.status === 'local_only_changes'
-                              ? 'bg-blue-500/20 text-blue-400'
-                              : 'bg-amber-500/20 text-amber-400'
-                          }`}
-                        >
-                          {item.reconciledInPartialRun
-                            ? 'Confirmado en lote previo'
-                            : isIdentical
-                            ? 'Idéntico en local y remoto'
-                            : item.status === 'local_only_changes'
-                            ? 'Datos locales (remoto en plantilla inicial)'
-                            : 'Diferencia entre local y remoto'}
-                        </span>
-                      </div>
-                      {!isIdentical && (
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleResaleReconcileChoice(item.module, 'local')}
-                            className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors ${
-                              choice === 'local'
-                                ? 'bg-blue-600 text-white'
-                                : 'border border-[var(--border)] text-[var(--text-soft)]'
-                            }`}
-                          >
-                            Conservar Local
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleResaleReconcileChoice(item.module, 'remote')}
-                            className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition-colors ${
-                              choice === 'remote'
-                                ? 'bg-amber-600 text-white'
-                                : 'border border-[var(--border)] text-[var(--text-soft)]'
-                            }`}
-                          >
-                            Usar Remoto
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3 text-[11px]">
-                      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)]/60 p-2">
-                        <span className="block font-bold text-blue-400">Versión local</span>
-                        <span className="mt-0.5 block text-[var(--text)]">{item.localSummary}</span>
-                      </div>
-                      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)]/60 p-2">
-                        <span className="block font-bold text-amber-400">
-                          Versión remota {item.remoteIsDefaultTemplate ? '(plantilla inicial)' : ''}
-                        </span>
-                        <span className="mt-0.5 block text-[var(--text)]">{item.remoteSummary}</span>
-                      </div>
-                      <div className="rounded-lg border border-[var(--border)] bg-[var(--bg)]/60 p-2">
-                        <span className="block font-bold text-[var(--text-soft)]">Base y revisiones</span>
-                        <span className="mt-0.5 block text-[var(--text-soft)]">Base: {item.baseSummary}</span>
-                        <span className="mt-0.5 block truncate text-[10px] text-[var(--text-faint)]">
-                          Rev: {item.baseRevisionMatchesRemote ? 'Base = Remota' : 'Distinta'} ({item.remoteRevision || 'sin rev'})
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="mt-4 border-t border-[var(--border)] pt-3">
-              <label className="flex cursor-pointer items-start gap-2.5 text-xs text-[var(--text)]">
-                <input
-                  type="checkbox"
-                  checked={resaleReconcileAuthorized}
-                  onChange={(e) => setResaleReconcileAuthorized(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-[var(--border)]"
-                />
-                <span>
-                  Autorizo explícitamente publicar la conciliación seleccionada por módulo. Antes de escribir en la nube, Celestian guardará copias de recuperación completas del estado local y del estado remoto en este dispositivo.
-                </span>
-              </label>
-              <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={handleExportResaleConflict}
-                  className="rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text)]"
-                >
-                  Exportar JSON del conflicto
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setResaleReconcilePreview(null)}
-                  className="rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--text-soft)]"
-                >
-                  Cerrar sin cambios
-                </button>
-                <button
-                  type="button"
-                  disabled={!resaleReconcileAuthorized || resaleResolutionPending}
-                  onClick={() => void handleExecuteAuthorizedResaleReconcile()}
-                  className="rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white disabled:opacity-40"
-                >
-                  {resaleResolutionPending ? 'Publicando conciliación…' : 'Autorizar y publicar conciliación'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <Suspense fallback={dialogLoading('Cargando opciones de sincronización…')}>
+          <CloudConflictModal
+            modules={resaleReconcilePreview.modules.map((item) => item.module)}
+            moduleComparisons={resaleReconcilePreview.modules}
+            recommendedSide={
+              resaleReconcilePreview.remoteOnlyCount >= resaleReconcilePreview.localOnlyCount
+                ? 'cloud'
+                : 'local'
+            }
+            isApplying={resaleResolutionPending}
+            errorMessage={resaleConflictReason || null}
+            onUseCloud={() =>
+              handleExecuteAuthorizedResaleReconcile(
+                Object.fromEntries(resaleReconcilePreview.modules.map((item) => [item.module, 'remote']))
+              )
+            }
+            onUseLocal={() =>
+              handleExecuteAuthorizedResaleReconcile(
+                Object.fromEntries(resaleReconcilePreview.modules.map((item) => [item.module, 'local']))
+              )
+            }
+            onApplyModuleChoices={(choices) => handleExecuteAuthorizedResaleReconcile(choices)}
+            onExportConflict={handleExportResaleConflict}
+            onClose={() => setResaleReconcilePreview(null)}
+          />
+        </Suspense>
       )}
 
       {isSearchOpen && <Suspense fallback={dialogLoading('Abriendo búsqueda…')}><GlobalSearchModal
@@ -3055,7 +3063,13 @@ export default function App() {
             isOpen={isCryptoUnlockOpen}
             onClose={() => setIsCryptoUnlockOpen(false)}
             userId={cloudUser?.uid || storageUserId || ''}
+            userEmail={cloudUser?.email}
             onUnlocked={handleCryptoUnlocked}
+            onRequestDisableLock={() => {
+              setIsCryptoUnlockOpen(false);
+              window.location.hash = '#security-section';
+              handleNavigate('config');
+            }}
             showToast={showToast}
           />
         </Suspense>
