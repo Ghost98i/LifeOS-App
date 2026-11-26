@@ -1865,39 +1865,42 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                               Series
                                               <input
                                                 type="number"
+                                                inputMode="numeric"
                                                 min={1}
                                                 max={20}
                                                 value={ex.sets.length || 1}
                                                 onChange={(event) => handleConfigureTemplateExercise(t.id, exIdx, {
                                                   setsCount: Number(event.target.value),
                                                 })}
-                                                className="mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
+                                                className="celestian-clean-field mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)]"
                                               />
                                             </label>
                                             <label className="text-xs font-medium text-[var(--text-soft)]">
                                               Reps
                                               <input
                                                 type="number"
+                                                inputMode="numeric"
                                                 min={1}
                                                 max={1000}
                                                 value={ex.sets[0]?.reps || 10}
                                                 onChange={(event) => handleConfigureTemplateExercise(t.id, exIdx, {
                                                   reps: Number(event.target.value),
                                                 })}
-                                                className="mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
+                                                className="celestian-clean-field mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)]"
                                               />
                                             </label>
                                             <label className="text-xs font-medium text-[var(--text-soft)]">
                                               Objetivo (kg)
                                               <input
                                                 type="number"
+                                                inputMode="decimal"
                                                 min={0}
                                                 step="0.5"
                                                 value={ex.sets[0]?.weight ?? ex.weight ?? 0}
                                                 onChange={(event) => handleConfigureTemplateExercise(t.id, exIdx, {
                                                   targetWeight: Number(event.target.value),
                                                 })}
-                                                className="mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
+                                                className="celestian-clean-field mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-3 text-sm font-semibold text-[var(--text)]"
                                               />
                                             </label>
                                             <div className="text-xs font-medium text-[var(--text-soft)]">
@@ -1925,7 +1928,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                                     });
                                                   }
                                                 }}
-                                                className="mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-2 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
+                                                className="celestian-clean-field mt-1 min-h-11 w-full rounded-xl border border-transparent bg-[var(--surface-muted)] px-2 text-sm font-semibold text-[var(--text)]"
                                               >
                                                 <option value="inherit">General ({gymSettings.restBetweenSetsSeconds} s)</option>
                                                 <option value="custom">Personalizado</option>
@@ -1935,6 +1938,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                                 <input
                                                   aria-label={`Descanso personalizado de ${ex.name} en segundos`}
                                                   type="number"
+                                                  inputMode="numeric"
                                                   min={15}
                                                   max={600}
                                                   step={15}
@@ -1944,7 +1948,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                                     timerEnabled: true,
                                                     restSeconds: Math.min(600, Math.max(15, Number(event.target.value) || gymSettings.restBetweenSetsSeconds)),
                                                   })}
-                                                  className="mt-1 min-h-11 w-full rounded-xl border border-[var(--blue)]/30 bg-[var(--bg-elevated)] px-3 text-sm font-semibold text-[var(--text)] focus:border-[var(--blue)]"
+                                                  className="celestian-clean-field mt-1 min-h-11 w-full rounded-xl border border-[#4F46E5]/30 bg-[var(--bg-elevated)] px-3 text-sm font-semibold text-[var(--text)]"
                                                 />
                                               )}
                                             </div>
@@ -3162,21 +3166,23 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                             Peso (kg)
                             <input
                               type="number"
+                              inputMode="decimal"
                               step="0.5"
                               min="0"
                               value={set.weight}
                               onChange={(event) => onUpdateSet(exIdx, setIdx, { weight: Number(event.target.value) || 0 })}
-                              className="mt-1 min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-bold text-[var(--text)]"
+                              className="celestian-clean-field mt-1 min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-bold text-[var(--text)]"
                             />
                           </label>
                           <label className="text-xs font-medium text-[var(--text-soft)]">
                             Reps
                             <input
                               type="number"
+                              inputMode="numeric"
                               min="1"
                               value={set.reps}
                               onChange={(event) => onUpdateSet(exIdx, setIdx, { reps: Number(event.target.value) || 0 })}
-                              className="mt-1 min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-bold text-[var(--text)]"
+                              className="celestian-clean-field mt-1 min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-bold text-[var(--text)]"
                             />
                           </label>
                         </div>
@@ -3289,6 +3295,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                 </button>
                                 <input
                                   type="number"
+                                  inputMode="decimal"
                                   step="0.5"
                                   min="0"
                                   placeholder={ghostSet ? String(ghostSet.weight) : undefined}
@@ -3298,7 +3305,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                       weight: Number(e.target.value) || 0,
                                     })
                                   }
-                                  className="h-11 w-16 px-1.5 text-xs tabular-nums font-bold rounded-xl bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-center"
+                                  className="celestian-clean-field h-11 w-16 px-1.5 text-xs tabular-nums font-bold rounded-xl bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-center"
                                 />
                                 <button
                                   type="button"
@@ -3374,6 +3381,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                 </button>
                                 <input
                                   type="number"
+                                  inputMode="numeric"
                                   min="1"
                                   placeholder={ghostSet ? String(ghostSet.reps) : undefined}
                                   value={set.reps}
@@ -3382,7 +3390,7 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                                       reps: Number(e.target.value) || 0,
                                     })
                                   }
-                                  className="h-11 w-14 px-1.5 text-xs tabular-nums font-bold rounded-xl bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-center"
+                                  className="celestian-clean-field h-11 w-14 px-1.5 text-xs tabular-nums font-bold rounded-xl bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-center"
                                 />
                                 <button
                                   type="button"
@@ -3432,9 +3440,9 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
                   <button
                     type="button"
                     onClick={() => onAddSet(exIdx)}
-                    className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                    className="inline-flex min-h-11 sm:min-h-0 items-center gap-1 px-1.5 sm:px-0 text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                   >
-                    <AppIcon name="plus" className="h-3 w-3" />
+                    <AppIcon name="plus" className="h-3.5 w-3.5" />
                     <span>Agregar serie</span>
                   </button>
                   <span className="text-[10px] text-[var(--text-faint)]">
@@ -3547,10 +3555,11 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
           </label>
           <input
             type="number"
+            inputMode="decimal"
             step="0.5"
             value={newExWeight}
             onChange={(e) => setNewExWeight(e.target.value)}
-            className="w-16 px-2 py-1.5 text-xs tabular-nums rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
+            className="celestian-clean-field min-h-11 sm:min-h-0 w-20 sm:w-16 px-2 py-1.5 text-xs tabular-nums rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
           />
         </div>
 
@@ -3560,17 +3569,19 @@ const WorkoutSessionCard: React.FC<WorkoutSessionCardProps> = ({
           </label>
           <input
             type="number"
+            inputMode="numeric"
             value={newExReps}
             onChange={(e) => setNewExReps(e.target.value)}
-            className="w-14 px-2 py-1.5 text-xs tabular-nums rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
+            className="celestian-clean-field min-h-11 sm:min-h-0 w-16 sm:w-14 px-2 py-1.5 text-xs tabular-nums rounded-lg bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
           />
         </div>
 
         <button
           type="submit"
-          className="px-3.5 py-1.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-bold rounded-lg cursor-pointer transition-all shadow-2xs"
+          className="inline-flex min-h-11 sm:min-h-0 items-center justify-center gap-1.5 px-3.5 py-1.5 bg-[#4F46E5] hover:bg-[#4338CA] text-white text-xs font-bold rounded-lg cursor-pointer transition-all shadow-2xs"
         >
-          ＋ Añadir
+          <AppIcon name="plus" className="h-3.5 w-3.5" />
+          <span>Añadir</span>
         </button>
       </form>
     </div>

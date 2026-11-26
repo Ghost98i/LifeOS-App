@@ -42,7 +42,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   const { slot2, slot4 } = getMobileNavSlots(state || (hiddenTabs ? { settings: { hiddenTabs } as any } : undefined));
 
   const itemClass = (active: boolean) =>
-    `flex min-w-0 flex-1 flex-col items-center gap-0.5 py-1 text-[11px] transition-colors cursor-pointer ${
+    `flex min-h-[44px] min-w-[44px] flex-1 flex-col items-center justify-center gap-0.5 py-1 text-[11px] transition-transform active:scale-95 cursor-pointer ${
       active ? 'text-[var(--text)] font-bold' : 'text-[var(--text-faint)] hover:text-[var(--text-soft)]'
     }`;
   const iconPillClass = (active: boolean) =>
@@ -147,7 +147,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
       </div>
 
       {/* Main Bottom Tabs */}
-      <div className="flex items-end px-2 pt-2 pb-[max(.45rem,env(safe-area-inset-bottom))]">
+      <div className="flex items-end gap-0.5 px-2 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         <button
           type="button"
           onClick={() => onNavigate('dashboard')}
@@ -183,7 +183,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
           onClick={onOpenCapture}
           onMouseEnter={onPrefetchCapture}
           onFocus={onPrefetchCapture}
-          className="relative mx-2 -mt-1.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] dark:bg-[#4F46E5] dark:hover:bg-[#6366F1] text-white shadow-[0_6px_18px_rgba(79,70,229,0.35)] active:scale-95 transition-all cursor-pointer border border-white/15"
+          className="relative mx-2.5 -mt-1.5 flex h-12 w-12 min-h-[48px] min-w-[48px] shrink-0 items-center justify-center rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] dark:bg-[#4F46E5] dark:hover:bg-[#6366F1] text-white shadow-[0_6px_18px_rgba(79,70,229,0.35)] active:scale-95 transition-transform cursor-pointer border border-white/15"
           aria-label="Captura rápida"
         >
           <AppIcon name="squarePlus" strokeWidth={1.75} className="h-5 w-5 text-white" />

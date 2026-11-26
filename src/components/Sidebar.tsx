@@ -86,7 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <aside
         ref={drawerRef}
         aria-label="Navegación principal"
-        className={`fixed lg:sticky top-0 left-0 h-screen w-[232px] bg-[var(--sidebar)] border-r border-[var(--border)] flex flex-col p-4 z-[75] lg:z-50 transition-transform duration-200 ease-in-out shrink-0 shadow-[var(--chrome-shadow)] ${
+        className={`fixed lg:sticky top-0 left-0 h-dvh w-[232px] bg-[var(--sidebar)] border-r border-[var(--border)] flex flex-col px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] lg:py-4 z-[75] lg:z-50 transition-transform duration-200 ease-in-out shrink-0 shadow-[var(--chrome-shadow)] ${
           isOpenMobile ? 'visible translate-x-0' : 'invisible -translate-x-full lg:visible lg:translate-x-0'
         }`}
       >
@@ -100,11 +100,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        <button type="button" onClick={onCloseMobile} aria-label="Cerrar navegación" className="mb-2 flex min-h-11 items-center justify-center gap-2 rounded-lg border border-[var(--border)] text-sm text-[var(--text-soft)] lg:hidden">
+        <button type="button" onClick={onCloseMobile} aria-label="Cerrar navegación" className="mb-2 flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg border border-[var(--border)] text-sm text-[var(--text-soft)] active:scale-95 transition-transform lg:hidden">
           <AppIcon name="x" className="h-4 w-4" /> Cerrar
         </button>
 
-        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto pr-1">
+        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pr-1">
           {items.map((item, idx) => {
             const isActive = currentView === item.id;
             const showPrincipalHeader = idx === 0;
@@ -136,7 +136,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onMouseEnter={() => onPrefetchView?.(item.id)}
                   onFocus={() => onPrefetchView?.(item.id)}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`group relative flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm transition-all cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
+                  className={`group relative flex min-h-11 lg:min-h-0 w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm transition-all cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
                     isActive
                       ? 'bg-[#4F46E5]/12 dark:bg-[#4F46E5]/20 font-bold text-[var(--text)] ring-1 ring-inset ring-[#4F46E5]/30 dark:ring-[#818CF8]/30 shadow-2xs'
                       : 'font-medium text-[var(--text-soft)] hover:bg-[var(--surface-muted)]/60 hover:text-[var(--text)]'

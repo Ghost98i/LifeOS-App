@@ -28,18 +28,18 @@ export const ToastViewport: React.FC = () => {
     <div
       aria-live="polite"
       aria-atomic="true"
-      className="pointer-events-none fixed inset-x-3 top-[calc(4.5rem+env(safe-area-inset-top))] z-[120] flex flex-col items-center gap-2 lg:inset-x-auto lg:top-auto lg:bottom-6 lg:right-6 lg:items-end"
+      className="pointer-events-none fixed inset-x-3 bottom-[calc(7.75rem+env(safe-area-inset-bottom))] z-[120] flex flex-col items-center gap-2 md:inset-x-auto md:bottom-6 md:right-6 md:items-end"
     >
       {toasts.map((toast) => (
         <div
           key={toast.id}
           role="status"
           onClick={() => dismissToast(toast.id)}
-          className={`toast-enter pointer-events-auto flex w-full max-w-sm items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold shadow-2xl backdrop-blur-xl lg:w-96 cursor-pointer select-none transition-transform active:scale-[0.98] ${
+          className={`toast-enter pointer-events-auto flex w-full max-w-sm items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-sm font-semibold shadow-2xl backdrop-blur-xl md:w-96 cursor-pointer select-none transition-transform active:scale-[0.98] ${
             toast.tone === 'error'
               ? 'border-rose-500/30 bg-rose-950/90 text-rose-100 hover:bg-rose-950/95'
               : toast.tone === 'info'
-              ? 'border-blue-500/30 bg-slate-900/90 text-blue-100 hover:bg-slate-900/95'
+              ? 'border-indigo-500/35 bg-slate-900/95 text-indigo-100 hover:bg-slate-900'
               : 'border-emerald-500/30 bg-emerald-950/90 text-emerald-100 hover:bg-emerald-950/95'
           }`}
           title="Toca para descartar"
@@ -73,7 +73,7 @@ export const ToastViewport: React.FC = () => {
                 e.stopPropagation();
                 dismissToast(toast.id);
               }}
-              className="inline-flex items-center justify-center shrink-0 -mr-1 p-1 text-xs opacity-60 hover:opacity-100 rounded-lg transition-opacity"
+              className="inline-flex min-h-[44px] min-w-[44px] -my-2 -mr-2 sm:min-h-0 sm:min-w-0 sm:my-0 sm:-mr-1 sm:p-1 items-center justify-center shrink-0 text-xs opacity-70 hover:opacity-100 rounded-lg transition-opacity cursor-pointer"
               aria-label="Descartar aviso"
             >
               <AppIcon name="x" className="h-3.5 w-3.5" />

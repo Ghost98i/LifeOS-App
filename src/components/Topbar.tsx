@@ -168,11 +168,11 @@ export const Topbar: React.FC<TopbarProps> = ({
   })();
 
   return (
-    <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--topbar)] shadow-[var(--chrome-shadow)] backdrop-blur-xl">
+    <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--topbar)] shadow-[var(--chrome-shadow)] backdrop-blur-xl pt-[env(safe-area-inset-top)]">
       <div className="mx-auto flex min-h-16 w-full max-w-[1360px] items-center gap-1.5 px-4 py-2.5 sm:gap-2 sm:px-6 sm:py-3 lg:gap-3 lg:px-8">
       <button
         onClick={onOpenMobileNav}
-        className="flex h-10 w-10 min-h-[40px] min-w-[40px] sm:h-9 sm:w-9 sm:min-h-0 sm:min-w-0 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--text)] lg:hidden cursor-pointer"
+        className="flex h-11 w-11 min-h-[44px] min-w-[44px] sm:h-9 sm:w-9 sm:min-h-0 sm:min-w-0 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--text)] active:scale-95 transition-transform lg:hidden cursor-pointer"
         aria-label="Abrir menú"
       >
         <AppIcon name="menu" className="h-5 w-5" />
@@ -292,7 +292,7 @@ export const Topbar: React.FC<TopbarProps> = ({
             }}
             aria-expanded={cloudConfigured && cloudUser ? showCloudMenu : undefined}
             aria-haspopup={cloudConfigured && cloudUser ? 'menu' : undefined}
-            className={`flex h-10 min-h-[40px] min-w-[40px] sm:h-9 sm:min-h-0 sm:min-w-9 items-center justify-center gap-1.5 rounded-xl border px-2 sm:px-2.5 text-xs font-semibold transition-all ${syncLed.badgeClass} ${cloudConfigured ? 'cursor-pointer hover:opacity-90' : 'cursor-default'}`}
+            className={`flex h-11 min-h-[44px] min-w-[44px] sm:h-9 sm:min-h-0 sm:min-w-9 items-center justify-center gap-1.5 rounded-xl border px-2 sm:px-2.5 text-xs font-semibold transition-all ${syncLed.badgeClass} ${cloudConfigured ? 'cursor-pointer hover:opacity-90' : 'cursor-default'}`}
             aria-label={cloudConfigured && !cloudUser ? 'Conectar con Google' : `Sincronización: ${syncLed.label}`}
             title={
               cloudConfigured
@@ -322,11 +322,11 @@ export const Topbar: React.FC<TopbarProps> = ({
         </div>
 
         {/* Utility Controls Capsule */}
-        <div className="inline-flex h-10 sm:h-9 items-center gap-0.5 sm:gap-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-0.5 shadow-2xs">
+        <div className="inline-flex min-h-[44px] sm:h-9 sm:min-h-0 items-center gap-0.5 sm:gap-0 rounded-xl border border-[var(--border)] bg-[var(--card)] p-0.5 shadow-2xs">
           <button
             type="button"
             onClick={onOpenSearch}
-            className="flex h-9 w-10 min-h-[40px] min-w-[40px] items-center justify-center rounded-[10px] text-[var(--text-soft)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text)] sm:hidden cursor-pointer"
+            className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-[10px] text-[var(--text-soft)] transition-colors hover:bg-[var(--surface-muted)] hover:text-[var(--text)] active:scale-95 sm:hidden cursor-pointer"
             aria-label="Buscar en Celestian"
           >
             <AppIcon name="search" className="h-4 w-4"/>
@@ -357,7 +357,7 @@ export const Topbar: React.FC<TopbarProps> = ({
             type="button"
             onClick={toggleSound}
             title={soundOn ? 'Sonidos activados (clic para silenciar)' : 'Sonidos silenciados (clic para activar)'}
-            className={`flex h-9 w-10 min-h-[40px] min-w-[40px] sm:h-8 sm:w-8 sm:min-h-0 sm:min-w-0 items-center justify-center rounded-[10px] transition-all cursor-pointer ${
+            className={`flex h-11 w-11 min-h-[44px] min-w-[44px] sm:h-8 sm:w-8 sm:min-h-0 sm:min-w-0 items-center justify-center rounded-[10px] transition-all active:scale-95 cursor-pointer ${
               soundOn
                 ? 'text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)]'
                 : 'bg-[var(--surface-muted)] text-[var(--text-faint)] hover:text-[var(--text)]'

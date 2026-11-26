@@ -118,7 +118,7 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-[130] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4 backdrop-blur-xs animate-in fade-in"
       onClick={onClose}
     >
       <div
@@ -128,10 +128,12 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
         aria-modal="true"
         aria-labelledby="gym-rest-settings-title"
         data-gym-rest-settings
-        className="max-h-[calc(100dvh-2rem)] w-full max-w-md space-y-5 overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-2xl"
+        className="flex max-h-[90dvh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
+        <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+
+        <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-5 py-3.5 sm:pt-5">
           <div className="flex items-center gap-2.5">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#4F46E5]/12 text-[#4F46E5] dark:bg-[#4F46E5]/20 dark:text-indigo-300">
               <AppIcon name="stopwatch" className="h-5 w-5" />
@@ -149,11 +151,13 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Cerrar ajustes"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)] active:scale-95 transition"
           >
             <AppIcon name="x" className="h-4 w-4" />
           </button>
         </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-5 px-5 py-4">
 
         {/* Auto Timer Toggle */}
         <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3.5">
@@ -212,12 +216,13 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
           <input
             id="rest-sets-input"
             type="number"
+            inputMode="numeric"
             min={15}
             max={600}
             step={15}
             value={setRest}
             onChange={(e) => setSetRest(Math.max(15, Math.min(600, Number(e.target.value) || 120)))}
-            className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold tabular-nums text-[var(--text)] outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/25 focus-visible:outline-none"
+            className="celestian-clean-field focus-visible:outline-none min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold tabular-nums text-[var(--text)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
         </div>
 
@@ -250,12 +255,13 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
           <input
             id="rest-exercises-input"
             type="number"
+            inputMode="numeric"
             min={15}
             max={600}
             step={15}
             value={exerciseRest}
             onChange={(e) => setExerciseRest(Math.max(15, Math.min(600, Number(e.target.value) || 180)))}
-            className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold tabular-nums text-[var(--text)] outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:border-[#4F46E5] focus:ring-2 focus:ring-[#4F46E5]/25 focus-visible:outline-none"
+            className="celestian-clean-field focus-visible:outline-none min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-semibold tabular-nums text-[var(--text)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
         </div>
 
@@ -339,7 +345,9 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
         </div>
 
         {saveError && <p role="alert" className="text-xs text-rose-700 dark:text-rose-300">No se guardaron los ajustes. Podés volver a intentarlo.</p>}
-        <div className="flex items-center justify-end gap-2 border-t border-[var(--border)] pt-3">
+        </div>
+
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--border)] bg-[var(--card)] px-5 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:py-4">
           <button
             type="button"
             onClick={onClose}

@@ -587,6 +587,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
               <div className="flex items-center gap-1">
                 <PrivacyInput
                   type="number"
+                  inputMode="decimal"
                   autoFocus
                   value={tempGlobalBudget}
                   onChange={(e) => setTempGlobalBudget(e.target.value)}
@@ -594,7 +595,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                     if (e.key === 'Enter') saveEditGlobal();
                     if (e.key === 'Escape') setEditingGlobal(false);
                   }}
-                  className="finance-control finance-amount-input w-24 px-2 py-1 rounded-lg border text-xs outline-none"
+                  className="celestian-clean-field finance-control finance-amount-input w-24 px-2 py-1 rounded-lg border text-xs"
                   placeholder="Límite"
                 />
                 <button
@@ -714,6 +715,7 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                           <div className="flex items-center gap-1">
                             <PrivacyInput
                               type="number"
+                              inputMode="decimal"
                               autoFocus
                               value={tempBudget}
                               onChange={(e) => setTempBudget(e.target.value)}
@@ -721,15 +723,16 @@ export const FinanceAnalyticsView: React.FC<FinanceAnalyticsViewProps> = ({
                                 if (e.key === 'Enter') saveEditCategory(item.categoryId);
                                 if (e.key === 'Escape') setEditingCategory(null);
                               }}
-                              className="finance-control w-20 px-2 py-0.5 rounded border border-indigo-500 text-xs outline-none"
+                              className="celestian-clean-field finance-control w-20 px-2 py-0.5 rounded border border-indigo-500 text-xs"
                               placeholder="Monto"
                             />
                             <button
                               type="button"
                               onClick={() => saveEditCategory(item.categoryId)}
-                              className="px-1.5 py-0.5 rounded bg-indigo-600 text-white font-bold text-[10px] cursor-pointer"
+                              aria-label="Guardar límite"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded bg-[#4F46E5] text-white font-bold text-[10px] cursor-pointer"
                             >
-                              ✓
+                              <AppIcon name="check" className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         ) : (

@@ -1022,6 +1022,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                   <input
                     id="config-height"
                     type="number"
+                    inputMode="numeric"
                     value={profileHeight}
                     onChange={(e) => setProfileHeight(e.target.value)}
                     placeholder="175"
@@ -1064,6 +1065,7 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                     <input
                       id="config-stream-goal"
                       type="number"
+                      inputMode="numeric"
                       value={streamGoal}
                       onChange={(e) => setStreamGoal(e.target.value)}
                       placeholder="12"
@@ -1451,13 +1453,15 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
         return (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4 backdrop-blur-xs"
             onMouseDown={(e) => {
               if (e.target === e.currentTarget && !isVerifyingReset) closeResetModal();
             }}
           >
-            <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Reiniciar datos" className="w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 sm:p-6 space-y-4 shadow-2xl">
-              <div className="flex items-start justify-between gap-3">
+            <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Reiniciar datos" className="flex w-full max-w-md max-h-[90dvh] flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl p-0 shadow-2xl">
+              <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+
+              <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-5 py-3.5 sm:px-6 sm:pt-5 dark:border-white/[0.06]">
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Shield size={20} strokeWidth={1.75} className="shrink-0 text-rose-600 dark:text-rose-400" aria-hidden="true" />
                   <div className="min-w-0">
@@ -1470,24 +1474,26 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                   onClick={closeResetModal}
                   disabled={isVerifyingReset}
                   aria-label="Cerrar"
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 disabled:opacity-50 cursor-pointer"
+                  className="inline-flex h-11 w-11 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-800 active:scale-95 transition dark:hover:bg-white/[0.06] dark:hover:text-slate-100 disabled:opacity-50 cursor-pointer"
                 >
                   <X size={16} strokeWidth={1.75} aria-hidden="true" />
                 </button>
               </div>
 
-              <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
-                <p>
-                  Esta acción vacía tus tareas, finanzas, notas, gimnasio y demás módulos para dejar Celestian LifeOS en blanco.
-                </p>
-                <ul className="list-disc list-inside space-y-1 text-xs">
-                  <li>Tu sesión de Google <strong>no</strong> se cierra.</li>
-                  <li>Antes de reiniciar se guarda automáticamente una copia de emergencia en este navegador.</li>
-                  <li>Si tenés sincronización activa, los datos en blanco se actualizarán en tus otros dispositivos.</li>
-                </ul>
-              </div>
+              <form onSubmit={(e) => { void handleConfirmReset(e); }} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-4 px-5 py-4 sm:px-6">
+                  <div className="space-y-2 text-sm text-slate-600 dark:text-slate-400">
+                    <p>
+                      Esta acción vacía tus tareas, finanzas, notas, gimnasio y demás módulos para dejar Celestian LifeOS en blanco.
+                    </p>
+                    <ul className="list-disc list-inside space-y-1 text-xs">
+                      <li>Tu sesión de Google <strong>no</strong> se cierra.</li>
+                      <li>Antes de reiniciar se guarda automáticamente una copia de emergencia en este navegador.</li>
+                      <li>Si tenés sincronización activa, los datos en blanco se actualizarán en tus otros dispositivos.</li>
+                    </ul>
+                  </div>
 
-              <form onSubmit={(e) => { void handleConfirmReset(e); }} className="space-y-3 border-t border-slate-100 pt-3.5 dark:border-white/[0.06]">
+                  <div className="space-y-3 border-t border-slate-100 pt-3.5 dark:border-white/[0.06]">
                 {requiresE2EE ? (
                   <div className="space-y-2.5">
                     <input
@@ -1602,20 +1608,22 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                     {resetError}
                   </p>
                 )}
+                  </div>
+                </div>
 
-                <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-end dark:border-white/[0.06]">
+                <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-100 bg-white px-5 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:flex-row sm:items-center sm:justify-end sm:px-6 sm:py-4 dark:border-white/[0.06] dark:bg-[#0D111A]">
                   <button
                     type="button"
                     onClick={closeResetModal}
                     disabled={isVerifyingReset}
-                    className={`${secondaryBtnClass} disabled:opacity-50`}
+                    className={`${secondaryBtnClass} min-h-11 sm:min-h-0 disabled:opacity-50`}
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     disabled={isResetSubmitDisabled}
-                    className="inline-flex min-h-10 items-center justify-center rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                    className="inline-flex min-h-11 sm:min-h-10 items-center justify-center rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                   >
                     {isCheckingResetSecurity
                       ? 'Verificando seguridad…'

@@ -45,7 +45,7 @@ const ExerciseTrendChart: React.FC<{
         Tendencia de Fuerza (e1RM / Peso)
       </span>
       <div className="flex items-center gap-3 text-[10px] font-bold">
-        <span className="flex items-center gap-1.5 text-[var(--blue)]">
+        <span className="flex items-center gap-1.5 text-[#4F46E5] dark:text-[#818CF8]">
           <span className="h-2 w-2 rounded-full bg-[#6366f1]" />
           e1RM
         </span>
@@ -120,7 +120,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = React.m
 
   return (
     <div
-      className="fixed inset-0 z-[130] flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-xs"
+      className="fixed inset-0 z-[130] flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/65 backdrop-blur-xs"
       onClick={onClose}
     >
       <div
@@ -129,11 +129,13 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = React.m
         role="dialog"
         aria-modal="true"
         aria-labelledby="exercise-history-title"
-        className="w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 shadow-2xl space-y-4 outline-none"
+        className="flex w-full max-w-lg max-h-[90dvh] flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl outline-none"
         onClick={(e) => e.stopPropagation()}
       >
+        <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+
         {/* Header */}
-        <div className="flex items-start justify-between gap-3 border-b border-[var(--border)] pb-3.5">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--border)] px-4 py-3.5 sm:px-6 sm:pt-5">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 id="exercise-history-title" className="min-w-0 break-words text-lg sm:text-xl font-black text-[var(--text)] tracking-tight">
@@ -145,7 +147,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = React.m
                 </span>
               )}
               {history.equipment && (
-                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-lg bg-[var(--blue-soft)] border border-[var(--blue)]/25 text-[var(--blue)] capitalize">
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-lg bg-[#4F46E5]/12 border border-[#4F46E5]/25 text-[#4F46E5] dark:bg-[#4F46E5]/20 dark:text-[#818CF8] capitalize">
                   {history.equipment}
                 </span>
               )}
@@ -159,12 +161,14 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = React.m
             type="button"
             onClick={onClose}
             aria-label="Cerrar modal"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card-subtle)] text-[var(--text-soft)] hover:border-[var(--blue)] hover:text-[var(--blue)] transition cursor-pointer"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card-subtle)] text-[var(--text-soft)] hover:border-[#4F46E5] hover:text-[#4F46E5] dark:hover:text-[#818CF8] active:scale-95 transition cursor-pointer"
             title="Cerrar"
           >
             <AppIcon name="x" className="h-4 w-4" />
           </button>
         </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-4 px-4 py-4 sm:px-6">
 
         {/* 4 PR Metrics Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
@@ -184,11 +188,11 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = React.m
           </div>
 
           {/* Max e1RM (LifeOS Signature Indigo) */}
-          <div className="rounded-xl border border-[var(--blue)]/30 bg-[var(--blue-soft)] p-2.5 text-center">
-            <span className="block text-[11px] font-semibold text-[var(--blue)]">
+          <div className="rounded-xl border border-[#4F46E5]/30 bg-[#4F46E5]/10 dark:bg-[#4F46E5]/18 p-2.5 text-center">
+            <span className="block text-[11px] font-semibold text-[#4F46E5] dark:text-[#818CF8]">
               1RM estimado
             </span>
-            <strong className="block text-sm sm:text-base font-black text-[var(--blue)] tabular-nums mt-0.5">
+            <strong className="block text-sm sm:text-base font-black text-[#4F46E5] dark:text-[#818CF8] tabular-nums mt-0.5">
               {history.prs.maxE1RM ? `~${history.prs.maxE1RM.value} kg` : '—'}
             </strong>
             {history.prs.maxE1RM?.weight ? (
@@ -256,7 +260,7 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = React.m
                       {sess.volume.toLocaleString('es-UY')} kg
                     </strong>
                     {sess.e1rm > 0 && (
-                      <span className="text-[10px] text-[var(--blue)] font-bold block">
+                      <span className="text-[10px] text-[#4F46E5] dark:text-[#818CF8] font-bold block">
                         ~{sess.e1rm} kg 1RM
                       </span>
                     )}
@@ -266,13 +270,14 @@ export const ExerciseHistoryModal: React.FC<ExerciseHistoryModalProps> = React.m
             </div>
           )}
         </div>
+        </div>
 
         {/* Footer */}
-        <div className="pt-1">
+        <div className="shrink-0 border-t border-[var(--border)] bg-[var(--card)] px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
           <button
             type="button"
             onClick={onClose}
-            className="min-h-11 w-full py-2.5 px-4 rounded-xl bg-[var(--blue-soft)] hover:bg-[var(--blue)] text-[var(--blue)] hover:text-white border border-[var(--blue)]/30 text-xs font-bold transition cursor-pointer"
+            className="min-h-11 w-full py-2.5 px-4 rounded-xl bg-[#4F46E5]/12 hover:bg-[#4F46E5] text-[#4F46E5] dark:text-[#818CF8] hover:text-white border border-[#4F46E5]/30 text-xs font-bold transition cursor-pointer"
           >
             Cerrar Ficha
           </button>

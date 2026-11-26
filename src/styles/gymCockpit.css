@@ -170,9 +170,9 @@
 }
 .c-pager-btn {
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  width: 40px; min-width: 40px; height: 40px; min-height: 44px;
+  width: 44px; min-width: 44px; height: 44px; min-height: 44px;
   border: 0; border-radius: 8px; color: var(--text-soft); background: transparent; cursor: pointer;
-  transition: background-color 140ms ease, color 140ms ease;
+  transition: background-color 140ms ease, color 140ms ease, transform 100ms ease;
 }
 .c-pager-btn:disabled { opacity: 0.32; cursor: default; }
 .c-pager-btn:not(:disabled):hover { color: var(--gym-visual-accent); background: var(--gym-visual-soft); }

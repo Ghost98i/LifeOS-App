@@ -1121,7 +1121,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
           className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)]/75 px-4 py-3 text-xs text-[var(--text-soft)]"
         >
           <div className="flex items-start gap-2.5 min-w-0">
-            <AppIcon name="shield" className="h-4 w-4 shrink-0 text-[var(--blue)] mt-0.5" />
+            <AppIcon name="shield" className="h-4 w-4 shrink-0 text-[#4F46E5] dark:text-[#818CF8] mt-0.5" />
             <p className="leading-relaxed">
               <strong className="font-semibold text-[var(--text)]">Celestian LifeOS nunca se conecta a tu banco ni te pide contraseñas o tarjetas.</strong>{' '}
               Es un registro privado manual bajo tu cuenta aislada, con cifrado de extremo a extremo opcional en Configuración y Modo Privacidad para ocultar montos en pantalla.
@@ -1132,9 +1132,9 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
               <button
                 type="button"
                 onClick={onOpenSecurityConfig}
-                className="text-xs font-semibold text-[var(--blue)] hover:underline whitespace-nowrap cursor-pointer"
+                className="text-xs font-semibold text-[#4F46E5] dark:text-[#818CF8] hover:underline whitespace-nowrap cursor-pointer"
               >
-                {cloudConnected ? 'Activar cifrado →' : 'Ver seguridad →'}
+                {cloudConnected ? 'Activar cifrado' : 'Ver seguridad'}
               </button>
             )}
             <button
@@ -1415,37 +1415,44 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       {/* MODAL 2: Financial Commitment Form Modal */}
       {isCommitmentModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
           onClick={() => setIsCommitmentModalOpen(false)}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-label="Registrar Compromiso Financiero"
-            className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 max-w-lg w-full shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+            className="flex w-full max-w-lg max-h-[90dvh] flex-col overflow-hidden bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">💳</span>
-                <h3 className="section-title">
-                  {editingComId ? 'Editar Compromiso' : 'Nuevo Compromiso'}
-                </h3>
+            <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-3.5 sm:px-6 sm:pt-5">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#4F46E5]/10 text-[#4F46E5] dark:bg-[#4F46E5]/20 dark:text-[#818CF8]">
+                  <AppIcon name="wallet" className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <h3 className="section-title">
+                    {editingComId ? 'Editar Compromiso' : 'Nuevo Compromiso'}
+                  </h3>
+                  <p className="text-xs text-[var(--text-soft)]">
+                    Se reflejan en la proyección; afectan el saldo real al pagarse.
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsCommitmentModalOpen(false)}
-                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg cursor-pointer"
+                aria-label="Cerrar"
+                className="flex h-11 w-11 sm:h-9 sm:w-9 shrink-0 items-center justify-center text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] rounded-lg cursor-pointer"
               >
                 <AppIcon name="x" className="h-4 w-4" />
               </button>
             </div>
 
-            <p className="text-xs text-[var(--text-soft)]">
-              Se reflejan en la proyección; afectan el saldo real al pagarse.
-            </p>
-
-            <form onSubmit={handleSaveCommitment} className="space-y-3">
+            <form onSubmit={handleSaveCommitment} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 space-y-3">
               <div>
                 <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
                   Nombre / Obligación
@@ -1456,7 +1463,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   placeholder="Ej. Antel, Tarjeta, Cuota TV"
                   value={comName}
                   onChange={(e) => setComName(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-hidden focus:border-[var(--blue)]"
+                  className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] placeholder-[var(--text-faint)]"
                 />
               </div>
 
@@ -1467,13 +1474,14 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   </label>
                   <PrivacyInput
                     type="number"
+                    inputMode="decimal"
                     required
                     min="1"
                     step="any"
                     placeholder="0"
                     value={comAmount}
                     onChange={(e) => setComAmount(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs tabular-nums text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                    className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs tabular-nums text-[var(--text)]"
                   />
                 </div>
 
@@ -1486,7 +1494,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                     required
                     value={comDate}
                     onChange={(e) => setComDate(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                    className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)]"
                   />
                 </div>
               </div>
@@ -1499,7 +1507,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   <select
                     value={comFreq}
                     onChange={(e) => setComFreq(e.target.value as any)}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                    className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)]"
                   >
                     <option value="monthly">Mensual</option>
                     <option value="weekly">Semanal</option>
@@ -1516,7 +1524,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   <select
                     value={comCategory}
                     onChange={(e) => setComCategory(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                    className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)]"
                   >
                     {(() => {
                       const allCats = getAllCategories(state.finance?.categories || []);
@@ -1559,11 +1567,12 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                       </label>
                       <input
                         type="number"
+                        inputMode="numeric"
                         min="1"
                         placeholder="Ej. 3"
                         value={comTotalOccurrences}
                         onChange={(e) => setComTotalOccurrences(e.target.value)}
-                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1.5 text-xs tabular-nums text-[var(--text)]"
+                        className="celestian-clean-field w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1.5 text-xs tabular-nums text-[var(--text)]"
                       />
                     </div>
                     <div>
@@ -1572,11 +1581,12 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                       </label>
                       <input
                         type="number"
+                        inputMode="numeric"
                         min="1"
                         placeholder="Ej. 2"
                         value={comRemainingOccurrences}
                         onChange={(e) => setComRemainingOccurrences(e.target.value)}
-                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1.5 text-xs tabular-nums text-[var(--text)]"
+                        className="celestian-clean-field w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1.5 text-xs tabular-nums text-[var(--text)]"
                       />
                     </div>
                   </div>
@@ -1587,12 +1597,13 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                     <div className="flex items-center gap-1.5">
                       <input
                         type="number"
+                        inputMode="decimal"
                         min="1"
                         step="any"
                         placeholder="Total compra (opcional)"
                         value={finTotalAmount}
                         onChange={(e) => setFinTotalAmount(e.target.value)}
-                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1 text-xs tabular-nums text-[var(--text)] placeholder-[var(--text-faint)]"
+                        className="celestian-clean-field w-full rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1 text-xs tabular-nums text-[var(--text)] placeholder-[var(--text-faint)]"
                       />
                       <button
                         type="button"
@@ -1606,7 +1617,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                             showToast('Ingresá el total de compra y cuotas totales para sugerir.', 'info');
                           }
                         }}
-                        className="px-2 py-1 text-[11px] font-semibold rounded-lg bg-[var(--surface-muted)] hover:bg-[var(--border)] text-[var(--text)] border border-[var(--border)] shrink-0 cursor-pointer"
+                        className="min-h-11 sm:min-h-0 px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-[var(--surface-muted)] hover:bg-[var(--border)] text-[var(--text)] border border-[var(--border)] shrink-0 cursor-pointer"
                         title="Calcular cuota sugerida (total / cuotas)"
                       >
                         Calcular
@@ -1623,7 +1634,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                 <select
                   value={comAccount}
                   onChange={(e) => setComAccount(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                  className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)]"
                 >
                   <option value="">Sin asignar</option>
                   {(state.finance.accounts || []).map((acc) => (
@@ -1643,21 +1654,22 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   placeholder="Detalles adicionales"
                   value={comNotes}
                   onChange={(e) => setComNotes(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-hidden focus:border-[var(--blue)]"
+                  className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] placeholder-[var(--text-faint)]"
                 />
               </div>
+              </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border)]">
+              <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--border)] bg-[var(--card)] px-5 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
                 <button
                   type="button"
                   onClick={resetComForm}
-                  className="px-4 py-2 text-xs font-bold rounded-xl border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
+                  className="min-h-11 sm:min-h-0 px-4 py-2 text-xs font-bold rounded-xl border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="primary-button py-2 px-4 text-xs font-bold cursor-pointer"
+                  className="min-h-11 sm:min-h-0 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white py-2 px-4 text-xs font-bold cursor-pointer shadow-xs"
                 >
                   {editingComId ? 'Guardar Cambios' : 'Registrar Compromiso'}
                 </button>
@@ -1670,37 +1682,44 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       {/* MODAL 3: Expected Income Form Modal */}
       {isIncomeModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
           onClick={() => setIsIncomeModalOpen(false)}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-label="Registrar Ingreso Previsto"
-            className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 max-w-lg w-full shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+            className="flex w-full max-w-lg max-h-[90dvh] flex-col overflow-hidden bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">💰</span>
-                <h3 className="section-title">
-                  {editingIncId ? 'Editar Ingreso Previsto' : 'Nuevo Ingreso Previsto'}
-                </h3>
+            <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-3.5 sm:px-6 sm:pt-5">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <AppIcon name="income" className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <h3 className="section-title">
+                    {editingIncId ? 'Editar Ingreso Previsto' : 'Nuevo Ingreso Previsto'}
+                  </h3>
+                  <p className="text-xs text-[var(--text-soft)]">
+                    Proyecta el ingreso; el saldo real cambia al confirmar el cobro.
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsIncomeModalOpen(false)}
-                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg cursor-pointer"
+                aria-label="Cerrar"
+                className="flex h-11 w-11 sm:h-9 sm:w-9 shrink-0 items-center justify-center text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] rounded-lg cursor-pointer"
               >
                 <AppIcon name="x" className="h-4 w-4" />
               </button>
             </div>
 
-            <p className="text-xs text-[var(--text-soft)]">
-              Proyecta el ingreso; el saldo real cambia al confirmar el cobro.
-            </p>
-
-            <form onSubmit={handleSaveExpectedIncome} className="space-y-3">
+            <form onSubmit={handleSaveExpectedIncome} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 space-y-3">
               <div>
                 <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
                   Concepto / Fuente
@@ -1711,7 +1730,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   placeholder="Ej. Sueldo, Cobro freelance, Alquiler"
                   value={incName}
                   onChange={(e) => setIncName(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] placeholder-[var(--text-faint)] focus:outline-hidden focus:border-[var(--blue)]"
+                  className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] placeholder-[var(--text-faint)]"
                 />
               </div>
 
@@ -1722,13 +1741,14 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   </label>
                   <PrivacyInput
                     type="number"
+                    inputMode="decimal"
                     required
                     min="1"
                     step="any"
                     placeholder="0"
                     value={incAmount}
                     onChange={(e) => setIncAmount(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs tabular-nums text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                    className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs tabular-nums text-[var(--text)]"
                   />
                 </div>
 
@@ -1741,7 +1761,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                     required
                     value={incDate}
                     onChange={(e) => setIncDate(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                    className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)]"
                   />
                 </div>
               </div>
@@ -1753,7 +1773,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                 <select
                   value={incFreq}
                   onChange={(e) => setIncFreq(e.target.value as ExpectedIncomeFrequency)}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                  className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)]"
                 >
                   <option value="monthly">Mensual (mismo día de cada mes)</option>
                   <option value="biweekly">Quincenal (cada 14 días)</option>
@@ -1771,7 +1791,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   <select
                     value={incCategory}
                     onChange={(e) => setIncCategory(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                    className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)]"
                   >
                     <option value="">Sin categoría</option>
                     {(() => {
@@ -1797,7 +1817,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   <select
                     value={incAccount}
                     onChange={(e) => setIncAccount(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                    className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)]"
                   >
                     <option value="">Sin asignar</option>
                     {(state.finance.accounts || []).map((acc) => (
@@ -1818,22 +1838,23 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                     type="date"
                     value={incEndDate}
                     onChange={(e) => setIncEndDate(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                    className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)]"
                   />
                 </div>
               )}
+              </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border)]">
+              <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--border)] bg-[var(--card)] px-5 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
                 <button
                   type="button"
                   onClick={resetIncomeForm}
-                  className="px-4 py-2 text-xs font-bold rounded-xl border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
+                  className="min-h-11 sm:min-h-0 px-4 py-2 text-xs font-bold rounded-xl border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="primary-button py-2 px-4 text-xs font-bold cursor-pointer"
+                  className="min-h-11 sm:min-h-0 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white py-2 px-4 text-xs font-bold cursor-pointer shadow-xs"
                 >
                   {editingIncId ? 'Guardar Cambios' : 'Registrar Ingreso Previsto'}
                 </button>
@@ -1846,48 +1867,55 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       {/* MODAL 4: Payment Confirmation Modal */}
       {payingCommitment && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
           onClick={() => setPayingCommitment(null)}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-label="Registrar pago de Compromiso"
-            className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4"
+            className="flex w-full max-w-md max-h-[90dvh] flex-col overflow-hidden bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">💳</span>
+            <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-3.5 sm:px-6 sm:pt-5">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#4F46E5]/10 text-[#4F46E5] dark:bg-[#4F46E5]/20 dark:text-[#818CF8]">
+                  <AppIcon name="wallet" className="h-4 w-4" />
+                </span>
                 <h3 className="section-title">Registrar pago</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setPayingCommitment(null)}
-                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg cursor-pointer"
+                aria-label="Cerrar"
+                className="flex h-11 w-11 sm:h-9 sm:w-9 shrink-0 items-center justify-center text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] rounded-lg cursor-pointer"
               >
                 <AppIcon name="x" className="h-4 w-4" />
               </button>
             </div>
 
-            <p className="text-xs text-[var(--text-soft)]">
-              Se registrará un gasto real y se avanzará el vencimiento de{' '}
-              <strong className="text-[var(--text)]"><PrivateFinancialText>{payingCommitment.name}</PrivateFinancialText></strong>.
-            </p>
+            <form onSubmit={handleExecutePayment} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 space-y-3">
+              <p className="text-xs text-[var(--text-soft)]">
+                Se registrará un gasto real y se avanzará el vencimiento de{' '}
+                <strong className="text-[var(--text)]"><PrivateFinancialText>{payingCommitment.name}</PrivateFinancialText></strong>.
+              </p>
 
-            <form onSubmit={handleExecutePayment} className="space-y-3">
               <div>
                 <label className="text-[10px] font-black uppercase text-[var(--text-faint)] block mb-1">
                   Monto a pagar ({confirmedFinancialCurrency(payingCommitment.currency) ?? 'moneda sin confirmar'})
                 </label>
                 <PrivacyInput
                   type="number"
+                  inputMode="decimal"
                   required
                   min="0.01"
                   step="any"
                   value={payAmount}
                   onChange={(e) => setPayAmount(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs tabular-nums text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                  className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs tabular-nums text-[var(--text)]"
                 />
                 <span className="text-[10px] text-[var(--text-faint)] block mt-0.5">
                   Podés ajustar el valor si la factura o cuota real difiere del estimado.
@@ -1901,7 +1929,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                 <select
                   value={payAccount}
                   onChange={(e) => setPayAccount(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                  className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)]"
                 >
                   {(state.finance.accounts || []).map((acc) => (
                     <option key={acc.id} value={acc.id}>
@@ -1919,7 +1947,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   type="date"
                   value={payDate}
                   onChange={(e) => setPayDate(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs tabular-nums text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                  className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs tabular-nums text-[var(--text)]"
                 />
               </div>
 
@@ -1958,12 +1986,13 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   </span>
                 </label>
               </div>
+              </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border)]">
+              <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--border)] bg-[var(--card)] px-5 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
                 <button
                   type="button"
                   onClick={() => setPayingCommitment(null)}
-                  className="px-4 py-2 text-xs font-bold rounded-xl border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
+                  className="min-h-11 sm:min-h-0 px-4 py-2 text-xs font-bold rounded-xl border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
                 >
                   Cancelar
                 </button>
@@ -1979,10 +2008,10 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                     <button
                       type="submit"
                       disabled={isSubmitDisabled}
-                      className={`px-4 py-2 text-xs font-bold rounded-xl text-white shadow-2xs flex items-center gap-1.5 ${
+                      className={`min-h-11 sm:min-h-0 px-4 py-2 text-xs font-bold rounded-xl text-white shadow-2xs flex items-center gap-1.5 ${
                         isSubmitDisabled
-                          ? 'bg-blue-600/50 cursor-not-allowed opacity-60'
-                          : 'bg-[var(--blue)] hover:bg-[var(--blue-hover)] cursor-pointer'
+                          ? 'bg-[#4F46E5]/50 cursor-not-allowed opacity-60'
+                          : 'bg-[#4F46E5] hover:bg-[#4338CA] cursor-pointer'
                       }`}
                     >
                       <AppIcon name="check" className="h-3.5 w-3.5" />
@@ -2020,22 +2049,24 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
 
         return (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
+            className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
             onClick={() => setConfirmingIncome(null)}
           >
             <div
               role="dialog"
               aria-modal="true"
               aria-label="Confirmar cobro de previsión"
-              className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4"
+              className="flex w-full max-w-md max-h-[90dvh] flex-col overflow-hidden bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between border-b border-[var(--border)] pb-3">
-                <div className="flex items-center gap-2">
+              <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+
+              <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-5 py-3.5 sm:px-6 sm:pt-5">
+                <div className="flex items-center gap-2 min-w-0">
                   <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                     <AppIcon name="trendingUp" className="h-4 w-4" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <h3 className="text-sm font-bold text-[var(--text)]">Confirmar cobro previsto</h3>
                     <p className="text-xs text-[var(--text-soft)]">
                       <PrivateFinancialText>{confirmingIncome.name}</PrivateFinancialText> · {state.settings?.privacyMode ? '••••' : formatPlannedAmount(confirmingIncome.amount, confirmingIncome.currency)}
@@ -2045,13 +2076,15 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setConfirmingIncome(null)}
-                  className="p-1 rounded-lg text-[var(--text-faint)] hover:text-[var(--text)] cursor-pointer"
+                  aria-label="Cerrar"
+                  className="flex h-11 w-11 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer"
                 >
                   <AppIcon name="x" className="h-4 w-4" />
                 </button>
               </div>
 
-              <form onSubmit={handleExecuteIncomeConfirmation} className="space-y-4">
+              <form onSubmit={handleExecuteIncomeConfirmation} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 space-y-4">
                 {matchingCandidates.length > 0 ? (
                   <div className="space-y-3">
                     <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-700 dark:text-amber-400 space-y-1">
@@ -2065,7 +2098,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                     </div>
 
                     <div className="space-y-2">
-                      <label className="flex items-start gap-2.5 p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] cursor-pointer transition-all hover:border-[var(--blue)]">
+                      <label className="flex items-start gap-2.5 p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] cursor-pointer transition-all hover:border-[#4F46E5]">
                         <input
                           type="radio"
                           name="confirmAction"
@@ -2117,7 +2150,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                         </div>
                       </label>
 
-                      <label className="flex items-start gap-2.5 p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] cursor-pointer transition-all hover:border-[var(--blue)]">
+                      <label className="flex items-start gap-2.5 p-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] cursor-pointer transition-all hover:border-[#4F46E5]">
                         <input
                           type="radio"
                           name="confirmAction"
@@ -2154,7 +2187,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                       <select
                         value={confirmIncomeAccountId}
                         onChange={(e) => setConfirmIncomeAccountId(e.target.value)}
-                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                        className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs text-[var(--text)]"
                       >
                         {(state.finance.accounts || []).map((acc) => (
                           <option key={acc.id} value={acc.id}>
@@ -2172,7 +2205,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                         type="date"
                         value={confirmIncomeDate}
                         onChange={(e) => setConfirmIncomeDate(e.target.value)}
-                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs tabular-nums text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                        className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs tabular-nums text-[var(--text)]"
                       />
                     </div>
 
@@ -2198,6 +2231,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                     )}
                   </div>
                 )}
+                </div>
 
                 {(() => {
                   const isFuture = Boolean(
@@ -2210,18 +2244,18 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                     : Boolean(isFuture && !confirmIncomeIsAdvance);
 
                   return (
-                    <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--border)]">
+                    <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--border)] bg-[var(--card)] px-5 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
                       <button
                         type="button"
                         onClick={() => setConfirmingIncome(null)}
-                        className="px-4 py-2 text-xs font-bold rounded-xl border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
+                        className="min-h-11 sm:min-h-0 px-4 py-2 text-xs font-bold rounded-xl border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
                       >
                         Cancelar
                       </button>
                       <button
                         type="submit"
                         disabled={isSubmitDisabled}
-                        className={`px-4 py-2 text-xs font-bold rounded-xl text-white shadow-2xs flex items-center gap-1.5 ${
+                        className={`min-h-11 sm:min-h-0 px-4 py-2 text-xs font-bold rounded-xl text-white shadow-2xs flex items-center gap-1.5 ${
                           isSubmitDisabled
                             ? 'bg-emerald-600/50 cursor-not-allowed opacity-60'
                             : 'bg-emerald-600 hover:bg-emerald-500 cursor-pointer'
@@ -2246,31 +2280,37 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       {/* MODAL 5: Cushion Config Modal */}
       {isCushionModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
           onClick={() => setIsCushionModalOpen(false)}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-label="Colchón Financiero Mínimo"
-            className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4"
+            className="flex w-full max-w-md max-h-[90dvh] flex-col overflow-hidden bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
+            <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+
+            <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-5 py-3.5 sm:px-6 sm:pt-5">
               <div className="flex items-center gap-2">
-                <span className="text-xl">🛡️</span>
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[#4F46E5]/10 text-[#4F46E5] dark:bg-[#4F46E5]/20 dark:text-[#818CF8]">
+                  <AppIcon name="shield" className="h-4 w-4" />
+                </span>
                 <h3 className="section-title">Colchón mínimo</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsCushionModalOpen(false)}
-                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg cursor-pointer"
+                aria-label="Cerrar"
+                className="flex h-11 w-11 sm:h-9 sm:w-9 shrink-0 items-center justify-center text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] rounded-lg cursor-pointer"
               >
                 <AppIcon name="x" className="h-4 w-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveCushion} className="space-y-4">
+            <form onSubmit={handleSaveCushion} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 space-y-4">
               <p className="text-xs text-[var(--text-soft)]">Es una referencia para los avisos; no modifica tu saldo.</p>
               <div className="flex items-center justify-between p-3 rounded-xl bg-[var(--surface-muted)] border border-[var(--border)]">
                 <div>
@@ -2291,13 +2331,14 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   </label>
                   <PrivacyInput
                     type="number"
+                    inputMode="decimal"
                     required
                     min="0"
                     step="any"
                     value={cushionInput}
                     onChange={(e) => setCushionInput(e.target.value)}
                     placeholder="Ej. 10000"
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-sm tabular-nums font-bold text-[var(--text)] focus:outline-hidden focus:border-[var(--blue)]"
+                    className="celestian-clean-field w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-sm tabular-nums font-bold text-[var(--text)]"
                   />
                   <p className="text-[11px] text-[var(--text-soft)] mt-1">
                     Saldo actual en cuentas: <PrivacyAmount as="strong">{cushionBalanceLabel}</PrivacyAmount>
@@ -2309,18 +2350,19 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
                   )}
                 </div>
               )}
+              </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--border)]">
+              <div className="flex shrink-0 items-center justify-end gap-2 border-t border-[var(--border)] bg-[var(--card)] px-5 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
                 <button
                   type="button"
                   onClick={() => setIsCushionModalOpen(false)}
-                  className="px-4 py-2 text-xs font-bold rounded-xl border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
+                  className="min-h-11 sm:min-h-0 px-4 py-2 text-xs font-bold rounded-xl border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="primary-button py-2 px-4 text-xs font-bold cursor-pointer"
+                  className="min-h-11 sm:min-h-0 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white py-2 px-4 text-xs font-bold cursor-pointer shadow-xs"
                 >
                   Guardar Colchón
                 </button>
@@ -2370,27 +2412,30 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       {/* MODAL 10: Nueva cuenta (desde Onboarding o botón rápido) */}
       {isAddAccountModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
           onClick={() => setIsAddAccountModalOpen(false)}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-label="Nueva cuenta"
-            className="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto"
+            className="flex w-full max-w-sm max-h-[90dvh] flex-col overflow-hidden bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
+            <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+
+            <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)]/60 px-5 py-3.5 sm:px-6">
               <h3 className="font-extrabold text-sm text-[var(--text)]">Nueva cuenta</h3>
               <button
                 type="button"
                 onClick={() => setIsAddAccountModalOpen(false)}
-                className="text-[var(--text-faint)] hover:text-[var(--text)] p-1 rounded-lg cursor-pointer"
+                aria-label="Cerrar"
+                className="flex h-11 w-11 sm:h-9 sm:w-9 items-center justify-center text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] rounded-lg cursor-pointer"
               >
-                ✕
+                <AppIcon name="x" className="h-4 w-4" />
               </button>
             </div>
-            <form onSubmit={handleCreateFirstAccount} className="space-y-3">
+            <form onSubmit={handleCreateFirstAccount} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6 space-y-3">
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Nombre de la cuenta
