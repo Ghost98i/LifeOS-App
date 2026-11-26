@@ -68,7 +68,7 @@ export function getSafeJobHref(raw?: string | null): string | null {
 }
 
 export function hasAdvancedJobDetails(
-  application: Pick<JobApplication, 'reclutador' | 'notas' | 'followUpNotes' | 'nextAction' | 'nextActionDate' | 'keyDates'>
+  application: Pick<JobApplication, 'reclutador' | 'notas' | 'followUpNotes' | 'nextAction' | 'nextActionDate' | 'keyDates' | 'salaryExpectation'>
 ): boolean {
   return Boolean(
     application.reclutador?.trim() ||
@@ -76,6 +76,7 @@ export function hasAdvancedJobDetails(
     application.followUpNotes?.trim() ||
     application.nextAction?.trim() ||
     application.nextActionDate?.trim() ||
+    (typeof application.salaryExpectation === 'number' && application.salaryExpectation > 0) ||
     (Array.isArray(application.keyDates) && application.keyDates.length > 0)
   );
 }
@@ -249,10 +250,17 @@ export function saveJobApplication(
   }
 
   const cleanSource = typeof draft.source === 'string' ? draft.source.trim() : '';
+  const cleanSalary =
+    typeof draft.salaryExpectation === 'number' && Number.isFinite(draft.salaryExpectation) && draft.salaryExpectation > 0
+      ? draft.salaryExpectation
+      : undefined;
+  const cleanSalaryCurrency = cleanSalary ? (draft.salaryCurrency === 'USD' ? 'USD' : 'UYU') : undefined;
   const normalizedDraft: JobApplicationDraft = {
     ...draft,
     link: normalizedLink.url,
     ...(cleanSource ? { source: cleanSource } : { source: undefined }),
+    salaryExpectation: cleanSalary,
+    salaryCurrency: cleanSalaryCurrency,
   };
 
   if (editingId) {

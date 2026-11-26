@@ -23,7 +23,7 @@ const application = (id: string, estado: JobApplication['estado']): JobApplicati
 test('Trabajo vacío muestra bienvenida limpia, oculta filtros redundantes y métricas en cero', () => {
   const html = renderTrabajo();
   assert.match(html, /Seguí tus postulaciones sin perder el hilo/);
-  assert.match(html, /CV enviado → Entrevista → Oferta \/ Rechazado/);
+  assert.match(html, /CV enviado[\s\S]*lucide-arrow-right[\s\S]*Entrevista[\s\S]*lucide-arrow-right[\s\S]*Oferta \/ Rechazado/);
   assert.match(html, /Registrar postulación privada/);
   assert.match(html, /Registrar concurso público/);
   assert.doesNotMatch(html, /Nueva postulación/);

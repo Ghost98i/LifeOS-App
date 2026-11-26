@@ -40,7 +40,7 @@ const AGENDA_TAB_FOCUS =
   'agenda-clean-tab outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
 
 const AGENDA_INPUT_CLASS =
-  'agenda-clean-input mt-1.5 min-h-11 w-full rounded-xl border border-slate-200/90 bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-slate-400 outline-none focus:outline-none focus-visible:outline-none dark:border-white/[0.1] dark:placeholder:text-slate-500';
+  'agenda-clean-input celestian-clean-field mt-1.5 min-h-11 w-full rounded-xl border border-slate-200/90 bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--text)] placeholder:text-slate-400 outline-none focus:outline-none focus-visible:outline-none dark:border-white/[0.1] dark:placeholder:text-slate-500';
 
 const recurrenceHint = (freq: TaskRecurring['freq'], days: DayKey[] = []) => {
   if (days.length > 0) return 'Los días elegidos determinan cuándo aparece; la frecuencia no limita esos días.';
@@ -415,7 +415,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       aria-label={completed ? `Reabrir ${taskName}` : `Completar ${taskName}`}
       aria-pressed={completed}
       title={completed ? 'Reabrir para hoy' : 'Completar para hoy'}
-      className={`lifeos-task-check agenda-completion-check group relative -ml-2 flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer ${completed ? 'is-completed' : 'is-pending'}`}
+      className={`lifeos-task-check agenda-completion-check group relative -ml-2 flex min-h-10 min-w-10 max-sm:min-h-11 max-sm:min-w-11 shrink-0 items-center justify-center rounded-full transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70 cursor-pointer ${completed ? 'is-completed' : 'is-pending'}`}
     >
       <CompletionCheck checked={completed} size="md" />
     </button>
@@ -927,7 +927,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               <button
                 type="button"
                 onClick={(e) => openWeeklyBlock(item.day, e.currentTarget)}
-                className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer"
+                className={`inline-flex min-h-11 sm:min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer ${AGENDA_TAB_FOCUS}`}
               >
                 <AppIcon name="plus" className="h-4 w-4" />
                 <span>Actividad semanal</span>
@@ -936,7 +936,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 <button
                   type="button"
                   onClick={() => openNewEvent(item.date)}
-                  className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-4 py-2 text-xs font-semibold text-[var(--text)] transition-colors hover:border-[#4F46E5] hover:text-[#4F46E5] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] dark:border-white/[0.08] dark:bg-transparent dark:hover:border-indigo-400 dark:hover:text-indigo-300 cursor-pointer"
+                  className={`inline-flex min-h-11 sm:min-h-10 items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-4 py-2 text-xs font-semibold text-[var(--text)] transition-colors hover:border-[#4F46E5] hover:text-[#4F46E5] dark:border-white/[0.08] dark:bg-transparent dark:hover:border-indigo-400 dark:hover:text-indigo-300 cursor-pointer ${AGENDA_TAB_FOCUS}`}
                 >
                   <AppIcon name="plus" className="h-4 w-4" />
                   <span>Compromiso puntual</span>
@@ -946,7 +946,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 <button
                   type="button"
                   onClick={(e) => openTemplateAction('load', e.currentTarget)}
-                  className="inline-flex min-h-10 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-[#4F46E5] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] dark:text-indigo-300 cursor-pointer"
+                  className={`inline-flex min-h-11 sm:min-h-10 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-[#4F46E5] hover:underline dark:text-indigo-300 cursor-pointer ${AGENDA_TAB_FOCUS}`}
                 >
                   <span>Usar plantilla sugerida</span>
                 </button>
@@ -1004,9 +1004,10 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setActiveSection('rutinas')}
-                  className="inline-flex min-h-10 shrink-0 items-center px-2 text-xs font-semibold text-[#4F46E5] hover:underline dark:text-indigo-300 cursor-pointer"
+                  className={`inline-flex min-h-11 sm:min-h-10 shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-[#4F46E5] hover:underline dark:text-indigo-300 cursor-pointer ${AGENDA_TAB_FOCUS}`}
                 >
-                  Ver rutinas →
+                  <span>Ver rutinas</span>
+                  <AppIcon name="arrowRight" className="h-3.5 w-3.5" />
                 </button>
               </div>
             )}
@@ -1124,7 +1125,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 <button
                   type="button"
                   onClick={(e) => openWeeklyBlock(days[mobileDay].day, e.currentTarget)}
-                  className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-2.5 py-2 text-[12px] font-semibold text-white transition-colors hover:bg-[#4338CA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 sm:px-3.5 sm:text-xs cursor-pointer"
+                  className={`inline-flex min-h-11 sm:min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-2.5 py-2 text-[12px] font-semibold text-white transition-colors hover:bg-[#4338CA] sm:px-3.5 sm:text-xs cursor-pointer ${AGENDA_TAB_FOCUS}`}
                 >
                   <AppIcon name="plus" className="h-3.5 w-3.5 shrink-0 sm:h-4 sm:w-4" />
                   <span className="truncate">Actividad semanal</span>
@@ -1134,7 +1135,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   <button
                     type="button"
                     onClick={() => openNewEvent(dates[mobileDay])}
-                    className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-2.5 py-2 text-[12px] font-semibold text-[var(--text)] transition-colors hover:border-[#4F46E5] hover:text-[#4F46E5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 dark:border-white/[0.08] dark:bg-transparent dark:hover:border-[#818CF8] dark:hover:text-[#818CF8] sm:px-3.5 sm:text-xs cursor-pointer"
+                    className={`inline-flex min-h-11 sm:min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-2.5 py-2 text-[12px] font-semibold text-[var(--text)] transition-colors hover:border-[#4F46E5] hover:text-[#4F46E5] dark:border-white/[0.08] dark:bg-transparent dark:hover:border-[#818CF8] dark:hover:text-[#818CF8] sm:px-3.5 sm:text-xs cursor-pointer ${AGENDA_TAB_FOCUS}`}
                   >
                     <AppIcon name="plus" className="h-3.5 w-3.5 shrink-0 text-[#4F46E5] dark:text-[#818CF8] sm:h-4 sm:w-4" />
                     <span className="truncate">Compromiso puntual</span>
@@ -1238,15 +1239,16 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       )}
 
       {weeklyDraft && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4" onClick={closeWeeklyBlock}>
+        <div className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4" onClick={closeWeeklyBlock}>
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="agenda-weekly-title"
             aria-describedby="agenda-weekly-hint"
-            className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
+            className="max-h-[90dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
             onClick={(event) => event.stopPropagation()}
           >
+            <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />
             <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-3 dark:border-white/[0.06]">
               <div>
                 <h2 id="agenda-weekly-title" className="text-base font-bold text-[var(--text)]">Nueva actividad semanal</h2>
@@ -1257,7 +1259,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 onClick={closeWeeklyBlock}
                 aria-label="Cerrar modal"
                 title="Cerrar"
-                className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-xl text-[var(--text-soft)] transition-colors hover:bg-slate-100 hover:text-[var(--text)] outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 dark:hover:bg-white/[0.06] cursor-pointer"
+                className={`flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 shrink-0 items-center justify-center rounded-xl text-[var(--text-soft)] transition-colors hover:bg-slate-100 hover:text-[var(--text)] dark:hover:bg-white/[0.06] cursor-pointer ${AGENDA_TAB_FOCUS}`}
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -1270,7 +1272,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   autoFocus
                   type="text"
                   maxLength={200}
-                  placeholder="Ej: Gimnasio, inglés, planificación..."
+                  placeholder="Ej.: Gimnasio, inglés, planificación..."
                   value={weeklyDraft.activity}
                   onChange={(event) => {
                     setWeeklyDraft({ ...weeklyDraft, activity: event.target.value });
@@ -1319,8 +1321,8 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 </div>
               </div>
               <div className="flex justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
-                <button type="button" onClick={closeWeeklyBlock} className="min-h-10 rounded-xl border border-slate-200/80 px-4 py-2 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] dark:border-white/[0.08] cursor-pointer">Cancelar</button>
-                <button type="submit" className="min-h-10 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer">Guardar</button>
+                <button type="button" onClick={closeWeeklyBlock} className={`min-h-11 sm:min-h-10 rounded-xl border border-slate-200/80 px-4 py-2 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] dark:border-white/[0.08] cursor-pointer ${AGENDA_TAB_FOCUS}`}>Cancelar</button>
+                <button type="submit" className={`min-h-11 sm:min-h-10 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer ${AGENDA_TAB_FOCUS}`}>Guardar</button>
               </div>
             </form>
           </div>
@@ -1328,14 +1330,15 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       )}
 
       {eventDraft && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4" onClick={() => setEventDraft(null)}>
+        <div className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4" onClick={() => setEventDraft(null)}>
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="agenda-event-title"
-            className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
+            className="max-h-[90dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
             onClick={(event) => event.stopPropagation()}
           >
+            <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />
             <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-white/[0.06]">
               <h2 id="agenda-event-title" className="text-base font-bold text-[var(--text)]">
                 {eventDraft.id ? 'Editar compromiso' : 'Nuevo compromiso puntual'}
@@ -1345,7 +1348,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 onClick={() => setEventDraft(null)}
                 aria-label="Cerrar modal"
                 title="Cerrar"
-                className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-xl text-[var(--text-soft)] transition-colors hover:bg-slate-100 hover:text-[var(--text)] outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 dark:hover:bg-white/[0.06] cursor-pointer"
+                className={`flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 shrink-0 items-center justify-center rounded-xl text-[var(--text-soft)] transition-colors hover:bg-slate-100 hover:text-[var(--text)] dark:hover:bg-white/[0.06] cursor-pointer ${AGENDA_TAB_FOCUS}`}
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -1400,7 +1403,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                   <button
                     type="button"
                     onClick={() => deleteEvent(eventDraft.id!)}
-                    className="mr-auto min-h-10 rounded-xl px-2.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10 cursor-pointer"
+                    className={`mr-auto min-h-11 sm:min-h-10 rounded-xl px-2.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10 cursor-pointer ${AGENDA_TAB_FOCUS}`}
                   >
                     Eliminar
                   </button>
@@ -1408,13 +1411,13 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setEventDraft(null)}
-                  className="min-h-10 rounded-xl border border-slate-200/80 px-4 py-2 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] dark:border-white/[0.08] cursor-pointer"
+                  className={`min-h-11 sm:min-h-10 rounded-xl border border-slate-200/80 px-4 py-2 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] dark:border-white/[0.08] cursor-pointer ${AGENDA_TAB_FOCUS}`}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="min-h-10 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer"
+                  className={`min-h-11 sm:min-h-10 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer ${AGENDA_TAB_FOCUS}`}
                 >
                   Guardar
                 </button>
@@ -1425,14 +1428,15 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       )}
 
       {templateAction && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4" onClick={closeTemplateAction}>
+        <div className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4" onClick={closeTemplateAction}>
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="agenda-template-title"
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-5 space-y-4 shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-4 shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
             onClick={event => event.stopPropagation()}
           >
+            <div className="mx-auto mb-1 h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />
             <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-white/[0.06]">
               <h2 id="agenda-template-title" className="text-base font-bold text-[var(--text)]">
                 {templateAction === 'load' ? 'Aplicar plantilla sugerida' : 'Vaciar horario recurrente'}
@@ -1442,7 +1446,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 onClick={closeTemplateAction}
                 aria-label="Cerrar modal"
                 title="Cerrar"
-                className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-xl text-[var(--text-soft)] transition-colors hover:bg-slate-100 hover:text-[var(--text)] outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 dark:hover:bg-white/[0.06] cursor-pointer"
+                className={`flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 shrink-0 items-center justify-center rounded-xl text-[var(--text-soft)] transition-colors hover:bg-slate-100 hover:text-[var(--text)] dark:hover:bg-white/[0.06] cursor-pointer ${AGENDA_TAB_FOCUS}`}
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -1454,11 +1458,11 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               {' '}Tus rutinas y compromisos puntuales se conservan.
             </p>
             <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
-              <button type="button" autoFocus onClick={closeTemplateAction} className="min-h-10 rounded-xl border border-slate-200/80 px-4 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] dark:border-white/[0.08] cursor-pointer">Cancelar</button>
+              <button type="button" autoFocus onClick={closeTemplateAction} className={`min-h-11 sm:min-h-10 rounded-xl border border-slate-200/80 px-4 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] dark:border-white/[0.08] cursor-pointer ${AGENDA_TAB_FOCUS}`}>Cancelar</button>
               <button
                 type="button"
                 onClick={confirmTemplateAction}
-                className={`min-h-10 rounded-xl px-4 text-xs font-semibold text-white transition-colors cursor-pointer ${
+                className={`min-h-11 sm:min-h-10 rounded-xl px-4 text-xs font-semibold text-white transition-colors cursor-pointer ${AGENDA_TAB_FOCUS} ${
                   templateAction === 'clear'
                     ? 'bg-rose-600 hover:bg-rose-700'
                     : 'bg-[#4F46E5] hover:bg-[#4338CA]'
@@ -1472,14 +1476,15 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       )}
 
       {editingTask && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4" onClick={() => setEditingTask(null)}>
+        <div className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4" onClick={() => setEditingTask(null)}>
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="agenda-edit-routine-title"
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
             onClick={event => event.stopPropagation()}
           >
+            <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />
             <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3 dark:border-white/[0.06]">
               <h2 id="agenda-edit-routine-title" className="text-base font-bold text-[var(--text)]">Editar rutina</h2>
               <button
@@ -1487,7 +1492,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 onClick={() => setEditingTask(null)}
                 aria-label="Cerrar modal"
                 title="Cerrar"
-                className="flex min-h-10 min-w-10 shrink-0 items-center justify-center rounded-xl text-[var(--text-soft)] transition-colors hover:bg-slate-100 hover:text-[var(--text)] outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 dark:hover:bg-white/[0.06] cursor-pointer"
+                className={`flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 shrink-0 items-center justify-center rounded-xl text-[var(--text-soft)] transition-colors hover:bg-slate-100 hover:text-[var(--text)] dark:hover:bg-white/[0.06] cursor-pointer ${AGENDA_TAB_FOCUS}`}
               >
                 <X className="h-4 w-4" aria-hidden="true" />
               </button>
@@ -1519,7 +1524,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                       aria-label={DAY_LABELS[day]}
                       aria-pressed={editingTask.days?.includes(day) || false}
                       onClick={() => toggleDaySelection(day, editingTask.days || [], days => setEditingTask({ ...editingTask, days: days.length ? days : undefined }))}
-                      className={`min-h-10 min-w-10 rounded-xl border px-2.5 text-xs font-semibold transition-colors cursor-pointer ${
+                      className={`min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 rounded-xl border px-2.5 text-xs font-semibold transition-colors cursor-pointer ${AGENDA_TAB_FOCUS} ${
                         editingTask.days?.includes(day)
                           ? 'border-[#4F46E5] bg-[#4F46E5] text-white'
                           : 'border-slate-200/80 text-[var(--text-soft)] hover:text-[var(--text)] dark:border-white/[0.08]'
@@ -1538,8 +1543,8 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 </select>
               </div>
               <div className="flex justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
-                <button type="button" onClick={() => setEditingTask(null)} className="min-h-10 rounded-xl border border-slate-200/80 px-4 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] dark:border-white/[0.08] cursor-pointer">Cancelar</button>
-                <button type="submit" className="min-h-10 rounded-xl bg-[#4F46E5] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer">Guardar rutina</button>
+                <button type="button" onClick={() => setEditingTask(null)} className={`min-h-11 sm:min-h-10 rounded-xl border border-slate-200/80 px-4 text-xs font-semibold text-[var(--text-soft)] hover:text-[var(--text)] dark:border-white/[0.08] cursor-pointer ${AGENDA_TAB_FOCUS}`}>Cancelar</button>
+                <button type="submit" className={`min-h-11 sm:min-h-10 rounded-xl bg-[#4F46E5] px-4 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer ${AGENDA_TAB_FOCUS}`}>Guardar rutina</button>
               </div>
             </form>
           </div>
@@ -1549,16 +1554,17 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       {/* Modal / Drawer for editing agenda block */}
       {editingBlock && (
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in"
+          className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4 animate-in fade-in"
           onClick={() => setEditingBlock(null)}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="edit-agenda-block-title"
-            className="bg-white dark:bg-[#0D111A] border border-slate-200/80 dark:border-white/[0.08] rounded-2xl p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] max-w-md w-full max-h-[90dvh] overflow-y-auto space-y-4 shadow-xl"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-4 shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
             onClick={(e) => e.stopPropagation()}
           >
+            <div className="mx-auto mb-1 h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/[0.06] pb-3">
               <div className="flex items-center gap-2">
                 <Pencil className="h-4 w-4 text-[#4F46E5] dark:text-[#818CF8]" aria-hidden="true" />
@@ -1567,7 +1573,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               <button
                 type="button"
                 onClick={() => setEditingBlock(null)}
-                className="flex min-h-10 min-w-10 items-center justify-center rounded-xl text-[var(--text-soft)] hover:bg-slate-100 hover:text-[var(--text)] outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 dark:hover:bg-white/[0.06] cursor-pointer"
+                className={`flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 items-center justify-center rounded-xl text-[var(--text-soft)] hover:bg-slate-100 hover:text-[var(--text)] dark:hover:bg-white/[0.06] cursor-pointer ${AGENDA_TAB_FOCUS}`}
                 aria-label="Cerrar modal"
                 title="Cerrar"
               >
@@ -1577,24 +1583,26 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
 
             <form onSubmit={handleSaveEditedBlock} className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-[var(--text-soft)] block">
+                <label htmlFor="agenda-edit-block-activity" className="text-xs font-semibold text-[var(--text-soft)] block">
                   Actividad
                 </label>
                 <input
+                  id="agenda-edit-block-activity"
                   type="text"
                   value={editingBlock.activity}
                   onChange={(e) => setEditingBlock({ ...editingBlock, activity: e.target.value })}
-                  placeholder="Ej: Ir al Gimnasio"
+                  placeholder="Ej.: Ir al gimnasio"
                   className={`${AGENDA_INPUT_CLASS} font-medium`}
                 />
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="text-xs font-semibold text-[var(--text-soft)] block">
+                  <label htmlFor="agenda-edit-block-day" className="text-xs font-semibold text-[var(--text-soft)] block">
                     Día de la semana
                   </label>
                   <select
+                    id="agenda-edit-block-day"
                     value={editingBlock.newDay}
                     onChange={(e) =>
                       setEditingBlock({ ...editingBlock, newDay: e.target.value as DayKey })
@@ -1610,29 +1618,29 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 </div>
 
                 <div>
-                  <label className="text-xs font-semibold text-[var(--text-soft)] block">
-                    Horario (HH:MM)
+                  <label htmlFor="agenda-edit-block-time" className="text-xs font-semibold text-[var(--text-soft)] block">
+                    Hora opcional
                   </label>
                   <input
-                    type="text"
+                    id="agenda-edit-block-time"
+                    type="time"
                     value={editingBlock.time}
                     onChange={(e) => setEditingBlock({ ...editingBlock, time: e.target.value })}
-                    placeholder="Ej: 09:00"
                     className={`${AGENDA_INPUT_CLASS} tabular-nums font-medium`}
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-[var(--text-soft)] block">Esfuerzo mental</label>
-                <select value={editingBlock.effort} onChange={(e) => setEditingBlock({ ...editingBlock, effort: e.target.value as EffortLevel })} className={`${AGENDA_INPUT_CLASS} font-medium`}>
+                <label htmlFor="agenda-edit-block-effort" className="text-xs font-semibold text-[var(--text-soft)] block">Esfuerzo mental</label>
+                <select id="agenda-edit-block-effort" value={editingBlock.effort} onChange={(e) => setEditingBlock({ ...editingBlock, effort: e.target.value as EffortLevel })} className={`${AGENDA_INPUT_CLASS} font-medium`}>
                   <option value="low">Bajo</option><option value="medium">Medio</option><option value="high">Alto</option>
                 </select>
               </div>
 
               {/* Task Linking Section */}
               <div className="border-t border-slate-100 dark:border-white/[0.06] pt-3 space-y-2">
-                <label className="text-xs font-semibold text-[var(--text-soft)] block">
+                <label htmlFor="agenda-edit-block-task-search" className="text-xs font-semibold text-[var(--text-soft)] block">
                   Tarea vinculada
                 </label>
 
@@ -1648,7 +1656,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                       <button
                         type="button"
                         onClick={() => setEditingBlock({ ...editingBlock, linkedTaskId: undefined, taskSearch: '' })}
-                        className="min-h-10 text-xs font-semibold text-rose-600 hover:text-rose-700 px-2.5 rounded-lg hover:bg-rose-500/10 transition cursor-pointer shrink-0 dark:text-rose-400"
+                        className={`min-h-11 sm:min-h-10 text-xs font-semibold text-rose-600 hover:text-rose-700 px-2.5 rounded-lg hover:bg-rose-500/10 transition cursor-pointer shrink-0 dark:text-rose-400 ${AGENDA_TAB_FOCUS}`}
                         title="Quitar vínculo"
                       >
                         Quitar
@@ -1661,6 +1669,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
 
                 {/* Task search + selector */}
                 <input
+                  id="agenda-edit-block-task-search"
                   type="text"
                   value={editingBlock.taskSearch}
                   onChange={(e) => setEditingBlock({ ...editingBlock, taskSearch: e.target.value })}
@@ -1680,7 +1689,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                             linkedTaskId: isSelected ? undefined : t.id,
                             taskSearch: '',
                           })}
-                          className={`min-h-10 w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer flex items-center gap-2 ${
+                          className={`min-h-11 sm:min-h-10 w-full text-left px-3 py-2 rounded-xl text-xs font-medium transition cursor-pointer flex items-center gap-2 ${AGENDA_TAB_FOCUS} ${
                             isSelected
                               ? 'bg-indigo-50/80 dark:bg-indigo-500/15 border border-[#4F46E5]/40 text-[var(--text)]'
                               : 'bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-soft)] hover:border-[#4F46E5] hover:text-[var(--text)]'
@@ -1705,13 +1714,13 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setEditingBlock(null)}
-                  className="min-h-10 px-4 py-2 text-xs font-semibold rounded-xl bg-transparent text-[var(--text-soft)] hover:text-[var(--text)] border border-slate-200/80 dark:border-white/[0.08] cursor-pointer"
+                  className={`min-h-11 sm:min-h-10 px-4 py-2 text-xs font-semibold rounded-xl bg-transparent text-[var(--text-soft)] hover:text-[var(--text)] border border-slate-200/80 dark:border-white/[0.08] cursor-pointer ${AGENDA_TAB_FOCUS}`}
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="min-h-10 px-4 py-2 text-xs font-semibold rounded-xl bg-[#4F46E5] text-white hover:bg-[#4338CA] cursor-pointer"
+                  className={`min-h-11 sm:min-h-10 px-4 py-2 text-xs font-semibold rounded-xl bg-[#4F46E5] text-white hover:bg-[#4338CA] cursor-pointer ${AGENDA_TAB_FOCUS}`}
                 >
                   Guardar cambios
                 </button>
@@ -1739,7 +1748,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               onClick={() => setShowRoutineForm((current) => !current)}
               aria-expanded={showRoutineForm}
               aria-controls="new-routine-form"
-              className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 cursor-pointer"
+              className={`inline-flex min-h-11 sm:min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer ${AGENDA_TAB_FOCUS}`}
             >
               {showRoutineForm ? (
                 <X className="h-4 w-4" aria-hidden="true" />
@@ -1765,7 +1774,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                       <button
                         type="button"
                         onClick={() => setShowRoutineForm(true)}
-                        className="mt-4 inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 cursor-pointer"
+                        className={`mt-4 inline-flex min-h-11 sm:min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer ${AGENDA_TAB_FOCUS}`}
                       >
                         <AppIcon name="plus" className="h-4 w-4" />
                         <span>Crear primera rutina</span>
@@ -1868,7 +1877,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                           type="text"
                           value={taskName}
                           onChange={(e) => setTaskName(e.target.value)}
-                          placeholder="Ej: Meditar 10 min, Estirar, Leer 20 pag..."
+                          placeholder="Ej.: Meditar 10 min, estirar, leer 20 pág..."
                           className={AGENDA_INPUT_CLASS}
                         />
                       </div>
@@ -1882,7 +1891,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                             className={AGENDA_INPUT_CLASS}
                           >
                             <option value="daily">Diaria</option>
-                            <option value="2-3x">2-3 veces/semana</option>
+                            <option value="2-3x">2–3 veces por semana</option>
                             <option value="weekly">Semanal</option>
                           </select>
                         </div>
@@ -1892,7 +1901,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                         </div>
                       </div>
                       <div>
-                        <label htmlFor="new-routine-effort" className="block text-xs font-semibold text-[var(--text-soft)]">Esfuerzo</label>
+                        <label htmlFor="new-routine-effort" className="block text-xs font-semibold text-[var(--text-soft)]">Esfuerzo mental</label>
                         <select id="new-routine-effort" value={taskEffort} onChange={(e) => setTaskEffort(e.target.value as EffortLevel)} className={AGENDA_INPUT_CLASS}>
                           <option value="low">Bajo</option><option value="medium">Medio</option><option value="high">Alto</option>
                         </select>
@@ -1911,7 +1920,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                               onClick={() => toggleDaySelection(d, taskDays, setTaskDays)}
                               aria-label={DAY_LABELS[d]}
                               aria-pressed={isSelected}
-                              className={`min-h-10 min-w-10 px-2.5 py-1 text-xs font-semibold rounded-xl border cursor-pointer transition-colors ${
+                              className={`min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 px-2.5 py-1 text-xs font-semibold rounded-xl border cursor-pointer transition-colors ${AGENDA_TAB_FOCUS} ${
                                 isSelected
                                   ? 'bg-[#4F46E5] border-[#4F46E5] text-white'
                                   : 'bg-[var(--bg-elevated)] border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)]'
@@ -1925,7 +1934,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                       <p className="mt-2 text-xs text-[var(--text-soft)]" aria-live="polite">{recurrenceHint(taskFreq, taskDays)}</p>
                     </fieldset>
                     <div className="flex justify-end border-t border-slate-100 pt-3 dark:border-white/[0.06]">
-                      <button type="submit" className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 cursor-pointer"><AppIcon name="plus" className="h-4 w-4" />Agregar rutina</button>
+                      <button type="submit" className={`inline-flex min-h-11 sm:min-h-10 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer ${AGENDA_TAB_FOCUS}`}><AppIcon name="plus" className="h-4 w-4" />Agregar rutina</button>
                     </div>
                   </form>
                 </SurfaceCard>

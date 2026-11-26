@@ -829,6 +829,10 @@ export interface JobApplication {
   nextAction?: string;
   nextActionDate?: string;
   keyDates?: JobKeyDate[];
+  /** Optional expected remuneration amount for this application. */
+  salaryExpectation?: number;
+  /** Currency for expected remuneration (defaults to UYU when omitted). */
+  salaryCurrency?: 'UYU' | 'USD';
   sourceOpportunityId?: string | null;
 }
 
