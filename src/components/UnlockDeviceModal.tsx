@@ -5,9 +5,10 @@ import {
   EyeOff,
   FileText,
   KeyRound,
+  Lock,
   LockOpen,
   ShieldCheck,
-  Unlock,
+  Upload,
   X,
 } from 'lucide-react';
 import {
@@ -23,6 +24,16 @@ import {
   type WrappedKeyEnvelope,
 } from '../lib/cryptoCore';
 import { useDialogFocus } from '../hooks/useDialogFocus';
+import { CompletionCheck } from './ui/CompletionCheck';
+
+const CLEAN_FOCUS =
+  'outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
+
+function blurOnMouseClick(event: React.MouseEvent<HTMLElement>) {
+  if (event.detail > 0) {
+    event.currentTarget.blur();
+  }
+}
 
 export interface UnlockDeviceModalProps {
   isOpen: boolean;
@@ -61,6 +72,7 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
   const [passwordInput, setPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [recoveryInput, setRecoveryInput] = useState('');
+  const [loadedFileName, setLoadedFileName] = useState<string | null>(null);
   const [unlockError, setUnlockError] = useState<string | null>(null);
   const [isUnlocking, setIsUnlocking] = useState(false);
 
@@ -79,6 +91,7 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
     let active = true;
     setUnlockError(null);
     setUpgradeError(null);
+    setLoadedFileName(null);
     setLegacyUnlockedEnvelope(null);
     setLegacyRecoverySecret('');
     setShowAddPasswordForm(false);
@@ -119,6 +132,7 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
     setUpgradeError(null);
     setPasswordInput('');
     setRecoveryInput('');
+    setLoadedFileName(null);
     setLegacyUnlockedEnvelope(null);
     setLegacyRecoverySecret('');
     setShowAddPasswordForm(false);
@@ -132,6 +146,8 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
   if (!isOpen) return null;
 
   const accountHasPassword = hasVaultPassword(resolvedEnvelope);
+  const legacyPwLongEnough = newVaultPassword.length >= 8;
+  const legacyPwMatches = confirmVaultPassword.length > 0 && newVaultPassword === confirmVaultPassword;
 
   const handleUnlockWithPassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,6 +188,7 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
 
       setIsUnlocking(false);
       setRecoveryInput('');
+      setLoadedFileName(null);
       onUnlocked?.(res.envelope);
 
       if (!hasVaultPassword(res.envelope)) {
@@ -200,9 +217,11 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
       const key = await extractRecoveryKeyFromText(text);
       if (key) {
         setRecoveryInput(key);
+        setLoadedFileName(file.name);
         setUnlockError(null);
         showToast?.('Archivo de recuperación cargado. Tocá Desbloquear para continuar.', 'info');
       } else {
+        setLoadedFileName(null);
         setUnlockError('No encontramos una clave válida dentro de ese archivo.');
       }
       e.target.value = '';
@@ -242,15 +261,17 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
   };
 
   const fieldClass =
-    'celestian-clean-field w-full min-h-11 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
+    'celestian-clean-field w-full min-h-11 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
   const primaryBtnClass =
-    'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#4F46E5] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
+    `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#4F46E5] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${CLEAN_FOCUS}`;
   const secondaryBtnClass =
-    'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.09] dark:bg-transparent dark:text-slate-200 dark:hover:bg-white/[0.05] cursor-pointer disabled:opacity-45 outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
+    `inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.1] dark:bg-transparent dark:text-slate-200 dark:hover:bg-white/[0.05] cursor-pointer disabled:opacity-45 ${CLEAN_FOCUS}`;
+  const closeBtnClass =
+    `inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer disabled:opacity-40 ${CLEAN_FOCUS}`;
 
   return (
     <div
-      className="fixed inset-0 z-[95] flex items-center justify-center bg-black/65 p-3 sm:p-4 backdrop-blur-xs"
+      className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) resetAndClose();
       }}
@@ -266,28 +287,31 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
         {/* Post-unlock friendly step for legacy recovery-key-only accounts */}
         {legacyUnlockedEnvelope ? (
           <div className="space-y-4">
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
               <div className="flex items-start gap-3 min-w-0">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-600 dark:text-emerald-400">
-                  <Check size={20} strokeWidth={2.2} aria-hidden="true" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400">
+                  <Check size={19} strokeWidth={2.2} aria-hidden="true" />
                 </div>
-                <div className="min-w-0 space-y-0.5">
-                  <h3 id="unlock-device-title" className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                    ¡Listo! Tus datos están desbloqueados
+                <div className="min-w-0 space-y-1">
+                  <h3 id="unlock-device-title" className="text-base font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100 leading-snug">
+                    Tus datos están desbloqueados
                   </h3>
-                  <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-                    Para entrar más fácil la próxima vez desde otro dispositivo, podés elegir una mejora rápida:
+                  <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                    Para entrar más fácil desde otros dispositivos, podés elegir una mejora rápida:
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={resetAndClose}
+                onClick={(event) => {
+                  blurOnMouseClick(event);
+                  resetAndClose();
+                }}
                 aria-label="Cerrar"
                 title="Cerrar"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
+                className={closeBtnClass}
               >
-                <X size={18} strokeWidth={1.75} aria-hidden="true" />
+                <X size={17} strokeWidth={1.75} aria-hidden="true" />
               </button>
             </div>
 
@@ -295,14 +319,17 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
               <div className="space-y-2.5">
                 <button
                   type="button"
-                  onClick={() => setShowAddPasswordForm(true)}
-                  className="w-full rounded-xl border border-[#4F46E5]/40 bg-[#4F46E5]/[0.05] p-3.5 text-left transition-colors hover:bg-[#4F46E5]/[0.09] dark:bg-[#4F46E5]/12 dark:hover:bg-[#4F46E5]/18 cursor-pointer space-y-1"
+                  onClick={(event) => {
+                    blurOnMouseClick(event);
+                    setShowAddPasswordForm(true);
+                  }}
+                  className={`w-full rounded-xl border border-[#4F46E5]/35 bg-[#4F46E5]/[0.04] p-3.5 text-left transition-colors hover:border-[#4F46E5]/60 hover:bg-[#4F46E5]/[0.08] dark:border-[#818CF8]/35 dark:bg-[#4F46E5]/10 dark:hover:bg-[#4F46E5]/16 cursor-pointer space-y-1 ${CLEAN_FOCUS}`}
                 >
-                  <div className="flex items-center gap-2 text-sm font-semibold text-[#4F46E5] dark:text-indigo-300">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-[#4F46E5] dark:text-[#818CF8]">
                     <KeyRound size={16} strokeWidth={1.75} aria-hidden="true" />
                     <span>Agregar una contraseña de bóveda</span>
                   </div>
-                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                  <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
                     Guardala en el gestor de tu navegador para abrir en 1 toque, manteniendo tu código actual como respaldo.
                   </p>
                 </button>
@@ -310,30 +337,38 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
                 {onRequestDisableLock && (
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
                       resetAndClose();
                       onRequestDisableLock();
                     }}
-                    className="w-full rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 text-left transition-colors hover:bg-slate-100/70 dark:border-white/[0.08] dark:bg-white/[0.03] dark:hover:bg-white/[0.06] cursor-pointer space-y-1"
+                    className={`w-full rounded-xl border border-slate-200/85 bg-white p-3.5 text-left transition-colors hover:border-slate-300 hover:bg-slate-50/80 dark:border-white/[0.08] dark:bg-white/[0.02] dark:hover:bg-white/[0.05] cursor-pointer space-y-1 ${CLEAN_FOCUS}`}
                   >
                     <div className="flex items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      <LockOpen size={16} strokeWidth={1.75} aria-hidden="true" />
+                      <LockOpen size={16} strokeWidth={1.75} className="text-slate-500 dark:text-slate-400" aria-hidden="true" />
                       <span>Desactivar el candado adicional</span>
                     </div>
-                    <p className="text-xs text-slate-600 dark:text-slate-400">
+                    <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
                       Pasá a inicio de sesión en 1 clic con Google sin pedir claves al cambiar de dispositivo.
                     </p>
                   </button>
                 )}
 
-                <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-white/[0.06]">
-                  <button type="button" onClick={resetAndClose} className={secondaryBtnClass}>
+                <div className="flex justify-end pt-3 border-t border-slate-100 dark:border-white/[0.06]">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      resetAndClose();
+                    }}
+                    className={secondaryBtnClass}
+                  >
                     Ahora no, ir a mis datos
                   </button>
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleSaveLegacyVaultPassword} className="space-y-3.5">
+              <form onSubmit={handleSaveLegacyVaultPassword} className="space-y-4">
                 <input
                   type="text"
                   name="username"
@@ -346,7 +381,7 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
                 />
                 <div className="space-y-1.5">
                   <label htmlFor="legacy-new-vault-password" className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
-                    Contraseña de bóveda (mínimo 8 caracteres)
+                    Contraseña de bóveda
                   </label>
                   <div className="relative">
                     <input
@@ -368,11 +403,14 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
                     />
                     <button
                       type="button"
-                      onClick={() => setShowNewPassword((v) => !v)}
+                      onClick={(event) => {
+                        blurOnMouseClick(event);
+                        setShowNewPassword((v) => !v);
+                      }}
                       aria-label={showNewPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                      className={`absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer ${CLEAN_FOCUS}`}
                     >
-                      {showNewPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      {showNewPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
                     </button>
                   </div>
                 </div>
@@ -399,26 +437,45 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
                   />
                 </div>
 
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600 dark:text-slate-400">
+                  <span className="inline-flex items-center gap-1.5">
+                    <CompletionCheck checked={legacyPwLongEnough} size="sm" />
+                    <span className={legacyPwLongEnough ? 'text-slate-900 dark:text-slate-200 font-medium' : ''}>
+                      Mínimo 8 caracteres
+                    </span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <CompletionCheck checked={legacyPwMatches} size="sm" />
+                    <span className={legacyPwMatches ? 'text-slate-900 dark:text-slate-200 font-medium' : ''}>
+                      Las contraseñas coinciden
+                    </span>
+                  </span>
+                </div>
+
+                <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
                   No uses tu PIN bancario ni la contraseña de tu banco. Tu navegador podrá guardarla para abrir en 1 toque.
                 </p>
 
                 {upgradeError && (
-                  <p className="text-xs font-semibold text-rose-600 dark:text-rose-400">{upgradeError}</p>
+                  <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400">{upgradeError}</p>
                 )}
 
-                <div className="flex flex-col-reverse gap-2 pt-2 border-t border-slate-100 sm:flex-row sm:justify-end dark:border-white/[0.06]">
+                <div className="flex flex-col-reverse gap-2 pt-3 border-t border-slate-100 sm:flex-row sm:justify-end dark:border-white/[0.06]">
                   <button
                     type="button"
                     disabled={isSavingPassword}
-                    onClick={() => setShowAddPasswordForm(false)}
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      setShowAddPasswordForm(false);
+                    }}
                     className={secondaryBtnClass}
                   >
                     Volver
                   </button>
                   <button
                     type="submit"
-                    disabled={isSavingPassword || newVaultPassword.length < 8 || !confirmVaultPassword}
+                    disabled={isSavingPassword || !legacyPwLongEnough || !confirmVaultPassword}
+                    onClick={blurOnMouseClick}
                     className={primaryBtnClass}
                   >
                     {isSavingPassword ? 'Guardando…' : 'Guardar contraseña'}
@@ -430,36 +487,41 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
         ) : (
           /* Standard Unlock Screen */
           <>
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
               <div className="flex items-start gap-3 min-w-0">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#4F46E5]/12 text-[#4F46E5] dark:text-indigo-400">
-                  <Unlock size={20} strokeWidth={1.75} aria-hidden="true" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#4F46E5]/10 text-[#4F46E5] dark:bg-[#4F46E5]/15 dark:text-[#818CF8]">
+                  <Lock size={19} strokeWidth={1.75} aria-hidden="true" />
                 </div>
-                <div className="min-w-0 space-y-0.5">
-                  <h3 id="unlock-device-title" className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                <div className="min-w-0 space-y-1">
+                  <h3 id="unlock-device-title" className="text-base font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100 leading-snug">
                     Desbloquear tus datos
                   </h3>
-                  <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                  <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                     {mode === 'password'
                       ? 'Ingresá tu contraseña de bóveda para continuar en este dispositivo.'
-                      : 'Ingresá tu código de recuperación o cargá el archivo que guardaste.'}
+                      : accountHasPassword
+                      ? 'Ingresá tu código de recuperación o cargá el archivo de respaldo.'
+                      : 'Ingresá tu código de recuperación para abrir tu cuenta en este dispositivo.'}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={resetAndClose}
+                onClick={(event) => {
+                  blurOnMouseClick(event);
+                  resetAndClose();
+                }}
                 disabled={isUnlocking}
                 aria-label="Cerrar"
                 title="Cerrar"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer disabled:opacity-40"
+                className={closeBtnClass}
               >
-                <X size={18} strokeWidth={1.75} aria-hidden="true" />
+                <X size={17} strokeWidth={1.75} aria-hidden="true" />
               </button>
             </div>
 
             {isLoadingEnvelope ? (
-              <div className="py-6 text-center text-xs text-slate-500 dark:text-slate-400">
+              <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400">
                 Preparando desbloqueo…
               </div>
             ) : mode === 'password' ? (
@@ -500,35 +562,40 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
                     />
                     <button
                       type="button"
-                      onClick={() => setShowPassword((prev) => !prev)}
+                      onClick={(event) => {
+                        blurOnMouseClick(event);
+                        setShowPassword((prev) => !prev);
+                      }}
                       aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                      className={`absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer ${CLEAN_FOCUS}`}
                     >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      {showPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
                     </button>
                   </div>
                   {unlockError && (
-                    <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                    <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400 pt-0.5">
                       {unlockError}
                     </p>
                   )}
                 </div>
 
-                <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3.5 sm:flex-row sm:items-center sm:justify-between dark:border-white/[0.06]">
                   <button
                     type="button"
-                    onClick={() => {
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
                       setMode('recovery');
                       setUnlockError(null);
                     }}
                     disabled={isUnlocking}
-                    className="inline-flex min-h-10 items-center justify-center text-xs font-medium text-slate-500 hover:text-[#4F46E5] dark:text-slate-400 dark:hover:text-indigo-300 cursor-pointer"
+                    className={`inline-flex min-h-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-slate-500 transition-colors hover:text-[#4F46E5] dark:text-slate-400 dark:hover:text-[#818CF8] cursor-pointer ${CLEAN_FOCUS}`}
                   >
                     Usar clave o archivo de recuperación
                   </button>
                   <button
                     type="submit"
                     disabled={!passwordInput || isUnlocking}
+                    onClick={blurOnMouseClick}
                     className={primaryBtnClass}
                   >
                     {isUnlocking ? 'Desbloqueando…' : 'Desbloquear'}
@@ -538,68 +605,93 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
             ) : (
               <form onSubmit={handleUnlockWithRecovery} className="space-y-4">
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <label
-                      htmlFor="unlock-recovery-key"
-                      className="text-xs font-semibold text-slate-800 dark:text-slate-200"
-                    >
-                      Código de recuperación
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isUnlocking}
-                      className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold text-[#4F46E5] hover:bg-[#4F46E5]/10 dark:text-indigo-400 cursor-pointer"
-                    >
-                      <FileText size={14} strokeWidth={1.75} aria-hidden="true" />
-                      <span>Cargar archivo (.txt)</span>
-                    </button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".txt,text/plain"
-                      onChange={handleLoadRecoveryFile}
-                      className="sr-only"
-                      aria-label="Cargar archivo de recuperación"
-                    />
-                  </div>
+                  <label
+                    htmlFor="unlock-recovery-key"
+                    className="block text-xs font-semibold text-slate-800 dark:text-slate-200"
+                  >
+                    Código de recuperación
+                  </label>
                   <textarea
                     id="unlock-recovery-key"
                     rows={3}
                     value={recoveryInput}
                     onChange={(e) => {
                       setRecoveryInput(e.target.value);
+                      if (loadedFileName) setLoadedFileName(null);
                       if (unlockError) setUnlockError(null);
                     }}
                     placeholder="Pegá tu código de recuperación acá…"
+                    spellCheck={false}
+                    autoComplete="off"
                     className={`${fieldClass} font-mono text-xs resize-none`}
                     disabled={isUnlocking}
                     autoFocus
                   />
+
+                  {/* Discreet .txt recovery file upload zone */}
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      fileInputRef.current?.click();
+                    }}
+                    disabled={isUnlocking}
+                    className={`w-full min-h-11 rounded-xl border border-dashed border-slate-300/90 bg-slate-50/70 px-3.5 py-2.5 text-left transition-colors hover:border-[#4F46E5]/50 hover:bg-indigo-50/40 dark:border-white/[0.12] dark:bg-white/[0.02] dark:hover:border-[#818CF8]/45 dark:hover:bg-[#4F46E5]/[0.08] flex items-center justify-between gap-3 cursor-pointer disabled:opacity-45 ${CLEAN_FOCUS}`}
+                  >
+                    <span className="flex items-center gap-2.5 min-w-0">
+                      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#4F46E5]/10 text-[#4F46E5] dark:bg-[#4F46E5]/15 dark:text-[#818CF8]">
+                        {loadedFileName ? <FileText size={15} strokeWidth={1.75} aria-hidden="true" /> : <Upload size={15} strokeWidth={1.75} aria-hidden="true" />}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs font-semibold text-slate-800 dark:text-slate-200">
+                          {loadedFileName ? `Cargado: ${loadedFileName}` : 'Cargar archivo de respaldo (.txt)'}
+                        </span>
+                        <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                          {loadedFileName ? 'Podés cambiarlo o tocar Desbloquear' : 'Detectamos tu clave automáticamente'}
+                        </span>
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs font-semibold text-[#4F46E5] dark:text-[#818CF8]">
+                      Elegir
+                    </span>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".txt,text/plain"
+                    onChange={handleLoadRecoveryFile}
+                    className="sr-only"
+                    aria-label="Cargar archivo de recuperación"
+                  />
+
                   {unlockError && (
-                    <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                    <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400 pt-0.5">
                       {unlockError}
                     </p>
                   )}
                 </div>
 
-                <div className="flex flex-col-reverse gap-2 pt-2 border-t border-slate-100 sm:flex-row sm:items-center sm:justify-between dark:border-white/[0.06]">
+                <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3.5 sm:flex-row sm:items-center sm:justify-between dark:border-white/[0.06]">
                   {accountHasPassword ? (
                     <button
                       type="button"
-                      onClick={() => {
+                      onClick={(event) => {
+                        blurOnMouseClick(event);
                         setMode('password');
                         setUnlockError(null);
                       }}
                       disabled={isUnlocking}
-                      className="inline-flex min-h-10 items-center justify-center text-xs font-medium text-[#4F46E5] hover:underline dark:text-indigo-400 cursor-pointer"
+                      className={`inline-flex min-h-10 items-center justify-center rounded-lg px-2 text-xs font-semibold text-[#4F46E5] transition-colors hover:underline dark:text-[#818CF8] cursor-pointer ${CLEAN_FOCUS}`}
                     >
                       Usar contraseña de bóveda
                     </button>
                   ) : (
                     <button
                       type="button"
-                      onClick={resetAndClose}
+                      onClick={(event) => {
+                        blurOnMouseClick(event);
+                        resetAndClose();
+                      }}
                       disabled={isUnlocking}
                       className={secondaryBtnClass}
                     >
@@ -609,6 +701,7 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
                   <button
                     type="submit"
                     disabled={!recoveryInput.trim() || isUnlocking}
+                    onClick={blurOnMouseClick}
                     className={primaryBtnClass}
                   >
                     {isUnlocking ? 'Desbloqueando…' : 'Desbloquear'}
@@ -617,8 +710,8 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
               </form>
             )}
 
-            <div className="flex items-start gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[11px] leading-relaxed text-slate-500 dark:bg-white/[0.03] dark:text-slate-400">
-              <ShieldCheck size={14} strokeWidth={1.75} className="mt-0.5 shrink-0 text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
+            <div className="flex items-start gap-2.5 rounded-xl bg-slate-50 px-3.5 py-2.5 text-[11px] leading-relaxed text-slate-600 dark:bg-white/[0.03] dark:text-slate-400">
+              <ShieldCheck size={15} strokeWidth={1.75} className="mt-0.5 shrink-0 text-[#4F46E5] dark:text-[#818CF8]" aria-hidden="true" />
               <span>
                 Una vez desbloqueado, este dispositivo queda recordado para que no tengas que volver a escribirlo.
               </span>

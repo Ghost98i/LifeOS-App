@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Check,
   ChevronDown,
+  ChevronLeft,
   Copy,
   Download,
   ExternalLink,
@@ -22,6 +23,7 @@ import type { LifeOSState } from '../types';
 import { UnlockDeviceModal } from './UnlockDeviceModal';
 import { SurfaceCard } from './ui/SurfacePrimitives';
 import { CelestianSwitch } from './ui/CelestianSwitch';
+import { CompletionCheck } from './ui/CompletionCheck';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import { showToast } from '../lib/toast';
 import { getHumanModuleLabel, SYNC_MODULES } from '../lib/syncModel';
@@ -60,6 +62,15 @@ import {
   forgetDeviceTrust,
   isDeviceEnrolled,
 } from '../lib/deviceTrust';
+
+const CLEAN_FOCUS =
+  'outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
+
+function blurOnMouseClick(event: React.MouseEvent<HTMLElement>) {
+  if (event.detail > 0) {
+    event.currentTarget.blur();
+  }
+}
 
 interface PrivacySecuritySectionProps {
   state: LifeOSState;
@@ -126,11 +137,22 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
   // Add / change vault password modal (for legacy accounts or password updates)
   const [isVaultPwModalOpen, setIsVaultPwModalOpen] = useState(false);
   const [vaultAuthSecret, setVaultAuthSecret] = useState('');
+  const [showVaultCurrentSecret, setShowVaultCurrentSecret] = useState(false);
   const [vaultNewPw, setVaultNewPw] = useState('');
   const [vaultConfirmPw, setVaultConfirmPw] = useState('');
   const [showVaultNewPw, setShowVaultNewPw] = useState(false);
   const [vaultPwError, setVaultPwError] = useState<string | null>(null);
   const [isSavingVaultPw, setIsSavingVaultPw] = useState(false);
+  const [copiedKeyFeedback, setCopiedKeyFeedback] = useState(false);
+  const copyFeedbackTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyFeedbackTimerRef.current !== null) {
+        window.clearTimeout(copyFeedbackTimerRef.current);
+      }
+    };
+  }, []);
 
   // Unlock Modal
   const [isUnlockModalOpen, setIsUnlockModalOpen] = useState<boolean>(false);
@@ -290,6 +312,13 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
     try {
       await navigator.clipboard.writeText(key);
       setBackupAcknowledged(true);
+      setCopiedKeyFeedback(true);
+      if (copyFeedbackTimerRef.current !== null) {
+        window.clearTimeout(copyFeedbackTimerRef.current);
+      }
+      copyFeedbackTimerRef.current = window.setTimeout(() => {
+        setCopiedKeyFeedback(false);
+      }, 2000);
       showToast('Código de respaldo copiado.', 'success');
     } catch {
       showToast('No se pudo copiar automáticamente. Seleccionalo manualmente antes de continuar.', 'error');
@@ -621,12 +650,19 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
     showToast('Datos locales eliminados de este dispositivo.', 'success');
   };
 
+  const setupPwLongEnough = setupPassword.length >= 8;
+  const setupPwMatches = setupConfirm.length > 0 && setupPassword === setupConfirm;
+  const vaultPwLongEnough = vaultNewPw.length >= 8;
+  const vaultPwMatches = vaultConfirmPw.length > 0 && vaultNewPw === vaultConfirmPw;
+
   const fieldClass =
-    'celestian-clean-field w-full min-h-11 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
+    'celestian-clean-field w-full min-h-11 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
   const primaryBtnClass =
-    'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
+    `inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] disabled:opacity-45 disabled:cursor-not-allowed cursor-pointer ${CLEAN_FOCUS}`;
   const secondaryBtnClass =
-    'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-transparent px-3.5 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:bg-white/[0.04] cursor-pointer disabled:opacity-50 outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
+    `inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.1] dark:bg-transparent dark:text-slate-200 dark:hover:bg-white/[0.05] cursor-pointer disabled:opacity-45 ${CLEAN_FOCUS}`;
+  const modalCloseBtnClass =
+    `inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer disabled:opacity-40 ${CLEAN_FOCUS}`;
 
   return (
     <SurfaceCard className="p-4 sm:p-5 space-y-4">
@@ -998,7 +1034,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       {/* Guided 2-Step Activation Modal */}
       {wizardStep > 0 && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 sm:p-4 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget && !isMigrating && !isProvisioning) setWizardStep(0);
           }}
@@ -1008,33 +1044,66 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
             role="dialog"
             aria-modal="true"
             aria-label="Activar candado privado adicional"
-            className="w-full max-w-lg max-h-[90dvh] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 space-y-5 shadow-2xl"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 space-y-5 shadow-2xl"
           >
-            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
-              <div className="space-y-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <Shield size={18} strokeWidth={1.75} className="shrink-0 text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
-                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                    {wizardStep === 1 && 'Paso 1 de 2: Creá tu contraseña de bóveda'}
-                    {wizardStep === 2 && 'Paso 2 de 2: Guardá tu respaldo de emergencia'}
-                    {wizardStep === 3 && 'Activando candado privado…'}
-                  </h3>
+            <div className="space-y-3.5 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#4F46E5]/10 text-[#4F46E5] dark:bg-[#4F46E5]/15 dark:text-[#818CF8]">
+                    {wizardStep === 1 && <Lock size={19} strokeWidth={1.75} aria-hidden="true" />}
+                    {wizardStep === 2 && <KeyRound size={19} strokeWidth={1.75} aria-hidden="true" />}
+                    {wizardStep === 3 && <Shield size={19} strokeWidth={1.75} aria-hidden="true" />}
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <h3 className="text-base font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100 leading-snug">
+                      {wizardStep === 1 && 'Creá tu contraseña de bóveda'}
+                      {wizardStep === 2 && 'Guardá tu respaldo de emergencia'}
+                      {wizardStep === 3 && 'Activando candado privado…'}
+                    </h3>
+                    <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                      {wizardStep === 1 && 'La vas a usar si algún día abrís tu cuenta en un dispositivo nuevo.'}
+                      {wizardStep === 2 && 'Solo lo vas a necesitar si alguna vez olvidás tu contraseña de bóveda.'}
+                      {wizardStep === 3 && 'Protegiendo tus áreas de forma segura…'}
+                    </p>
+                  </div>
                 </div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {wizardStep === 1 && 'La vas a usar si algún día abrís tu cuenta en un dispositivo nuevo.'}
-                  {wizardStep === 2 && 'Solo lo vas a necesitar si alguna vez olvidás tu contraseña de bóveda.'}
-                  {wizardStep === 3 && 'Protegiendo tus áreas de forma segura…'}
-                </p>
+                {!isMigrating && !isProvisioning && (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      setWizardStep(0);
+                    }}
+                    aria-label="Cerrar"
+                    title="Cerrar"
+                    className={modalCloseBtnClass}
+                  >
+                    <X size={17} strokeWidth={1.75} aria-hidden="true" />
+                  </button>
+                )}
               </div>
-              {!isMigrating && !isProvisioning && (
-                <button
-                  type="button"
-                  onClick={() => setWizardStep(0)}
-                  aria-label="Cerrar"
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
-                >
-                  <X size={16} strokeWidth={1.75} aria-hidden="true" />
-                </button>
+
+              {wizardStep <= 2 && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-semibold">
+                    <span className="text-[#4F46E5] dark:text-[#818CF8] tabular-nums">
+                      Paso {wizardStep} de 2
+                    </span>
+                    <span className="text-slate-400 dark:text-slate-500">
+                      {wizardStep === 1 ? 'Contraseña de bóveda' : 'Respaldo de emergencia'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5" aria-hidden="true">
+                    <div className="h-1 rounded-full bg-[#4F46E5] dark:bg-[#818CF8]" />
+                    <div
+                      className={`h-1 rounded-full transition-colors duration-200 ${
+                        wizardStep === 2
+                          ? 'bg-[#4F46E5] dark:bg-[#818CF8]'
+                          : 'bg-slate-200/90 dark:bg-white/[0.08]'
+                      }`}
+                    />
+                  </div>
+                </div>
               )}
             </div>
 
@@ -1053,7 +1122,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
 
                 <div className="space-y-1.5">
                   <label htmlFor="vault-setup-password" className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
-                    Contraseña de bóveda (mínimo 8 caracteres)
+                    Contraseña de bóveda
                   </label>
                   <div className="relative">
                     <input
@@ -1075,11 +1144,14 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                     />
                     <button
                       type="button"
-                      onClick={() => setShowSetupPassword((v) => !v)}
+                      onClick={(event) => {
+                        blurOnMouseClick(event);
+                        setShowSetupPassword((v) => !v);
+                      }}
                       aria-label={showSetupPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                      className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                      className={`absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer ${CLEAN_FOCUS}`}
                     >
-                      {showSetupPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      {showSetupPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
                     </button>
                   </div>
                 </div>
@@ -1106,9 +1178,27 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                   />
                 </div>
 
-                <div className="rounded-xl border border-amber-500/25 bg-amber-500/8 px-3.5 py-2.5 text-xs text-amber-800 dark:text-amber-300 space-y-1">
-                  <p className="font-semibold">No uses tu PIN bancario ni la contraseña de tu banco.</p>
-                  <p className="text-[11px] opacity-90">
+                {/* Sober visual requirements indicator */}
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  <span className="inline-flex items-center gap-1.5">
+                    <CompletionCheck checked={setupPwLongEnough} size="sm" />
+                    <span className={setupPwLongEnough ? 'font-medium text-slate-900 dark:text-slate-100' : ''}>
+                      Mínimo 8 caracteres
+                    </span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <CompletionCheck checked={setupPwMatches} size="sm" />
+                    <span className={setupPwMatches ? 'font-medium text-slate-900 dark:text-slate-100' : ''}>
+                      Las contraseñas coinciden
+                    </span>
+                  </span>
+                </div>
+
+                <div className="rounded-xl bg-slate-50 px-3.5 py-2.5 text-[11px] leading-relaxed text-slate-600 dark:bg-white/[0.03] dark:text-slate-400 space-y-0.5">
+                  <p className="font-semibold text-slate-800 dark:text-slate-200">
+                    No uses tu PIN bancario ni la contraseña de tu banco.
+                  </p>
+                  <p>
                     Tu navegador o gestor de contraseñas puede guardarla para desbloquear en 1 toque desde otros dispositivos.
                   </p>
                 </div>
@@ -1119,13 +1209,22 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                   </p>
                 )}
 
-                <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:justify-end dark:border-white/[0.06]">
-                  <button type="button" onClick={() => setWizardStep(0)} disabled={isProvisioning} className={secondaryBtnClass}>
+                <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3.5 sm:flex-row sm:justify-end dark:border-white/[0.06]">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      setWizardStep(0);
+                    }}
+                    disabled={isProvisioning}
+                    className={secondaryBtnClass}
+                  >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    disabled={isProvisioning || setupPassword.length < 8 || !setupConfirm}
+                    disabled={isProvisioning || !setupPwLongEnough || !setupConfirm}
+                    onClick={blurOnMouseClick}
                     className={primaryBtnClass}
                   >
                     {isProvisioning ? 'Preparando…' : 'Continuar'}
@@ -1137,26 +1236,44 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
             {wizardStep === 2 && (
               <div className="space-y-4">
                 <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-                  Guardá este respaldo en un lugar privado. Solo lo vas a necesitar si alguna vez olvidás tu contraseña de bóveda.
+                  Guardá este código en un lugar privado. Si algún día olvidás tu contraseña de bóveda, es la única forma de recuperar tus datos.
                 </p>
 
-                <div className="rounded-xl border border-[#4F46E5]/30 bg-slate-50 p-4 text-center space-y-1.5 select-all dark:bg-white/[0.03]">
-                  <span className="block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                <div className="rounded-xl border border-[#4F46E5]/25 bg-slate-50/90 p-4 text-center space-y-2 select-all dark:border-[#818CF8]/25 dark:bg-white/[0.03]">
+                  <span className="block text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">
                     Código de respaldo de emergencia
                   </span>
-                  <div className="font-mono text-xs sm:text-sm font-bold text-[#4F46E5] dark:text-indigo-300 tracking-wide break-all">
+                  <div className="font-mono text-xs sm:text-sm font-semibold text-[#4F46E5] dark:text-[#818CF8] tracking-wide break-all leading-relaxed">
                     {generatedKey}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <button type="button" onClick={() => void copyRecoveryKey(generatedKey)} className={secondaryBtnClass}>
-                    <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
-                    <span>Copiar código</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      void copyRecoveryKey(generatedKey);
+                    }}
+                    className={`${secondaryBtnClass} min-h-11`}
+                  >
+                    {copiedKeyFeedback ? (
+                      <Check size={14} strokeWidth={2.2} className="text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                    ) : (
+                      <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
+                    )}
+                    <span>{copiedKeyFeedback ? 'Copiado' : 'Copiar'}</span>
                   </button>
-                  <button type="button" onClick={() => handleDownloadKeyFile(generatedKey, provisionedEnvelope)} className={secondaryBtnClass}>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      handleDownloadKeyFile(generatedKey, provisionedEnvelope);
+                    }}
+                    className={`${secondaryBtnClass} min-h-11`}
+                  >
                     <Download size={14} strokeWidth={1.75} aria-hidden="true" />
-                    <span>Descargar archivo (.txt)</span>
+                    <span>Descargar .txt</span>
                   </button>
                 </div>
 
@@ -1166,11 +1283,26 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                   </p>
                 )}
 
-                <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between dark:border-white/[0.06]">
-                  <button type="button" onClick={() => setWizardStep(1)} className={secondaryBtnClass}>
-                    Atrás
+                <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3.5 sm:flex-row sm:items-center sm:justify-between dark:border-white/[0.06]">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      setWizardStep(1);
+                    }}
+                    className={secondaryBtnClass}
+                  >
+                    <ChevronLeft size={14} strokeWidth={1.75} aria-hidden="true" />
+                    <span>Atrás</span>
                   </button>
-                  <button type="button" onClick={() => void handleConfirmAndActivate()} className={primaryBtnClass}>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      void handleConfirmAndActivate();
+                    }}
+                    className={primaryBtnClass}
+                  >
                     <Lock size={14} strokeWidth={1.75} aria-hidden="true" />
                     <span>{backupAcknowledged ? 'Activar candado privado' : 'Ya lo guardé, activar candado'}</span>
                   </button>
@@ -1181,22 +1313,22 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
             {wizardStep === 3 && (
               <div className="space-y-4 py-2">
                 <div className="space-y-2">
-                  <div className="flex justify-between text-xs font-semibold">
-                    <span className="text-slate-900 dark:text-slate-100">
+                  <div className="flex justify-between gap-2 text-xs font-semibold">
+                    <span className="truncate text-slate-900 dark:text-slate-100">
                       {isMigrating
                         ? `Protegiendo: ${migrationProgress?.currentModule ? getHumanModuleLabel(migrationProgress.currentModule) : 'Preparando…'}`
-                        : '¡Candado privado activado!'}
+                        : 'Candado privado activado'}
                     </span>
-                    <span className="tabular-nums text-[#4F46E5] dark:text-indigo-400">
+                    <span className="shrink-0 tabular-nums text-[#4F46E5] dark:text-[#818CF8]">
                       {migrationProgress
                         ? `${migrationProgress.currentIndex} / ${migrationProgress.totalModules}`
                         : `0 / ${SYNC_MODULES.length}`}
                     </span>
                   </div>
 
-                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-white/[0.06]">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-white/[0.07]">
                     <div
-                      className="h-full bg-[#4F46E5] transition-all duration-300"
+                      className="h-full rounded-full bg-[#4F46E5] dark:bg-[#818CF8] transition-all duration-300"
                       style={{
                         width: `${
                           migrationProgress
@@ -1208,7 +1340,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                   </div>
                 </div>
 
-                <p className="text-center text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-center text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                   {isMigrating
                     ? 'Mantené esta pestaña abierta unos segundos mientras protegemos tus datos.'
                     : 'Listo. Tus datos ya están protegidos con tu contraseña de bóveda.'}
@@ -1222,7 +1354,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       {/* Safe Deactivation Confirmation Modal */}
       {isDisableModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 sm:p-4 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget && !isDisabling) setIsDisableModalOpen(false);
           }}
@@ -1232,30 +1364,34 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
             role="dialog"
             aria-modal="true"
             aria-label="Desactivar candado privado adicional"
-            className="w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 space-y-4 shadow-2xl"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-2.5 min-w-0">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#4F46E5]/12 text-[#4F46E5] dark:text-indigo-400">
-                  <LockOpen size={18} strokeWidth={1.75} aria-hidden="true" />
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#4F46E5]/10 text-[#4F46E5] dark:bg-[#4F46E5]/15 dark:text-[#818CF8]">
+                  <LockOpen size={19} strokeWidth={1.75} aria-hidden="true" />
                 </div>
                 <div className="min-w-0 space-y-1">
-                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                    ¿Desactivar el candado privado adicional?
+                  <h3 className="text-base font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100 leading-snug">
+                    ¿Desactivar el candado privado?
                   </h3>
-                  <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-                    Tus datos seguirán protegidos con tu cuenta de Google y podrás abrir tu cuenta en 1 clic desde cualquier dispositivo.
+                  <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                    Tu cuenta seguirá protegida con Google y volverá a abrir en 1 clic desde cualquier dispositivo.
                   </p>
                 </div>
               </div>
               {!isDisabling && (
                 <button
                   type="button"
-                  onClick={() => setIsDisableModalOpen(false)}
+                  onClick={(event) => {
+                    blurOnMouseClick(event);
+                    setIsDisableModalOpen(false);
+                  }}
                   aria-label="Cerrar"
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
+                  title="Cerrar"
+                  className={modalCloseBtnClass}
                 >
-                  <X size={16} strokeWidth={1.75} aria-hidden="true" />
+                  <X size={17} strokeWidth={1.75} aria-hidden="true" />
                 </button>
               )}
             </div>
@@ -1266,15 +1402,15 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
 
             {disableProgress && (
               <div className="space-y-2">
-                <div className="flex justify-between text-xs font-medium text-slate-700 dark:text-slate-300">
-                  <span>{disableProgress.message}</span>
-                  <span className="tabular-nums text-[#4F46E5] dark:text-indigo-400">
+                <div className="flex justify-between gap-2 text-xs font-medium text-slate-700 dark:text-slate-300">
+                  <span className="truncate">{disableProgress.message}</span>
+                  <span className="shrink-0 tabular-nums text-[#4F46E5] dark:text-[#818CF8]">
                     {disableProgress.completed}/{disableProgress.total}
                   </span>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-white/[0.06]">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-white/[0.07]">
                   <div
-                    className="h-full bg-[#4F46E5] transition-all duration-300"
+                    className="h-full rounded-full bg-[#4F46E5] dark:bg-[#818CF8] transition-all duration-300"
                     style={{ width: `${Math.round((disableProgress.completed / Math.max(1, disableProgress.total)) * 100)}%` }}
                   />
                 </div>
@@ -1287,14 +1423,25 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
               </p>
             )}
 
-            <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:justify-end dark:border-white/[0.06]">
-              <button type="button" onClick={() => setIsDisableModalOpen(false)} disabled={isDisabling} className={secondaryBtnClass}>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3.5 sm:flex-row sm:justify-end dark:border-white/[0.06]">
+              <button
+                type="button"
+                onClick={(event) => {
+                  blurOnMouseClick(event);
+                  setIsDisableModalOpen(false);
+                }}
+                disabled={isDisabling}
+                className={secondaryBtnClass}
+              >
                 Cancelar
               </button>
               <button
                 type="button"
                 disabled={isDisabling}
-                onClick={() => void handleConfirmDisableExtraLock()}
+                onClick={(event) => {
+                  blurOnMouseClick(event);
+                  void handleConfirmDisableExtraLock();
+                }}
                 className={primaryBtnClass}
               >
                 {isDisabling ? 'Actualizando cuenta…' : 'Sí, desactivar candado'}
@@ -1307,7 +1454,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       {/* Add / Change Vault Password Modal */}
       {isVaultPwModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 sm:p-4 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget && !isSavingVaultPw) setIsVaultPwModalOpen(false);
           }}
@@ -1317,29 +1464,38 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
             role="dialog"
             aria-modal="true"
             aria-label={accountHasPassword ? 'Cambiar contraseña de bóveda' : 'Crear contraseña de bóveda'}
-            className="w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 space-y-4 shadow-2xl"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-0.5 min-w-0">
-                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                  {accountHasPassword ? 'Cambiar contraseña de bóveda' : 'Crear contraseña de bóveda'}
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Tu código de recuperación de emergencia seguirá funcionando como respaldo.
-                </p>
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#4F46E5]/10 text-[#4F46E5] dark:bg-[#4F46E5]/15 dark:text-[#818CF8]">
+                  <KeyRound size={19} strokeWidth={1.75} aria-hidden="true" />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <h3 className="text-base font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100 leading-snug">
+                    {accountHasPassword ? 'Cambiar contraseña de bóveda' : 'Crear contraseña de bóveda'}
+                  </h3>
+                  <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                    Tu código de recuperación de emergencia seguirá funcionando como respaldo.
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
-                onClick={() => setIsVaultPwModalOpen(false)}
+                onClick={(event) => {
+                  blurOnMouseClick(event);
+                  setIsVaultPwModalOpen(false);
+                }}
                 disabled={isSavingVaultPw}
                 aria-label="Cerrar"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
+                title="Cerrar"
+                className={modalCloseBtnClass}
               >
-                <X size={16} strokeWidth={1.75} aria-hidden="true" />
+                <X size={17} strokeWidth={1.75} aria-hidden="true" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveVaultPassword} className="space-y-3.5">
+            <form onSubmit={handleSaveVaultPassword} className="space-y-4">
               <input
                 type="text"
                 name="username"
@@ -1354,25 +1510,38 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                 <label htmlFor="vault-current-secret" className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
                   {accountHasPassword ? 'Contraseña actual (o código de recuperación)' : 'Código de recuperación actual'}
                 </label>
-                <input
-                  id="vault-current-secret"
-                  type="password"
-                  autoComplete="current-password"
-                  value={vaultAuthSecret}
-                  onChange={(e) => {
-                    setVaultAuthSecret(e.target.value);
-                    if (vaultPwError) setVaultPwError(null);
-                  }}
-                  placeholder={accountHasPassword ? 'Tu contraseña actual…' : 'Pegá tu código de recuperación…'}
-                  className={fieldClass}
-                  disabled={isSavingVaultPw}
-                  autoFocus
-                />
+                <div className="relative">
+                  <input
+                    id="vault-current-secret"
+                    type={showVaultCurrentSecret ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    value={vaultAuthSecret}
+                    onChange={(e) => {
+                      setVaultAuthSecret(e.target.value);
+                      if (vaultPwError) setVaultPwError(null);
+                    }}
+                    placeholder={accountHasPassword ? 'Tu contraseña actual…' : 'Pegá tu código de recuperación…'}
+                    className={`${fieldClass} pr-11`}
+                    disabled={isSavingVaultPw}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      setShowVaultCurrentSecret((v) => !v);
+                    }}
+                    aria-label={showVaultCurrentSecret ? 'Ocultar credencial actual' : 'Mostrar credencial actual'}
+                    className={`absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer ${CLEAN_FOCUS}`}
+                  >
+                    {showVaultCurrentSecret ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+                  </button>
+                </div>
               </div>
 
               <div className="space-y-1.5">
                 <label htmlFor="vault-new-secret" className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
-                  Nueva contraseña de bóveda (mínimo 8 caracteres)
+                  Nueva contraseña de bóveda
                 </label>
                 <div className="relative">
                   <input
@@ -1393,11 +1562,14 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                   />
                   <button
                     type="button"
-                    onClick={() => setShowVaultNewPw((v) => !v)}
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      setShowVaultNewPw((v) => !v);
+                    }}
                     aria-label={showVaultNewPw ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
+                    className={`absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer ${CLEAN_FOCUS}`}
                   >
-                    {showVaultNewPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                    {showVaultNewPw ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
                   </button>
                 </div>
               </div>
@@ -1424,7 +1596,22 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                 />
               </div>
 
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-500 dark:text-slate-400">
+                <span className="inline-flex items-center gap-1.5">
+                  <CompletionCheck checked={vaultPwLongEnough} size="sm" />
+                  <span className={vaultPwLongEnough ? 'font-medium text-slate-900 dark:text-slate-100' : ''}>
+                    Mínimo 8 caracteres
+                  </span>
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <CompletionCheck checked={vaultPwMatches} size="sm" />
+                  <span className={vaultPwMatches ? 'font-medium text-slate-900 dark:text-slate-100' : ''}>
+                    Las contraseñas coinciden
+                  </span>
+                </span>
+              </div>
+
+              <p className="text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
                 No uses tu PIN bancario ni la contraseña de tu banco.
               </p>
 
@@ -1434,13 +1621,22 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                 </p>
               )}
 
-              <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:justify-end dark:border-white/[0.06]">
-                <button type="button" onClick={() => setIsVaultPwModalOpen(false)} disabled={isSavingVaultPw} className={secondaryBtnClass}>
+              <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3.5 sm:flex-row sm:justify-end dark:border-white/[0.06]">
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    blurOnMouseClick(event);
+                    setIsVaultPwModalOpen(false);
+                  }}
+                  disabled={isSavingVaultPw}
+                  className={secondaryBtnClass}
+                >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  disabled={isSavingVaultPw || !vaultAuthSecret.trim() || vaultNewPw.length < 8 || !vaultConfirmPw}
+                  disabled={isSavingVaultPw || !vaultAuthSecret.trim() || !vaultPwLongEnough || !vaultConfirmPw}
+                  onClick={blurOnMouseClick}
                   className={primaryBtnClass}
                 >
                   {isSavingVaultPw ? 'Guardando…' : 'Guardar contraseña'}
@@ -1475,27 +1671,43 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       {/* Modal: Renovar código de respaldo (Rewrap) */}
       {isRewrapModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 sm:p-4 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setIsRewrapModalOpen(false);
           }}
         >
-          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Renovar código de respaldo" className="w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <RotateCcw size={18} strokeWidth={1.75} className="shrink-0 text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
-                <div>
-                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Renovar código de respaldo</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Genera un nuevo código de emergencia para tu cuenta</p>
+          <SurfaceCard
+            as="div"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Renovar código de respaldo"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 space-y-4 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#4F46E5]/10 text-[#4F46E5] dark:bg-[#4F46E5]/15 dark:text-[#818CF8]">
+                  <RotateCcw size={19} strokeWidth={1.75} aria-hidden="true" />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <h3 className="text-base font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100 leading-snug">
+                    Renovar código de respaldo
+                  </h3>
+                  <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                    Genera un nuevo código de emergencia para tu cuenta.
+                  </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setIsRewrapModalOpen(false)}
+                onClick={(event) => {
+                  blurOnMouseClick(event);
+                  setIsRewrapModalOpen(false);
+                }}
                 aria-label="Cerrar"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
+                title="Cerrar"
+                className={modalCloseBtnClass}
               >
-                <X size={16} strokeWidth={1.75} aria-hidden="true" />
+                <X size={17} strokeWidth={1.75} aria-hidden="true" />
               </button>
             </div>
 
@@ -1505,60 +1717,107 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                   Ingresá tu código de respaldo actual para generar uno nuevo. Tu contraseña de bóveda seguirá funcionando normalmente.
                 </p>
 
-                <div>
-                  <label htmlFor="rewrap-current-key" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                    Código de respaldo actual:
+                <div className="space-y-1.5">
+                  <label htmlFor="rewrap-current-key" className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
+                    Código de respaldo actual
                   </label>
                   <textarea
                     id="rewrap-current-key"
-                    rows={2}
+                    rows={3}
                     value={currentKeyForRewrap}
-                    onChange={(e) => setCurrentKeyForRewrap(e.target.value)}
+                    onChange={(e) => {
+                      setCurrentKeyForRewrap(e.target.value);
+                      if (rewrapError) setRewrapError(null);
+                    }}
                     placeholder="Pegá tu código actual…"
+                    spellCheck={false}
+                    autoComplete="off"
                     className={`${fieldClass} font-mono text-xs resize-none`}
+                    autoFocus
                   />
                   {rewrapError && (
-                    <p className="mt-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400">{rewrapError}</p>
+                    <p role="alert" className="pt-0.5 text-xs font-semibold text-rose-600 dark:text-rose-400">{rewrapError}</p>
                   )}
                 </div>
 
-                <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
-                  <button type="button" onClick={() => setIsRewrapModalOpen(false)} className={secondaryBtnClass}>
+                <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3.5 sm:flex-row sm:justify-end dark:border-white/[0.06]">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      setIsRewrapModalOpen(false);
+                    }}
+                    className={secondaryBtnClass}
+                  >
                     Cancelar
                   </button>
-                  <button type="button" disabled={!currentKeyForRewrap.trim()} onClick={handleRewrapKey} className={primaryBtnClass}>
+                  <button
+                    type="button"
+                    disabled={!currentKeyForRewrap.trim()}
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      void handleRewrapKey();
+                    }}
+                    className={primaryBtnClass}
+                  >
                     Generar nuevo código
                   </button>
                 </div>
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="border-l-2 border-emerald-500 pl-3 py-1 text-xs text-emerald-700 dark:text-emerald-400">
-                  Código de respaldo actualizado. Guardalo en un lugar seguro.
+                <div className="flex items-center gap-2 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.08] px-3.5 py-2.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                  <Check size={15} strokeWidth={2.2} className="shrink-0" aria-hidden="true" />
+                  <span>Código de respaldo actualizado. Guardalo en un lugar seguro.</span>
                 </div>
 
-                <div className="rounded-xl border border-[#4F46E5]/35 bg-slate-50 p-4 text-center space-y-2 select-all dark:bg-white/[0.03]">
-                  <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                <div className="rounded-xl border border-[#4F46E5]/25 bg-slate-50/90 p-4 text-center space-y-2 select-all dark:border-[#818CF8]/25 dark:bg-white/[0.03]">
+                  <span className="block text-[11px] font-semibold uppercase tracking-[0.06em] text-slate-500 dark:text-slate-400">
                     Nuevo código de respaldo
                   </span>
-                  <div className="font-mono text-xs sm:text-sm font-bold text-[#4F46E5] dark:text-indigo-300 tracking-wide break-all">
+                  <div className="font-mono text-xs sm:text-sm font-semibold text-[#4F46E5] dark:text-[#818CF8] tracking-wide break-all leading-relaxed">
                     {rewrapResultKey}
                   </div>
                 </div>
 
-                <div className="flex justify-center gap-2">
-                  <button type="button" onClick={() => void copyRecoveryKey(rewrapResultKey)} className={secondaryBtnClass}>
-                    <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
-                    <span>Copiar</span>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      void copyRecoveryKey(rewrapResultKey);
+                    }}
+                    className={`${secondaryBtnClass} min-h-11`}
+                  >
+                    {copiedKeyFeedback ? (
+                      <Check size={14} strokeWidth={2.2} className="text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                    ) : (
+                      <Copy size={14} strokeWidth={1.75} aria-hidden="true" />
+                    )}
+                    <span>{copiedKeyFeedback ? 'Copiado' : 'Copiar'}</span>
                   </button>
-                  <button type="button" onClick={() => handleDownloadKeyFile(rewrapResultKey, localEnvelope)} className={secondaryBtnClass}>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      handleDownloadKeyFile(rewrapResultKey, localEnvelope);
+                    }}
+                    className={`${secondaryBtnClass} min-h-11`}
+                  >
                     <Download size={14} strokeWidth={1.75} aria-hidden="true" />
-                    <span>Descargar (.txt)</span>
+                    <span>Descargar .txt</span>
                   </button>
                 </div>
 
-                <div className="flex justify-end border-t border-slate-100 pt-3 dark:border-white/[0.06]">
-                  <button type="button" onClick={() => setIsRewrapModalOpen(false)} className={primaryBtnClass}>
+                <div className="flex justify-end border-t border-slate-100 pt-3.5 dark:border-white/[0.06]">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      setIsRewrapModalOpen(false);
+                    }}
+                    className={primaryBtnClass}
+                  >
                     Listo
                   </button>
                 </div>
@@ -1571,23 +1830,48 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       {/* Resolve Pending Rotation Modal */}
       {isResolveModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 sm:p-4 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setIsResolveModalOpen(false);
           }}
         >
-          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Verificar nuevo código de respaldo" className="w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-2">
-              <Key size={18} strokeWidth={1.75} className="shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
-              <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Verificar nuevo código de respaldo</h3>
+          <SurfaceCard
+            as="div"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Verificar nuevo código de respaldo"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 space-y-4 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/12 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
+                  <Key size={19} strokeWidth={1.75} aria-hidden="true" />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <h3 className="text-base font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100 leading-snug">
+                    Verificar nuevo código de respaldo
+                  </h3>
+                  <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                    Ingresá el nuevo código que generaste para confirmar que coincide con tu cuenta.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={(event) => {
+                  blurOnMouseClick(event);
+                  setIsResolveModalOpen(false);
+                }}
+                aria-label="Cerrar"
+                title="Cerrar"
+                className={modalCloseBtnClass}
+              >
+                <X size={17} strokeWidth={1.75} aria-hidden="true" />
+              </button>
             </div>
 
-            <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-              Ingresá el nuevo código que generaste para confirmar que coincide con tu cuenta.
-            </p>
-
             {resolveError && (
-              <p className="border-l-2 border-rose-500 pl-3 py-1 text-xs font-medium text-rose-600 dark:text-rose-400">
+              <p role="alert" className="border-l-2 border-rose-500 pl-3 py-1 text-xs font-medium text-rose-600 dark:text-rose-400">
                 {resolveError}
               </p>
             )}
@@ -1600,21 +1884,37 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                 id="resolve-key-input"
                 rows={3}
                 value={resolveKeyInput}
-                onChange={(e) => setResolveKeyInput(e.target.value)}
+                onChange={(e) => {
+                  setResolveKeyInput(e.target.value);
+                  if (resolveError) setResolveError(null);
+                }}
                 placeholder="Pegá el código generado…"
+                spellCheck={false}
+                autoComplete="off"
                 className={`${fieldClass} font-mono text-xs resize-none`}
+                autoFocus
               />
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
-              <button type="button" onClick={() => setIsResolveModalOpen(false)} className={secondaryBtnClass}>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3.5 sm:flex-row sm:justify-end dark:border-white/[0.06]">
+              <button
+                type="button"
+                onClick={(event) => {
+                  blurOnMouseClick(event);
+                  setIsResolveModalOpen(false);
+                }}
+                className={secondaryBtnClass}
+              >
                 Cancelar
               </button>
               <button
                 type="button"
                 disabled={!resolveKeyInput.trim()}
-                onClick={handleResolvePendingRotation}
-                className="inline-flex min-h-10 items-center justify-center rounded-xl bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-950 transition-colors hover:bg-amber-600 disabled:opacity-50 cursor-pointer"
+                onClick={(event) => {
+                  blurOnMouseClick(event);
+                  void handleResolvePendingRotation();
+                }}
+                className={`inline-flex min-h-10 items-center justify-center rounded-xl bg-amber-500 px-4 py-2 text-xs font-semibold text-slate-950 transition-colors hover:bg-amber-600 disabled:opacity-45 cursor-pointer ${CLEAN_FOCUS}`}
               >
                 Confirmar
               </button>
@@ -1626,50 +1926,86 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       {/* Download Recovery File Modal */}
       {isDownloadModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-3 sm:p-4 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setIsDownloadModalOpen(false);
           }}
         >
-          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Descargar archivo de respaldo" className="w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <Download size={18} strokeWidth={1.75} className="shrink-0 text-[#4F46E5] dark:text-indigo-400" aria-hidden="true" />
-                <div>
-                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Descargar archivo de respaldo</h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Ingresá tu código actual para generar el archivo.</p>
+          <SurfaceCard
+            as="div"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Descargar archivo de respaldo"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 space-y-4 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#4F46E5]/10 text-[#4F46E5] dark:bg-[#4F46E5]/15 dark:text-[#818CF8]">
+                  <Download size={19} strokeWidth={1.75} aria-hidden="true" />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <h3 className="text-base font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100 leading-snug">
+                    Descargar archivo de respaldo
+                  </h3>
+                  <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                    Ingresá tu código actual para generar el archivo (.txt).
+                  </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setIsDownloadModalOpen(false)}
+                onClick={(event) => {
+                  blurOnMouseClick(event);
+                  setIsDownloadModalOpen(false);
+                }}
                 aria-label="Cerrar"
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
+                title="Cerrar"
+                className={modalCloseBtnClass}
               >
-                <X size={16} strokeWidth={1.75} aria-hidden="true" />
+                <X size={17} strokeWidth={1.75} aria-hidden="true" />
               </button>
             </div>
-            <p className="text-xs text-slate-600 dark:text-slate-400">
+            <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
               Este archivo te sirve como respaldo de emergencia para desbloquear tu cuenta en un dispositivo nuevo.
             </p>
-            <div>
+            <div className="space-y-1.5">
+              <label htmlFor="download-recovery-key-input" className="block text-xs font-semibold text-slate-800 dark:text-slate-200">
+                Código de respaldo actual
+              </label>
               <textarea
+                id="download-recovery-key-input"
                 rows={3}
                 value={downloadKeyInput}
-                onChange={(e) => setDownloadKeyInput(e.target.value)}
+                onChange={(e) => {
+                  setDownloadKeyInput(e.target.value);
+                  if (downloadError) setDownloadError(null);
+                }}
                 placeholder="Pegá tu código de respaldo actual…"
+                spellCheck={false}
+                autoComplete="off"
                 className={`${fieldClass} font-mono text-xs resize-none`}
+                autoFocus
               />
-              {downloadError && <p className="mt-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400">{downloadError}</p>}
+              {downloadError && (
+                <p role="alert" className="pt-0.5 text-xs font-semibold text-rose-600 dark:text-rose-400">{downloadError}</p>
+              )}
             </div>
-            <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
-              <button type="button" onClick={() => setIsDownloadModalOpen(false)} className={secondaryBtnClass}>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3.5 sm:flex-row sm:justify-end dark:border-white/[0.06]">
+              <button
+                type="button"
+                onClick={(event) => {
+                  blurOnMouseClick(event);
+                  setIsDownloadModalOpen(false);
+                }}
+                className={secondaryBtnClass}
+              >
                 Cancelar
               </button>
               <button
                 type="button"
                 disabled={!downloadKeyInput.trim()}
-                onClick={async () => {
+                onClick={async (event) => {
+                  blurOnMouseClick(event);
                   const targetEnvelope = localEnvelope || cloudEnvelope;
                   if (!targetEnvelope || !storageUserId) {
                     setDownloadError('No encontramos el respaldo de claves de esta cuenta.');
@@ -1692,7 +2028,8 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                 }}
                 className={primaryBtnClass}
               >
-                Descargar archivo
+                <Download size={14} strokeWidth={1.75} aria-hidden="true" />
+                <span>Descargar .txt</span>
               </button>
             </div>
           </SurfaceCard>
@@ -1701,26 +2038,61 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
 
       {/* Account Deletion Confirmation Modal (untouched logic) */}
       {isDeleteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div ref={deleteDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Eliminar cuenta y datos" className="w-full max-w-lg space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 sm:p-6 shadow-2xl dark:border-white/[0.07] dark:bg-[#0D111A]">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !isDeleting) closeDeleteModal();
+          }}
+        >
+          <div
+            ref={deleteDialogRef}
+            tabIndex={-1}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Eliminar cuenta y datos"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 shadow-2xl dark:border-white/[0.08] dark:bg-[#0D111A] outline-none"
+          >
             {deleteStage === 'confirm' ? (
               <>
-                <div className="flex items-start gap-2.5">
-                  <Trash2 size={20} strokeWidth={1.75} className="mt-0.5 shrink-0 text-rose-600 dark:text-rose-400" aria-hidden="true" />
-                  <div className="space-y-1">
-                    <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Eliminar cuenta y datos en la nube</h3>
-                    <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-                      Esta acción es permanente y no se puede deshacer. Se eliminarán de la nube todos tus datos sincronizados, su historial y el acceso del candado privado si lo activaste. Luego cerraremos tu sesión en este dispositivo.
-                    </p>
+                <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-500/12 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400">
+                      <Trash2 size={19} strokeWidth={1.75} aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <h3 className="text-base font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100 leading-snug">
+                        Eliminar cuenta y datos en la nube
+                      </h3>
+                      <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                        Esta acción es permanente y no se puede deshacer.
+                      </p>
+                    </div>
                   </div>
+                  {!isDeleting && (
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        blurOnMouseClick(event);
+                        closeDeleteModal();
+                      }}
+                      aria-label="Cerrar"
+                      title="Cerrar"
+                      className={modalCloseBtnClass}
+                    >
+                      <X size={17} strokeWidth={1.75} aria-hidden="true" />
+                    </button>
+                  )}
                 </div>
+                <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+                  Se eliminarán de la nube todos tus datos sincronizados, su historial y el acceso del candado privado si lo activaste. Luego cerraremos tu sesión en este dispositivo.
+                </p>
                 <ul className="list-inside list-disc space-y-1 border-l-2 border-rose-500/40 pl-3 py-1 text-xs text-slate-600 dark:text-slate-400">
                   <li>Todos los módulos sincronizados en la nube y su historial.</li>
                   <li>Tu configuración y acceso del candado privado adicional, si estaba activo.</li>
                   <li>El vínculo de sincronización con este dispositivo (tu cuenta de Google sigue intacta).</li>
                 </ul>
                 <div className="space-y-1.5">
-                  <label htmlFor="delete-account-confirmation" className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+                  <label htmlFor="delete-account-confirmation" className="block text-xs font-semibold text-slate-900 dark:text-slate-100">
                     Escribí <strong>ELIMINAR</strong> para confirmar
                   </label>
                   <input
@@ -1730,24 +2102,31 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                     onChange={(event) => setDeleteConfirmation(event.target.value)}
                     autoComplete="off"
                     spellCheck={false}
-                    className="w-full min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm font-semibold uppercase tracking-widest text-slate-900 focus:border-rose-500 focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100"
+                    placeholder="ELIMINAR"
+                    className={`${fieldClass} font-semibold uppercase tracking-widest`}
                   />
                 </div>
-                {deleteError && <p className="text-xs font-semibold text-rose-600 dark:text-rose-400">{deleteError}</p>}
-                <div className="flex flex-col-reverse justify-end gap-2 border-t border-slate-100 pt-3 sm:flex-row dark:border-white/[0.06]">
+                {deleteError && <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400">{deleteError}</p>}
+                <div className="flex flex-col-reverse justify-end gap-2 border-t border-slate-100 pt-3.5 sm:flex-row dark:border-white/[0.06]">
                   <button
                     type="button"
-                    onClick={closeDeleteModal}
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      closeDeleteModal();
+                    }}
                     disabled={isDeleting}
-                    className={`${secondaryBtnClass} disabled:opacity-50`}
+                    className={secondaryBtnClass}
                   >
                     Cancelar
                   </button>
                   <button
                     type="button"
                     disabled={isDeleting || deleteConfirmation.trim().toUpperCase() !== 'ELIMINAR'}
-                    onClick={() => { void handleDeleteAccount(); }}
-                    className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-xl bg-rose-600 px-5 py-2 text-xs font-semibold text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      void handleDeleteAccount();
+                    }}
+                    className={`inline-flex min-h-10 cursor-pointer items-center justify-center rounded-xl bg-rose-600 px-5 py-2 text-xs font-semibold text-white transition-colors hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-45 ${CLEAN_FOCUS}`}
                   >
                     {isDeleting ? 'Eliminando…' : 'Eliminar definitivamente'}
                   </button>
@@ -1755,23 +2134,37 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
               </>
             ) : (
               <>
-                <div className="flex items-start gap-2.5">
-                  <Check size={20} strokeWidth={2} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                <div className="flex items-start gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400">
+                    <Check size={19} strokeWidth={2.2} aria-hidden="true" />
+                  </div>
                   <div className="space-y-1">
-                    <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Cuenta y datos en la nube eliminados</h3>
+                    <h3 className="text-base font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100 leading-snug">
+                      Cuenta y datos en la nube eliminados
+                    </h3>
                     <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
                       Tu sesión de Google se cerró. Los datos que quedan en este dispositivo son solo locales y ya no están vinculados a la nube. ¿Querés eliminarlos también?
                     </p>
                   </div>
                 </div>
-                <div className="flex flex-col-reverse justify-end gap-2 border-t border-slate-100 pt-3 sm:flex-row dark:border-white/[0.06]">
-                  <button type="button" onClick={closeDeleteModal} className={secondaryBtnClass}>
+                <div className="flex flex-col-reverse justify-end gap-2 border-t border-slate-100 pt-3.5 sm:flex-row dark:border-white/[0.06]">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      closeDeleteModal();
+                    }}
+                    className={secondaryBtnClass}
+                  >
                     Conservar datos locales
                   </button>
                   <button
                     type="button"
-                    onClick={handleDeleteLocal}
-                    className="inline-flex min-h-10 cursor-pointer items-center justify-center rounded-xl bg-rose-600 px-5 py-2 text-xs font-semibold text-white transition-colors hover:bg-rose-700"
+                    onClick={(event) => {
+                      blurOnMouseClick(event);
+                      handleDeleteLocal();
+                    }}
+                    className={`inline-flex min-h-10 cursor-pointer items-center justify-center rounded-xl bg-rose-600 px-5 py-2 text-xs font-semibold text-white transition-colors hover:bg-rose-700 ${CLEAN_FOCUS}`}
                   >
                     Eliminar también los datos locales
                   </button>

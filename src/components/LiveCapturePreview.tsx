@@ -39,7 +39,7 @@ function getDraftTypeBadge(draft: CaptureDraft): {
       return {
         label: 'Tarea',
         icon: 'check',
-        toneClass: 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300',
+        toneClass: 'border-[#4F46E5]/30 bg-[#4F46E5]/10 text-[#4F46E5] dark:border-[#818CF8]/30 dark:bg-indigo-500/15 dark:text-[#818CF8]',
       };
     case 'note':
       return {
@@ -63,7 +63,7 @@ function getDraftTypeBadge(draft: CaptureDraft): {
       return {
         label: 'Trabajo',
         icon: 'briefcase',
-        toneClass: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-300',
+        toneClass: 'border-[#4F46E5]/30 bg-[#4F46E5]/10 text-[#4F46E5] dark:border-[#818CF8]/30 dark:bg-indigo-500/15 dark:text-[#818CF8]',
       };
     case 'resale':
       return {
@@ -136,7 +136,7 @@ const SingleDraftChips: React.FC<{ draft: CaptureDraft }> = ({ draft }) => {
               ? 'bg-rose-500/15 text-rose-700 dark:text-rose-300'
               : draft.priority === 'baja'
               ? 'bg-[var(--bg-elevated)] text-[var(--text-soft)] border border-[var(--border)]'
-              : 'bg-blue-500/10 text-blue-700 dark:text-blue-300'
+              : 'bg-[#4F46E5]/10 text-[#4F46E5] dark:bg-indigo-500/15 dark:text-[#818CF8]'
           }`}
         >
           {draft.priority}
@@ -260,7 +260,7 @@ export const LiveCapturePreview: React.FC<LiveCapturePreviewProps> = ({
     >
       <div className="flex items-center gap-1.5 flex-wrap">
         <span className="inline-flex items-center gap-1 font-bold text-[var(--text)]">
-          <AppIcon name="sparkles" className="h-3.5 w-3.5 text-[var(--blue)]" />
+          <AppIcon name="sparkles" className="h-3.5 w-3.5 text-[#4F46E5] dark:text-[#818CF8]" />
           <span>{drafts.length} capturas:</span>
         </span>
         {drafts.slice(0, 4).map((d) => {

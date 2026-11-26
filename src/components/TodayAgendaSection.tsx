@@ -190,7 +190,7 @@ const AgendaBlockRow: React.FC<{
           onClick={() => onToggle(entry)}
           aria-label={entry.done ? `Marcar como pendiente: ${entry.label}` : `Completar: ${entry.label}`}
           aria-pressed={entry.done}
-          className={`lifeos-task-check group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 cursor-pointer ${
+          className={`lifeos-task-check group relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70 cursor-pointer ${
             entry.done ? 'is-completed' : 'is-pending'
           }`}
         >
@@ -459,15 +459,28 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
           title="Tu día"
           count={totalMainItems > 0 ? totalMainItems : null}
           action={
-            openLabel ? (
-              <button
-                type="button"
-                onClick={onOpenAgenda}
-                className="whitespace-nowrap text-xs font-semibold text-indigo-600 transition hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300 cursor-pointer"
-              >
-                {openLabel}
-              </button>
-            ) : null
+            <div className="flex items-center gap-3">
+              {onOpenCapture && totalMainItems > 0 && (
+                <button
+                  type="button"
+                  onClick={onOpenCapture}
+                  className="inline-flex min-h-8 items-center gap-1 whitespace-nowrap rounded-lg px-2 py-1 text-xs font-semibold text-[#4F46E5] transition hover:bg-[#4F46E5]/10 dark:text-[#818CF8] dark:hover:bg-indigo-500/15 cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70"
+                  aria-label="Agregar tarea o bloque para hoy"
+                >
+                  <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
+                  <span>Agregar</span>
+                </button>
+              )}
+              {openLabel && (
+                <button
+                  type="button"
+                  onClick={onOpenAgenda}
+                  className="whitespace-nowrap text-xs font-semibold text-[#4F46E5] transition hover:text-[#4338CA] dark:text-[#818CF8] dark:hover:text-indigo-300 cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70 rounded-md"
+                >
+                  {openLabel}
+                </button>
+              )}
+            </div>
           }
           className="pb-3"
         />
@@ -589,7 +602,7 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
                   <button
                     type="button"
                     onClick={onOpenCapture}
-                    className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 cursor-pointer whitespace-nowrap"
+                    className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-[#4F46E5] px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-[#4338CA] active:scale-[0.98] cursor-pointer whitespace-nowrap outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70"
                   >
                     <Plus className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
                     <span>Agregar bloque</span>
@@ -743,10 +756,10 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
                   type="button"
                   onClick={() => onToggle(habit)}
                   aria-pressed={habit.done}
-                  className={`group inline-flex min-h-9 items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition cursor-pointer ${
+                  className={`group inline-flex min-h-9 items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition active:scale-[0.97] cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
                     habit.done
-                      ? 'border-slate-200/70 bg-slate-50 text-slate-500 dark:border-white/[0.07] dark:bg-white/[0.03] dark:text-slate-400'
-                      : 'border-slate-200/90 bg-white text-slate-800 hover:border-indigo-300 hover:text-indigo-600 dark:border-white/[0.09] dark:bg-white/[0.02] dark:text-slate-200 dark:hover:border-indigo-500/40 dark:hover:text-indigo-400'
+                      ? 'border-[#4F46E5]/20 bg-[#4F46E5]/[0.05] text-slate-500 dark:border-[#818CF8]/20 dark:bg-indigo-500/[0.08] dark:text-slate-400'
+                      : 'border-slate-200/90 bg-white text-slate-800 hover:border-[#4F46E5]/45 hover:text-[#4F46E5] dark:border-white/[0.09] dark:bg-white/[0.02] dark:text-slate-200 dark:hover:border-[#818CF8]/45 dark:hover:text-[#818CF8]'
                   }`}
                 >
                   <CompletionCheck checked={habit.done} size="sm" />

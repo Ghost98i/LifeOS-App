@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -40,6 +42,7 @@ import { executeAuthorizedConflictReconciliation } from './resaleConflictResolut
 import type { ResaleConflictRecord } from './resaleConflictRecovery';
 import { _resetDeviceTrustFallbackStore, isDeviceEnrolled } from './deviceTrust';
 import { CloudConflictModal } from '../components/CloudConflictModal';
+import { OnboardingView } from '../components/OnboardingView';
 import { UnlockDeviceModal } from '../components/UnlockDeviceModal';
 import { PrivacySecuritySection } from '../components/PrivacySecuritySection';
 
@@ -610,4 +613,40 @@ test('Bloque 23.5: Cuenta legacy con clave de recuperación => desbloquea sin ro
     _resetDeviceTrustFallbackStore();
     mem.restore();
   }
+});
+
+test('Bloque 26: Higiene visual (cero azules residuales, cero ASCII prohibidos, .celestian-clean-field y CompletionCheck) en OnboardingView, UnlockDeviceModal, CloudConflictModal y PrivacySecuritySection', () => {
+  const targetFiles = [
+    'src/components/OnboardingView.tsx',
+    'src/components/UnlockDeviceModal.tsx',
+    'src/components/CloudConflictModal.tsx',
+    'src/components/PrivacySecuritySection.tsx',
+  ];
+
+  for (const file of targetFiles) {
+    const src = fs.readFileSync(path.resolve(file), 'utf8');
+    assert.doesNotMatch(src, /\b(text|bg|border|ring)-(blue|sky)-/, `${file} no debe usar blue-* ni sky-*`);
+    assert.doesNotMatch(src, /var\(--blue\)/, `${file} no debe usar var(--blue)`);
+    assert.doesNotMatch(src, /[←→✓×▲▼▶▾↗]/, `${file} no debe usar símbolos ASCII prohibidos`);
+  }
+
+  const state = defaultState();
+  const onboardingStep1Html = renderToStaticMarkup(
+    <OnboardingView
+      state={state}
+      onComplete={() => {}}
+      initialStep={1}
+      cloudConfigured={true}
+      onCloudSignIn={() => {}}
+    />
+  );
+  assert.match(onboardingStep1Html, /id="onboarding-name"[^>]*celestian-clean-field/);
+  assert.match(onboardingStep1Html, /Continuar en modo local/);
+  assert.match(onboardingStep1Html, /Conectar con Google en 1 clic/);
+  assert.doesNotMatch(onboardingStep1Html, /text-blue-|bg-blue-|text-sky-|bg-sky-|var\(--blue\)/);
+
+  const onboardingStep2Html = renderToStaticMarkup(
+    <OnboardingView state={state} onComplete={() => {}} initialStep={2} />
+  );
+  assert.match(onboardingStep2Html, /data-completion-check="true"/);
 });

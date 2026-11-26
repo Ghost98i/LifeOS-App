@@ -70,6 +70,7 @@ export interface TodaySpotlight {
 
 export interface TodayRadarMilestone {
   id: string;
+  dismissKey?: string;
   module: 'estudios' | 'trabajo' | 'finanzas' | 'proyectos';
   moduleLabel: string;
   title: string;
@@ -569,9 +570,19 @@ function urgencyForDays(daysUntil: number): TodayRadarMilestone['urgency'] {
   return 'upcoming';
 }
 
+function isRadarKeyDismissed(
+  dismissKey: string | undefined,
+  settings?: LifeOSState['settings']
+): boolean {
+  if (!dismissKey) return false;
+  const record = settings?.attentionDismissals?.[dismissKey];
+  if (record) return record.status === 'dismissed';
+  return Boolean(settings?.dismissedAttentionKeys?.includes(dismissKey));
+}
+
 /**
  * Aggregates real upcoming milestones from Estudios, Trabajo, and Finanzas for the Radar panel.
- * Respects module visibility and privacyMode.
+ * Respects module visibility, dismissed alerts, and privacyMode.
  */
 export function getTodayRadarMilestones(
   state: LifeOSState,
@@ -593,6 +604,9 @@ export function getTodayRadarMilestones(
       const daysUntil = daysBetween(todayIso, exam.date);
       if (daysUntil < 0 || daysUntil > 30) continue;
 
+      const dismissKey = `study_exam:${exam.id}:${exam.date}`;
+      if (isRadarKeyDismissed(dismissKey, state.settings)) continue;
+
       const subject = exam.subjectId ? subjects.find((s) => s.id === exam.subjectId) : null;
       const title = exam.title?.trim()
         ? subject
@@ -603,6 +617,7 @@ export function getTodayRadarMilestones(
       const timePart = exam.time ? ` · ${exam.time}` : '';
       milestones.push({
         id: `radar-exam-${exam.id}`,
+        dismissKey,
         module: 'estudios',
         moduleLabel: 'Estudios',
         title,
@@ -627,10 +642,13 @@ export function getTodayRadarMilestones(
         if (!kd.date || !/^\d{4}-\d{2}-\d{2}$/.test(kd.date)) continue;
         const daysUntil = daysBetween(todayIso, kd.date);
         if (daysUntil < -7 || daysUntil > 14) continue;
+        const dismissKey = `job_deadline:${app.id}:${kd.kind}:${kd.date}`;
+        if (isRadarKeyDismissed(dismissKey, state.settings)) continue;
         const kindLabel = JOB_KEY_DATE_LABELS[kd.kind] || 'Hito';
         const timePart = kd.time ? ` · ${kd.time}` : '';
         milestones.push({
           id: `radar-job-kd-${app.id}-${kd.id}`,
+          dismissKey,
           module: 'trabajo',
           moduleLabel: 'Trabajo',
           title: `${kindLabel}: ${app.empresa}`,
@@ -647,19 +665,23 @@ export function getTodayRadarMilestones(
       if (app.nextActionDate && /^\d{4}-\d{2}-\d{2}$/.test(app.nextActionDate)) {
         const daysUntil = daysBetween(todayIso, app.nextActionDate);
         if (daysUntil >= -7 && daysUntil <= 14) {
-          milestones.push({
-            id: `radar-job-next-${app.id}`,
-            module: 'trabajo',
-            moduleLabel: 'Trabajo',
-            title: app.nextAction?.trim() ? `${app.nextAction.trim()} · ${app.empresa}` : `Seguimiento · ${app.empresa}`,
-            detail: fmtDate(app.nextActionDate),
-            date: app.nextActionDate,
-            daysUntil,
-            countdownLabel: formatCountdown(daysUntil),
-            urgency: urgencyForDays(daysUntil),
-            targetView: 'trabajo',
-            targetFocusId: `job-app-${app.id}`,
-          });
+          const dismissKey = `job_followup:${app.id}:${app.nextActionDate}`;
+          if (!isRadarKeyDismissed(dismissKey, state.settings)) {
+            milestones.push({
+              id: `radar-job-next-${app.id}`,
+              dismissKey,
+              module: 'trabajo',
+              moduleLabel: 'Trabajo',
+              title: app.nextAction?.trim() ? `${app.nextAction.trim()} · ${app.empresa}` : `Seguimiento · ${app.empresa}`,
+              detail: fmtDate(app.nextActionDate),
+              date: app.nextActionDate,
+              daysUntil,
+              countdownLabel: formatCountdown(daysUntil),
+              urgency: urgencyForDays(daysUntil),
+              targetView: 'trabajo',
+              targetFocusId: `job-app-${app.id}`,
+            });
+          }
         }
       }
     }
@@ -677,6 +699,9 @@ export function getTodayRadarMilestones(
       const daysUntil = daysBetween(todayIso, com.nextDueDate);
       if (daysUntil > 10) continue;
 
+      const dismissKey = `finance_commitment:${com.id}:${com.nextDueDate}`;
+      if (isRadarKeyDismissed(dismissKey, state.settings)) continue;
+
       const cur = confirmedFinancialCurrency(com.currency);
       const formattedCleanAmount = `$ ${com.amount.toLocaleString('es-UY', { maximumFractionDigits: 2 })}`;
       const amountText = cur
@@ -687,6 +712,7 @@ export function getTodayRadarMilestones(
 
       milestones.push({
         id: `radar-fin-com-${com.id}`,
+        dismissKey,
         module: 'finanzas',
         moduleLabel: 'Finanzas',
         title: maskLabel(com.name),
@@ -712,12 +738,16 @@ export function getTodayRadarMilestones(
       const daysUntil = daysBetween(todayIso, nextDue.dueDate);
       if (daysUntil > 10) continue;
 
+      const dismissKey = `finance_agreement:${agreement.id}:${nextDue.installmentNumber}:${nextDue.dueDate}`;
+      if (isRadarKeyDismissed(dismissKey, state.settings)) continue;
+
       const cur = (agreement.currency || 'UYU').toUpperCase();
       const pendingAmount = nextDue.remainingDue > 0.005 ? nextDue.remainingDue : nextDue.requiredAmount;
       const amountText = maskMoney(pendingAmount, cur);
 
       milestones.push({
         id: `radar-fin-agr-${agreement.id}-${nextDue.installmentNumber}`,
+        dismissKey,
         module: 'finanzas',
         moduleLabel: 'Finanzas',
         title: `${maskLabel(agreement.title)} (${nextDue.installmentNumber}/${nextDue.totalInstallments})`,
@@ -741,20 +771,24 @@ export function getTodayRadarMilestones(
       if (project.reviewDate && /^\d{4}-\d{2}-\d{2}$/.test(project.reviewDate)) {
         const daysUntil = daysBetween(todayIso, project.reviewDate);
         if (daysUntil <= 14) {
-          milestones.push({
-            id: `radar-project-review-${project.id}`,
-            module: 'proyectos',
-            moduleLabel: 'Proyectos',
-            title: `Revisión: ${project.name}`,
-            detail: fmtDate(project.reviewDate),
-            date: project.reviewDate,
-            daysUntil,
-            countdownLabel: formatCountdown(daysUntil),
-            urgency: urgencyForDays(daysUntil),
-            targetView: 'notas',
-            targetTab: 'proyectos',
-            targetFocusId: `project-${project.id}`,
-          });
+          const dismissKey = `project_review:${project.id}:${project.reviewDate}`;
+          if (!isRadarKeyDismissed(dismissKey, state.settings)) {
+            milestones.push({
+              id: `radar-project-review-${project.id}`,
+              dismissKey,
+              module: 'proyectos',
+              moduleLabel: 'Proyectos',
+              title: `Revisión: ${project.name}`,
+              detail: fmtDate(project.reviewDate),
+              date: project.reviewDate,
+              daysUntil,
+              countdownLabel: formatCountdown(daysUntil),
+              urgency: urgencyForDays(daysUntil),
+              targetView: 'notas',
+              targetTab: 'proyectos',
+              targetFocusId: `project-${project.id}`,
+            });
+          }
         }
       }
 
@@ -763,8 +797,11 @@ export function getTodayRadarMilestones(
         if (!task.dueDate || !/^\d{4}-\d{2}-\d{2}$/.test(task.dueDate)) continue;
         const daysUntil = daysBetween(todayIso, task.dueDate);
         if (daysUntil > 14) continue;
+        const dismissKey = `project_task:${task.id}:${task.dueDate}`;
+        if (isRadarKeyDismissed(dismissKey, state.settings)) continue;
         milestones.push({
           id: `radar-project-task-${task.id}`,
+          dismissKey,
           module: 'proyectos',
           moduleLabel: 'Proyectos',
           title: task.text,
