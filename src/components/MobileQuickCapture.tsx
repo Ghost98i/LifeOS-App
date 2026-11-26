@@ -31,6 +31,7 @@ import {
 import { DraftConfirmationTray } from './DraftConfirmationTray';
 import { LiveCapturePreview } from './LiveCapturePreview';
 import { PrivacyAmount } from './PrivacyAmount';
+import { CelestianSwitch } from './ui/CelestianSwitch';
 
 interface MobileQuickCaptureProps {
   state: LifeOSState;
@@ -75,7 +76,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
   const [effort, setEffort] = useState<EffortLevel>('medium');
   const [reminderTime, setReminderTime] = useState('');
   const [date, setDate] = useState(todayISO());
-  const [message, setMessage] = useState('');
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [listening, setListening] = useState(false);
 
   // Fast Finance Parser state
@@ -162,7 +163,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
       setUniversalInput('');
       setMobileDrafts([]);
       setDate(todayISO());
-      setMessage('');
+      setFeedback(null);
       setNoteTitle('');
       setNotePinned(false);
       setManualAccountId(fallbackAccountId);
@@ -176,8 +177,11 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
   }, [open, initialKind, fallbackAccountId, suggestedTemplate, state.settings]);
 
   const previousFocusedElementRef = useRef<HTMLElement | null>(null);
+  const universalInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const financeInputRef = useRef<HTMLInputElement>(null);
+  const manualAmountRef = useRef<HTMLInputElement>(null);
+  const noteTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -195,16 +199,21 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
-    const timer = window.setTimeout(() => {
-      if (activeTab === 'capture') {
-        if (kind === 'gasto' && !manualFinanceMode) {
-          financeInputRef.current?.focus();
-        } else if (kind !== 'entrenamiento') {
-          inputRef.current?.focus();
-        }
+    if (!open || activeTab !== 'capture') return;
+    const focusPrimary = () => {
+      if (kind === 'universal') {
+        universalInputRef.current?.focus();
+      } else if (kind === 'gasto') {
+        if (manualFinanceMode) manualAmountRef.current?.focus();
+        else financeInputRef.current?.focus();
+      } else if (kind === 'nota') {
+        noteTextareaRef.current?.focus();
+      } else if (kind !== 'entrenamiento') {
+        inputRef.current?.focus();
       }
-    }, 60);
+    };
+    focusPrimary();
+    const timer = window.setTimeout(focusPrimary, 40);
     return () => window.clearTimeout(timer);
   }, [open, kind, manualFinanceMode, activeTab]);
 
@@ -220,6 +229,27 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
       onClose();
     }
   };
+
+  const requestCloseRef = useRef(handleRequestClose);
+  requestCloseRef.current = handleRequestClose;
+  const showExitConfirmRef = useRef(showExitConfirm);
+  showExitConfirmRef.current = showExitConfirm;
+
+  useEffect(() => {
+    if (!open) return;
+    const onGlobalKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (event.defaultPrevented) return;
+      event.preventDefault();
+      if (showExitConfirmRef.current) {
+        setShowExitConfirm(false);
+        return;
+      }
+      requestCloseRef.current();
+    };
+    window.addEventListener('keydown', onGlobalKeyDown);
+    return () => window.removeEventListener('keydown', onGlobalKeyDown);
+  }, [open]);
 
   const handleForceCloseDiscard = () => {
     setShowExitConfirm(false);
@@ -258,7 +288,12 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
 
   const handleDialogKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
+      e.preventDefault();
       e.stopPropagation();
+      if (showExitConfirm) {
+        setShowExitConfirm(false);
+        return;
+      }
       handleRequestClose();
     }
   };
@@ -277,20 +312,21 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
       });
 
       playSound('success');
+      showToast('Entrenamiento iniciado.', 'success');
       onClose();
       if (onNavigate) {
         onNavigate('gimnasio');
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Error al iniciar entrenamiento.');
+      setFeedback({ type: 'error', text: err instanceof Error ? err.message : 'Error al iniciar entrenamiento.' });
     }
   };
 
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
+  const submitCapture = () => {
     if (isSubmitting) return;
     setIsSubmitting(true);
     try {
+      let successMessage = 'Guardado al instante';
       if (kind === 'gasto') {
         if (manualFinanceMode) {
           const amt = Number(manualAmount.replace(',', '.'));
@@ -308,7 +344,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
           });
           if (saved === false) throw new Error('No se pudo guardar. Conservamos el gasto para que puedas reintentar.');
           playSound('coins');
-          setMessage('✓ Gasto registrado');
+          successMessage = 'Gasto registrado';
         } else {
           // Use parsed quick finance
           if (!parsedFinance.isValid || parsedFinance.amount === null) {
@@ -326,7 +362,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
               );
             });
             playSound('success');
-            setMessage('✓ Obligación registrada como tarea');
+            successMessage = 'Obligación registrada como tarea';
           } else {
             const chosenAccountId = parsedFinance.accountId || manualAccountId || fallbackAccountId;
             const saved = onUpdateState((draft) => {
@@ -342,22 +378,25 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
             });
             if (saved === false) throw new Error('No se pudo guardar. Conservamos el gasto para que puedas reintentar.');
             playSound('coins');
-            setMessage('✓ Gasto registrado');
+            successMessage = parsedFinance.type === 'ingreso' ? 'Ingreso registrado' : 'Gasto registrado';
           }
         }
       } else if (kind === 'inbox') {
+        if (!text.trim()) throw new Error('Escribí un texto para guardar en tu bandeja.');
         onUpdateState((draft) => {
           addQuickInbox(draft, text, 'quick-capture');
         });
         playSound('success');
-        setMessage('✓ Guardado al instante');
+        successMessage = 'Guardado en bandeja';
       } else if (kind === 'tarea') {
+        if (!text.trim()) throw new Error('Escribí una tarea para guardar.');
         onUpdateState((draft) => {
           addQuickTask(draft, text, priority, date, effort);
         });
         playSound('success');
-        setMessage('✓ Guardado al instante');
+        successMessage = 'Tarea guardada';
       } else if (kind === 'nota') {
+        if (!text.trim()) throw new Error('Escribí el contenido de la nota.');
         onUpdateState((draft) => {
           addQuickNote(draft, text, date, {
             title: noteTitle.trim() || undefined,
@@ -365,34 +404,51 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
           });
         });
         playSound('success');
-        setMessage('✓ Guardado al instante');
+        successMessage = 'Nota guardada';
       } else if (kind === 'idea') {
         if (!isModuleEnabled(state.settings, 'ia')) {
           throw new Error('El módulo IA está desactivado.');
         }
+        if (!text.trim()) throw new Error('Escribí una idea para guardar.');
         onUpdateState((draft) => {
           addQuickIdea(draft, text);
         });
         playSound('success');
-        setMessage('✓ Guardado al instante');
+        successMessage = 'Idea guardada';
       } else if (kind === 'recordatorio') {
+        if (!text.trim()) throw new Error('Escribí un recordatorio para guardar.');
         onUpdateState((draft) => {
           addQuickReminder(draft, text, date, reminderTime);
         });
         playSound('success');
-        setMessage('✓ Guardado al instante');
+        successMessage = 'Recordatorio guardado';
       }
 
+      setFeedback({ type: 'success', text: successMessage });
+      showToast(successMessage, 'success');
       setText('');
+      setNoteTitle('');
       setFinanceInput('');
       setManualAmount('');
       window.setTimeout(() => {
         setIsSubmitting(false);
         onClose();
-      }, 400);
+      }, 220);
     } catch (error) {
       setIsSubmitting(false);
-      setMessage(error instanceof Error ? error.message : 'No se pudo guardar.');
+      setFeedback({ type: 'error', text: error instanceof Error ? error.message : 'No se pudo guardar.' });
+    }
+  };
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    submitCapture();
+  };
+
+  const handleFormKeyDown = (event: React.KeyboardEvent<HTMLFormElement>) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      event.preventDefault();
+      submitCapture();
     }
   };
 
@@ -444,7 +500,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
     };
     const Recognition = browserWindow.SpeechRecognition || browserWindow.webkitSpeechRecognition;
     if (!Recognition) {
-      setMessage('El dictado no está disponible en este navegador.');
+      setFeedback({ type: 'error', text: 'El dictado no está disponible en este navegador.' });
       return;
     }
     const recognition = new Recognition();
@@ -454,7 +510,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
     recognition.onend = () => setListening(false);
     recognition.onerror = () => {
       setListening(false);
-      setMessage('No pude escuchar. Podés escribir con el teclado.');
+      setFeedback({ type: 'error', text: 'No pude escuchar. Podés escribir con el teclado.' });
     };
     recognition.onresult = (event: any) => {
       const transcript = String(event.results?.[0]?.[0]?.transcript || '').trim();
@@ -476,16 +532,91 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
     if (!trimmed) return;
     const drafts = parseCaptureDrafts(trimmed, state);
     if (drafts.length > 0) {
-      setMessage('');
+      setFeedback(null);
       setMobileDrafts((prev) => [...prev, ...drafts]);
       setUniversalInput('');
       playSound('click');
     }
   };
 
+  const handleUniversalQuickConfirm = () => {
+    const trimmed = universalInput.trim();
+    if (trimmed) {
+      const drafts = parseCaptureDrafts(trimmed, state);
+      if (drafts.length === 1 && canConfirmDraft(state, drafts[0]).valid) {
+        let confirmFeedback: { message: string; sound: 'success' | 'coins' | 'click' } = {
+          message: 'Elemento registrado.',
+          sound: 'success',
+        };
+        const saved = onUpdateState((s) => {
+          confirmFeedback = confirmCaptureDraft(s, drafts[0]);
+        });
+        if (saved === false) {
+          setFeedback({ type: 'error', text: 'No se pudo guardar en este dispositivo.' });
+          return;
+        }
+        playSound(confirmFeedback.sound);
+        showToast(confirmFeedback.message, 'success');
+        setUniversalInput('');
+        onClose();
+        return;
+      }
+      handleUniversalParse();
+    }
+  };
+
+  const cleanFieldBase =
+    'celestian-clean-field rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text)] placeholder:text-[var(--text-faint)] transition-colors';
+
+  const typeSelectorBar = (
+    <div
+      role="tablist"
+      aria-label="Tipo de captura"
+      className="flex flex-wrap gap-1.5"
+    >
+      {availableCaptureOptions.map((option) => {
+        const isSelected = kind === option.kind;
+        return (
+          <button
+            key={option.kind}
+            type="button"
+            role="tab"
+            aria-selected={isSelected}
+            onClick={() => {
+              setKind(option.kind);
+              setFeedback(null);
+            }}
+            className={`inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
+              isSelected
+                ? 'bg-[#4F46E5] text-white shadow-xs'
+                : 'border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:border-[#4F46E5]/40 hover:text-[var(--text)]'
+            }`}
+          >
+            <AppIcon name={option.icon} className="h-3.5 w-3.5 shrink-0" />
+            <span className="whitespace-nowrap">{option.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+
+  const feedbackBanner = feedback ? (
+    <p
+      role={feedback.type === 'success' ? 'status' : 'alert'}
+      className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold leading-relaxed ${
+        feedback.type === 'success'
+          ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+          : 'border-rose-500/25 bg-rose-500/10 text-rose-700 dark:text-rose-300'
+      }`}
+    >
+      <AppIcon name={feedback.type === 'success' ? 'check' : 'alertCircle'} className="h-4 w-4 shrink-0" />
+      <span>{feedback.text}</span>
+    </p>
+  ) : null;
+
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/55 backdrop-blur-xs transition-opacity"
+      className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/55 sm:p-4 backdrop-blur-xs transition-opacity"
       onClick={handleRequestClose}
     >
       <section
@@ -493,7 +624,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
         aria-modal="true"
         aria-label="Captura rápida"
         onKeyDown={handleDialogKeyDown}
-        className="w-full sm:max-w-lg max-h-[92dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-[var(--card)] border border-[var(--border)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl transition-transform relative"
+        className="relative flex w-full sm:max-w-lg max-h-[90dvh] flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl bg-[var(--card)] border border-[var(--border)] shadow-2xl transition-transform"
         onClick={(event) => event.stopPropagation()}
       >
         {/* Exit Confirmation Dialog */}
@@ -510,21 +641,21 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
               <button
                 type="button"
                 onClick={handleForceCloseSaveInbox}
-                className="flex-1 py-2 px-3 rounded-xl bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold hover:opacity-90 transition cursor-pointer"
+                className="flex-1 py-2.5 px-3 rounded-xl bg-[#4F46E5] text-white text-xs font-bold hover:bg-[#4338CA] transition cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70"
               >
                 Guardar en Bandeja
               </button>
               <button
                 type="button"
                 onClick={handleForceCloseDiscard}
-                className="flex-1 py-2 px-3 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-xs font-bold hover:bg-rose-500/20 transition cursor-pointer"
+                className="flex-1 py-2.5 px-3 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20 text-xs font-bold hover:bg-rose-500/20 transition cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70"
               >
                 Descartar
               </button>
               <button
                 type="button"
                 onClick={() => setShowExitConfirm(false)}
-                className="py-2 px-3 rounded-xl bg-[var(--surface-muted)] text-[var(--text-soft)] text-xs font-semibold hover:bg-[var(--border)] transition cursor-pointer"
+                className="py-2.5 px-3 rounded-xl bg-[var(--surface-muted)] text-[var(--text-soft)] text-xs font-semibold hover:bg-[var(--border)] transition cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70"
               >
                 Volver
               </button>
@@ -532,33 +663,35 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
           </div>
         )}
 
-        {/* Header & Mode Tabs */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[var(--bg)] border border-[var(--border)]">
+        {/* Sticky Header & Mode Tabs */}
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--border)]/70 px-4 py-3 sm:px-5">
+          <div className="flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-1">
             <button
               type="button"
               onClick={() => setActiveTab('capture')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              className={`flex min-h-8 items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
                 activeTab === 'capture'
-                  ? 'bg-[var(--card)] text-[var(--text)] shadow-xs border border-[var(--border)] font-bold'
+                  ? 'bg-[#4F46E5] text-white shadow-xs'
                   : 'text-[var(--text-soft)] hover:text-[var(--text)]'
               }`}
             >
-              <AppIcon name="squarePlus" className="h-4 w-4" />
+              <AppIcon name="squarePlus" className="h-3.5 w-3.5" />
               <span>Captura</span>
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('inbox')}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
+              className={`flex min-h-8 items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-semibold transition cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
                 activeTab === 'inbox'
-                  ? 'bg-[var(--card)] text-[var(--text)] shadow-xs border border-[var(--border)] font-bold'
+                  ? 'bg-[#4F46E5] text-white shadow-xs'
                   : 'text-[var(--text-soft)] hover:text-[var(--text)]'
               }`}
             >
               <span>Bandeja</span>
               {(state.inbox || []).length > 0 && (
-                <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 text-white text-[10px] font-bold px-1">
+                <span className={`flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold ${
+                  activeTab === 'inbox' ? 'bg-white/25 text-white' : 'bg-amber-500 text-white'
+                }`}>
                   {(state.inbox || []).length}
                 </span>
               )}
@@ -567,28 +700,18 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
           <button
             type="button"
             onClick={handleRequestClose}
-            className="w-11 h-11 shrink-0 rounded-full bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] font-bold flex items-center justify-center transition cursor-pointer"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70"
             aria-label="Cerrar"
           >
             <AppIcon name="x" className="h-4 w-4" />
           </button>
         </div>
 
-        {message && (() => {
-          const isSuccess = message.startsWith('✓');
-          const cleanMessage = isSuccess ? message.replace(/^✓\s*/, '') : message;
-          return (
-            <p role={isSuccess ? 'status' : 'alert'} className={`mb-3 flex items-center gap-1.5 text-sm leading-relaxed ${isSuccess ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'}`}>
-              <AppIcon name={isSuccess ? 'check' : 'alertCircle'} className="h-4 w-4 shrink-0" />
-              <span>{cleanMessage}</span>
-            </p>
-          );
-        })()}
-
         {activeTab === 'inbox' ? (
-          <div className="space-y-3 py-1">
-            <div className="flex items-center justify-between">
-              <div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-3 px-4 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5">
+            {feedbackBanner}
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
                 <span className="text-xs font-extrabold text-[var(--text)] block">
                   Bandeja de entrada personal ({(state.inbox || []).length})
                 </span>
@@ -603,7 +726,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                     setActiveTab('capture');
                     setKind('inbox');
                   }}
-                  className="inline-flex items-center gap-1 rounded-lg bg-[var(--blue-soft)] border border-[var(--blue)]/30 px-2 py-1 text-[10px] font-bold text-[var(--blue)] cursor-pointer"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-[#4F46E5]/10 border border-[#4F46E5]/30 px-2.5 py-1.5 text-[11px] font-bold text-[#4F46E5] dark:text-[#818CF8] cursor-pointer"
                 >
                   <AppIcon name="plus" className="h-3 w-3" />
                   <span>Nueva</span>
@@ -613,7 +736,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
 
             {(state.inbox || []).length === 0 ? (
               <div className="py-10 text-center space-y-3 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--bg)] p-6">
-                <AppIcon name="sparkles" className="mx-auto h-7 w-7 text-[var(--blue)]" />
+                <AppIcon name="sparkles" className="mx-auto h-7 w-7 text-[#4F46E5] dark:text-[#818CF8]" />
                 <p className="text-sm font-bold text-[var(--text)]">Bandeja al día</p>
                 <p className="text-xs text-[var(--text-faint)] max-w-xs mx-auto">
                   No tenés capturas pendientes de clasificar. Escribí cualquier idea o pensamiento rápido para procesarlo cuando quieras.
@@ -624,21 +747,21 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                     setActiveTab('capture');
                     setKind('inbox');
                   }}
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-xl bg-[var(--blue)] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[var(--blue-hover)] cursor-pointer"
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#4338CA] cursor-pointer"
                 >
                   <AppIcon name="zap" className="h-3.5 w-3.5" />
                   <span>Capturar en bandeja</span>
                 </button>
               </div>
             ) : (
-              <div className="space-y-2.5 max-h-[60dvh] overflow-y-auto pr-0.5">
+              <div className="space-y-2.5 pr-0.5">
                 {(state.inbox || []).map((item) => (
                   <div
                     key={item.id}
                     className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3.5 space-y-2.5 shadow-xs"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs font-semibold text-[var(--text)] whitespace-pre-wrap leading-relaxed">
+                      <p className="text-xs font-semibold text-[var(--text)] whitespace-pre-wrap leading-relaxed break-words">
                         {item.text}
                       </p>
                       <button
@@ -660,7 +783,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                         <button
                           type="button"
                           onClick={() => handleConvertInbox(item.id, 'tarea')}
-                          className="inline-flex items-center gap-1 rounded-lg bg-[var(--blue-soft)] border border-[var(--blue)]/30 px-2.5 py-1 text-[10px] font-bold text-[var(--blue)] hover:bg-[var(--blue)] hover:text-white transition cursor-pointer"
+                          className="inline-flex items-center gap-1 rounded-lg bg-[#4F46E5]/10 border border-[#4F46E5]/30 px-2.5 py-1 text-[10px] font-bold text-[#4F46E5] dark:text-[#818CF8] hover:bg-[#4F46E5] hover:text-white transition cursor-pointer"
                         >
                           <AppIcon name="check" className="h-3 w-3" />
                           <span>Tarea hoy</span>
@@ -698,236 +821,224 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
               </div>
             )}
           </div>
-        ) : (
-          <>
-            {/* Category Selector Chips */}
-            <div className="flex flex-wrap gap-1.5 rounded-2xl bg-[var(--bg)] p-1.5 mb-4">
-              {availableCaptureOptions.map((option) => (
-                <button
-                  key={option.kind}
-                  type="button"
-                  onClick={() => {
-                    setKind(option.kind);
-                    setMessage('');
-                  }}
-                  className={`flex-1 min-w-[52px] flex flex-col items-center justify-center rounded-xl py-2 px-1 text-[11px] font-bold transition cursor-pointer ${
-                    kind === option.kind
-                      ? 'bg-[var(--card)] text-[#4F46E5] dark:text-indigo-400 shadow-xs border border-[var(--border)]'
-                      : 'text-[var(--text-soft)] hover:text-[var(--text)]'
-                  }`}
-                >
-                  <AppIcon name={option.icon} className="h-4 w-4 mb-1 shrink-0" />
-                  <span className="truncate">{option.label}</span>
-                </button>
-              ))}
-            </div>
+        ) : kind === 'universal' ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-3.5 px-4 py-3.5 sm:px-5">
+              {typeSelectorBar}
+              {feedbackBanner}
 
-        {/* UNIVERSAL / WORKOUT / STANDARD TABS */}
-        {kind === 'universal' ? (
-          <div className="space-y-4 py-1">
-            <div className="space-y-3">
-              <label className="block">
-                <span className="text-xs font-semibold text-[var(--text)] mb-1.5 block">
-                  ¿Qué querés registrar?
-                </span>
-                <div className="relative flex gap-2">
-                  <input
-                    autoFocus
-                    value={universalInput}
-                    onChange={(e) => setUniversalInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleUniversalParse();
-                      }
-                    }}
-                    placeholder="Ej: 1200 nafta, estudiar redes mañana..."
-                    className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-3.5 px-4 text-sm font-medium outline-none focus:border-[var(--blue)] shadow-inner text-[var(--text)]"
-                  />
-                  <button
-                    type="button"
-                    onClick={startDictation}
-                    className={`flex items-center justify-center w-12 h-12 rounded-2xl border transition cursor-pointer shrink-0 ${
-                      listening
-                        ? 'bg-rose-500 text-white animate-pulse border-rose-600'
-                        : 'bg-[var(--card)] text-[var(--text-soft)] border-[var(--border)] hover:text-[var(--text)]'
-                    }`}
-                    title="Dictado por voz"
-                  >
-                    <AppIcon name="mic" className="h-4 w-4" />
-                  </button>
-                </div>
-              </label>
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="text-xs font-semibold text-[var(--text)] mb-1.5 block">
+                    ¿Qué querés registrar?
+                  </span>
+                  <div className="relative flex gap-2">
+                    <input
+                      ref={universalInputRef}
+                      autoFocus
+                      value={universalInput}
+                      onChange={(e) => setUniversalInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                          e.preventDefault();
+                          handleUniversalQuickConfirm();
+                        } else if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleUniversalParse();
+                        }
+                      }}
+                      placeholder="Ej: 1200 nafta, estudiar redes mañana..."
+                      className={`${cleanFieldBase} min-w-0 flex-1 py-3 px-3.5 text-sm font-medium`}
+                    />
+                    <button
+                      type="button"
+                      onClick={startDictation}
+                      className={`flex items-center justify-center w-11 h-11 rounded-xl border transition cursor-pointer shrink-0 ${
+                        listening
+                          ? 'bg-rose-500 text-white animate-pulse border-rose-600'
+                          : 'bg-[var(--bg-elevated)] text-[var(--text-soft)] border-[var(--border)] hover:text-[var(--text)]'
+                      }`}
+                      title="Dictado por voz"
+                      aria-label="Dictado por voz"
+                    >
+                      <AppIcon name="mic" className="h-4 w-4" />
+                    </button>
+                  </div>
+                </label>
 
-              {universalPreviewDrafts.length > 0 && (
-                <LiveCapturePreview drafts={universalPreviewDrafts} state={state} />
-              )}
-
-              <div className="flex items-center justify-between pt-1">
-                <span className="text-[11px] text-[var(--text-faint)]">
-                  Podés combinar varios registros con &quot;y&quot;.
-                </span>
-                <button
-                  type="button"
-                  onClick={handleUniversalParse}
-                  disabled={!universalInput.trim()}
-                  className="px-4 py-2 rounded-xl bg-[var(--text)] text-[var(--bg-elevated)] text-xs font-bold hover:opacity-90 active:scale-95 disabled:opacity-30 transition cursor-pointer shadow-xs"
-                >
-                  Revisar captura
-                </button>
+                {universalPreviewDrafts.length > 0 && (
+                  <LiveCapturePreview drafts={universalPreviewDrafts} state={state} />
+                )}
               </div>
-            </div>
 
-            {mobileDrafts.length > 0 && (
-              <DraftConfirmationTray
-                drafts={mobileDrafts}
-                state={state}
-                confirmingDraftIds={confirmingDraftIds}
-                isConfirmingAll={isConfirmingAll}
-                onUpdateDraft={(updated) =>
-                  setMobileDrafts((prev) => prev.map((d) => (d.id === updated.id ? updated : d)))
-                }
-                onConfirmDraft={(draft) => {
-                  if (confirmingDraftIds.has(draft.id)) return;
-                  const validation = canConfirmDraft(state, draft);
-                  if (!validation.valid) {
-                    setMessage(validation.reason || 'Borrador no válido.');
-                    return;
+              {mobileDrafts.length > 0 && (
+                <DraftConfirmationTray
+                  drafts={mobileDrafts}
+                  state={state}
+                  confirmingDraftIds={confirmingDraftIds}
+                  isConfirmingAll={isConfirmingAll}
+                  onUpdateDraft={(updated) =>
+                    setMobileDrafts((prev) => prev.map((d) => (d.id === updated.id ? updated : d)))
                   }
-                  setConfirmingDraftIds((prev) => new Set(prev).add(draft.id));
-                  setMessage('');
-                  try {
-                    let feedback: { message: string; sound: 'success' | 'coins' | 'click' } = {
-                      message: 'Elemento registrado.',
-                      sound: 'success',
-                    };
-                    const saved = onUpdateState((s) => {
-                      feedback = confirmCaptureDraft(s, draft);
-                    });
-                    if (saved === false) {
-                      setMessage('No se pudo guardar en este dispositivo. El borrador sigue disponible.');
+                  onConfirmDraft={(draft) => {
+                    if (confirmingDraftIds.has(draft.id)) return;
+                    const validation = canConfirmDraft(state, draft);
+                    if (!validation.valid) {
+                      setFeedback({ type: 'error', text: validation.reason || 'Borrador no válido.' });
                       return;
                     }
-                    playSound(feedback.sound);
-                    showToast(feedback.message);
-                    setMobileDrafts((prev) => {
-                      const next = prev.filter((d) => d.id !== draft.id);
-                      if (next.length === 0) onClose();
-                      return next;
-                    });
-                  } catch (err) {
-                    setMessage(err instanceof Error ? err.message : 'Error al registrar.');
-                  } finally {
-                    setConfirmingDraftIds((prev) => {
-                      const next = new Set(prev);
-                      next.delete(draft.id);
-                      return next;
-                    });
-                  }
-                }}
-                onConfirmAll={() => {
-                  if (isConfirmingAll) return;
-                  setIsConfirmingAll(true);
-                  setMessage('');
-                  try {
-                    let count = 0;
-                    const confirmedIds = new Set<string>();
-                    const saved = onUpdateState((s) => {
-                      for (const d of mobileDrafts) {
-                        if (canConfirmDraft(s, d).valid) {
-                          try {
-                            confirmCaptureDraft(s, d);
-                            confirmedIds.add(d.id);
-                            count++;
-                          } catch {
-                            // individual draft error, keep in tray
+                    setConfirmingDraftIds((prev) => new Set(prev).add(draft.id));
+                    setFeedback(null);
+                    try {
+                      let confirmFeedback: { message: string; sound: 'success' | 'coins' | 'click' } = {
+                        message: 'Elemento registrado.',
+                        sound: 'success',
+                      };
+                      const saved = onUpdateState((s) => {
+                        confirmFeedback = confirmCaptureDraft(s, draft);
+                      });
+                      if (saved === false) {
+                        setFeedback({ type: 'error', text: 'No se pudo guardar en este dispositivo. El borrador sigue disponible.' });
+                        return;
+                      }
+                      playSound(confirmFeedback.sound);
+                      showToast(confirmFeedback.message);
+                      setMobileDrafts((prev) => {
+                        const next = prev.filter((d) => d.id !== draft.id);
+                        if (next.length === 0) onClose();
+                        return next;
+                      });
+                    } catch (err) {
+                      setFeedback({ type: 'error', text: err instanceof Error ? err.message : 'Error al registrar.' });
+                    } finally {
+                      setConfirmingDraftIds((prev) => {
+                        const next = new Set(prev);
+                        next.delete(draft.id);
+                        return next;
+                      });
+                    }
+                  }}
+                  onConfirmAll={() => {
+                    if (isConfirmingAll) return;
+                    setIsConfirmingAll(true);
+                    setFeedback(null);
+                    try {
+                      let count = 0;
+                      const confirmedIds = new Set<string>();
+                      const saved = onUpdateState((s) => {
+                        for (const d of mobileDrafts) {
+                          if (canConfirmDraft(s, d).valid) {
+                            try {
+                              confirmCaptureDraft(s, d);
+                              confirmedIds.add(d.id);
+                              count++;
+                            } catch {
+                              // individual draft error, keep in tray
+                            }
                           }
                         }
+                      });
+                      if (saved === false) {
+                        setFeedback({ type: 'error', text: 'No se pudo guardar en este dispositivo. Los borradores siguen disponibles.' });
+                        return;
                       }
-                    });
-                    if (saved === false) {
-                      setMessage('No se pudo guardar en este dispositivo. Los borradores siguen disponibles.');
-                      return;
+                      if (count > 0) {
+                        playSound('success');
+                        showToast(`${count} elementos registrados.`);
+                      }
+                      setMobileDrafts((prev) => {
+                        const remaining = prev.filter((d) => !confirmedIds.has(d.id));
+                        if (remaining.length === 0) onClose();
+                        return remaining;
+                      });
+                    } catch (err) {
+                      setFeedback({ type: 'error', text: err instanceof Error ? err.message : 'Error al registrar borradores.' });
+                    } finally {
+                      setIsConfirmingAll(false);
                     }
-                    if (count > 0) {
-                      playSound('success');
-                      showToast(`${count} elementos registrados.`);
+                  }}
+                  onDiscardDraft={(draftId) => {
+                    const removed = mobileDrafts.find((d) => d.id === draftId);
+                    setMobileDrafts((prev) => prev.filter((d) => d.id !== draftId));
+                    if (removed) {
+                      showToast('Borrador descartado.', 'info', {
+                        actionLabel: 'Deshacer',
+                        onAction: () => setMobileDrafts((prev) => (prev.some((d) => d.id === removed.id) ? prev : [...prev, removed])),
+                      });
                     }
-                    setMobileDrafts((prev) => {
-                      const remaining = prev.filter((d) => !confirmedIds.has(d.id));
-                      if (remaining.length === 0) onClose();
-                      return remaining;
+                  }}
+                  onDiscardAll={() => {
+                    const snapshot = [...mobileDrafts];
+                    setMobileDrafts([]);
+                    if (snapshot.length > 0) {
+                      showToast(`${snapshot.length} borradores descartados.`, 'info', {
+                        actionLabel: 'Deshacer',
+                        onAction: () => setMobileDrafts((prev) => [...prev, ...snapshot]),
+                      });
+                    }
+                  }}
+                  onEnableModule={(draft) => {
+                    onUpdateState((s) => {
+                      enableModuleForDraft(s, draft);
                     });
-                  } catch (err) {
-                    setMessage(err instanceof Error ? err.message : 'Error al registrar borradores.');
-                  } finally {
-                    setIsConfirmingAll(false);
-                  }
-                }}
-                onDiscardDraft={(draftId) => {
-                  const removed = mobileDrafts.find((d) => d.id === draftId);
-                  setMobileDrafts((prev) => prev.filter((d) => d.id !== draftId));
-                  if (removed) {
-                    showToast('Borrador descartado.', 'info', {
-                      actionLabel: 'Deshacer',
-                      onAction: () => setMobileDrafts((prev) => (prev.some((d) => d.id === removed.id) ? prev : [...prev, removed])),
-                    });
-                  }
-                }}
-                onDiscardAll={() => {
-                  const snapshot = [...mobileDrafts];
-                  setMobileDrafts([]);
-                  if (snapshot.length > 0) {
-                    showToast(`${snapshot.length} borradores descartados.`, 'info', {
-                      actionLabel: 'Deshacer',
-                      onAction: () => setMobileDrafts((prev) => [...prev, ...snapshot]),
-                    });
-                  }
-                }}
-                onEnableModule={(draft) => {
-                  onUpdateState((s) => {
-                    enableModuleForDraft(s, draft);
-                  });
-                  setMobileDrafts((prev) =>
-                    prev.map((d) => (d.id === draft.id ? { ...d, isModuleEnabled: true } : d))
-                  );
-                  showToast('Módulo activado.');
-                }}
-                onConvertToNote={(draft) => {
-                  const noteDraft = convertDraftToNote(draft);
-                  setMobileDrafts((prev) =>
-                    prev.map((d) => (d.id === draft.id ? noteDraft : d))
-                  );
-                  showToast('Convertido a nota.');
-                }}
-                onConvertToInbox={(draft) => {
-                  const inboxDraft: CaptureDraft = {
-                    id: draft.id,
-                    rawText: draft.rawText,
-                    kind: 'inbox',
-                    targetModule: 'dashboard',
-                    isModuleEnabled: true,
-                    text: draft.rawText,
-                  };
-                  setMobileDrafts((prev) =>
-                    prev.map((d) => (d.id === draft.id ? inboxDraft : d))
-                  );
-                  showToast('Convertido a bandeja de entrada.');
-                }}
-              />
-            )}
+                    setMobileDrafts((prev) =>
+                      prev.map((d) => (d.id === draft.id ? { ...d, isModuleEnabled: true } : d))
+                    );
+                    showToast('Módulo activado.');
+                  }}
+                  onConvertToNote={(draft) => {
+                    const noteDraft = convertDraftToNote(draft);
+                    setMobileDrafts((prev) =>
+                      prev.map((d) => (d.id === draft.id ? noteDraft : d))
+                    );
+                    showToast('Convertido a nota.');
+                  }}
+                  onConvertToInbox={(draft) => {
+                    const inboxDraft: CaptureDraft = {
+                      id: draft.id,
+                      rawText: draft.rawText,
+                      kind: 'inbox',
+                      targetModule: 'dashboard',
+                      isModuleEnabled: true,
+                      text: draft.rawText,
+                    };
+                    setMobileDrafts((prev) =>
+                      prev.map((d) => (d.id === draft.id ? inboxDraft : d))
+                    );
+                    showToast('Convertido a bandeja de entrada.');
+                  }}
+                />
+              )}
+            </div>
+
+            <div className="flex shrink-0 items-center justify-between gap-2 border-t border-[var(--border)]/70 bg-[var(--card)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
+              <span className="text-[11px] text-[var(--text-faint)] truncate">
+                Combiná registros con &quot;y&quot;
+              </span>
+              <button
+                type="button"
+                onClick={handleUniversalParse}
+                disabled={!universalInput.trim()}
+                className="inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-bold text-white hover:bg-[#4338CA] active:scale-[0.98] disabled:opacity-40 transition cursor-pointer shadow-xs outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70"
+              >
+                <span>Revisar captura</span>
+                <kbd className="hidden sm:inline rounded bg-black/20 px-1.5 py-0.5 text-[10px] font-mono">Enter</kbd>
+              </button>
+            </div>
           </div>
         ) : kind === 'entrenamiento' ? (
-          <div className="space-y-4 py-1">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-3.5 px-4 py-3.5 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5">
+            {typeSelectorBar}
+            {feedbackBanner}
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 space-y-3">
               <span className="text-xs font-bold text-[var(--text)] block">
                 {suggestedTemplate ? `Sugerido para hoy (${todayDayKey}):` : 'Iniciar sesión:'}
               </span>
 
               {suggestedTemplate && (
-                <div className="flex items-center justify-between rounded-xl border border-[var(--blue)]/30 bg-[var(--blue-soft)]/20 p-3">
-                  <div>
-                    <strong className="text-sm font-bold text-[var(--text)] block">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-[#4F46E5]/30 bg-[#4F46E5]/[0.06] p-3">
+                  <div className="min-w-0">
+                    <strong className="text-sm font-bold text-[var(--text)] block truncate">
                       {suggestedTemplate.name}
                     </strong>
                     <span className="text-[11px] text-[var(--text-soft)]">
@@ -937,7 +1048,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                   <button
                     type="button"
                     onClick={() => handleStartWorkout(suggestedTemplate.id)}
-                    className="rounded-xl bg-[var(--blue)] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[var(--blue-hover)] transition cursor-pointer"
+                    className="shrink-0 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-[#4338CA] transition cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70"
                   >
                     Iniciar ya
                   </button>
@@ -952,7 +1063,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                   <select
                     value={selectedWorkoutTemplateId}
                     onChange={(e) => setSelectedWorkoutTemplateId(e.target.value)}
-                    className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-2.5 text-xs text-[var(--text)]"
+                    className={`${cleanFieldBase} min-w-0 flex-1 p-2.5 text-xs`}
                   >
                     <option value="">Sesión Libre (sin rutina fija)</option>
                     {(state.gym?.routineTemplates || []).map((t) => (
@@ -964,7 +1075,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                   <button
                     type="button"
                     onClick={() => handleStartWorkout(selectedWorkoutTemplateId || undefined)}
-                    className="rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-xs font-bold text-[var(--text)] hover:border-[var(--blue)] transition cursor-pointer"
+                    className="shrink-0 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-xs font-bold text-[var(--text)] hover:border-[#4F46E5]/50 transition cursor-pointer"
                   >
                     Iniciar
                   </button>
@@ -973,347 +1084,385 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
             </div>
           </div>
         ) : (
-          /* STANDARD FORM FOR OTHER 5 KINDS */
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* FAST EXPENSE PARSER */}
-            {kind === 'gasto' && (
-              <div className="space-y-3">
-                {!manualFinanceMode ? (
-                  <div>
-                    <label className="block">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-xs font-semibold text-[var(--text)]">Entrada rápida</span>
-                        <button
-                          type="button"
-                          onClick={() => setManualFinanceMode(true)}
-                          className="text-[11px] text-[var(--blue)] font-semibold hover:underline cursor-pointer"
-                        >
-                          Modo tradicional
-                        </button>
-                      </div>
-                      <div className="relative flex gap-2">
-                        <input
-                          ref={financeInputRef}
-                          autoFocus
-                          value={financeInput}
-                          onChange={(e) => setFinanceInput(e.target.value)}
-                          placeholder="Monto, categoría o cuenta (ej: 500 super)..."
-                          className="w-full rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-3.5 px-4 text-sm font-medium outline-none focus:border-[var(--blue)] shadow-inner text-[var(--text)]"
-                        />
-                        <button
-                          type="button"
-                          onClick={startDictation}
-                          className={`w-11 shrink-0 rounded-2xl border text-base flex items-center justify-center transition cursor-pointer ${
-                            listening
-                              ? 'border-rose-500 bg-rose-500/15 animate-pulse'
-                              : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)]'
-                          }`}
-                          title="Dictar por voz"
-                        >
-                          <AppIcon name="mic" className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </label>
+          /* STANDARD FORM FOR OTHER 6 KINDS WITH PINNED FOOTER */
+          <form onSubmit={handleSubmit} onKeyDown={handleFormKeyDown} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain space-y-3.5 px-4 py-3.5 sm:px-5">
+              {typeSelectorBar}
+              {feedbackBanner}
 
-                    {/* Compact Live Parser Preview Badge */}
-                    <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <span className="text-[10px] uppercase font-bold tracking-wider text-[var(--text-faint)] block">
-                            Interpretación:
-                          </span>
-                          <span
-                            className={`text-xs tabular-nums font-bold block mt-0.5 truncate ${
-                              parsedFinance.isValid ? 'text-emerald-500' : 'text-[var(--text-soft)]'
-                            }`}
+              {/* FAST EXPENSE PARSER */}
+              {kind === 'gasto' && (
+                <div className="space-y-3">
+                  {!manualFinanceMode ? (
+                    <div>
+                      <label className="block">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-semibold text-[var(--text)]">Entrada rápida</span>
+                          <button
+                            type="button"
+                            onClick={() => setManualFinanceMode(true)}
+                            className="text-[11px] text-[#4F46E5] dark:text-[#818CF8] font-semibold hover:underline cursor-pointer"
                           >
-                            <PrivacyAmount>{parsedFinance.preview}</PrivacyAmount>
-                          </span>
+                            Modo tradicional
+                          </button>
                         </div>
-                        {parsedFinance.isValid && (
-                          <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-500 shrink-0">
-                            Listo
-                          </span>
+                        <div className="relative flex gap-2">
+                          <input
+                            ref={financeInputRef}
+                            autoFocus
+                            value={financeInput}
+                            onChange={(e) => setFinanceInput(e.target.value)}
+                            placeholder="Monto, categoría o cuenta (ej: 500 super)..."
+                            className={`${cleanFieldBase} min-w-0 flex-1 py-3 px-3.5 text-sm font-medium`}
+                          />
+                          <button
+                            type="button"
+                            onClick={startDictation}
+                            className={`w-11 h-11 shrink-0 rounded-xl border text-base flex items-center justify-center transition cursor-pointer ${
+                              listening
+                                ? 'border-rose-500 bg-rose-500/15 animate-pulse'
+                                : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:text-[var(--text)]'
+                            }`}
+                            title="Dictar por voz"
+                            aria-label="Dictar por voz"
+                          >
+                            <AppIcon name="mic" className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </label>
+
+                      {/* Compact Live Parser Preview Badge */}
+                      <div className="mt-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)] p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-[var(--text-faint)] block">
+                              Interpretación:
+                            </span>
+                            <span
+                              className={`text-xs tabular-nums font-bold block mt-0.5 truncate ${
+                                parsedFinance.isValid ? 'text-emerald-600 dark:text-emerald-400' : 'text-[var(--text-soft)]'
+                              }`}
+                            >
+                              <PrivacyAmount>{parsedFinance.preview}</PrivacyAmount>
+                            </span>
+                          </div>
+                          {parsedFinance.isValid && (
+                            <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+                              Listo
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Quick Account Picker Chips if account is missing */}
+                        {parsedFinance.missing.includes('account') && (state.finance?.accounts || []).length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-[var(--border)]">
+                            <span className="text-[10px] text-[var(--text-faint)] block mb-1">
+                              Cuenta:
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {(state.finance?.accounts || []).map((acc) => (
+                                <button
+                                  key={acc.id}
+                                  type="button"
+                                  onClick={() => setManualAccountId(acc.id)}
+                                  className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition cursor-pointer ${
+                                    (manualAccountId || fallbackAccountId) === acc.id
+                                      ? 'bg-[#4F46E5] text-white'
+                                      : 'bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)]'
+                                  }`}
+                                >
+                                  {acc.name}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                         )}
                       </div>
-
-                      {/* Quick Account Picker Chips if account is missing */}
-                      {parsedFinance.missing.includes('account') && (state.finance?.accounts || []).length > 0 && (
-                        <div className="mt-2 pt-2 border-t border-[var(--border)]">
-                          <span className="text-[10px] text-[var(--text-faint)] block mb-1">
-                            Cuenta:
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {(state.finance?.accounts || []).map((acc) => (
-                              <button
-                                key={acc.id}
-                                type="button"
-                                onClick={() => setManualAccountId(acc.id)}
-                                className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition cursor-pointer ${
-                                  (manualAccountId || fallbackAccountId) === acc.id
-                                    ? 'bg-[var(--blue)] text-white'
-                                    : 'bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)]'
-                                }`}
-                              >
-                                {acc.name}
-                              </button>
+                    </div>
+                  ) : (
+                    /* Manual input fallback */
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-[var(--text)]">Formulario detallado</span>
+                        <button
+                          type="button"
+                          onClick={() => setManualFinanceMode(false)}
+                          className="inline-flex items-center gap-1 text-[11px] text-[#4F46E5] dark:text-[#818CF8] font-semibold hover:underline cursor-pointer"
+                        >
+                          <AppIcon name="chevronLeft" className="h-3.5 w-3.5" />
+                          <span>Volver a entrada rápida</span>
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label>
+                          <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">Monto ($U)</span>
+                          <input
+                            ref={manualAmountRef}
+                            autoFocus
+                            required
+                            inputMode="decimal"
+                            value={manualAmount}
+                            onChange={(e) => setManualAmount(e.target.value)}
+                            placeholder="0"
+                            className={`${cleanFieldBase} w-full p-2.5 text-base font-bold ${
+                              state.settings?.privacyMode ? 'privacy-sensitive' : ''
+                            }`}
+                          />
+                        </label>
+                        <label>
+                          <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">Cuenta</span>
+                          <select
+                            value={manualAccountId || fallbackAccountId}
+                            onChange={(e) => setManualAccountId(e.target.value)}
+                            className={`${cleanFieldBase} w-full p-2.5 text-xs`}
+                          >
+                            {(state.finance?.accounts || []).map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.name}
+                              </option>
                             ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  /* Manual input fallback */
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-[var(--text)]">Formulario detallado</span>
-                      <button
-                        type="button"
-                        onClick={() => setManualFinanceMode(false)}
-                        className="text-[11px] text-[var(--blue)] font-semibold hover:underline cursor-pointer"
-                      >
-                        ← Volver a parser rápido
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <label>
-                        <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">Monto ($U)</span>
+                          </select>
+                        </label>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label>
+                          <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">Categoría</span>
+                          <select
+                            value={manualCategory}
+                            onChange={(e) => setManualCategory(e.target.value)}
+                            className={`${cleanFieldBase} w-full p-2.5 text-xs`}
+                          >
+                            {activeCategories.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">Fecha</span>
+                          <input
+                            type="date"
+                            value={date}
+                            onChange={(e) => setDate(e.target.value)}
+                            className={`${cleanFieldBase} w-full p-2.5 text-xs`}
+                          />
+                        </label>
+                      </div>
+                      <label className="block">
+                        <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">Nota / Detalle</span>
                         <input
-                          autoFocus
-                          required
-                          inputMode="decimal"
-                          value={manualAmount}
-                          onChange={(e) => setManualAmount(e.target.value)}
-                          placeholder="0"
-                          className={`w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-lg font-black outline-none focus:border-[var(--blue)] ${
-                            state.settings?.privacyMode ? 'privacy-sensitive' : ''
-                          }`}
-                        />
-                      </label>
-                      <label>
-                        <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">Cuenta</span>
-                        <select
-                          value={manualAccountId || fallbackAccountId}
-                          onChange={(e) => setManualAccountId(e.target.value)}
-                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-xs"
-                        >
-                          {(state.finance?.accounts || []).map((a) => (
-                            <option key={a.id} value={a.id}>
-                              {a.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <label>
-                        <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">Categoría</span>
-                        <select
-                          value={manualCategory}
-                          onChange={(e) => setManualCategory(e.target.value)}
-                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-xs"
-                        >
-                          {activeCategories.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">Fecha</span>
-                        <input
-                          type="date"
-                          value={date}
-                          onChange={(e) => setDate(e.target.value)}
-                          className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-xs"
+                          value={text}
+                          onChange={(e) => setText(e.target.value)}
+                          placeholder="Ej.: Almuerzo en el centro..."
+                          className={`${cleanFieldBase} w-full p-2.5 text-xs`}
                         />
                       </label>
                     </div>
-                    <label className="block">
-                      <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">Nota / Detalle</span>
-                      <input
-                        value={text}
-                        onChange={(e) => setText(e.target.value)}
-                        placeholder="Ej.: Almuerzo en el centro..."
-                        className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-xs outline-none focus:border-[var(--blue)]"
-                      />
-                    </label>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Optional Title for Note */}
-            {kind === 'nota' && (
-              <label className="block mb-2">
-                <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">
-                  Título (opcional)
-                </span>
-                <input
-                  type="text"
-                  value={noteTitle}
-                  onChange={(e) => setNoteTitle(e.target.value)}
-                  placeholder="Ej.: Soporte monitor, Configuración OBS..."
-                  className="min-w-0 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs font-semibold text-[var(--text)] outline-none focus:border-[var(--blue)]"
-                />
-              </label>
-            )}
-
-            {/* TEXT INPUT FOR INBOX, TASKS, NOTES, IDEAS, REMINDERS */}
-            {kind !== 'gasto' && (
-              <label className="block">
-                <span className="block text-xs font-bold text-[var(--text-soft)] mb-1.5">
-                  {kind === 'inbox'
-                    ? '¿Qué querés guardar en tu bandeja?'
-                    : kind === 'tarea'
-                    ? '¿Qué querés registrar para hoy?'
-                    : kind === 'nota'
-                    ? '¿Qué querés guardar?'
-                    : kind === 'idea'
-                    ? '¿Cuál es la idea o proyecto?'
-                    : '¿De qué querés acordarte?'}
-                </span>
-                <div className="flex gap-2">
-                  <input
-                    ref={inputRef}
-                    autoFocus
-                    required
-                    value={text}
-                    onChange={(event) => setText(event.target.value)}
-                    placeholder={
-                      kind === 'inbox'
-                        ? 'Ej.: Averiguar trámite, mandar presupuesto a cliente, probar app...'
-                        : kind === 'tarea'
-                        ? 'Ej.: Enviar CV a Micro1, Comprar alimento para gatos...'
-                        : kind === 'nota'
-                        ? 'Ej.: Código de acceso al portón es 4912...'
-                        : kind === 'idea'
-                        ? 'Ej.: Automatizar presupuestos con webhook...'
-                        : 'Ej.: Enviar informe antes de las 18...'
-                    }
-                    className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-sm outline-none focus:border-[var(--blue)]"
-                  />
-                  <button
-                    type="button"
-                    onClick={startDictation}
-                    className={`w-11 shrink-0 rounded-xl border text-base flex items-center justify-center transition cursor-pointer ${
-                      listening
-                        ? 'border-rose-500 bg-rose-500/15 animate-pulse'
-                        : 'border-[var(--border)] bg-[var(--bg)] text-[var(--text-soft)]'
-                    }`}
-                    aria-label="Dictar por voz"
-                  >
-                    <AppIcon name="mic" className="h-4 w-4" />
-                  </button>
+                  )}
                 </div>
-              </label>
-            )}
+              )}
 
-            {/* NOTE EXTRAS: Pin toggle */}
-            {kind === 'nota' && (
-              <div className="flex items-center justify-between pt-1 text-xs">
-                <label className="flex items-center gap-2 cursor-pointer select-none text-[var(--text-soft)] hover:text-[var(--text)]">
+              {/* Optional Title for Note */}
+              {kind === 'nota' && (
+                <label className="block">
+                  <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">
+                    Título (opcional)
+                  </span>
                   <input
-                    type="checkbox"
+                    type="text"
+                    value={noteTitle}
+                    onChange={(e) => setNoteTitle(e.target.value)}
+                    placeholder="Ej.: Soporte monitor, Configuración OBS..."
+                    className={`${cleanFieldBase} min-w-0 w-full p-2.5 text-xs font-semibold`}
+                  />
+                </label>
+              )}
+
+              {/* TEXT INPUT / TEXTAREA FOR INBOX, TASKS, NOTES, IDEAS, REMINDERS */}
+              {kind === 'nota' ? (
+                <label className="block">
+                  <span className="block text-xs font-bold text-[var(--text-soft)] mb-1.5">
+                    ¿Qué querés guardar?
+                  </span>
+                  <div className="flex items-start gap-2">
+                    <textarea
+                      ref={noteTextareaRef}
+                      autoFocus
+                      required
+                      rows={3}
+                      value={text}
+                      onChange={(event) => setText(event.target.value)}
+                      placeholder="Ej.: Código de acceso al portón es 4912..."
+                      className={`${cleanFieldBase} min-w-0 flex-1 resize-none p-3 text-sm leading-relaxed`}
+                    />
+                    <button
+                      type="button"
+                      onClick={startDictation}
+                      className={`w-11 h-11 shrink-0 rounded-xl border text-base flex items-center justify-center transition cursor-pointer ${
+                        listening
+                          ? 'border-rose-500 bg-rose-500/15 animate-pulse'
+                          : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:text-[var(--text)]'
+                      }`}
+                      aria-label="Dictar por voz"
+                    >
+                      <AppIcon name="mic" className="h-4 w-4" />
+                    </button>
+                  </div>
+                </label>
+              ) : kind !== 'gasto' && (
+                <label className="block">
+                  <span className="block text-xs font-bold text-[var(--text-soft)] mb-1.5">
+                    {kind === 'inbox'
+                      ? '¿Qué querés guardar en tu bandeja?'
+                      : kind === 'tarea'
+                      ? '¿Qué querés registrar para hoy?'
+                      : kind === 'idea'
+                      ? '¿Cuál es la idea o proyecto?'
+                      : '¿De qué querés acordarte?'}
+                  </span>
+                  <div className="flex gap-2">
+                    <input
+                      ref={inputRef}
+                      autoFocus
+                      required
+                      value={text}
+                      onChange={(event) => setText(event.target.value)}
+                      placeholder={
+                        kind === 'inbox'
+                          ? 'Ej.: Averiguar trámite, mandar presupuesto a cliente...'
+                          : kind === 'tarea'
+                          ? 'Ej.: Enviar CV a Micro1, Comprar alimento...'
+                          : kind === 'idea'
+                          ? 'Ej.: Automatizar presupuestos con webhook...'
+                          : 'Ej.: Enviar informe antes de las 18...'
+                      }
+                      className={`${cleanFieldBase} min-w-0 flex-1 p-3 text-sm`}
+                    />
+                    <button
+                      type="button"
+                      onClick={startDictation}
+                      className={`w-11 h-11 shrink-0 rounded-xl border text-base flex items-center justify-center transition cursor-pointer ${
+                        listening
+                          ? 'border-rose-500 bg-rose-500/15 animate-pulse'
+                          : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:text-[var(--text)]'
+                      }`}
+                      aria-label="Dictar por voz"
+                    >
+                      <AppIcon name="mic" className="h-4 w-4" />
+                    </button>
+                  </div>
+                </label>
+              )}
+
+              {/* NOTE EXTRAS: Pin switch */}
+              {kind === 'nota' && (
+                <div className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2.5 text-xs">
+                  <span id="quick-capture-pin-label" className="inline-flex items-center gap-1.5 font-semibold text-[var(--text-soft)]">
+                    <AppIcon name="pin" className="h-3.5 w-3.5 text-[#4F46E5] dark:text-[#818CF8]" />
+                    <span>Fijar nota arriba</span>
+                  </span>
+                  <CelestianSwitch
                     checked={notePinned}
-                    onChange={(e) => setNotePinned(e.target.checked)}
-                    className="rounded border-[var(--border)] text-[var(--blue)] focus:ring-0"
+                    onChange={setNotePinned}
+                    ariaLabelledBy="quick-capture-pin-label"
+                    size="sm"
                   />
-                  <span className="inline-flex items-center gap-1.5"><AppIcon name="pin" className="h-3.5 w-3.5" /><span>Fijar nota arriba</span></span>
-                </label>
-              </div>
-            )}
+                </div>
+              )}
 
-            {/* TAREA EXTRAS: Priority & Effort */}
-            {kind === 'tarea' && (
-              <div className="space-y-2.5 pt-1">
-                <div>
-                  <span className="block text-[11px] font-bold text-[var(--text-faint)] mb-1">Prioridad</span>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(['alta', 'media', 'baja'] as const).map((item) => (
-                      <button
-                        key={item}
-                        type="button"
-                        onClick={() => setPriority(item)}
-                        className={`rounded-xl border px-3 py-2 text-xs font-bold capitalize transition cursor-pointer ${
-                          priority === item
-                            ? 'border-[var(--blue)] bg-[var(--blue-soft)] text-[var(--blue)]'
-                            : 'border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)]'
-                        }`}
-                      >
-                        {item}
-                      </button>
-                    ))}
+              {/* TAREA EXTRAS: Priority & Effort */}
+              {kind === 'tarea' && (
+                <div className="space-y-2.5">
+                  <div>
+                    <span className="block text-[11px] font-bold text-[var(--text-faint)] mb-1">Prioridad</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['alta', 'media', 'baja'] as const).map((item) => (
+                        <button
+                          key={item}
+                          type="button"
+                          onClick={() => setPriority(item)}
+                          className={`min-h-9 rounded-xl border px-3 py-1.5 text-xs font-bold capitalize transition cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
+                            priority === item
+                              ? 'border-[#4F46E5] bg-[#4F46E5]/12 text-[#4F46E5] dark:border-[#818CF8] dark:bg-indigo-500/20 dark:text-[#818CF8]'
+                              : 'border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)]'
+                          }`}
+                        >
+                          {item}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="block text-[11px] font-bold text-[var(--text-faint)] mb-1">Nivel de Energía</span>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(
+                        [
+                          { id: 'low', label: 'Baja' },
+                          { id: 'medium', label: 'Media' },
+                          { id: 'high', label: 'Alta' },
+                        ] as const
+                      ).map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setEffort(item.id)}
+                          className={`min-h-9 rounded-xl border px-2 py-1.5 text-xs font-bold transition cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
+                            effort === item.id
+                              ? 'border-[#4F46E5] bg-[#4F46E5]/12 text-[#4F46E5] dark:border-[#818CF8] dark:bg-indigo-500/20 dark:text-[#818CF8]'
+                              : 'border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)]'
+                          }`}
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
+              )}
 
-                <div>
-                  <span className="block text-[11px] font-bold text-[var(--text-faint)] mb-1">Nivel de Energía</span>
-                  <div className="grid grid-cols-3 gap-2">
-                    {(
-                      [
-                        { id: 'low', label: 'Baja energía' },
-                        { id: 'medium', label: 'Media' },
-                        { id: 'high', label: 'Alta concentración' },
-                      ] as const
-                    ).map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => setEffort(item.id)}
-                        className={`rounded-xl border px-2 py-2 text-[11px] font-bold transition cursor-pointer ${
-                          effort === item.id
-                            ? 'border-amber-500 bg-amber-500/10 text-amber-500'
-                            : 'border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)]'
-                        }`}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
+              {/* RECORDATORIO EXTRAS: Time */}
+              {kind === 'recordatorio' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <label>
+                    <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">Hora (opcional)</span>
+                    <input
+                      type="time"
+                      value={reminderTime}
+                      onChange={(e) => setReminderTime(e.target.value)}
+                      className={`${cleanFieldBase} w-full p-2.5 text-xs tabular-nums`}
+                    />
+                  </label>
+                  <label>
+                    <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">Fecha</span>
+                    <input
+                      type="date"
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      className={`${cleanFieldBase} w-full p-2.5 text-xs tabular-nums`}
+                    />
+                  </label>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
-            {/* RECORDATORIO EXTRAS: Time */}
-            {kind === 'recordatorio' && (
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <label>
-                  <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">Hora (opcional)</span>
-                  <input
-                    type="time"
-                    value={reminderTime}
-                    onChange={(e) => setReminderTime(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs tabular-nums"
-                  />
-                </label>
-                <label>
-                  <span className="block text-xs font-bold text-[var(--text-soft)] mb-1">Fecha</span>
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-2.5 text-xs tabular-nums"
-                  />
-                </label>
-              </div>
-            )}
-
-            {/* Save Button */}
-            <button
-              type="submit"
-              className="w-full rounded-2xl bg-[var(--blue)] py-3.5 text-sm font-extrabold text-white shadow-md hover:bg-[var(--blue-hover)] transition cursor-pointer flex items-center justify-center gap-2"
-            >
-              <span>Guardar</span>
-              <kbd className="rounded bg-black/20 px-1.5 py-0.5 text-[10px] font-mono">↵ Enter</kbd>
-            </button>
+            {/* Pinned Save Footer — always accessible on 389px even with virtual keyboard */}
+            <div className="shrink-0 border-t border-[var(--border)]/70 bg-[var(--card)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#4F46E5] py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#4338CA] active:scale-[0.99] disabled:opacity-60 transition cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70"
+              >
+                <span>{isSubmitting ? 'Guardando…' : 'Guardar'}</span>
+                <kbd className="hidden sm:inline rounded bg-black/20 px-1.5 py-0.5 text-[10px] font-mono">
+                  {kind === 'nota' ? 'Ctrl + Enter' : 'Enter'}
+                </kbd>
+              </button>
+            </div>
           </form>
         )}
-      </>
-    )}
-  </section>
-</div>
+      </section>
+    </div>
   );
 };

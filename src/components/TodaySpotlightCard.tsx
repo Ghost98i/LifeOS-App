@@ -24,6 +24,8 @@ export interface TodaySpotlightCardProps {
   onToggleEntry: (entry: TodayAgendaEntry) => void;
   onOpenCheckout: () => void;
   onNavigate: (view: ViewType) => void;
+  canPlanTomorrow?: boolean;
+  planTomorrowView?: ViewType;
 }
 
 export const TodaySpotlightCard: React.FC<TodaySpotlightCardProps> = ({
@@ -33,6 +35,8 @@ export const TodaySpotlightCard: React.FC<TodaySpotlightCardProps> = ({
   onToggleEntry,
   onOpenCheckout,
   onNavigate,
+  canPlanTomorrow = true,
+  planTomorrowView = 'agenda',
 }) => {
   if (spotlight.mode === 'free') return null;
 
@@ -41,9 +45,9 @@ export const TodaySpotlightCard: React.FC<TodaySpotlightCardProps> = ({
   const isCurrent = spotlight.mode === 'current';
 
   const primaryBtnClass =
-    'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 cursor-pointer whitespace-nowrap';
+    'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#4338CA] active:scale-[0.98] cursor-pointer whitespace-nowrap outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70';
   const secondaryBtnClass =
-    'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200 dark:hover:bg-white/[0.08] cursor-pointer whitespace-nowrap';
+    'inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 active:scale-[0.98] dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-200 dark:hover:bg-white/[0.08] cursor-pointer whitespace-nowrap outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70';
 
   const renderLeadingVisual = () => {
     if (spotlight.domain === 'gym') {
@@ -180,8 +184,9 @@ export const TodaySpotlightCard: React.FC<TodaySpotlightCardProps> = ({
     }
 
     if (spotlight.mode === 'day_closed') {
+      if (!canPlanTomorrow) return null;
       return (
-        <button type="button" onClick={() => onNavigate('agenda')} className={secondaryBtnClass}>
+        <button type="button" onClick={() => onNavigate(planTomorrowView)} className={secondaryBtnClass}>
           <CalendarDays className="h-4 w-4" strokeWidth={1.75} aria-hidden="true" />
           <span>Planificar mañana</span>
         </button>

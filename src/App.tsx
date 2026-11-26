@@ -2653,6 +2653,10 @@ export default function App() {
       <Suspense fallback={dialogLoading('Preparando tu espacio…')}><OnboardingView
         state={state}
         onComplete={handleCompleteOnboarding}
+        cloudConfigured={cloudSyncConfigured}
+        cloudUser={cloudUser}
+        syncStatus={syncStatus}
+        onCloudSignIn={handleCloudSignIn}
       /></Suspense>
     );
   }
@@ -2705,7 +2709,7 @@ export default function App() {
           onQuickAction={handleQuickAction}
           onSearch={(q) => { setSearchQuery(q); setIsSearchOpen(true); }}
           onOpenSearch={() => { setSearchQuery(''); setIsSearchOpen(true); }}
-          onOpenCapture={() => setIsQuickCaptureOpen(true)}
+          onOpenCapture={() => { setQuickCaptureKind('tarea'); setIsQuickCaptureOpen(true); }}
           onTogglePrivacy={handleTogglePrivacy}
           cloudConfigured={cloudSyncConfigured}
           cloudUser={cloudUser}

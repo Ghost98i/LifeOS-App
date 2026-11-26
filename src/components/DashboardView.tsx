@@ -350,6 +350,56 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     }
   };
 
+  const handleDismissRadarMilestone = (item: TodayRadarMilestone) => {
+    const dismissKey = item.dismissKey;
+    if (!dismissKey) return;
+    if (
+      onUpdateState((draft) => {
+        if (!draft.settings) {
+          draft.settings = {
+            darkMode: false,
+            hiddenTabs: [],
+            onboardingCompleted: false,
+            dismissedAttentionKeys: [],
+            attentionDismissals: {},
+          };
+        }
+        const prevRec = draft.settings.attentionDismissals?.[dismissKey];
+        const nextTimestamp = nextAttentionDismissalTimestamp(prevRec);
+        const nextDismissals = {
+          ...(draft.settings.attentionDismissals || {}),
+          [dismissKey]: { status: 'dismissed' as const, updatedAt: nextTimestamp },
+        };
+        draft.settings.attentionDismissals = nextDismissals;
+        draft.settings.dismissedAttentionKeys = Object.entries(nextDismissals)
+          .filter(([, rec]) => (rec as AttentionDismissalRecord)?.status === 'dismissed')
+          .map(([k]) => k)
+          .sort();
+      }) === false
+    ) {
+      return;
+    }
+    showToast('Aviso silenciado en Hoy.', 'info', {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        onUpdateState((draft) => {
+          if (!draft.settings) return;
+          const prevRec = draft.settings.attentionDismissals?.[dismissKey];
+          const nextTimestamp = nextAttentionDismissalTimestamp(prevRec);
+          const nextDismissals = {
+            ...(draft.settings.attentionDismissals || {}),
+            [dismissKey]: { status: 'active' as const, updatedAt: nextTimestamp },
+          };
+          draft.settings.attentionDismissals = nextDismissals;
+          draft.settings.dismissedAttentionKeys = Object.entries(nextDismissals)
+            .filter(([, rec]) => (rec as AttentionDismissalRecord)?.status === 'dismissed')
+            .map(([k]) => k)
+            .sort();
+        });
+      },
+    });
+  };
+
   const handleDismissAttention = (item: AttentionItem) => {
     if (
       onUpdateState((draft) => {
@@ -802,7 +852,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         {sparkline.sleepPath && (
                           <path
                             d={sparkline.sleepPath}
-                            stroke="rgba(125,211,252,0.9)"
+                            stroke="rgba(196,181,253,0.95)"
                             strokeWidth={1.6}
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -868,6 +918,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           onToggleEntry={handleToggleAgendaEntry}
           onOpenCheckout={() => onNavigate('checkout')}
           onNavigate={onNavigate}
+          canPlanTomorrow={isModuleEnabled(state, 'agenda') || isModuleEnabled(state, 'calendario')}
+          planTomorrowView={isModuleEnabled(state, 'agenda') ? 'agenda' : 'calendario'}
         />
       )}
 
@@ -974,7 +1026,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           milestones={radarMilestones}
           pulse={todayPulse}
           enabledRadarModules={enabledRadarModules}
+          notesEnabled={notesEnabled}
           onOpenMilestone={handleOpenRadarMilestone}
+          onDismissMilestone={handleDismissRadarMilestone}
+          dismissedCount={dismissedAttentionItems.length}
+          onOpenDismissed={() => setShowDismissedModal(true)}
           onNavigate={onNavigate}
           onOpenActivity={() => setIsActivityModalOpen(true)}
         />

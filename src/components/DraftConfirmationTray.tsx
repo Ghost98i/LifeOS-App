@@ -284,7 +284,7 @@ const DraftCard: React.FC<DraftCardProps> = ({
                   {draft.installments && (
                     <>
                       <span className="text-[var(--text-faint)]">·</span>
-                      <span className="text-blue-500 font-semibold">{draft.installments} cuotas</span>
+                      <span className="text-[#4F46E5] dark:text-[#818CF8] font-semibold">{draft.installments} cuotas</span>
                     </>
                   )}
                   <span className="text-[var(--text-faint)]">·</span>
@@ -298,7 +298,7 @@ const DraftCard: React.FC<DraftCardProps> = ({
                   {draft.time && (
                     <>
                       <span className="text-[var(--text-faint)]">·</span>
-                      <span className="tabular-nums text-blue-500 font-bold">{draft.time}</span>
+                      <span className="tabular-nums text-[#4F46E5] dark:text-[#818CF8] font-bold">{draft.time}</span>
                     </>
                   )}
                   <span className="text-[var(--text-faint)]">·</span>
@@ -308,7 +308,7 @@ const DraftCard: React.FC<DraftCardProps> = ({
                         ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
                         : draft.priority === 'media'
                         ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-                        : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                        : 'bg-[#4F46E5]/12 text-[#4F46E5] dark:bg-indigo-500/15 dark:text-[#818CF8]'
                     }`}
                   >
                     {draft.priority}
@@ -354,7 +354,7 @@ const DraftCard: React.FC<DraftCardProps> = ({
                   {draft.time && (
                     <>
                       <span className="text-[var(--text-faint)]">·</span>
-                      <span className="tabular-nums text-blue-500 font-bold">{draft.time}</span>
+                      <span className="tabular-nums text-[#4F46E5] dark:text-[#818CF8] font-bold">{draft.time}</span>
                     </>
                   )}
                   <span className="text-[var(--text-faint)]">·</span>
@@ -539,7 +539,7 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
                 } as FinanceDraft);
               }}
               placeholder="0.00"
-              className={`px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-sm font-semibold outline-none ${
+              className={`celestian-clean-field px-2 py-1 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-sm font-semibold ${
                 state.settings.privacyMode ? 'privacy-sensitive' : ''
               }`}
             />
@@ -564,7 +564,7 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
                   missingFields: newMissing.length > 0 ? newMissing : undefined,
                 } as FinanceDraft);
               }}
-              className="px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium outline-none"
+              className="celestian-clean-field px-2 py-1 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium"
             >
               <option value="">Seleccionar categoría...</option>
               {categories
@@ -597,7 +597,7 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
                   accountName: acc?.name,
                 } as FinanceDraft);
               }}
-              className={`px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium outline-none ${
+              className={`celestian-clean-field px-2 py-1 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium ${
                 state.settings.privacyMode ? 'privacy-sensitive' : ''
               }`}
             >
@@ -626,7 +626,7 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
                   dateLabel: newDate === todayISO() ? 'Hoy' : newDate,
                 } as FinanceDraft);
               }}
-              className="px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium outline-none"
+              className="celestian-clean-field px-2 py-1 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium"
             />
           </div>
         </div>
@@ -657,7 +657,7 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
             onChange={(e) =>
               onUpdateDraft({ ...draft, text: e.target.value } as TaskDraft)
             }
-            className="px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-sm font-semibold outline-none"
+            className="celestian-clean-field px-2 py-1 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-sm font-semibold"
           />
         </div>
 
@@ -674,7 +674,7 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
                   priority: e.target.value as 'alta' | 'media' | 'baja',
                 } as TaskDraft)
               }
-              className="px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium outline-none"
+              className="celestian-clean-field px-2 py-1 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium"
             >
               <option value="alta">Alta</option>
               <option value="media">Media</option>
@@ -698,7 +698,7 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
                   ambiguityWarning: undefined,
                 } as TaskDraft);
               }}
-              className="px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium outline-none"
+              className="celestian-clean-field px-2 py-1 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium"
             />
           </div>
         </div>
@@ -730,7 +730,7 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
               onChange={(e) =>
                 onUpdateDraft({ ...draft, subjectName: e.target.value } as StudyDraft)
               }
-              className="px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-sm font-semibold outline-none"
+              className="celestian-clean-field px-2 py-1 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-sm font-semibold"
             />
           </div>
 
@@ -747,7 +747,7 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
                   minutes: parseInt(e.target.value, 10) || 30,
                 } as StudyDraft)
               }
-              className="px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-sm font-semibold outline-none"
+              className="celestian-clean-field px-2 py-1 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-sm font-semibold"
             />
           </div>
         </div>
@@ -778,7 +778,7 @@ const InlineDraftEditor: React.FC<InlineDraftEditorProps> = ({
           onChange={(e) =>
             onUpdateDraft({ ...draft, text: e.target.value } as any)
           }
-          className="px-2 py-1 rounded bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium outline-none resize-none"
+          className="celestian-clean-field px-2 py-1 rounded-lg bg-[var(--card)] border border-[var(--border)] text-[var(--text)] text-xs font-medium resize-none"
         />
       </div>
 
@@ -821,7 +821,7 @@ function getDraftMeta(draft: CaptureDraft): {
       return {
         label: 'Tarea',
         icon: 'check',
-        badgeClass: 'bg-blue-500/15 text-blue-700 dark:text-blue-300',
+        badgeClass: 'bg-[#4F46E5]/12 text-[#4F46E5] dark:bg-indigo-500/15 dark:text-[#818CF8]',
       };
     case 'study':
       return {

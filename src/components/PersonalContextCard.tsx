@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Activity } from 'lucide-react';
+import { Activity, ArrowLeft } from 'lucide-react';
 import type {
   ContextOptionalFactorKey,
   DailyContextEntry,
@@ -484,7 +484,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
                   onClick={() => handleSelectDate(today)}
                   className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold text-indigo-600 transition-colors hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-500/10 cursor-pointer"
                 >
-                  <span aria-hidden="true">←</span>
+                  <ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden="true" />
                   <span>Volver a hoy</span>
                 </button>
               )}
@@ -806,7 +806,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
                               onClick={() => setConnection(isSelected ? null : id)}
                               className={`rounded-lg border py-1 text-xs font-medium transition-colors ${
                                 isSelected
-                                  ? 'border-sky-600/60 bg-sky-500/15 font-semibold text-sky-800 dark:text-sky-200'
+                                  ? 'border-[#4F46E5]/55 bg-[#4F46E5]/12 font-semibold text-[#4F46E5] dark:border-[#818CF8]/55 dark:bg-indigo-500/20 dark:text-[#818CF8]'
                                   : 'border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)]'
                               }`}
                             >
@@ -1067,7 +1067,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
                               onClick={() => setIsNoteExpanded(!isNoteExpanded)}
                               aria-expanded={isNoteExpanded}
                               aria-controls="today-state-note-content"
-                              className="rounded text-[11px] font-semibold text-[var(--blue)] hover:underline focus:outline-none focus:ring-1 focus:ring-[var(--blue)] cursor-pointer"
+                              className="rounded text-[11px] font-semibold text-[#4F46E5] dark:text-[#818CF8] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 cursor-pointer"
                             >
                               {isNoteExpanded ? 'Ver menos' : 'Ver más'}
                             </button>
@@ -1134,7 +1134,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
                       onClick={() => setShowExplainDetails(!showExplainDetails)}
                       aria-expanded={showExplainDetails}
                       aria-controls="today-state-context-explanation"
-                      className="text-[11px] font-semibold text-[var(--blue)] hover:underline"
+                      className="text-[11px] font-semibold text-[#4F46E5] dark:text-[#818CF8] hover:underline"
                     >
                       {showExplainDetails ? 'Menos detalles' : 'Por qué veo esto'}
                     </button>
@@ -1204,7 +1204,7 @@ export const PersonalContextCard: React.FC<PersonalContextCardProps> = ({
                       aria-pressed={record.date === selectedDate}
                       aria-label={`${formatLongDate(record.date, record.date === today)}: ${record.hasAny ? 'Con registro' : 'Sin registros'}. Seleccionar día.`}
                       onClick={() => handleSelectDate(record.date)}
-                      className={`flex min-h-11 min-w-0 flex-col items-center justify-center rounded-lg text-xs ${record.date === selectedDate ? 'bg-[var(--blue-soft)] font-semibold text-[var(--blue)]' : 'text-[var(--text-soft)] hover:bg-[var(--surface-muted)]'}`}
+                      className={`flex min-h-11 min-w-0 flex-col items-center justify-center rounded-lg text-xs ${record.date === selectedDate ? 'bg-[#4F46E5]/12 font-semibold text-[#4F46E5] dark:bg-indigo-500/20 dark:text-[#818CF8]' : 'text-[var(--text-soft)] hover:bg-[var(--surface-muted)]'}`}
                     >
                       <span>{record.date === today ? 'Hoy' : dayLabel(record.date)}</span>
                       <span>{dayNumber(record.date)}</span>
@@ -1481,9 +1481,9 @@ const WeeklyGeneralMatrixChart: React.FC<{
                 <stop offset="100%" stopColor="var(--state-mood)" stopOpacity="0.02" />
               </linearGradient>
               <linearGradient id="af-pillar-grad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--blue)" stopOpacity="0.10" />
-                <stop offset="65%" stopColor="var(--blue)" stopOpacity="0.04" />
-                <stop offset="100%" stopColor="var(--blue)" stopOpacity="0.14" />
+                <stop offset="0%" stopColor="#4F46E5" stopOpacity="0.10" />
+                <stop offset="65%" stopColor="#4F46E5" stopOpacity="0.04" />
+                <stop offset="100%" stopColor="#4F46E5" stopOpacity="0.14" />
               </linearGradient>
             </defs>
 
@@ -1512,7 +1512,7 @@ const WeeklyGeneralMatrixChart: React.FC<{
                 height="220"
                 rx="8"
                 fill="url(#af-pillar-grad)"
-                stroke="var(--blue)"
+                stroke="#4F46E5"
                 strokeOpacity="0.28"
                 strokeWidth="1.2"
                 vectorEffect="non-scaling-stroke"
@@ -1856,7 +1856,7 @@ const WeeklyGeneralMatrixChart: React.FC<{
                   {formatLongDate(inspectRec.date, inspectRec.date === today)}
                 </span>
                 {inspectRec.date === selectedDate ? (
-                  <span className="rounded bg-[var(--blue-soft)]/70 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--blue)]">
+                  <span className="rounded bg-[#4F46E5]/12 px-1.5 py-0.5 text-[10px] font-semibold text-[#4F46E5] dark:bg-indigo-500/20 dark:text-[#818CF8]">
                     Seleccionado
                   </span>
                 ) : (
@@ -2004,9 +2004,9 @@ const WeeklyGeneralMatrixChart: React.FC<{
                 aria-pressed={isSelected}
                 aria-label={`${summaryTitle}. Seleccionar día.`}
                 title={summaryTitle}
-                className={`group relative flex min-h-[46px] min-w-0 flex-col items-center justify-center py-1.5 px-0.5 text-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue)] focus-visible:z-10 ${
+                className={`group relative flex min-h-[46px] min-w-0 flex-col items-center justify-center py-1.5 px-0.5 text-center transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 focus-visible:z-10 ${
                   isSelected
-                    ? 'bg-[color-mix(in_srgb,var(--blue)_14%,transparent)] font-bold text-[var(--blue)] shadow-2xs'
+                    ? 'bg-[#4F46E5]/12 font-bold text-[#4F46E5] dark:bg-indigo-500/20 dark:text-[#818CF8] shadow-2xs'
                     : isInspected
                       ? 'bg-[var(--surface-muted)] text-[var(--text)]'
                       : 'text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]'
@@ -2017,7 +2017,7 @@ const WeeklyGeneralMatrixChart: React.FC<{
                 </span>
                 <span
                   className={`text-[12px] font-mono leading-4 tabular-nums ${
-                    isSelected ? 'font-bold text-[var(--blue)]' : 'text-[var(--text-faint)] group-hover:text-[var(--text-soft)]'
+                    isSelected ? 'font-bold text-[#4F46E5] dark:text-[#818CF8]' : 'text-[var(--text-faint)] group-hover:text-[var(--text-soft)]'
                   }`}
                 >
                   {dayNumber(rec.date)}
@@ -2253,9 +2253,9 @@ const WeeklyMetricDetailChart: React.FC<{
                   width="76"
                   height="138"
                   rx="8"
-                  fill="var(--blue)"
+                  fill="#4F46E5"
                   fillOpacity="0.06"
-                  stroke="var(--blue)"
+                  stroke="#4F46E5"
                   strokeOpacity="0.22"
                   strokeWidth="1"
                   vectorEffect="non-scaling-stroke"
@@ -2394,7 +2394,7 @@ const WeeklyMetricDetailChart: React.FC<{
                   {formatLongDate(inspectRec.date, inspectRec.date === today)}
                 </span>
                 {inspectRec.date === selectedDate ? (
-                  <span className="rounded bg-[var(--blue-soft)]/70 px-1.5 py-0.5 text-[10px] font-semibold text-[var(--blue)]">
+                  <span className="rounded bg-[#4F46E5]/12 px-1.5 py-0.5 text-[10px] font-semibold text-[#4F46E5] dark:bg-indigo-500/20 dark:text-[#818CF8]">
                     Seleccionado
                   </span>
                 ) : (
@@ -2500,7 +2500,7 @@ const WeeklyMetricDetailChart: React.FC<{
                 title={summaryTitle}
                 className={`group relative flex min-h-[46px] min-w-0 flex-col items-center justify-center py-2 text-center transition-colors ${
                   isSelected
-                    ? 'bg-[color-mix(in_srgb,var(--blue)_12%,transparent)] font-bold text-[var(--blue)] shadow-2xs'
+                    ? 'bg-[#4F46E5]/12 font-bold text-[#4F46E5] dark:bg-indigo-500/20 dark:text-[#818CF8] shadow-2xs'
                     : isInspected
                       ? 'bg-[var(--surface-muted)] text-[var(--text)]'
                       : 'text-[var(--text-soft)] hover:bg-[var(--surface-muted)] hover:text-[var(--text)]'
@@ -2509,7 +2509,7 @@ const WeeklyMetricDetailChart: React.FC<{
                 <span className="text-[12px] font-semibold leading-4">{isToday ? 'Hoy' : dayLabel(rec.date)}</span>
                 <span
                   className={`text-[12px] tabular-nums leading-4 ${
-                    isSelected ? 'font-bold text-[var(--blue)]' : 'text-[var(--text-faint)] group-hover:text-[var(--text-soft)]'
+                    isSelected ? 'font-bold text-[#4F46E5] dark:text-[#818CF8]' : 'text-[var(--text-faint)] group-hover:text-[var(--text-soft)]'
                   }`}
                 >
                   {dayNumber(rec.date)}
@@ -2553,7 +2553,7 @@ const MetricScale: React.FC<MetricScaleProps> = ({
       case 'sleep':
         return 'border-[var(--state-sleep-border-active)] bg-[var(--state-sleep-soft)] font-semibold text-[var(--state-sleep)] ring-1 ring-[var(--state-sleep-border-active)]/30';
       default:
-        return 'border-[var(--blue)] bg-[var(--blue)] text-white';
+        return 'border-[#4F46E5] bg-[#4F46E5] text-white';
     }
   };
 

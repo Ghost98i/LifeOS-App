@@ -59,7 +59,7 @@ export const WeeklyReviewCard: React.FC<WeeklyReviewCardProps> = ({ state, onUpd
           <button
             type="button"
             onClick={() => setIsGuidedReviewOpen(true)}
-            className="min-h-8 sm:min-h-9 rounded-lg px-2.5 text-xs font-semibold text-[var(--blue)] transition-colors hover:bg-[var(--surface-muted)]"
+            className="min-h-8 sm:min-h-9 rounded-lg px-2.5 text-xs font-semibold text-[#4F46E5] dark:text-[#818CF8] transition-colors hover:bg-[var(--surface-muted)]"
           >
             Revisar
           </button>

@@ -198,12 +198,12 @@ export const Topbar: React.FC<TopbarProps> = ({
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2 ml-auto">
         {/* Quick Action Split-Button */}
         <div ref={quickMenuContainerRef} className="relative hidden sm:flex items-center">
-          <div className="inline-flex h-9 items-stretch overflow-hidden rounded-xl bg-indigo-600 dark:bg-indigo-500 shadow-xs">
+          <div className="inline-flex h-9 items-stretch overflow-hidden rounded-xl bg-[#4F46E5] shadow-xs">
             <button
               type="button"
               onClick={onOpenCapture}
               title={(state.inbox || []).length > 0 ? `Capturar / Bandeja (${(state.inbox || []).length} pendientes)` : "Capturar (C)"}
-              className="flex h-full items-center gap-1.5 px-3 text-xs font-bold text-white transition-colors hover:bg-indigo-700 dark:hover:bg-indigo-400 active:bg-black/15 cursor-pointer"
+              className="flex h-full items-center gap-1.5 px-3 text-xs font-bold text-white transition-colors hover:bg-[#4338CA] active:bg-black/15 cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/80"
             >
               <AppIcon name="squarePlus" className="h-4 w-4 text-white" />
               <span>Capturar</span>
@@ -223,10 +223,10 @@ export const Topbar: React.FC<TopbarProps> = ({
                   type="button"
                   onClick={() => setShowQuickMenu((v) => !v)}
                   title="Acciones y atajos rápidos"
-                  className={`flex h-full w-8 items-center justify-center text-white transition-colors cursor-pointer ${
+                  className={`flex h-full w-8 items-center justify-center text-white transition-colors cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/80 ${
                     showQuickMenu
                       ? 'bg-black/20'
-                      : 'hover:bg-indigo-700 dark:hover:bg-indigo-400 active:bg-black/15'
+                      : 'hover:bg-[#4338CA] active:bg-black/15'
                   }`}
                   aria-label="Más acciones rápidas"
                   aria-expanded={showQuickMenu}
@@ -254,7 +254,7 @@ export const Topbar: React.FC<TopbarProps> = ({
                       playSound('click');
                       onQuickAction(q.view, q.focusId, q.txType);
                     }}
-                    className="flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-left text-xs font-medium text-[var(--text)] hover:bg-[var(--blue-soft)] hover:text-[var(--blue)] transition-colors cursor-pointer"
+                    className="flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-left text-xs font-medium text-[var(--text)] hover:bg-[#4F46E5]/10 hover:text-[#4F46E5] dark:hover:bg-indigo-500/15 dark:hover:text-[#818CF8] transition-colors cursor-pointer"
                   >
                     <span>{q.label}</span>
                     <span className="text-[10px] text-[var(--text-faint)] uppercase">{q.view}</span>

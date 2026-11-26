@@ -131,7 +131,7 @@ export const DismissedAttentionModal: React.FC<DismissedAttentionModalProps> = (
                 <button
                   type="button"
                   onClick={() => onRestoreItem(item)}
-                  className="min-h-11 shrink-0 px-2.5 text-xs font-semibold text-[var(--blue)] hover:bg-[var(--blue)]/10 rounded-lg transition cursor-pointer"
+                  className="min-h-11 shrink-0 px-2.5 text-xs font-semibold text-[#4F46E5] hover:bg-[#4F46E5]/10 dark:text-[#818CF8] dark:hover:bg-indigo-500/15 rounded-lg transition cursor-pointer"
                   aria-label={`Restaurar aviso: ${item.title}`}
                 >
                   Restaurar
