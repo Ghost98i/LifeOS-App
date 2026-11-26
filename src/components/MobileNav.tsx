@@ -7,7 +7,9 @@ import { getMobileNavSlots } from '../lib/moduleVisibility';
 interface MobileNavProps {
   currentView: ViewType;
   onNavigate: (view: ViewType) => void;
+  onPrefetchView?: (view: ViewType) => void;
   onOpenCapture: () => void;
+  onPrefetchCapture?: () => void;
   onOpenMore: () => void;
   syncStatus?: CloudSyncStatus;
   privacyMode?: boolean;
@@ -23,7 +25,9 @@ interface MobileNavProps {
 export const MobileNav: React.FC<MobileNavProps> = ({
   currentView,
   onNavigate,
+  onPrefetchView,
   onOpenCapture,
+  onPrefetchCapture,
   onOpenMore,
   syncStatus,
   privacyMode,
@@ -160,6 +164,8 @@ export const MobileNav: React.FC<MobileNavProps> = ({
           <button
             type="button"
             onClick={() => onNavigate(slot2.id)}
+            onMouseEnter={() => onPrefetchView?.(slot2.id)}
+            onFocus={() => onPrefetchView?.(slot2.id)}
             className={itemClass(currentView === slot2.id)}
             aria-label={`Ir a ${slot2.label}`}
             aria-current={currentView === slot2.id ? 'page' : undefined}
@@ -175,6 +181,8 @@ export const MobileNav: React.FC<MobileNavProps> = ({
         <button
           type="button"
           onClick={onOpenCapture}
+          onMouseEnter={onPrefetchCapture}
+          onFocus={onPrefetchCapture}
           className="relative mx-2 -mt-1.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#4F46E5] hover:bg-[#4338CA] dark:bg-[#4F46E5] dark:hover:bg-[#6366F1] text-white shadow-[0_6px_18px_rgba(79,70,229,0.35)] active:scale-95 transition-all cursor-pointer border border-white/15"
           aria-label="Captura rápida"
         >
@@ -189,6 +197,8 @@ export const MobileNav: React.FC<MobileNavProps> = ({
           <button
             type="button"
             onClick={() => onNavigate(slot4.id)}
+            onMouseEnter={() => onPrefetchView?.(slot4.id)}
+            onFocus={() => onPrefetchView?.(slot4.id)}
             className={itemClass(currentView === slot4.id)}
             aria-label={`Ir a ${slot4.label}`}
             aria-current={currentView === slot4.id ? 'page' : undefined}

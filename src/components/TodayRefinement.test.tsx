@@ -4,7 +4,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { dayKeyFromDate, defaultState, todayISO } from '../lib/storage';
 import { getDismissedAttentionItems } from '../lib/todayAttention';
-import { DashboardView } from './DashboardView';
+import { DashboardView, preloadDashboardModals } from './DashboardView';
 import { PersonalContextCard } from './PersonalContextCard';
 import { DismissedAttentionModal } from './DismissedAttentionModal';
 import { WeeklyReviewCard } from './WeeklyReviewCard';
@@ -188,7 +188,8 @@ test('Hoy V3: renderiza hero integrado con mini sparkline, Spotlight reactivo, T
   assert.doesNotMatch(html, /Gráfico de evolución/);
 });
 
-test('Hoy V3: abrir el modal de Estado muestra el editor diario y el gráfico de evolución de 7 días bajo demanda', () => {
+test('Hoy V3: abrir el modal de Estado muestra el editor diario y el gráfico de evolución de 7 días bajo demanda', async () => {
+  await preloadDashboardModals();
   const state = defaultState();
   const today = todayISO();
   state.dailyContext.push({ date: today, sleepHours: 8, energy: 5, mood: 4, connection: null });
@@ -258,7 +259,8 @@ test('Hoy V3: sin bloques oculta Spotlight duplicado y muestra un único estado 
   assert.doesNotMatch(scheduledHtml, />Agenda</);
 });
 
-test('Hoy V3 cierre: con 1 solo día de estado oculta sparkline vacío, y el botón Historial abre modal de Actividad reciente bajo demanda', () => {
+test('Hoy V3 cierre: con 1 solo día de estado oculta sparkline vacío, y el botón Historial abre modal de Actividad reciente bajo demanda', async () => {
+  await preloadDashboardModals();
   const state = defaultState();
   const today = todayISO();
   state.dailyContext.push({ date: today, sleepHours: 8, energy: 4, mood: 5, connection: null });

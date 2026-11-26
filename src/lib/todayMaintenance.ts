@@ -1,5 +1,5 @@
 import type { Account, LifeOSState } from '../types';
-import { hasRecordedContext } from './contextInsights';
+import { hasRecordedContext } from './contextSummary';
 import { isModuleEnabled } from './moduleVisibility';
 
 /** Presentation eligibility only. Never infers dates or changes the underlying records. */

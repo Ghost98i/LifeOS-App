@@ -30,8 +30,8 @@ import {
   defaultAccountId,
   cashFlow30Days,
   cashFlowProjection,
-  getRealBalancesByCurrency,
 } from '../lib/calculations';
+import { getRealBalancesByCurrency } from '../lib/financeCashflow';
 import { FinanceHero } from './FinanceHero';
 import { FinanceTransactionModal } from './FinanceTransactionModal';
 import { FinanceTransactionTable } from './FinanceTransactionTable';

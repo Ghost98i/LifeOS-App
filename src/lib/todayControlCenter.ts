@@ -4,11 +4,11 @@ import { daysBetween, dayKeyFromDate, fmtDate, formatMoney, todayISO } from './s
 import { todayGymStatus } from './calculations';
 import { getActiveGymSession } from './gymFlows';
 import { isModuleEnabled } from './moduleVisibility';
-import { formatStudyDuration } from './studyFlows';
+import { formatStudyDuration } from './studyDuration';
 import { deriveAgreementSchedule } from './financeAgreements';
 import { confirmedFinancialCurrency } from './financeCurrencyPolicy';
 import { isJobApplicationActive, JOB_KEY_DATE_LABELS, normalizeJobKeyDates } from './jobApplications';
-import { contextForDate } from './contextInsights';
+import { contextForDate } from './contextSummary';
 import { GYM_ICON_REGISTRY, type GymIconName } from './gymIconRegistry';
 
 export type TodayBlockDomain = 'gym' | 'study' | 'general';

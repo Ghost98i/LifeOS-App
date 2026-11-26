@@ -14,6 +14,9 @@ interface TopbarProps {
   onSearch: (query: string) => void;
   onOpenSearch: () => void;
   onOpenCapture: () => void;
+  onPrefetchSearch?: () => void;
+  onPrefetchCapture?: () => void;
+  onPrefetchView?: (view: ViewType) => void;
   onTogglePrivacy: () => void;
   cloudConfigured: boolean;
   cloudUser: CloudUser | null;
@@ -40,6 +43,9 @@ export const Topbar: React.FC<TopbarProps> = ({
   onSearch: _onSearch,
   onOpenSearch,
   onOpenCapture,
+  onPrefetchSearch,
+  onPrefetchCapture,
+  onPrefetchView,
   onTogglePrivacy,
   cloudConfigured,
   cloudUser,
@@ -175,6 +181,8 @@ export const Topbar: React.FC<TopbarProps> = ({
       <button
         type="button"
         onClick={onOpenSearch}
+        onMouseEnter={onPrefetchSearch}
+        onFocus={onPrefetchSearch}
         className="hidden sm:flex h-9 items-center justify-between w-44 md:w-56 lg:w-72 px-3 py-1.5 text-xs lg:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:bg-[var(--surface-muted)] text-[var(--text-faint)] transition-all text-left shadow-2xs group cursor-pointer"
         title="Buscar y Paleta de Comandos (Ctrl + K o ⌘K)"
         aria-label="Abrir Paleta de Comandos"
@@ -202,6 +210,8 @@ export const Topbar: React.FC<TopbarProps> = ({
             <button
               type="button"
               onClick={onOpenCapture}
+              onMouseEnter={onPrefetchCapture}
+              onFocus={onPrefetchCapture}
               title={(state.inbox || []).length > 0 ? `Capturar / Bandeja (${(state.inbox || []).length} pendientes)` : "Capturar (C)"}
               className="flex h-full items-center gap-1.5 px-3 text-xs font-bold text-white transition-colors hover:bg-[#4338CA] active:bg-black/15 cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/80"
             >
@@ -254,6 +264,8 @@ export const Topbar: React.FC<TopbarProps> = ({
                       playSound('click');
                       onQuickAction(q.view, q.focusId, q.txType);
                     }}
+                    onMouseEnter={() => onPrefetchView?.(q.view)}
+                    onFocus={() => onPrefetchView?.(q.view)}
                     className="flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-left text-xs font-medium text-[var(--text)] hover:bg-[#4F46E5]/10 hover:text-[#4F46E5] dark:hover:bg-indigo-500/15 dark:hover:text-[#818CF8] transition-colors cursor-pointer"
                   >
                     <span>{q.label}</span>
