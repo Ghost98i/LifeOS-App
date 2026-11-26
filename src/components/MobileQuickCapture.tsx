@@ -40,6 +40,7 @@ interface MobileQuickCaptureProps {
   onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
   onNavigate?: (view: ViewType) => void;
   initialKind?: CaptureKind;
+  initialText?: string;
 }
 
 export type CaptureKind = 'universal' | 'tarea' | 'gasto' | 'nota' | 'entrenamiento' | 'inbox' | 'idea' | 'recordatorio';
@@ -62,6 +63,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
   onUpdateState,
   onNavigate,
   initialKind,
+  initialText,
 }) => {
   const [activeTab, setActiveTab] = useState<'capture' | 'inbox'>('capture');
   const [kind, setKind] = useState<CaptureKind>(() => initialKind || 'universal');
@@ -155,12 +157,22 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
     };
 
     if (isOpening) {
+      const targetKind: CaptureKind =
+        initialKind && isAllowed(initialKind) ? initialKind : 'universal';
       if (initialKind && isAllowed(initialKind)) {
         setKind(initialKind);
       } else {
         setKind((prev) => (isAllowed(prev) ? prev : 'universal'));
       }
-      setUniversalInput('');
+      const trimmedSeed = (initialText || '').trim();
+      setUniversalInput(targetKind === 'universal' ? trimmedSeed : '');
+      if (trimmedSeed) {
+        if (targetKind === 'gasto') {
+          setFinanceInput(trimmedSeed);
+        } else if (targetKind !== 'universal' && targetKind !== 'entrenamiento') {
+          setText(trimmedSeed);
+        }
+      }
       setMobileDrafts([]);
       setDate(todayISO());
       setFeedback(null);
@@ -174,7 +186,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
       // If module visibility changed while open, ensure kind remains valid without wiping drafts or input
       setKind((prev) => (isAllowed(prev) ? prev : 'universal'));
     }
-  }, [open, initialKind, fallbackAccountId, suggestedTemplate, state.settings]);
+  }, [open, initialKind, initialText, fallbackAccountId, suggestedTemplate, state.settings]);
 
   const previousFocusedElementRef = useRef<HTMLElement | null>(null);
   const universalInputRef = useRef<HTMLInputElement>(null);

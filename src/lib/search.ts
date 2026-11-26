@@ -35,7 +35,7 @@ export interface SearchResult {
   isSensitive?: boolean;
 }
 
-function normalize(value: unknown): string {
+export function normalizeSearchText(value: unknown): string {
   return String(value ?? '')
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
@@ -43,43 +43,83 @@ function normalize(value: unknown): string {
     .trim();
 }
 
+function hasWordPrefix(text: string, needle: string): boolean {
+  if (!text || !needle) return false;
+  const words = text.split(/[\s\-_/·.,:;()]+/);
+  return words.some((word) => word.startsWith(needle));
+}
+
 /**
- * Calculates a match score:
+ * Calculates a relevance score:
  * - 100: Exact match on title
- * - 75:  Title starts with query
+ * - 80:  Title starts with query
+ * - 65:  A word in title starts with query
  * - 50:  Title contains query
- * - 30:  Primary tags / fields match query
- * - 10:  Secondary content / notes match query
+ * - 38:  Primary field exact or starts with query
+ * - 30:  Primary field contains query
+ * - 10:  Secondary field contains query
+ * - Multi-token fallback (42 / 22 / 8) when all space-separated tokens match
  * - 0:   No match
  */
-function scoreMatch(
-  query: string,
+export function scoreSearchMatch(
+  rawQuery: string,
   title: string,
   primaryFields: unknown[] = [],
   secondaryFields: unknown[] = []
 ): number {
-  const normTitle = normalize(title);
+  const query = normalizeSearchText(rawQuery);
+  if (!query) return 0;
+
+  const normTitle = normalizeSearchText(title);
   if (normTitle === query) return 100;
-  if (normTitle.startsWith(query)) return 75;
+  if (normTitle.startsWith(query)) return 80;
+  if (hasWordPrefix(normTitle, query)) return 65;
   if (normTitle.includes(query)) return 50;
 
-  for (const field of primaryFields) {
-    if (normalize(field).includes(query)) return 30;
+  const normPrimary = primaryFields
+    .map((field) => normalizeSearchText(field))
+    .filter(Boolean);
+
+  for (const field of normPrimary) {
+    if (field === query || field.startsWith(query)) return 38;
+  }
+  for (const field of normPrimary) {
+    if (hasWordPrefix(field, query)) return 34;
+  }
+  for (const field of normPrimary) {
+    if (field.includes(query)) return 30;
   }
 
-  for (const field of secondaryFields) {
-    if (normalize(field).includes(query)) return 10;
+  const normSecondary = secondaryFields
+    .map((field) => normalizeSearchText(field))
+    .filter(Boolean);
+
+  for (const field of normSecondary) {
+    if (field.includes(query)) return 10;
+  }
+
+  // Multi-token fallback for queries with 2+ terms
+  const tokens = query.split(/\s+/).filter((t) => t.length >= 2);
+  if (tokens.length >= 2) {
+    if (tokens.every((token) => normTitle.includes(token))) return 42;
+    const primaryHaystack = `${normTitle} ${normPrimary.join(' ')}`;
+    if (tokens.every((token) => primaryHaystack.includes(token))) return 22;
+    const fullHaystack = `${primaryHaystack} ${normSecondary.join(' ')}`;
+    if (tokens.every((token) => fullHaystack.includes(token))) return 8;
   }
 
   return 0;
 }
 
+const MONETARY_GOAL_SOURCES = new Set(['available', 'net_worth', 'resale_profit']);
+
 export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult[] {
-  const query = normalize(rawQuery);
+  const query = normalizeSearchText(rawQuery);
   if (query.length < 2) return [];
 
-  const candidates: SearchResult[] = [];
+  const candidatesById = new Map<string, SearchResult>();
   const privacyMode = Boolean(state.settings?.privacyMode);
+
   const maskMoney = (amount: number, prefix: string = '', currency: string = 'UYU') => {
     const cur = (currency || 'UYU').toUpperCase();
     const sym = cur === 'USD' ? 'US$' : '$U';
@@ -91,47 +131,96 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
     primaryFields: unknown[] = [],
     secondaryFields: unknown[] = []
   ) => {
-    const score = scoreMatch(query, result.title, primaryFields, secondaryFields);
+    const score = scoreSearchMatch(query, result.title, primaryFields, secondaryFields);
     if (score > 0) {
-      candidates.push({ ...result, score });
+      const existing = candidatesById.get(result.id);
+      if (!existing || score > (existing.score ?? 0)) {
+        candidatesById.set(result.id, { ...result, score });
+      }
     }
   };
 
   // 1. Tareas y Prioridades (Siempre disponibles / Core)
   (state.todayExtras || []).forEach((item) =>
     consider(
-      { id: `task-${item.id}`, icon: '✓', iconName: 'check', title: item.text, subtitle: `Tarea · ${item.date}`, view: 'dashboard', category: 'tasks' },
-      [item.date]
+      {
+        id: `task-${item.id}`,
+        icon: '',
+        iconName: 'task',
+        title: maskFinancialText(item.text, privacyMode),
+        subtitle: `Tarea · ${item.date}`,
+        view: 'dashboard',
+        category: 'tasks',
+      },
+      [item.date, 'tarea']
     )
   );
 
   (state.dailyPriorities || []).forEach((item) =>
     consider(
-      { id: `priority-${item.id}`, icon: '🎯', iconName: 'check', title: item.text, subtitle: `Prioridad · ${item.date}`, view: 'dashboard', category: 'tasks' },
-      [item.date]
+      {
+        id: `priority-${item.id}`,
+        icon: '',
+        iconName: 'target',
+        title: maskFinancialText(item.text, privacyMode),
+        subtitle: `Prioridad · ${item.date}`,
+        view: 'dashboard',
+        category: 'tasks',
+      },
+      [item.date, 'prioridad']
     )
   );
 
   (state.inbox || []).forEach((item) =>
     consider(
-      { id: `inbox-${item.id}`, icon: '📥', iconName: 'bell', title: item.text, subtitle: 'Bandeja de entrada', view: 'dashboard', category: 'tasks' },
+      {
+        id: `inbox-${item.id}`,
+        icon: '',
+        iconName: 'inbox',
+        title: maskFinancialText(item.text, privacyMode),
+        subtitle: 'Bandeja de entrada',
+        view: 'dashboard',
+        category: 'tasks',
+      },
       ['inbox', 'bandeja']
     )
   );
 
-  (state.goals || []).forEach((item) =>
+  (state.goals || []).forEach((item) => {
+    const isMonetaryGoal = Boolean(item.linked && MONETARY_GOAL_SOURCES.has(item.linked));
+    const goalSubtitle =
+      isMonetaryGoal && privacyMode
+        ? 'Meta financiera · ••••'
+        : `${item.current} de ${item.target}`;
     consider(
-      { id: `goal-${item.id}`, icon: '🎯', iconName: 'trophy', title: item.name, subtitle: `${item.current} de ${item.target}`, view: 'dashboard', category: 'other' },
+      {
+        id: `goal-${item.id}`,
+        icon: '',
+        iconName: 'trophy',
+        title: maskFinancialText(item.name, privacyMode),
+        subtitle: goalSubtitle,
+        view: 'dashboard',
+        category: 'other',
+        isSensitive: isMonetaryGoal || undefined,
+      },
       ['meta'],
-      [item.current, item.target]
-    )
-  );
+      isMonetaryGoal && privacyMode ? [] : [item.current, item.target]
+    );
+  });
 
   // 2. Agenda Semanal y Rutinas (Módulo 'agenda')
   if (isModuleEnabled(state, 'agenda')) {
     (state.tasksRecurring || []).forEach((item) =>
       consider(
-        { id: `routine-${item.id}`, icon: '🔁', iconName: 'repeat', title: item.name, subtitle: 'Rutina', view: 'agenda', category: 'calendar' },
+        {
+          id: `routine-${item.id}`,
+          icon: '',
+          iconName: 'repeat',
+          title: item.name,
+          subtitle: 'Rutina',
+          view: 'agenda',
+          category: 'calendar',
+        },
         [item.freq, ...(item.days || [])],
         ['rutina']
       )
@@ -140,7 +229,15 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
     Object.entries(state.agenda || {}).forEach(([day, blocks]) =>
       blocks.forEach((item) =>
         consider(
-          { id: `agenda-${item.id}`, icon: '📅', iconName: 'calendar', title: item.activity, subtitle: `${day} · ${item.time}`, view: 'agenda', category: 'calendar' },
+          {
+            id: `agenda-${item.id}`,
+            icon: '',
+            iconName: 'calendar',
+            title: item.activity,
+            subtitle: `${day} · ${item.time}`,
+            view: 'agenda',
+            category: 'calendar',
+          },
           [day, item.time]
         )
       )
@@ -165,8 +262,8 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `tx-${item.id}`,
-          icon: isIngreso ? '↗' : '↘',
-          iconName: 'wallet',
+          icon: '',
+          iconName: isIngreso ? 'income' : 'wallet',
           title,
           subtitle,
           view: 'finanzas',
@@ -185,7 +282,7 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `account-${item.id}`,
-          icon: '💳',
+          icon: '',
           iconName: 'wallet',
           title: maskFinancialText(item.name, privacyMode),
           subtitle: `Cuenta · Saldo: ${maskMoney(item.balance, '', cur)}`,
@@ -202,8 +299,8 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `transfer-${item.id}`,
-          icon: '⇄',
-          iconName: 'repeat',
+          icon: '',
+          iconName: 'transfer',
           title: maskFinancialText(item.note || 'Transferencia', privacyMode),
           subtitle: `${maskMoney(item.amount)} · ${item.date}`,
           view: 'finanzas',
@@ -219,7 +316,7 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `subscription-${item.id}`,
-          icon: '🔔',
+          icon: '',
           iconName: 'clock',
           title: maskFinancialText(item.name, privacyMode),
           subtitle: `Suscripción · ${maskMoney(item.amount)}/mes`,
@@ -237,7 +334,7 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `commitment-${item.id}`,
-          icon: '💳',
+          icon: '',
           iconName: 'calendar',
           title: maskFinancialText(item.name, privacyMode),
           subtitle: `Compromiso · ${maskMoney(item.amount, '', cur)} · Vence: ${item.nextDueDate}`,
@@ -256,7 +353,7 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `expected-income-${item.id}`,
-          icon: '💰',
+          icon: '',
           iconName: 'trendingUp',
           title: maskFinancialText(item.name, privacyMode),
           subtitle: `Ingreso previsto · ${maskMoney(item.amount, '', cur)} · ${item.startDate}`,
@@ -277,7 +374,7 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
         consider(
           {
             id: `agreement-${item.id}`,
-            icon: '📑',
+            icon: '',
             iconName: 'wallet',
             title: maskFinancialText(item.title, privacyMode),
             subtitle: `Acuerdo / Cuotas · ${item.creditorName} · ${maskMoney(item.initialRemainingBalance, '', cur)}`,
@@ -294,7 +391,7 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `debt-${item.id}`,
-          icon: '🧾',
+          icon: '',
           iconName: 'wallet',
           title: maskFinancialText(item.name, privacyMode),
           subtitle: `Deuda · ${maskMoney(item.amount)}`,
@@ -311,7 +408,7 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `investment-${item.id}`,
-          icon: '📈',
+          icon: '',
           iconName: 'trendingUp',
           title: maskFinancialText(item.name, privacyMode),
           subtitle: `Inversión · ${maskMoney(item.amount)}`,
@@ -325,39 +422,64 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
     );
   }
 
-  // 4. Reventa (Módulo 'reventa')
+  // 4. Mi negocio / Reventa (Módulo 'reventa')
   if (isModuleEnabled(state, 'reventa')) {
-    (state.resale?.inventory || []).forEach((item) =>
+    (state.resale?.commercial?.items || []).forEach((item) => {
+      const unitLabel = item.unit === 'unit' ? 'Unidades' : item.unit === 'kg' ? 'Kilogramos' : 'Gramos';
       consider(
         {
-          id: `resale-${item.id}`,
-          icon: '📦',
-          iconName: 'repeat',
-          title: item.item,
-          subtitle: `Reventa · ${item.status}`,
+          id: `commercial-item-${item.id}`,
+          icon: '',
+          iconName: 'product',
+          title: maskFinancialText(item.name, privacyMode),
+          subtitle: `Producto · Mi negocio · ${unitLabel}`,
           view: 'reventa',
           focusId: 'qa-focus-reventa',
           category: 'resale',
         },
-        [item.status, 'reventa'],
-        [item.note]
-      )
-    );
+        ['producto', 'inventario', 'mi negocio', 'reventa', 'stock'],
+        [item.unit]
+      );
+    });
+
+    (state.resale?.inventory || []).forEach((item) => {
+      const purchaseCur = (item.purchaseCurrency || 'UYU').toUpperCase();
+      const priceSnippet =
+        typeof item.buyPrice === 'number' && Number.isFinite(item.buyPrice)
+          ? ` · Costo: ${maskMoney(item.buyPrice, '', purchaseCur)}`
+          : '';
+      consider(
+        {
+          id: `resale-${item.id}`,
+          icon: '',
+          iconName: 'store',
+          title: maskFinancialText(item.item, privacyMode),
+          subtitle: `Mi negocio · ${item.status}${priceSnippet}`,
+          view: 'reventa',
+          focusId: 'qa-focus-reventa',
+          category: 'resale',
+          isSensitive: true,
+        },
+        [item.status, 'reventa', 'mi negocio', 'producto'],
+        privacyMode ? [] : [item.note, item.buyPrice, item.sellPrice]
+      );
+    });
 
     (state.resale?.opportunities || []).forEach((item) =>
       consider(
         {
           id: `resale-op-${item.id}`,
-          icon: '🔁',
-          iconName: 'sparkles',
-          title: item.item,
-          subtitle: 'Oportunidad de reventa',
+          icon: '',
+          iconName: 'store',
+          title: maskFinancialText(item.item, privacyMode),
+          subtitle: `Oportunidad · Mi negocio · ${maskMoney(item.buyPrice)}`,
           view: 'reventa',
           focusId: 'qa-focus-reventa',
           category: 'resale',
+          isSensitive: true,
         },
-        ['oportunidad', 'reventa'],
-        [item.nota]
+        ['oportunidad', 'reventa', 'mi negocio'],
+        privacyMode ? [] : [item.nota, item.buyPrice, item.marketPrice]
       )
     );
   }
@@ -370,10 +492,10 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `job-${item.id}`,
-          icon: '💼',
+          icon: '',
           iconName: 'briefcase',
           title: `${typeLabel} · ${item.empresa} · ${item.puesto}`,
-          subtitle: `Estado: ${getJobStageLabel(type, item.estado)}${item.nextAction ? ` · ${item.nextAction}` : ''}`,
+          subtitle: `Estado: ${getJobStageLabel(type, item.estado)}${item.nextAction ? ` · ${maskFinancialText(item.nextAction, privacyMode)}` : ''}`,
           view: 'trabajo',
           focusId: 'qa-focus-trabajo',
           category: 'jobs',
@@ -387,8 +509,8 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `job-op-${item.id}`,
-          icon: '✨',
-          iconName: 'sparkles',
+          icon: '',
+          iconName: 'briefcase',
           title: `${item.empresa} · ${item.puesto || 'Oportunidad'}`,
           subtitle: 'Oportunidad laboral',
           view: 'trabajo',
@@ -407,15 +529,15 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `subject-${item.id}`,
-          icon: '📚',
-          iconName: 'book',
+          icon: '',
+          iconName: 'graduation',
           title: item.name,
           subtitle: 'Materia',
           view: 'estudios',
           focusId: 'qa-focus-estudio',
           category: 'study',
         },
-        ['materia', 'facultad']
+        ['materia', 'facultad', 'estudios']
       )
     );
 
@@ -429,8 +551,8 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `exam-${item.id}`,
-          icon: '🧪',
-          iconName: 'book',
+          icon: '',
+          iconName: 'exam',
           title,
           subtitle: `${item.status}${gradeStr} · ${item.date}${timeStr}`,
           view: 'estudios',
@@ -446,7 +568,7 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `study-${item.id}`,
-          icon: '⏱️',
+          icon: '',
           iconName: 'clock',
           title: subject?.name || 'Estudio',
           subtitle: `${item.minutes} min · ${item.date}`,
@@ -490,14 +612,14 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `exercise-${ex.name.toLowerCase()}`,
-          icon: '🏋️',
+          icon: '',
           iconName: 'dumbbell',
           title: ex.name,
           subtitle: `Ejercicio · ${ex.muscleGroup || 'General'}${ex.lastDate ? ` · Último: ${ex.lastDate}` : ''}`,
           view: 'gimnasio',
           category: 'gym',
         },
-        [ex.muscleGroup, 'ejercicio', 'gym']
+        [ex.muscleGroup, 'ejercicio', 'gym', 'gimnasio']
       );
     });
 
@@ -506,7 +628,7 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `gym-${item.id}`,
-          icon: '🏋️',
+          icon: '',
           iconName: 'dumbbell',
           title: exerciseNames,
           subtitle: `Sesión · ${item.date}`,
@@ -522,7 +644,7 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `template-${item.id}`,
-          icon: '📋',
+          icon: '',
           iconName: 'list',
           title: item.name,
           subtitle: 'Plantilla de rutina',
@@ -537,7 +659,7 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `weight-${item.date}`,
-          icon: '⚖️',
+          icon: '',
           iconName: 'scale',
           title: `${item.kg} kg`,
           subtitle: `Registro de peso · ${item.date}`,
@@ -556,7 +678,7 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `event-${item.id}`,
-          icon: '📅',
+          icon: '',
           iconName: 'calendarDays',
           title: item.name,
           subtitle: `Evento (${item.type}) · ${item.date}`,
@@ -573,17 +695,17 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
     (state.notes?.postits || []).forEach((item) => {
       const title = item.title?.trim();
       const firstLine = item.text.trim().split('\n')[0]?.trim() || '';
-      const displayTitle = title || firstLine.slice(0, 60) || 'Nota sin título';
-      const displaySubtitle = title ? item.text.slice(0, 60) : `Nota · ${item.date}`;
+      const displayTitle = maskFinancialText(title || firstLine.slice(0, 60) || 'Nota sin título', privacyMode);
+      const displaySubtitle = maskFinancialText(title ? item.text.slice(0, 60) : `Nota · ${item.date}`, privacyMode);
       const tagsString = (item.tags || []).join(' ');
 
       consider(
         {
           id: `note-${item.id}`,
-          icon: '📝',
+          icon: '',
           iconName: 'note',
           title: displayTitle,
-          subtitle: `${item.pinned ? '📌 ' : ''}${displaySubtitle}`,
+          subtitle: `${item.pinned ? 'Fijada · ' : ''}${displaySubtitle}`,
           view: 'notas',
           focusId: `note-${item.id}`,
           category: 'notes',
@@ -598,9 +720,9 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `shopping-${item.id}`,
-          icon: '🛒',
+          icon: '',
           iconName: 'check',
-          title: item.text,
+          title: maskFinancialText(item.text, privacyMode),
           subtitle: `Lista de compras · ${item.done ? 'Comprado' : 'Pendiente'}`,
           view: 'notas',
           category: 'notes',
@@ -613,8 +735,8 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `link-${item.id}`,
-          icon: '🔗',
-          iconName: 'sparkles',
+          icon: '',
+          iconName: 'link',
           title: item.name,
           subtitle: `Enlace · ${item.url}`,
           view: 'notas',
@@ -629,10 +751,10 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `possession-${item.id}`,
-          icon: '🎁',
-          iconName: 'note',
+          icon: '',
+          iconName: 'gift',
           title: item.name,
-          subtitle: `Mis cosas (${item.category})${item.location ? ` · 📍 ${item.location}` : ''}`,
+          subtitle: `Mis cosas (${item.category})${item.location ? ` · ${item.location}` : ''}`,
           view: 'notas',
           category: 'notes',
         },
@@ -645,8 +767,8 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       consider(
         {
           id: `project-${item.id}`,
-          icon: '🚀',
-          iconName: 'target',
+          icon: '',
+          iconName: 'project',
           title: item.name,
           subtitle: `Proyecto (${item.status}) · Próximo: ${item.nextStep || 'Sin definir'}`,
           view: 'notas',
@@ -662,8 +784,16 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
   if (isModuleEnabled(state, 'ia')) {
     (state.ideas || []).forEach((item) =>
       consider(
-        { id: `idea-${item.id}`, icon: '💡', iconName: 'ai', title: item.text, subtitle: 'Idea', view: 'ia', category: 'other' },
-        ['idea']
+        {
+          id: `idea-${item.id}`,
+          icon: '',
+          iconName: 'ai',
+          title: maskFinancialText(item.text, privacyMode),
+          subtitle: 'Idea · IA',
+          view: 'ia',
+          category: 'other',
+        },
+        ['idea', 'ia']
       )
     );
   }
@@ -671,13 +801,22 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
   if (isStreamingEnabled(state)) {
     (state.streaming?.sessions || []).forEach((item) =>
       consider(
-        { id: `stream-${item.id}`, icon: '🎙️', iconName: 'flame', title: `${item.hours} h de stream`, subtitle: item.date, view: 'dashboard', category: 'other' },
+        {
+          id: `stream-${item.id}`,
+          icon: '',
+          iconName: 'flame',
+          title: `${item.hours} h de stream`,
+          subtitle: item.date,
+          view: 'dashboard',
+          category: 'other',
+        },
         ['stream', 'streaming', item.date]
       )
     );
   }
 
   // Sorting by relevance score descending, preserving stable presentation
+  const candidates = Array.from(candidatesById.values());
   candidates.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 
   // Cap at 60 items globally after sorting

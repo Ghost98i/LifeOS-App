@@ -178,6 +178,7 @@ export default function App() {
   const [quickTransactionType, setQuickTransactionType] = useState<'gasto' | 'ingreso' | null>(null);
   const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false);
   const [quickCaptureKind, setQuickCaptureKind] = useState<CaptureKind>('tarea');
+  const [quickCaptureInitialText, setQuickCaptureInitialText] = useState('');
   const [initialNoteId, setInitialNoteId] = useState<string | null>(null);
   const [initialFinanceTab, setInitialFinanceTab] = useState<'movimientos' | 'cuentas' | 'analisis' | 'proyeccion' | null>(null);
   const [initialNotesTab, setInitialNotesTab] = useState<'notas' | 'proyectos' | 'streaming' | null>(null);
@@ -2337,7 +2338,10 @@ export default function App() {
       setQuickCaptureKind('nota');
       setIsQuickCaptureOpen(true);
     },
-    onToggleCommandPalette: () => setIsSearchOpen((prev) => !prev),
+    onToggleCommandPalette: () => {
+      setSearchQuery('');
+      setIsSearchOpen((prev) => !prev);
+    },
     onTogglePrivacy: () => {
       updateStateRef.current((draft) => {
         draft.settings.privacyMode = !draft.settings.privacyMode;
@@ -3012,7 +3016,11 @@ export default function App() {
             state={state}
             open={isQuickCaptureOpen}
             initialKind={quickCaptureKind}
-            onClose={() => setIsQuickCaptureOpen(false)}
+            initialText={quickCaptureInitialText}
+            onClose={() => {
+              setIsQuickCaptureOpen(false);
+              setQuickCaptureInitialText('');
+            }}
             onUpdateState={updateState}
             onNavigate={handleNavigate}
           />
@@ -3071,12 +3079,15 @@ export default function App() {
         onClose={() => setIsSearchOpen(false)}
         onNavigate={handleSearchNavigate}
         onUpdateState={updateState}
-        onOpenCapture={() => {
-          setQuickCaptureKind('tarea');
+        onOpenCapture={(kind = 'tarea', initialText = '') => {
+          setQuickCaptureKind(kind);
+          setQuickCaptureInitialText(initialText);
           setIsQuickCaptureOpen(true);
         }}
         onToggleTheme={handleToggleTheme}
         onTogglePrivacy={handleTogglePrivacy}
+        cloudConnected={Boolean(cloudUser)}
+        onForceSync={cloudUser ? () => { void handleForceSync(); } : undefined}
       /></Suspense>}
       <ToastViewport />
       {isGymOverlayActive && (
