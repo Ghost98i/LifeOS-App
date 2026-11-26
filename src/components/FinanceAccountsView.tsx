@@ -643,25 +643,29 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
       {/* Modal: Add Account */}
       {isAddAccountOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
           onClick={() => setIsAddAccountOpen(false)}
         >
           <div
-            className="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Nueva cuenta"
+            className="flex w-full max-w-sm max-h-[90dvh] flex-col overflow-hidden bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
+            <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+            <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)]/60 px-5 py-3.5 sm:px-6">
               <h3 className="font-extrabold text-sm text-[var(--text)]">Nueva cuenta</h3>
               <button
                 type="button"
                 onClick={() => setIsAddAccountOpen(false)}
                 aria-label="Cerrar"
-                className={`h-8 w-8 inline-flex items-center justify-center text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] rounded-lg cursor-pointer ${CLEAN_FOCUS_RING}`}
+                className={`h-11 w-11 sm:h-8 sm:w-8 inline-flex items-center justify-center text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] rounded-lg cursor-pointer ${CLEAN_FOCUS_RING}`}
               >
                 <AppIcon name="x" className="h-4 w-4" />
               </button>
             </div>
-            <form onSubmit={handleCreateAccount} className="space-y-3">
+            <form onSubmit={handleCreateAccount} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6 space-y-3">
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Nombre de la cuenta
@@ -732,25 +736,29 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
       {/* Modal: Add Debt */}
       {isAddDebtOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
           onClick={() => setIsAddDebtOpen(false)}
         >
           <div
-            className="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Registrar deuda"
+            className="flex w-full max-w-sm max-h-[90dvh] flex-col overflow-hidden bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
+            <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+            <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)]/60 px-5 py-3.5 sm:px-6">
               <h3 className="font-extrabold text-sm text-[var(--text)]">Registrar deuda</h3>
               <button
                 type="button"
                 onClick={() => setIsAddDebtOpen(false)}
                 aria-label="Cerrar"
-                className={`h-8 w-8 inline-flex items-center justify-center text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] rounded-lg cursor-pointer ${CLEAN_FOCUS_RING}`}
+                className={`h-11 w-11 sm:h-8 sm:w-8 inline-flex items-center justify-center text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] rounded-lg cursor-pointer ${CLEAN_FOCUS_RING}`}
               >
                 <AppIcon name="x" className="h-4 w-4" />
               </button>
             </div>
-            <form onSubmit={handleCreateDebt} className="space-y-3">
+            <form onSubmit={handleCreateDebt} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6 space-y-3">
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Acreedor o concepto
@@ -762,7 +770,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                   value={debtName}
                   onChange={(e) => setDebtName(e.target.value)}
                   placeholder="Ej. Tarjeta de crédito, Préstamo..."
-                  className="w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500 font-medium"
+                  className="celestian-clean-field w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] font-medium"
                 />
               </div>
               <div>
@@ -772,11 +780,12 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                 <PrivacyInput
                   required
                   type="number"
+                  inputMode="decimal"
                   step="any"
                   value={debtAmount}
                   onChange={(e) => setDebtAmount(e.target.value)}
                   placeholder="0.00"
-                  className="w-full p-2.5 text-xs font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
+                  className="celestian-clean-field w-full p-2.5 text-xs font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
                 />
               </div>
               <div>
@@ -785,11 +794,12 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                 </label>
                 <PrivacyInput
                   type="number"
+                  inputMode="decimal"
                   step="any"
                   value={debtMonthlyPayment}
                   onChange={(e) => setDebtMonthlyPayment(e.target.value)}
                   placeholder="0.00"
-                  className="w-full p-2.5 text-xs font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
+                  className="celestian-clean-field w-full p-2.5 text-xs font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
                 />
               </div>
               <div>
@@ -817,25 +827,29 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
       {/* Modal: Add Investment */}
       {isAddInvOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
           onClick={() => setIsAddInvOpen(false)}
         >
           <div
-            className="bg-[var(--card)] border border-[var(--border)] rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Registrar activo o inversión"
+            className="flex w-full max-w-sm max-h-[90dvh] flex-col overflow-hidden bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
+            <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+            <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)]/60 px-5 py-3.5 sm:px-6">
               <h3 className="font-extrabold text-sm text-[var(--text)]">Registrar activo o inversión</h3>
               <button
                 type="button"
                 onClick={() => setIsAddInvOpen(false)}
                 aria-label="Cerrar"
-                className={`h-8 w-8 inline-flex items-center justify-center text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] rounded-lg cursor-pointer ${CLEAN_FOCUS_RING}`}
+                className={`h-11 w-11 sm:h-8 sm:w-8 inline-flex items-center justify-center text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] rounded-lg cursor-pointer ${CLEAN_FOCUS_RING}`}
               >
                 <AppIcon name="x" className="h-4 w-4" />
               </button>
             </div>
-            <form onSubmit={handleCreateInv} className="space-y-3">
+            <form onSubmit={handleCreateInv} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6 space-y-3">
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--text-faint)] block mb-1">
                   Nombre del activo
@@ -847,7 +861,7 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                   value={invName}
                   onChange={(e) => setInvName(e.target.value)}
                   placeholder="Ej. Plazo fijo, Fondos, Bono..."
-                  className="w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500 font-medium"
+                  className="celestian-clean-field w-full p-2.5 text-xs rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] font-medium"
                 />
               </div>
               <div>
@@ -857,11 +871,12 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                 <PrivacyInput
                   required
                   type="number"
+                  inputMode="decimal"
                   step="any"
                   value={invAmount}
                   onChange={(e) => setInvAmount(e.target.value)}
                   placeholder="0.00"
-                  className="w-full p-2.5 text-xs font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-none focus:border-indigo-500"
+                  className="celestian-clean-field w-full p-2.5 text-xs font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
                 />
               </div>
               <button

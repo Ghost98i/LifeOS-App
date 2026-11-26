@@ -130,8 +130,8 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
       aria-label="Sesión de estudio en curso"
       className={`fixed z-[59] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] text-[var(--text)] shadow-[var(--card-shadow)] transition-all duration-200 ${
         isCoexisting
-          ? 'bottom-[calc(7.35rem+env(safe-area-inset-bottom)+5.75rem)] left-3 right-3 sm:right-5 sm:left-auto sm:w-[360px] md:bottom-[6.75rem] lg:bottom-5 lg:left-[248px] lg:right-auto'
-          : 'bottom-[calc(7.35rem+env(safe-area-inset-bottom))] left-3 right-3 sm:right-auto sm:w-[360px] sm:left-5 md:bottom-5 lg:left-[248px]'
+          ? 'bottom-[calc(7.75rem+env(safe-area-inset-bottom)+6.25rem)] left-3 right-3 sm:right-5 sm:left-auto sm:w-[360px] md:bottom-[6.75rem] lg:bottom-5 lg:left-[248px] lg:right-auto'
+          : 'bottom-[calc(7.75rem+env(safe-area-inset-bottom))] left-3 right-3 sm:right-auto sm:w-[360px] sm:left-5 md:bottom-5 lg:left-[248px]'
       }`}
     >
       <div className="h-1 bg-[var(--surface-muted)]">
@@ -176,7 +176,7 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
         <div className="flex items-center gap-1.5 shrink-0">
           {needsReview ? (
             <button type="button" onClick={onOpenStudies}
-              className="min-h-9 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] dark:hover:bg-[#6366F1] px-3 text-xs font-bold text-white transition-colors cursor-pointer">
+              className="min-h-[44px] sm:min-h-9 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] dark:hover:bg-[#6366F1] px-3 text-xs font-bold text-white transition-colors cursor-pointer">
               Revisar en Estudios
             </button>
           ) : (
@@ -184,7 +184,7 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
           <button
             type="button"
             onClick={handleTogglePause}
-            className={`inline-flex min-h-9 items-center justify-center rounded-xl px-2.5 text-xs font-bold transition-all active:scale-95 cursor-pointer ${
+            className={`inline-flex min-h-[44px] min-w-[44px] sm:min-h-9 sm:min-w-0 items-center justify-center rounded-xl px-2.5 text-xs font-bold transition-all active:scale-95 cursor-pointer ${
               status === 'running'
                 ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 hover:bg-amber-500/25 border border-amber-500/30'
                 : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30'
@@ -197,7 +197,7 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
           <button
             type="button"
             onClick={handleFinishAndRecord}
-            className="min-h-9 rounded-xl bg-[#4F46E5] px-3 text-xs font-bold text-white transition-colors hover:bg-[#4338CA] dark:hover:bg-[#6366F1] active:scale-95 cursor-pointer"
+            className="min-h-[44px] sm:min-h-9 rounded-xl bg-[#4F46E5] px-3 text-xs font-bold text-white transition-colors hover:bg-[#4338CA] dark:hover:bg-[#6366F1] active:scale-95 cursor-pointer"
             title="Guardar minutos estudiados y finalizar"
           >
             Terminar
@@ -206,7 +206,7 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
           <button
             type="button"
             onClick={handleDiscard}
-            className="min-h-9 rounded-xl border border-[var(--border)] bg-[var(--card-subtle)] px-2 text-xs font-bold text-[var(--text-soft)] transition-colors hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-300 active:scale-95 cursor-pointer"
+            className="inline-flex min-h-[44px] min-w-[44px] sm:min-h-9 sm:min-w-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card-subtle)] px-2 text-xs font-bold text-[var(--text-soft)] transition-colors hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-300 active:scale-95 cursor-pointer"
             title="Descartar sesión"
             aria-label="Descartar sesión"
           >

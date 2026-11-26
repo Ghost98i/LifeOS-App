@@ -80,9 +80,11 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="workout-summary-title"
-        className="gym-summary-modal flex flex-col w-full sm:max-w-lg max-h-[92dvh] sm:max-h-[88vh] rounded-t-[2rem] sm:rounded-[2rem] bg-[var(--card)] border border-[var(--border)] shadow-2xl overflow-hidden"
+        className="gym-summary-modal flex flex-col w-full sm:max-w-lg max-h-[90dvh] rounded-t-2xl sm:rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
+        <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+
         {/* Header Compacto y Estable */}
         <div className="shrink-0 px-5 pt-4 pb-3 text-center border-b border-[var(--border)]/40 bg-[var(--surface-muted)]/30">
           <div className="gym-summary-confirmation mx-auto flex h-11 w-11 items-center justify-center rounded-xl mb-1.5">
@@ -97,7 +99,7 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
         </div>
 
         {/* Cuerpo Desplazable (Único contenedor con scroll natural) */}
-        <div className="flex-1 overflow-y-auto min-h-0 p-4 sm:p-5 space-y-4">
+        <div className="flex-1 overflow-y-auto overscroll-contain min-h-0 p-4 sm:p-5 space-y-4">
           {/* Métricas Principales */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-muted)] p-2.5 sm:p-3 text-center">
@@ -240,7 +242,7 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
         </div>
 
         {/* Footer FIJO: El botón Continuar está SIEMPRE visible y accesible */}
-        <div className="shrink-0 p-3.5 sm:p-4 border-t border-[var(--border)] bg-[var(--card)] pb-[max(0.875rem,env(safe-area-inset-bottom))]">
+        <div className="shrink-0 p-3.5 sm:p-4 border-t border-[var(--border)] bg-[var(--card)] pb-[max(1rem,env(safe-area-inset-bottom))]">
           <button
             type="button"
             onClick={onClose}

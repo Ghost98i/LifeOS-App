@@ -154,26 +154,29 @@ export const GymRestTimerBar: React.FC<GymRestTimerBarProps> = ({
   const urgency = isOvertime ? 'overtime' : snapshot.remainingSeconds <= 5 ? 'critical' : snapshot.remainingSeconds <= 15 ? 'ending' : isExerciseRest ? 'long' : 'normal';
 
   const manualEditor = isManualEditorOpen ? (
-    <div className="fixed inset-0 z-[130] flex items-center justify-center bg-black/60 p-4" onClick={() => setIsManualEditorOpen(false)}>
-      <div ref={manualDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="gym-manual-rest-title" className="w-full max-w-xs space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-2xl" onClick={(event) => event.stopPropagation()}>
-        <div>
+    <div className="fixed inset-0 z-[130] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4 backdrop-blur-xs" onClick={() => setIsManualEditorOpen(false)}>
+      <div ref={manualDialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="gym-manual-rest-title" className="flex w-full sm:max-w-xs max-h-[90dvh] flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+        <div className="shrink-0 border-b border-[var(--border)]/60 px-5 py-3.5 sm:pt-4">
           <h3 id="gym-manual-rest-title" className="text-base font-black text-[var(--text)]">Editar descanso en curso</h3>
           <p className="mt-1 text-xs text-[var(--text-soft)]">Elegí cuánto descanso queda. El tiempo se contará desde ahora.</p>
         </div>
-        <label className="block text-xs font-bold text-[var(--text-soft)]">
-          Segundos restantes
-          <input
-            type="number"
-            min={1}
-            step={1}
-            inputMode="numeric"
-            value={manualSeconds}
-            onChange={(event) => setManualSeconds(Math.max(1, Number(event.target.value) || 1))}
-            className="mt-1 min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-lg font-black tabular-nums text-[var(--text)] outline-none focus:border-[#4F46E5]"
-          />
-        </label>
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={() => setIsManualEditorOpen(false)} className="min-h-11 rounded-xl px-3 text-xs font-bold text-[var(--text-soft)]">Cancelar</button>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">
+          <label className="block text-xs font-bold text-[var(--text-soft)]">
+            Segundos restantes
+            <input
+              type="number"
+              min={1}
+              step={1}
+              inputMode="numeric"
+              value={manualSeconds}
+              onChange={(event) => setManualSeconds(Math.max(1, Number(event.target.value) || 1))}
+              className="celestian-clean-field mt-1 min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-lg font-black tabular-nums text-[var(--text)]"
+            />
+          </label>
+        </div>
+        <div className="flex shrink-0 justify-end gap-2 border-t border-[var(--border)]/60 bg-[var(--card)] px-5 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:py-3.5">
+          <button type="button" onClick={() => setIsManualEditorOpen(false)} className="min-h-11 rounded-xl px-3 text-xs font-bold text-[var(--text-soft)] hover:bg-[var(--surface-muted)]">Cancelar</button>
           <button type="button" onClick={applyManualEdit} className="min-h-11 rounded-xl bg-[#4F46E5] px-4 text-xs font-bold text-white hover:bg-[#4338CA]">Aplicar</button>
         </div>
       </div>

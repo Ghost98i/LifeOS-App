@@ -134,7 +134,7 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
       onClick={onClose}
     >
       <div
@@ -142,11 +142,13 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="finance-transfer-title"
-        className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-5 sm:p-6 max-w-md w-full space-y-5 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
+        className="flex w-full max-w-md max-h-[90dvh] flex-col overflow-hidden bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
+        <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+
         {/* Header — Unified transfer icon with Hero button */}
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-3.5 sm:px-6 sm:pt-5">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="h-9 w-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shrink-0">
               <AppIcon name="transfer" className="h-4 w-4" />
@@ -163,13 +165,15 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer transition-colors ${CLEAN_FOCUS_RING}`}
+            className={`flex h-11 w-11 sm:h-9 sm:w-9 shrink-0 items-center justify-center rounded-xl text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] active:scale-95 cursor-pointer transition-colors ${CLEAN_FOCUS_RING}`}
             aria-label="Cerrar"
             title="Cerrar"
           >
             <AppIcon name="x" className="h-4 w-4" />
           </button>
         </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6 space-y-5">
 
         {accounts.length < 2 ? (
           <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-200 space-y-2">
@@ -371,6 +375,7 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
             )}
           </div>
         )}
+        </div>
       </div>
     </div>
   );

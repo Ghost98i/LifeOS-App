@@ -1326,8 +1326,8 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
                     </select>
                   </div>
                   <div className="grid min-w-0 grid-cols-2 gap-2">
-                    <label className="space-y-1 text-xs text-[var(--text-soft)]">Peso<input type="number" min="0" step="0.25" value={newExerciseWeight} onChange={(event) => setNewExerciseWeight(Number(event.target.value) || 0)} className={`${controlClass} w-full`} /></label>
-                    <label className="space-y-1 text-xs text-[var(--text-soft)]">Reps<input type="number" min="1" value={newExerciseReps} onChange={(event) => setNewExerciseReps(Number(event.target.value) || 1)} className={`${controlClass} w-full`} /></label>
+                    <label className="space-y-1 text-xs text-[var(--text-soft)]">Peso<input type="number" inputMode="decimal" min="0" step="0.25" value={newExerciseWeight} onChange={(event) => setNewExerciseWeight(Number(event.target.value) || 0)} className={`${controlClass} w-full`} /></label>
+                    <label className="space-y-1 text-xs text-[var(--text-soft)]">Reps<input type="number" inputMode="numeric" min="1" value={newExerciseReps} onChange={(event) => setNewExerciseReps(Number(event.target.value) || 1)} className={`${controlClass} w-full`} /></label>
                   </div>
                   <button type="submit" className="min-h-11 w-full rounded-xl bg-[#4F46E5] text-sm font-bold text-white hover:bg-[#4338CA] dark:hover:bg-[#6366F1]">Agregar ejercicio</button>
                 </form>
@@ -1368,8 +1368,8 @@ export const ActiveWorkoutView: React.FC<ActiveWorkoutViewProps> = ({
             <select aria-label="Equipo" value={newExerciseEquipment} onChange={(event) => setNewExerciseEquipment(event.target.value as ExerciseEquipment)} className={`${controlClass} w-full`}>
               {EXERCISE_EQUIPMENT_OPTIONS.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
             </select>
-            <label className="space-y-1 text-xs text-[var(--text-soft)]">Peso inicial<input type="number" min="0" step="0.25" value={newExerciseWeight} onChange={(event) => setNewExerciseWeight(Number(event.target.value) || 0)} className={`${controlClass} w-full`} /></label>
-            <label className="space-y-1 text-xs text-[var(--text-soft)]">Reps iniciales<input type="number" min="1" value={newExerciseReps} onChange={(event) => setNewExerciseReps(Number(event.target.value) || 1)} className={`${controlClass} w-full`} /></label>
+            <label className="space-y-1 text-xs text-[var(--text-soft)]">Peso inicial<input type="number" inputMode="decimal" min="0" step="0.25" value={newExerciseWeight} onChange={(event) => setNewExerciseWeight(Number(event.target.value) || 0)} className={`${controlClass} w-full`} /></label>
+            <label className="space-y-1 text-xs text-[var(--text-soft)]">Reps iniciales<input type="number" inputMode="numeric" min="1" value={newExerciseReps} onChange={(event) => setNewExerciseReps(Number(event.target.value) || 1)} className={`${controlClass} w-full`} /></label>
             <button type="submit" className="min-h-12 rounded-xl bg-[#4F46E5] px-4 text-sm font-bold text-white hover:bg-[#4338CA] dark:hover:bg-[#6366F1] sm:col-span-2">Agregar ejercicio</button>
           </form>
         </div>

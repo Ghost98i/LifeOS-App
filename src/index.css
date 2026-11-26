@@ -313,6 +313,12 @@
   background: #4338CA;
 }
 
+html,
+body,
+#root {
+  min-height: 100dvh;
+}
+
 body {
   background-color: var(--bg);
   color: var(--text);
@@ -321,6 +327,7 @@ body {
   padding: 0;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
   caret-color: var(--accent);
   text-underline-offset: 3px;
   min-width: 320px;
@@ -1489,4 +1496,44 @@ button:active {
 @media (max-width: 639px) {
   .finance-refinement .finance-future-amount { flex-basis: 100%; }
   .finance-refinement .finance-future-list { max-height: none; overflow-y: visible; }
+}
+
+/* ==========================================================================
+   Block 30 — Mobile Native Ergonomics (389px): tap highlight, touch-action,
+   overscroll containment, safe-areas, and iOS auto-zoom prevention (< 640px)
+   ========================================================================== */
+:root {
+  --celestian-safe-top: env(safe-area-inset-top, 0px);
+  --celestian-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+button,
+a,
+summary,
+input,
+select,
+textarea,
+[role="button"],
+[role="switch"] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+[role="dialog"] .overflow-y-auto,
+[role="dialog"].overflow-y-auto,
+aside[aria-label="Navegación principal"] nav,
+.celestian-sheet-scroll,
+.overscroll-contain {
+  overscroll-behavior-y: contain;
+}
+
+@media (max-width: 639px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(.c-load-input):not(.text-xl):not(.text-2xl):not(.text-3xl),
+  select,
+  textarea,
+  .celestian-clean-field:not(.text-xl):not(.text-2xl):not(.text-3xl) {
+    font-size: 16px !important;
+    min-width: 0;
+    max-width: 100%;
+  }
 }

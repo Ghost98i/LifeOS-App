@@ -616,7 +616,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-black/55 sm:p-4 backdrop-blur-xs transition-opacity"
+      className="fixed inset-0 z-[80] flex items-end p-0 sm:items-center sm:p-4 justify-center bg-black/55 backdrop-blur-xs transition-opacity"
       onClick={handleRequestClose}
     >
       <section
@@ -624,12 +624,14 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
         aria-modal="true"
         aria-label="Captura rápida"
         onKeyDown={handleDialogKeyDown}
-        className="relative flex w-full sm:max-w-lg max-h-[90dvh] flex-col overflow-hidden rounded-t-3xl sm:rounded-3xl bg-[var(--card)] border border-[var(--border)] shadow-2xl transition-transform"
+        className="relative flex w-full sm:max-w-lg max-h-[90dvh] flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-2xl transition-transform"
         onClick={(event) => event.stopPropagation()}
       >
+        <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+
         {/* Exit Confirmation Dialog */}
         {showExitConfirm && (
-          <div className="absolute inset-0 z-50 rounded-t-3xl sm:rounded-3xl bg-[var(--card)]/95 backdrop-blur-sm p-6 flex flex-col justify-center items-center text-center gap-4 animate-fadeIn">
+          <div className="absolute inset-0 z-50 rounded-t-2xl sm:rounded-2xl bg-[var(--card)]/95 backdrop-blur-sm p-6 flex flex-col justify-center items-center text-center gap-4 animate-fadeIn">
             <AppIcon name="alertTriangle" className="h-8 w-8 text-amber-500" />
             <div>
               <h3 className="text-base font-bold text-[var(--text)]">¿Descartar cambios sin guardar?</h3>
@@ -700,7 +702,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
           <button
             type="button"
             onClick={handleRequestClose}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:text-[var(--text)] transition cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70"
+            className="flex h-11 w-11 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:text-[var(--text)] active:scale-95 transition cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70"
             aria-label="Cerrar"
           >
             <AppIcon name="x" className="h-4 w-4" />
@@ -1011,7 +1013,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
               )}
             </div>
 
-            <div className="flex shrink-0 items-center justify-between gap-2 border-t border-[var(--border)]/70 bg-[var(--card)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-t border-[var(--border)]/70 bg-[var(--card)] px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5 sm:pb-3">
               <span className="text-[11px] text-[var(--text-faint)] truncate">
                 Combiná registros con &quot;y&quot;
               </span>
@@ -1448,7 +1450,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
             </div>
 
             {/* Pinned Save Footer — always accessible on 389px even with virtual keyboard */}
-            <div className="shrink-0 border-t border-[var(--border)]/70 bg-[var(--card)] px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5">
+            <div className="shrink-0 border-t border-[var(--border)]/70 bg-[var(--card)] px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-5 sm:pb-3">
               <button
                 type="submit"
                 disabled={isSubmitting}

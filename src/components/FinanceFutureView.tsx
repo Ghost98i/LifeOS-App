@@ -961,25 +961,29 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
       {/* Modal: Add Subscription */}
       {isAddSubOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
           onClick={() => setIsAddSubOpen(false)}
         >
           <div
-            className="finance-surface-raised border border-[var(--finance-border)] rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Nueva suscripción"
+            className="flex w-full max-w-sm max-h-[90dvh] flex-col overflow-hidden finance-surface-raised border border-[var(--finance-border)] rounded-t-2xl sm:rounded-2xl shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
+            <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+            <div className="flex shrink-0 items-center justify-between border-b border-[var(--finance-border)] px-5 py-3.5 sm:px-6">
               <h3 className="font-extrabold text-sm text-[var(--finance-text-primary)]">Nueva suscripción</h3>
               <button
                 type="button"
                 onClick={() => setIsAddSubOpen(false)}
                 aria-label="Cerrar"
-                className={`h-8 w-8 inline-flex items-center justify-center text-[var(--finance-text-muted)] hover:text-[var(--finance-text-primary)] hover:bg-[var(--finance-surface-subtle)] rounded-lg cursor-pointer ${CLEAN_FOCUS_RING}`}
+                className={`h-11 w-11 sm:h-8 sm:w-8 inline-flex items-center justify-center text-[var(--finance-text-muted)] hover:text-[var(--finance-text-primary)] hover:bg-[var(--finance-surface-subtle)] rounded-lg cursor-pointer ${CLEAN_FOCUS_RING}`}
               >
                 <AppIcon name="x" className="h-4 w-4" />
               </button>
             </div>
-            <form onSubmit={handleCreateSub} className="space-y-3">
+            <form onSubmit={handleCreateSub} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6 space-y-3">
               <div>
                 <label className="text-[10px] font-bold uppercase tracking-wider text-[var(--finance-text-muted)] block mb-1">
                   Nombre del servicio
@@ -991,7 +995,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                   value={subName}
                   onChange={(e) => setSubName(e.target.value)}
                   placeholder="Ej. Netflix, Spotify, iCloud..."
-                  className="w-full p-2.5 text-xs rounded-xl finance-control border border-[var(--finance-border)] text-[var(--finance-text-primary)] outline-none focus:border-indigo-500 font-medium"
+                  className="celestian-clean-field w-full p-2.5 text-xs rounded-xl finance-control border border-[var(--finance-border)] text-[var(--finance-text-primary)] font-medium"
                 />
               </div>
               <div>
@@ -1005,7 +1009,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                   value={subAmount}
                   onChange={(e) => setSubAmount(e.target.value)}
                   placeholder="0,00"
-                  className="w-full p-2.5 text-xs tabular-nums font-bold rounded-xl finance-control border border-[var(--finance-border)] text-[var(--finance-text-primary)] outline-none focus:border-indigo-500"
+                  className="celestian-clean-field w-full p-2.5 text-xs tabular-nums font-bold rounded-xl finance-control border border-[var(--finance-border)] text-[var(--finance-text-primary)]"
                 />
               </div>
               <div>
@@ -1014,12 +1018,13 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                 </label>
                 <input
                   type="number"
+                  inputMode="numeric"
                   min="1"
                   max="31"
                   value={subDueDay}
                   onChange={(e) => setSubDueDay(e.target.value)}
                   placeholder="1 - 31"
-                  className="w-full p-2.5 text-xs tabular-nums rounded-xl finance-control border border-[var(--finance-border)] text-[var(--finance-text-primary)] outline-none focus:border-indigo-500"
+                  className="celestian-clean-field w-full p-2.5 text-xs tabular-nums rounded-xl finance-control border border-[var(--finance-border)] text-[var(--finance-text-primary)]"
                 />
               </div>
               <button

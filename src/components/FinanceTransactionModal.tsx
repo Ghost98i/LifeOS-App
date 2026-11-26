@@ -152,14 +152,16 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
       role="dialog"
       aria-modal="true"
       aria-labelledby="finance-tx-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--card)] p-5 sm:p-6 shadow-2xl transition-all space-y-4 max-h-[calc(100dvh-2rem)] overflow-y-auto">
+      <div className="relative flex w-full max-w-lg max-h-[90dvh] flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl transition-all">
+        <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+
         {/* Header — Unified icon direction with Hero quick actions */}
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] pb-3">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] px-5 py-3.5 sm:px-6 sm:pt-5">
           <div className="flex items-center gap-2.5 min-w-0">
             <div
               className={`p-2 rounded-xl shrink-0 ${
@@ -184,14 +186,15 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
           <button
             type="button"
             onClick={onClose}
-            className={`flex h-10 w-10 min-h-[40px] min-w-[40px] shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer ${CLEAN_FOCUS_RING}`}
+            className={`flex h-11 w-11 min-h-[44px] min-w-[44px] sm:h-10 sm:w-10 sm:min-h-0 sm:min-w-0 shrink-0 items-center justify-center rounded-lg text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] active:scale-95 transition cursor-pointer ${CLEAN_FOCUS_RING}`}
             aria-label="Cerrar"
           >
             <AppIcon name="x" className="h-4 w-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 space-y-4">
           {/* Segmented Type Picker */}
           <div className="grid grid-cols-2 gap-1 p-1 bg-[var(--surface-muted)] rounded-xl border border-[var(--border)]">
             <button
@@ -380,19 +383,21 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
             </div>
           )}
 
+          </div>
+
           {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-[var(--border)]">
+          <div className="flex shrink-0 items-center justify-end gap-2.5 border-t border-[var(--border)] bg-[var(--card)] px-5 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:py-4">
             <button
               type="button"
               onClick={onClose}
-              className={`px-4 py-2.5 text-xs font-bold rounded-xl border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer transition-colors ${CLEAN_FOCUS_RING}`}
+              className={`min-h-11 sm:min-h-0 px-4 py-2.5 text-xs font-bold rounded-xl border border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer transition-colors ${CLEAN_FOCUS_RING}`}
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={!isAmountValid}
-              className={`px-5 py-2.5 text-xs font-bold rounded-xl text-white shadow-xs cursor-pointer transition-all disabled:opacity-40 flex items-center gap-1.5 ${CLEAN_FOCUS_RING} ${
+              className={`min-h-11 sm:min-h-0 px-5 py-2.5 text-xs font-bold rounded-xl text-white shadow-xs cursor-pointer transition-all disabled:opacity-40 flex items-center gap-1.5 ${CLEAN_FOCUS_RING} ${
                 type === 'gasto'
                   ? 'bg-[#4F46E5] hover:bg-[#4338CA]'
                   : 'bg-emerald-600 hover:bg-emerald-700'

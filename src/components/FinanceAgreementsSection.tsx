@@ -986,11 +986,12 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                       <input
                         required
                         type="number"
+                        inputMode="numeric"
                         min="1"
                         max="120"
                         value={newTotalInstallments}
                         onChange={(e) => setNewTotalInstallments(e.target.value)}
-                        className="w-full p-2.5 text-xs font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-hidden focus:border-indigo-500"
+                        className="celestian-clean-field w-full p-2.5 text-xs font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
                       />
                     </div>
                     <div>
@@ -1000,10 +1001,11 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                       <PrivacyInput
                         required
                         type="text"
+                        inputMode="decimal"
                         value={newInstallmentAmount}
                         onChange={(e) => setNewInstallmentAmount(e.target.value)}
                         placeholder="Ej. 2000 o 2.000,50"
-                        className="w-full p-2.5 text-xs font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] outline-hidden focus:border-indigo-500"
+                        className="celestian-clean-field w-full p-2.5 text-xs font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
                       />
                     </div>
                   </div>

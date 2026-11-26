@@ -706,7 +706,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center bg-black/50 p-3 pt-[6vh] sm:pt-[10vh] backdrop-blur-md transition-opacity duration-150 animate-in fade-in"
+      className="fixed inset-0 z-[100] flex items-start justify-center bg-black/50 p-3 pt-[max(1rem,env(safe-area-inset-top))] sm:pt-[10vh] backdrop-blur-md transition-opacity duration-150 animate-in fade-in"
       onClick={onClose}
     >
       <div
@@ -714,7 +714,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-label="Comandos de Celestian"
-        className="w-full max-w-2xl overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl ring-1 ring-black/10 dark:ring-white/10 transition-all flex flex-col max-h-[82vh]"
+        className="w-full max-w-2xl overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl ring-1 ring-black/10 dark:ring-white/10 transition-all flex flex-col max-h-[85dvh]"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >
@@ -722,7 +722,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         {mode === 'palette' && (
           <>
             {/* Search Input Row */}
-            <div className="command-search-row flex items-center gap-3 border-b border-[var(--border)] px-4 py-3.5 bg-[var(--bg-elevated)]/50 transition-colors">
+            <div className="command-search-row flex shrink-0 items-center gap-2.5 border-b border-[var(--border)] px-4 py-3 bg-[var(--bg-elevated)]/50 transition-colors">
               <AppIcon name="search" className="h-5 w-5 shrink-0 text-[var(--text-faint)]" />
               <input
                 ref={inputRef}
@@ -730,18 +730,26 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Escribe un comando o busca notas, transacciones, ejercicios…"
-                className="min-w-0 flex-1 bg-transparent text-sm sm:text-base font-medium text-[var(--text)] placeholder:font-normal placeholder:text-[var(--text-faint)] outline-none"
+                className="celestian-clean-field-bare min-w-0 flex-1 bg-transparent text-sm sm:text-base font-medium text-[var(--text)] placeholder:font-normal placeholder:text-[var(--text-faint)] outline-none"
               />
               {query && (
                 <button
                   type="button"
                   onClick={() => setQuery('')}
-                  className="inline-flex items-center justify-center p-1 rounded-md text-xs text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] transition-colors"
+                  className="inline-flex h-11 w-11 sm:h-7 sm:w-7 shrink-0 items-center justify-center rounded-lg text-xs text-[var(--text-faint)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] transition-colors cursor-pointer"
                   aria-label="Limpiar búsqueda"
                 >
                   <AppIcon name="x" className="h-3.5 w-3.5" />
                 </button>
               )}
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--text-soft)] hover:text-[var(--text)] active:scale-95 transition sm:hidden cursor-pointer"
+                aria-label="Cerrar búsqueda"
+              >
+                <AppIcon name="x" className="h-4 w-4" />
+              </button>
               <kbd className="hidden sm:inline-flex items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--card)] px-2 py-0.5 font-mono text-[10px] font-bold text-[var(--text-faint)] shadow-2xs">
                 ESC
               </kbd>
@@ -855,7 +863,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                         : item.badgeTone === 'red'
                                         ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
                                         : item.badgeTone === 'blue'
-                                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                                        ? 'bg-[#4F46E5]/10 text-[#4F46E5] dark:bg-indigo-500/15 dark:text-[#818CF8]'
                                         : 'bg-[var(--bg)] text-[var(--text-faint)] border border-[var(--border)]'
                                     }`}
                                   >
@@ -875,7 +883,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                 </span>
                               )}
                               {isSelected && (
-                                <span className="flex items-center text-[11px] font-mono font-semibold text-[var(--blue)]">
+                                <span className="flex items-center text-[11px] font-mono font-semibold text-[#4F46E5] dark:text-[#818CF8]">
                                   <kbd className="rounded border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 shadow-2xs">↵</kbd>
                                 </span>
                               )}
@@ -913,20 +921,21 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
         {/* VIEW 2: MICRO-FORM "REGISTRAR GASTO" */}
         {mode === 'new-expense' && (
-          <form onSubmit={handleSaveExpense} className="flex flex-col flex-1">
+          <form onSubmit={handleSaveExpense} className="flex min-h-0 flex-col flex-1 overflow-hidden">
             {/* Sub-header */}
-            <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3 bg-[var(--bg-elevated)]/50">
+            <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3 bg-[var(--bg-elevated)]/50">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setMode('palette')}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--card)] text-xs text-[var(--text-soft)] hover:text-[var(--text)] transition-colors"
+                  className="flex h-11 w-11 sm:h-7 sm:w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--card)] text-xs text-[var(--text-soft)] hover:text-[var(--text)] transition-colors cursor-pointer"
                   title="Volver (Esc)"
+                  aria-label="Volver"
                 >
                   <AppIcon name="chevronLeft" className="h-3.5 w-3.5" />
                 </button>
                 <div className="flex items-center gap-2">
-                  <AppIcon name="wallet" className="h-4 w-4 text-[var(--blue)]" />
+                  <AppIcon name="wallet" className="h-4 w-4 text-[#4F46E5] dark:text-[#818CF8]" />
                   <span className="text-sm font-bold text-[var(--text)]">Registrar Gasto Rápido</span>
                 </div>
               </div>
@@ -935,7 +944,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
               </span>
             </div>
 
-            <div className="p-5 space-y-4 flex-1 overflow-y-auto">
+            <div className="min-h-0 p-5 space-y-4 flex-1 overflow-y-auto overscroll-contain">
               {/* Monto Input */}
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-[var(--text-soft)] uppercase tracking-wider block">
@@ -948,13 +957,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                   <input
                     ref={expenseAmountRef}
                     type="number"
+                    inputMode="decimal"
                     step="any"
                     min="0"
                     value={expenseAmount}
                     onChange={(e) => setExpenseAmount(e.target.value)}
                     placeholder="0.00"
                     required
-                    className="w-full pl-11 pr-4 py-2.5 text-xl font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue)]/20 outline-none text-[var(--text)]"
+                    className="celestian-clean-field w-full pl-11 pr-4 py-2.5 text-xl font-bold tabular-nums rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
                   />
                 </div>
 
@@ -965,7 +975,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                       key={preset}
                       type="button"
                       onClick={() => setExpenseAmount(preset.toString())}
-                      className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs tabular-nums font-semibold text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition-colors"
+                      className="min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1 text-xs tabular-nums font-semibold text-[var(--text-soft)] hover:text-[var(--text)] hover:border-[var(--border-hover)] transition-colors cursor-pointer"
                     >
                       +${preset.toLocaleString('es-AR')}
                     </button>
@@ -989,9 +999,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                           key={acc.id}
                           type="button"
                           onClick={() => setExpenseAccount(acc.id)}
-                          className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all ${
+                          className={`flex flex-col items-start p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
                             isSelected
-                              ? 'border-[var(--blue)] bg-[var(--blue-soft)] ring-1 ring-[var(--blue)]/30'
+                              ? 'border-[#4F46E5] bg-[#4F46E5]/12 ring-1 ring-[#4F46E5]/30 dark:border-[#818CF8] dark:bg-indigo-500/20'
                               : 'border-[var(--border)] bg-[var(--bg-elevated)] hover:bg-[var(--surface-muted)]'
                           }`}
                         >
@@ -1021,9 +1031,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                         key={cat.id}
                         type="button"
                         onClick={() => setExpenseCategory(cat.id)}
-                        className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors ${
+                        className={`min-h-9 rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
                           isSelected
-                            ? 'bg-[var(--blue)] text-white shadow-xs'
+                            ? 'bg-[#4F46E5] text-white shadow-xs'
                             : 'border border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:text-[var(--text)]'
                         }`}
                       >
@@ -1044,36 +1054,37 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                   value={expenseNote}
                   onChange={(e) => setExpenseNote(e.target.value)}
                   placeholder="Ej: Café con medialunas, Farmacia…"
-                  className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue)]/20 outline-none text-[var(--text)]"
+                  className="celestian-clean-field w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
                 />
               </div>
             </div>
 
             {/* Footer Form Controls */}
-            <div className="flex items-center justify-between border-t border-[var(--border)] bg-[var(--card)] px-4 py-3">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] bg-[var(--card)] px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:py-3">
               <button
                 type="button"
                 onClick={() => {
                   onNavigate('finanzas', 'qa-focus-tx', 'gasto');
                   onClose();
                 }}
-                className="text-xs font-semibold text-[var(--blue)] hover:underline"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[#4F46E5] dark:text-[#818CF8] hover:underline cursor-pointer"
               >
-                Abrir formulario completo ↗
+                <span>Abrir formulario completo</span>
+                <AppIcon name="externalLink" className="h-3.5 w-3.5" />
               </button>
 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setMode('palette')}
-                  className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-muted)] transition-colors"
+                  className="min-h-11 sm:min-h-0 rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-muted)] transition-colors cursor-pointer"
                 >
                   Cancelar (Esc)
                 </button>
                 <button
                   type="submit"
                   disabled={expenseSaving || !expenseAmount}
-                  className="rounded-xl bg-[var(--blue)] px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-1.5"
+                  className="min-h-11 sm:min-h-0 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] px-4 py-1.5 text-xs font-bold text-white shadow-sm disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <span>Guardar Gasto</span>
                   <kbd className="rounded bg-white/20 px-1 text-[9px] font-mono">↵</kbd>
@@ -1085,20 +1096,21 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
         {/* VIEW 3: MICRO-FORM "NUEVA POSTULACIÓN" */}
         {mode === 'new-job' && (
-          <form onSubmit={handleSaveJob} className="flex flex-col flex-1">
+          <form onSubmit={handleSaveJob} className="flex min-h-0 flex-col flex-1 overflow-hidden">
             {/* Sub-header */}
-            <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3 bg-[var(--bg-elevated)]/50">
+            <div className="flex shrink-0 items-center justify-between border-b border-[var(--border)] px-4 py-3 bg-[var(--bg-elevated)]/50">
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setMode('palette')}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--card)] text-xs text-[var(--text-soft)] hover:text-[var(--text)] transition-colors"
+                  className="flex h-11 w-11 sm:h-7 sm:w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--card)] text-xs text-[var(--text-soft)] hover:text-[var(--text)] transition-colors cursor-pointer"
                   title="Volver (Esc)"
+                  aria-label="Volver"
                 >
                   <AppIcon name="chevronLeft" className="h-3.5 w-3.5" />
                 </button>
                 <div className="flex items-center gap-2">
-                  <AppIcon name="briefcase" className="h-4 w-4 text-[var(--blue)]" />
+                  <AppIcon name="briefcase" className="h-4 w-4 text-[#4F46E5] dark:text-[#818CF8]" />
                   <span className="text-sm font-bold text-[var(--text)]">Nueva postulación</span>
                 </div>
               </div>
@@ -1107,10 +1119,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
               </span>
             </div>
 
-            <div className="p-5 space-y-4 flex-1 overflow-y-auto">
+            <div className="min-h-0 p-5 space-y-4 flex-1 overflow-y-auto overscroll-contain">
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-[var(--text-soft)] uppercase tracking-wider block">Tipo de proceso</label>
-                <select value={jobTipo} onChange={(e) => setJobTipo(e.target.value as JobApplicationType)} className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] text-[var(--text)]">
+                <select value={jobTipo} onChange={(e) => setJobTipo(e.target.value as JobApplicationType)} className="celestian-clean-field w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]">
                   <option value="convencional">Empleo convencional</option>
                   <option value="concurso">Concurso / llamado público</option>
                 </select>
@@ -1127,7 +1139,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                     onChange={(e) => setJobEmpresa(e.target.value)}
                     placeholder={jobTipo === 'concurso' ? 'Ej.: Ministerio de Salud Pública' : 'Ej.: MercadoLibre, Globant, Startup…'}
                     required
-                    className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue)]/20 outline-none text-[var(--text)] font-semibold"
+                    className="celestian-clean-field w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] font-semibold"
                   />
                 </div>
 
@@ -1141,7 +1153,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                     onChange={(e) => setJobPuesto(e.target.value)}
                     placeholder={jobTipo === 'concurso' ? 'Ej.: Administrativo III' : 'Ej: Fullstack Developer, Product Designer…'}
                     required
-                    className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue)]/20 outline-none text-[var(--text)]"
+                    className="celestian-clean-field w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
                   />
                 </div>
               </div>
@@ -1160,9 +1172,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                         type="button"
                         onClick={() => setJobEstado(st.id)}
                         aria-pressed={isSelected}
-                        className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all text-center ${
+                        className={`min-h-11 sm:min-h-0 py-2 px-3 rounded-xl border text-xs font-bold transition-all text-center cursor-pointer ${
                           isSelected
-                            ? 'border-[var(--blue)] bg-[var(--blue-soft)] text-[var(--blue)] ring-1 ring-[var(--blue)]/30'
+                            ? 'border-[#4F46E5] bg-[#4F46E5]/12 text-[#4F46E5] dark:border-[#818CF8] dark:bg-indigo-500/20 dark:text-[#818CF8] ring-1 ring-[#4F46E5]/30'
                             : 'border-[var(--border)] bg-[var(--bg-elevated)] text-[var(--text-soft)] hover:bg-[var(--surface-muted)]'
                         }`}
                       >
@@ -1184,7 +1196,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                     value={jobReclutador}
                     onChange={(e) => setJobReclutador(e.target.value)}
                     placeholder="Ej: Sofia (LinkedIn)"
-                    className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue)]/20 outline-none text-[var(--text)]"
+                    className="celestian-clean-field w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
                   />
                 </div>
 
@@ -1197,37 +1209,38 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                     value={jobLink}
                     onChange={(e) => setJobLink(e.target.value)}
                     placeholder={jobTipo === 'concurso' ? 'https://…' : 'https://linkedin.com/jobs/...'}
-                    className="w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] focus:border-[var(--blue)] focus:ring-2 focus:ring-[var(--blue)]/20 outline-none text-[var(--text)]"
+                    className="celestian-clean-field w-full px-3 py-2 text-xs sm:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
                   />
                 </div>
               </div>
             </div>
 
             {/* Footer Form Controls */}
-            <div className="flex items-center justify-between border-t border-[var(--border)] bg-[var(--card)] px-4 py-3">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-[var(--border)] bg-[var(--card)] px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:py-3">
               <button
                 type="button"
                 onClick={() => {
                   onNavigate('trabajo', 'qa-focus-trabajo');
                   onClose();
                 }}
-                className="text-xs font-semibold text-[var(--blue)] hover:underline"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-[#4F46E5] dark:text-[#818CF8] hover:underline cursor-pointer"
               >
-                Abrir pipeline completo en Trabajo ↗
+                <span>Abrir pipeline completo en Trabajo</span>
+                <AppIcon name="externalLink" className="h-3.5 w-3.5" />
               </button>
 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setMode('palette')}
-                  className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-muted)] transition-colors"
+                  className="min-h-11 sm:min-h-0 rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--text-soft)] hover:bg-[var(--surface-muted)] transition-colors cursor-pointer"
                 >
                   Cancelar (Esc)
                 </button>
                 <button
                   type="submit"
                   disabled={jobSaving || !jobEmpresa.trim() || !jobPuesto.trim() || !isJobStatusForType(jobTipo, jobEstado)}
-                  className="rounded-xl bg-[var(--blue)] px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-all flex items-center gap-1.5"
+                  className="min-h-11 sm:min-h-0 rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] px-4 py-1.5 text-xs font-bold text-white shadow-sm disabled:opacity-50 transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <span>Guardar Postulación</span>
                   <kbd className="rounded bg-white/20 px-1 text-[9px] font-mono">↵</kbd>
@@ -1254,7 +1267,7 @@ function renderHighlightedText(text: string, rawQuery: string, skip: boolean): R
   return (
     <>
       {before}
-      <mark className="bg-transparent font-extrabold text-[var(--blue)] underline decoration-[var(--blue)]/40 underline-offset-2">
+      <mark className="bg-transparent font-extrabold text-[#4F46E5] dark:text-[#818CF8] underline decoration-[#4F46E5]/40 underline-offset-2">
         {match}
       </mark>
       {after}

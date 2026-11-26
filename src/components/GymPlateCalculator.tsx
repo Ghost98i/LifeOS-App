@@ -20,7 +20,7 @@ const BAR_OPTIONS = [
 
 const STANDARD_PLATES = [
   { kg: 25, color: 'bg-rose-600 text-white border-rose-700', heightClass: 'h-16 w-3.5', label: '25 kg' },
-  { kg: 20, color: 'bg-blue-600 text-white border-blue-700', heightClass: 'h-16 w-3', label: '20 kg' },
+  { kg: 20, color: 'bg-indigo-600 text-white border-indigo-700', heightClass: 'h-16 w-3', label: '20 kg' },
   { kg: 15, color: 'bg-amber-500 text-slate-950 border-amber-600', heightClass: 'h-14 w-3', label: '15 kg' },
   { kg: 10, color: 'bg-emerald-600 text-white border-emerald-700', heightClass: 'h-12 w-2.5', label: '10 kg' },
   { kg: 5, color: 'bg-slate-200 text-slate-900 dark:bg-slate-600 dark:text-white border-slate-400', heightClass: 'h-10 w-2', label: '5 kg' },
@@ -136,7 +136,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-[130] flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
       onClick={onClose}
     >
       <div
@@ -145,13 +145,15 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="plate-calculator-title"
-        className="w-full max-w-md bg-[var(--card)] border border-[var(--border)] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="w-full max-w-md bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90dvh]"
         onClick={(e) => e.stopPropagation()}
       >
+        <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
+
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--border)]">
+        <div className="flex shrink-0 items-center justify-between px-4 py-3.5 border-b border-[var(--border)]">
           <div className="flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--blue-soft)] text-[var(--blue)] border border-[var(--blue)]/20">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#4F46E5]/12 text-[#4F46E5] dark:bg-[#4F46E5]/20 dark:text-[#818CF8] border border-[#4F46E5]/20">
               <AppIcon name="dumbbell" className="h-4 w-4" />
             </span>
             <div>
@@ -163,14 +165,14 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
             type="button"
             onClick={onClose}
             aria-label="Cerrar calculadora"
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] cursor-pointer"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)] active:scale-95 transition cursor-pointer"
           >
             <AppIcon name="x" className="h-4 w-4" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-4 space-y-4 overflow-y-auto">
+        <div className="min-h-0 flex-1 p-4 space-y-4 overflow-y-auto overscroll-contain">
           {/* Tabs */}
           <div className="grid grid-cols-2 gap-1 rounded-xl bg-[var(--surface-muted)] p-1 border border-[var(--border)]">
             <button
@@ -212,7 +214,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
                   setTotalWeight(b + sideSum * 2);
                 }
               }}
-              className="min-h-11 w-full px-3 text-xs font-semibold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden cursor-pointer"
+              className="celestian-clean-field min-h-11 w-full px-3 text-xs font-semibold rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] cursor-pointer"
             >
               {BAR_OPTIONS.map((opt) => (
                 <option key={opt.label} value={opt.weight}>
@@ -231,11 +233,12 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
                 </label>
                 <input
                   type="number"
+                  inputMode="decimal"
                   step="0.5"
                   min={barWeight}
                   value={totalWeight}
                   onChange={(e) => setTotalWeight(Math.max(0, Number(e.target.value)))}
-                  className="min-h-12 w-full px-3 text-xl tabular-nums font-extrabold text-center rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden"
+                  className="celestian-clean-field min-h-12 w-full px-3 text-xl tabular-nums font-extrabold text-center rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] text-[var(--text)]"
                 />
                 <div className="grid grid-cols-5 gap-1.5">
                   {[-5, -2.5, +2.5, +5, +10].map((delta) => (
@@ -243,7 +246,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
                       key={delta}
                       type="button"
                       onClick={() => setTotalWeight((prev) => Math.max(barWeight, prev + delta))}
-                      className="min-h-10 px-1 text-xs tabular-nums font-bold rounded-lg border border-[var(--border)] bg-[var(--card-subtle)] hover:bg-[var(--surface-muted)] text-[var(--text)] cursor-pointer transition-colors"
+                      className="min-h-11 sm:min-h-10 px-1 text-xs tabular-nums font-bold rounded-lg border border-[var(--border)] bg-[var(--card-subtle)] hover:bg-[var(--surface-muted)] text-[var(--text)] cursor-pointer transition-colors"
                     >
                       {delta > 0 ? `+${delta}` : delta}
                     </button>
@@ -262,8 +265,8 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
                   </span>
                 </div>
                 <div className="flex items-center justify-between border-t border-[var(--border)] pt-2">
-                  <span className="text-xs font-bold text-[var(--blue)]">Colocar por cada lado:</span>
-                  <span className="tabular-nums font-extrabold text-base text-[var(--blue)]">
+                  <span className="text-xs font-bold text-[#4F46E5] dark:text-[#818CF8]">Colocar por cada lado:</span>
+                  <span className="tabular-nums font-extrabold text-base text-[#4F46E5] dark:text-[#818CF8]">
                     {result.perSideKg} kg
                   </span>
                 </div>
@@ -342,7 +345,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
               <div className="p-3.5 rounded-xl bg-[var(--card-subtle)] border border-[var(--border)] space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-[var(--text)]">Discos colocados (por lado):</span>
-                  <span className="tabular-nums font-bold text-xs text-[var(--blue)]">
+                  <span className="tabular-nums font-bold text-xs text-[#4F46E5] dark:text-[#818CF8]">
                     {manualPlatesPerSide.reduce((a, b) => a + b, 0)} kg / lado
                   </span>
                 </div>
@@ -370,7 +373,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
 
                 <div className="flex items-center justify-between border-t border-[var(--border)] pt-2.5">
                   <span className="text-xs font-bold text-[var(--text-soft)]">Peso Total Resultante:</span>
-                  <span className="tabular-nums text-xl font-extrabold text-[var(--blue)]">
+                  <span className="tabular-nums text-xl font-extrabold text-[#4F46E5] dark:text-[#818CF8]">
                     {totalWeight} kg
                   </span>
                 </div>
@@ -380,7 +383,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-2 p-4 border-t border-[var(--border)] bg-[var(--card-subtle)]">
+        <div className="flex shrink-0 items-center justify-end gap-2 px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-4 border-t border-[var(--border)] bg-[var(--card-subtle)]">
           <button
             type="button"
             onClick={onClose}
@@ -391,7 +394,7 @@ export const GymPlateCalculator: React.FC<GymPlateCalculatorProps> = ({
           <button
             type="button"
             onClick={handleApply}
-            className="min-h-11 px-5 text-xs font-bold rounded-xl bg-[var(--blue)] hover:bg-[var(--blue-hover)] text-white shadow-xs cursor-pointer transition-all active:scale-[0.98]"
+            className="min-h-11 px-5 text-xs font-bold rounded-xl bg-[#4F46E5] hover:bg-[#4338CA] text-white shadow-xs cursor-pointer transition-all active:scale-[0.98]"
           >
             Aplicar {totalWeight} kg
           </button>
