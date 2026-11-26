@@ -65,9 +65,16 @@ export function installPreloadErrorRecovery(): () => void {
  */
 export function syncDocumentThemeColor(
   isDark: boolean,
-  doc: Pick<Document, 'querySelector'> | null = typeof document !== 'undefined' ? document : null
+  doc: (Pick<Document, 'querySelector'> & Partial<Pick<Document, 'querySelectorAll'>>) | null = typeof document !== 'undefined' ? document : null
 ): string {
   const color = isDark ? DARK_THEME_COLOR : LIGHT_THEME_COLOR;
+  if (doc && typeof doc.querySelectorAll === 'function') {
+    const metas = doc.querySelectorAll('meta[name="theme-color"]');
+    if (metas.length > 0) {
+      metas.forEach((meta) => meta.setAttribute('content', color));
+      return color;
+    }
+  }
   const meta = doc?.querySelector('meta[name="theme-color"]');
   meta?.setAttribute('content', color);
   return color;

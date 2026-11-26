@@ -27,27 +27,31 @@ export default defineConfig(({ mode }) => {
             disable: portable,
             registerType: 'prompt',
             injectRegister: false,
-            includeAssets: ['favicon.svg', 'lifeos-icon-16.png', 'lifeos-icon-32.png', 'lifeos-icon-180.png', 'lifeos-icon-192.png', 'lifeos-icon-512.png', 'icon-512-maskable.png'],
+            includeAssets: ['favicon.svg', 'lifeos-icon-16.png', 'lifeos-icon-32.png', 'lifeos-icon-180.png', 'lifeos-icon-192.png', 'lifeos-icon-512.png', 'icon-192-maskable.png', 'icon-512-maskable.png'],
             manifest: {
               id: '/',
               name: 'Celestian LifeOS',
-              short_name: 'LifeOS',
-              description: 'Organización personal con datos locales y sincronización opcional.',
+              short_name: 'Celestian',
+              description: 'Tu espacio personal para organizar agenda, trabajo, finanzas, estudios y gimnasio, con datos locales y sincronización opcional.',
               lang: 'es',
               dir: 'ltr',
               theme_color: '#07090E',
               background_color: '#07090E',
               display: 'standalone',
+              display_override: ['window-controls-overlay', 'standalone'],
               orientation: 'portrait',
               start_url: '/',
               scope: '/',
+              categories: ['productivity', 'lifestyle', 'finance'],
               shortcuts: [
-                { name: 'Captura rápida', short_name: 'Capturar', url: '/?action=capture', icons: [{ src: '/lifeos-icon-192.png', sizes: '192x192' }] },
-                { name: 'Iniciar gimnasio', short_name: 'Gimnasio', url: '/?action=gym', icons: [{ src: '/lifeos-icon-192.png', sizes: '192x192' }] },
+                { name: 'Hoy', short_name: 'Hoy', url: '/?view=dashboard', icons: [{ src: '/lifeos-icon-192.png', sizes: '192x192', type: 'image/png' }] },
+                { name: 'Finanzas', short_name: 'Finanzas', url: '/?view=finanzas', icons: [{ src: '/lifeos-icon-192.png', sizes: '192x192', type: 'image/png' }] },
+                { name: 'Gimnasio', short_name: 'Gimnasio', url: '/?view=gimnasio', icons: [{ src: '/lifeos-icon-192.png', sizes: '192x192', type: 'image/png' }] },
               ],
               icons: [
                 { src: '/lifeos-icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
                 { src: '/lifeos-icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+                { src: '/icon-192-maskable.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
                 { src: '/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
               ],
             },
@@ -57,10 +61,15 @@ export default defineConfig(({ mode }) => {
               // and dotLottie WASM runtime are large assets: they stay out of the
               // install-time precache and are cached on demand by runtimeCaching below.
               globPatterns: ['**/*.{js,css,html,woff2,png,webp,svg,lottie,json}'],
-              // Digital Asset Links must never be served from a stale precache or
+              // Digital Asset Links and public legal/info pages must never be
               // swallowed by the SPA navigation fallback.
               globIgnores: ['**/.well-known/**', '**/cervino-panorama-*.webp'],
-              navigateFallbackDenylist: [/^\/\.well-known\//],
+              navigateFallbackDenylist: [
+                /^\/\.well-known\//,
+                /^\/privacidad\.html$/,
+                /^\/eliminar-cuenta\.html$/,
+                /^\/creditos\.html$/,
+              ],
               maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
               navigateFallback: '/index.html',
               cleanupOutdatedCaches: true,

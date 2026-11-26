@@ -499,8 +499,7 @@ test('Seguridad & Hosting — Validación estática de CSP y Permissions-Policy 
     assert.equal(headers['x-frame-options'], 'DENY', resource);
     assert.equal(headers['referrer-policy'], 'strict-origin-when-cross-origin', resource);
     const permissions = Object.fromEntries((headers['permissions-policy'] ?? '').split(',').map(entry => entry.trim().split('=')));
-    assert.equal(permissions.geolocation, '(self)', `${resource}: geolocation solo self`);
-    for (const feature of ['camera', 'microphone', 'payment']) assert.equal(permissions[feature], '()', `${resource}: ${feature} bloqueado`);
+    for (const feature of ['geolocation', 'camera', 'microphone', 'payment']) assert.equal(permissions[feature], '()', `${resource}: ${feature} bloqueado`);
 
     const csp = headers['content-security-policy'];
     assert.ok(csp, `${resource}: CSP obligatoria`);
@@ -511,7 +510,7 @@ test('Seguridad & Hosting — Validación estática de CSP y Permissions-Policy 
     assert.deepEqual(directives['script-src'], ["'self'", "'wasm-unsafe-eval'"], resource);
     assert.deepEqual(directives['script-src-elem'], ["'self'", 'https://apis.google.com/js/api.js', 'https://apis.google.com/_/scs/abc-static/_/js/'], resource);
     for (const endpoint of ['https://api.open-meteo.com', 'https://geocoding-api.open-meteo.com']) {
-      assert.ok(directives['connect-src']?.includes(endpoint), `${resource}: connect-src incluye ${endpoint}`);
+      assert.ok(!directives['connect-src']?.includes(endpoint), `${resource}: connect-src no debe incluir ${endpoint}`);
     }
     for (const values of Object.values(directives)) {
       assert.ok(!values.includes("'unsafe-eval'"), `${resource}: sin unsafe-eval general`);
