@@ -22,6 +22,8 @@ import { CompletionCheck } from './ui/CompletionCheck';
 import { daysBetween, fmtDate, todayISO, uid } from '../lib/storage';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
+import { maskFinancialText } from '../lib/financialPrivacy';
+import { usePrivacyMode } from './PrivacyAmount';
 import { sendProjectNextStepToToday, sendProjectTaskToToday } from '../lib/projectFlows';
 import {
   getUnifiedTaskMap,
@@ -32,17 +34,47 @@ import {
 } from '../lib/taskDependencies';
 import { focusTargetElement } from '../lib/navigationFocus';
 
+const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+  activo: 'Activo',
+  en_pausa: 'En pausa',
+  completado: 'Completado',
+  cancelado: 'Cancelado',
+};
+
 interface ProjectsManagerProps {
   state: LifeOSState;
   onUpdateState: (updater: (draft: LifeOSState) => void) => boolean | void;
   initialFocusId?: string | null;
   focusNonce?: number;
+  /** Optional initial modal visibility for deterministic testing. */
+  initialShowForm?: boolean;
 }
 
-export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdateState, initialFocusId, focusNonce }) => {
+export const ProjectsManager: React.FC<ProjectsManagerProps> = ({
+  state,
+  onUpdateState,
+  initialFocusId,
+  focusNonce,
+  initialShowForm = false,
+}) => {
   const [filter, setFilter] = useState<'activos' | 'pausados' | 'completados' | 'todos'>('activos');
-  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(initialShowForm);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
+  const contextPrivacy = usePrivacyMode();
+  const privacyActive = Boolean(state.settings?.privacyMode) || contextPrivacy;
+
+  React.useEffect(() => {
+    if (!showCreateForm) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        setShowCreateForm(false);
+        setEditingProjectId(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showCreateForm]);
 
   React.useEffect(() => {
     if (initialFocusId) {
@@ -152,7 +184,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
     });
     if (saved === false) return;
     if (newStatus === 'completado') playSound('success');
-    showToast(`Estado cambiado a ${newStatus}.`);
+    showToast(`Estado cambiado a ${PROJECT_STATUS_LABELS[newStatus]}.`);
   };
 
   const handleDeleteProject = (id: string) => {
@@ -238,7 +270,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
       }
       const unblocks = getUnblockedCountIfCompleted(taskId, taskMap);
       if (unblocks > 0) {
-        showToast(`✦ Tarea completada. ¡Desbloqueaste ${unblocks} tarea(s)!`, 'success');
+        showToast(`Tarea completada. Desbloqueaste ${unblocks} ${unblocks === 1 ? 'tarea' : 'tareas'}.`, 'success');
       }
     }
 
@@ -324,7 +356,9 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
   };
 
   const fieldClass =
-    'celestian-clean-field w-full min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
+    'celestian-clean-field w-full min-h-11 sm:min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
+  const cleanBtnFocus =
+    'outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
 
   return (
     <div className="space-y-4 sm:space-y-5">
@@ -342,7 +376,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                   if (showCreateForm) resetForm();
                   else setShowCreateForm(true);
                 }}
-                className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer"
+                className={`inline-flex min-h-11 sm:min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer ${cleanBtnFocus}`}
               >
                 {showCreateForm ? <X size={15} strokeWidth={1.75} aria-hidden="true" /> : <Plus size={15} strokeWidth={1.75} aria-hidden="true" />}
                 <span>{showCreateForm ? 'Cerrar' : 'Nuevo proyecto'}</span>
@@ -362,7 +396,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
               type="button"
               aria-pressed={filter === tab}
               onClick={() => setFilter(tab)}
-              className={`min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 cursor-pointer ${
+              className={`min-h-10 shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${cleanBtnFocus} cursor-pointer ${
                 filter === tab
                   ? 'bg-[#4F46E5] text-white'
                   : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
@@ -380,124 +414,144 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
         </div>
       </SurfaceCard>
 
-      {/* Create / Edit Form */}
+      {/* Create / Edit Project Modal (Bottom Sheet on mobile, centered on desktop) */}
       {showCreateForm && (
-        <SurfaceCard as="div" className="p-4 sm:p-5">
-          <form onSubmit={handleSaveProject} className="space-y-4">
-            <SectionHeader
-              title={editingProjectId ? 'Editar proyecto' : 'Nuevo proyecto'}
-              action={
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="inline-flex min-h-10 items-center gap-1 rounded-lg px-2.5 text-xs font-medium text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 cursor-pointer"
-                >
-                  <X size={14} strokeWidth={1.75} aria-hidden="true" />
-                  <span>Cancelar</span>
-                </button>
-              }
-            />
-
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 border-t border-slate-100 pt-3.5 dark:border-white/[0.06]">
-              <div className="min-w-0">
-                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Nombre del proyecto *
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ej: Lanzamiento de producto, Mudanza"
-                  className={`${fieldClass} font-semibold`}
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Fecha de revisión
-                </label>
-                <input
-                  type="date"
-                  value={reviewDate}
-                  onChange={(e) => setReviewDate(e.target.value)}
-                  className={fieldClass}
-                />
-              </div>
-            </div>
-
-            <div className="min-w-0">
-              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                Resultado esperado
-              </label>
-              <input
-                type="text"
-                value={objective}
-                onChange={(e) => setObjective(e.target.value)}
-                placeholder="Ej: Conseguir los primeros 10 clientes antes de fin de mes."
-                className={fieldClass}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-              <div className="min-w-0">
-                <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Próximo paso
-                </label>
-                <input
-                  type="text"
-                  value={nextStep}
-                  onChange={(e) => setNextStep(e.target.value)}
-                  placeholder="Ej: Redactar email para agendar reunión."
-                  className={fieldClass}
-                />
-              </div>
-
-              <div className="min-w-0">
-                <label className="mb-1 block text-xs font-medium text-amber-700 dark:text-amber-400">
-                  Bloqueos (opcional)
-                </label>
-                <input
-                  type="text"
-                  value={blockers}
-                  onChange={(e) => setBlockers(e.target.value)}
-                  placeholder="Ej: Esperando respuesta o aprobación."
-                  className="w-full min-h-10 rounded-xl border border-amber-500/30 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:bg-white/[0.03] dark:text-slate-100"
-                />
-              </div>
-            </div>
-
-            <div className="min-w-0">
-              <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
-                Notas y contexto adicional
-              </label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Detalles, enlaces, consideraciones técnicas..."
-                rows={2}
-                className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-none dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 resize-y"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
+        <div
+          className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4 animate-in fade-in"
+          onClick={resetForm}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="project-form-title"
+            className="w-full max-w-2xl max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl dark:border-white/[0.08] dark:bg-[#0D111A] sm:p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />
+            <div className="mb-4 flex items-center justify-between gap-2">
+              <h2 id="project-form-title" className="text-base font-bold text-slate-900 dark:text-slate-100">
+                {editingProjectId ? 'Editar proyecto' : 'Nuevo proyecto'}
+              </h2>
               <button
                 type="button"
                 onClick={resetForm}
-                className="inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200/80 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:bg-white/[0.04] cursor-pointer"
+                aria-label="Cerrar formulario de proyecto"
+                title="Cerrar"
+                className={`inline-flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer ${cleanBtnFocus}`}
               >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer"
-              >
-                <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
-                <span>{editingProjectId ? 'Guardar cambios' : 'Crear proyecto'}</span>
+                <X size={16} strokeWidth={1.75} aria-hidden="true" />
               </button>
             </div>
-          </form>
-        </SurfaceCard>
+            <form onSubmit={handleSaveProject} className="space-y-4">
+
+              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 border-t border-slate-100 pt-3.5 dark:border-white/[0.06]">
+                <div className="min-w-0">
+                  <label htmlFor="project-name-input" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Nombre del proyecto *
+                  </label>
+                  <input
+                    id="project-name-input"
+                    type="text"
+                    required
+                    autoFocus
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Ej.: Lanzamiento de producto, mudanza"
+                    className={`${fieldClass} font-semibold`}
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label htmlFor="project-review-date" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Fecha de revisión
+                  </label>
+                  <input
+                    id="project-review-date"
+                    type="date"
+                    value={reviewDate}
+                    onChange={(e) => setReviewDate(e.target.value)}
+                    className={fieldClass}
+                  />
+                </div>
+              </div>
+
+              <div className="min-w-0">
+                <label htmlFor="project-objective-input" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Resultado esperado
+                </label>
+                <input
+                  id="project-objective-input"
+                  type="text"
+                  value={objective}
+                  onChange={(e) => setObjective(e.target.value)}
+                  placeholder="Ej.: Conseguir los primeros 10 clientes antes de fin de mes."
+                  className={fieldClass}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+                <div className="min-w-0">
+                  <label htmlFor="project-next-step-input" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                    Próximo paso
+                  </label>
+                  <input
+                    id="project-next-step-input"
+                    type="text"
+                    value={nextStep}
+                    onChange={(e) => setNextStep(e.target.value)}
+                    placeholder="Ej.: Redactar correo para agendar reunión."
+                    className={fieldClass}
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <label htmlFor="project-blockers-input" className="mb-1 block text-xs font-medium text-amber-700 dark:text-amber-400">
+                    Bloqueos (opcional)
+                  </label>
+                  <input
+                    id="project-blockers-input"
+                    type="text"
+                    value={blockers}
+                    onChange={(e) => setBlockers(e.target.value)}
+                    placeholder="Ej.: Esperando respuesta o aprobación."
+                    className="celestian-clean-field w-full min-h-11 sm:min-h-10 rounded-xl border border-amber-500/30 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 dark:bg-white/[0.03] dark:text-slate-100"
+                  />
+                </div>
+              </div>
+
+              <div className="min-w-0">
+                <label htmlFor="project-notes-input" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">
+                  Notas y contexto adicional
+                </label>
+                <textarea
+                  id="project-notes-input"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Detalles, enlaces, consideraciones técnicas..."
+                  rows={2}
+                  className="celestian-clean-field w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 resize-y"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className={`inline-flex min-h-11 sm:min-h-10 items-center justify-center rounded-xl border border-slate-200/80 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-300 dark:hover:bg-white/[0.04] cursor-pointer ${cleanBtnFocus}`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className={`inline-flex min-h-11 sm:min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer ${cleanBtnFocus}`}
+                >
+                  <Plus size={14} strokeWidth={1.75} aria-hidden="true" />
+                  <span>{editingProjectId ? 'Guardar cambios' : 'Crear proyecto'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {/* Projects List */}
@@ -560,7 +614,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
 
                     {project.objective && (
                       <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
-                        <strong className="font-semibold text-slate-700 dark:text-slate-300">Objetivo:</strong> {project.objective}
+                        <strong className="font-semibold text-slate-700 dark:text-slate-300">Objetivo:</strong> {maskFinancialText(project.objective, privacyActive)}
                       </p>
                     )}
                   </div>
@@ -571,7 +625,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                       aria-label={`Estado de ${project.name}`}
                       value={project.status}
                       onChange={(e) => handleUpdateStatus(project.id, e.target.value as ProjectStatus)}
-                      className="min-h-10 rounded-xl border border-slate-200/80 bg-white px-2.5 text-xs font-medium text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200 cursor-pointer"
+                      className="celestian-clean-field min-h-11 sm:min-h-10 rounded-xl border border-slate-200/80 bg-white px-2.5 text-xs font-medium text-slate-800 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-200 cursor-pointer"
                     >
                       <option value="activo">Activo</option>
                       <option value="en_pausa">En pausa</option>
@@ -582,7 +636,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                     <button
                       type="button"
                       onClick={() => handleStartEdit(project)}
-                      className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-[#4F46E5] dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-indigo-300 cursor-pointer"
+                      className={`inline-flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-[#4F46E5] dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-indigo-300 cursor-pointer ${cleanBtnFocus}`}
                       title="Editar proyecto"
                       aria-label="Editar proyecto"
                     >
@@ -591,7 +645,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                     <button
                       type="button"
                       onClick={() => handleDeleteProject(project.id)}
-                      className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-rose-500/10 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 cursor-pointer"
+                      className={`inline-flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-rose-500/10 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 cursor-pointer ${cleanBtnFocus}`}
                       title="Eliminar proyecto"
                       aria-label="Eliminar proyecto"
                     >
@@ -607,7 +661,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                       Próximo paso
                     </span>
                     <p className="mt-0.5 text-sm font-medium text-slate-900 dark:text-slate-100 break-words">
-                      {project.nextStep || 'Sin próximo paso definido.'}
+                      {project.nextStep ? maskFinancialText(project.nextStep, privacyActive) : 'Sin próximo paso definido.'}
                     </p>
                   </div>
 
@@ -796,11 +850,11 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                               <button
                                 type="button"
                                 onClick={() => handleDeleteTask(project.id, t.id)}
-                                className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
+                                className={`inline-flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer ${cleanBtnFocus}`}
                                 title="Eliminar tarea"
                                 aria-label={`Eliminar tarea ${t.text}`}
                               >
-                                <X size={15} strokeWidth={1.75} aria-hidden="true" />
+                                <Trash2 size={15} strokeWidth={1.75} aria-hidden="true" />
                               </button>
                             </div>
                           </div>
@@ -813,7 +867,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                                 <button
                                   type="button"
                                   onClick={() => setEditingDepTaskId(null)}
-                                  className="inline-flex min-h-9 items-center gap-1 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer"
+                                  className={`inline-flex min-h-9 items-center gap-1 text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 cursor-pointer ${cleanBtnFocus}`}
                                 >
                                   <span>Cerrar</span>
                                   <X size={13} strokeWidth={1.75} aria-hidden="true" />
@@ -827,14 +881,18 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                                       key={other.id}
                                       type="button"
                                       onClick={() => handleToggleTaskDependency(project.id, t.id, other.id)}
-                                      className={`min-h-10 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                                      className={`inline-flex min-h-10 items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${cleanBtnFocus} ${
                                         isSelected
                                           ? 'border-[#4F46E5] bg-[#4F46E5] text-white'
                                           : 'border-slate-200/80 bg-transparent text-slate-600 hover:border-[#4F46E5] dark:border-white/[0.08] dark:text-slate-300'
                                       }`}
                                     >
-                                      {isSelected ? '✓ ' : '+ '}
-                                      {other.text}
+                                      {isSelected ? (
+                                        <Check size={12} strokeWidth={2.2} aria-hidden="true" />
+                                      ) : (
+                                        <Plus size={12} strokeWidth={2.2} aria-hidden="true" />
+                                      )}
+                                      <span>{other.text}</span>
                                     </button>
                                   );
                                 })}
@@ -850,7 +908,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                                 type="date"
                                 defaultValue={t.dueDate || today}
                                 onChange={(e) => handleSetTaskDueDate(project.id, t.id, e.target.value)}
-                                className="min-h-10 rounded-lg border border-slate-200/80 bg-white px-2.5 text-xs text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100"
+                                className="celestian-clean-field min-h-10 rounded-lg border border-slate-200/80 bg-white px-2.5 text-xs text-slate-900 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100"
                               />
                               {t.dueDate && (
                                 <button
@@ -907,7 +965,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({ state, onUpdat
                 {project.notes && (
                   <p className="flex items-start gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-white/[0.06] dark:text-slate-400">
                     <MessageSquare size={14} strokeWidth={1.75} className="mt-0.5 shrink-0 text-slate-400 dark:text-slate-500" aria-hidden="true" />
-                    <span className="break-words">{project.notes}</span>
+                    <span className="break-words">{maskFinancialText(project.notes, privacyActive)}</span>
                   </p>
                 )}
               </SurfaceCard>

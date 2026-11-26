@@ -45,6 +45,7 @@ import {
 import { showToast } from '../lib/toast';
 import { isStreamingEnabled } from '../lib/moduleVisibility';
 import { ProjectsManager } from './ProjectsManager';
+import { PrivacyAmount, PrivacyProvider, usePrivacyMode } from './PrivacyAmount';
 import { CompletionCheck } from './ui/CompletionCheck';
 import { CelestianSwitch } from './ui/CelestianSwitch';
 import { ListDivider, SectionHeader, SurfaceCard } from './ui/SurfacePrimitives';
@@ -86,6 +87,8 @@ interface NotasViewProps {
   focusNonce?: number;
   storageUserId: string | null;
   onOpenGym: () => void;
+  /** Optional initial new-note modal visibility for deterministic testing. */
+  initialShowAddForm?: boolean;
 }
 
 export const NotasView: React.FC<NotasViewProps> = ({
@@ -97,7 +100,10 @@ export const NotasView: React.FC<NotasViewProps> = ({
   focusNonce,
   storageUserId,
   onOpenGym,
+  initialShowAddForm = false,
 }) => {
+  const contextPrivacy = usePrivacyMode();
+  const privacyActive = Boolean(state.settings?.privacyMode) || contextPrivacy;
   const initialNote = initialNoteId ? (state.notes?.postits || []).find((note) => note.id === initialNoteId) || null : null;
   type NotesSection = 'notas' | 'herramientas' | 'proyectos' | 'streaming' | 'cosas' | 'compras' | 'links';
   const streamingEnabled = isStreamingEnabled(state);
@@ -160,13 +166,16 @@ export const NotasView: React.FC<NotasViewProps> = ({
   const [goalInitial, setGoalInitial] = useState('');
   const [goalTarget, setGoalTarget] = useState('');
   const [goalLinked, setGoalLinked] = useState<'weight' | 'available' | null>(null);
+  const [updatingGoal, setUpdatingGoal] = useState<Goal | null>(null);
+  const [updatingGoalValue, setUpdatingGoalValue] = useState('');
 
   const [postitText, setPostitText] = useState('');
   const [noteTitle, setNoteTitle] = useState('');
   const [noteContent, setNoteContent] = useState('');
   const [noteTags, setNoteTags] = useState('');
   const [notePinned, setNotePinned] = useState(false);
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(initialShowAddForm);
+  const addModalRef = React.useRef<HTMLDivElement>(null);
   const [noteSearch, setNoteSearch] = useState('');
   const [noteOrder, setNoteOrder] = useState<'pinned' | 'recent'>('recent');
   const [noteError, setNoteError] = useState('');
@@ -281,15 +290,49 @@ export const NotasView: React.FC<NotasViewProps> = ({
   };
 
   const handleUpdateGoal = (g: Goal) => {
-    const val = prompt(`Nuevo valor actual para "${g.name}":`, String(g.current));
-    if (val === null) return;
-    const num = Number(val);
-    saveToolChange((draft) => {
-      if (!draft.goals) draft.goals = [];
-      const targetGoal = draft.goals.find((x) => x.id === g.id);
-      if (targetGoal) targetGoal.current = !isNaN(num) ? num : targetGoal.current;
-    });
+    setUpdatingGoal(g);
+    setUpdatingGoalValue(String(g.current));
   };
+
+  const handleSaveGoalValue = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!updatingGoal) return;
+    const num = Number(updatingGoalValue.replace(',', '.').trim());
+    if (!Number.isFinite(num)) return;
+    const saved = saveToolChange((draft) => {
+      if (!draft.goals) draft.goals = [];
+      const targetGoal = draft.goals.find((x) => x.id === updatingGoal.id);
+      if (targetGoal) targetGoal.current = num;
+    });
+    if (saved) {
+      setUpdatingGoal(null);
+      setUpdatingGoalValue('');
+    }
+  };
+
+  React.useEffect(() => {
+    if (!updatingGoal) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        setUpdatingGoal(null);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [updatingGoal]);
+
+  React.useEffect(() => {
+    if (!showAddForm) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        setShowAddForm(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showAddForm]);
 
   const handleDeleteGoal = (id: string) => {
     saveToolChange((draft) => {
@@ -597,15 +640,15 @@ export const NotasView: React.FC<NotasViewProps> = ({
 
 
   const fieldClass =
-    'celestian-clean-field w-full min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
-  const primaryBtnClass =
-    'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer';
-  const secondaryBtnClass =
-    'inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-transparent px-3.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:bg-white/[0.04] cursor-pointer';
+    'celestian-clean-field w-full min-h-11 sm:min-h-10 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
   const segmentedBtnBase =
     'outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 transition-colors cursor-pointer';
+  const primaryBtnClass =
+    `inline-flex min-h-11 sm:min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-sm font-semibold text-white hover:bg-[#4338CA] disabled:opacity-40 disabled:cursor-not-allowed ${segmentedBtnBase}`;
+  const secondaryBtnClass =
+    `inline-flex min-h-11 sm:min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-transparent px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-white/[0.08] dark:text-slate-200 dark:hover:bg-white/[0.04] ${segmentedBtnBase}`;
 
-  return (
+  const viewContent = (
     <div className="notes-refinement space-y-5">
       {noteError && !editingNote && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{noteError}</p>}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -719,6 +762,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
                   <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Valor inicial</label>
                   <input
                     type="number"
+                    inputMode="decimal"
                     aria-label="Valor inicial"
                     value={goalInitial}
                     onChange={(e) => setGoalInitial(e.target.value)}
@@ -730,6 +774,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
                   <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Meta</label>
                   <input
                     type="number"
+                    inputMode="decimal"
                     aria-label="Meta"
                     value={goalTarget}
                     onChange={(e) => setGoalTarget(e.target.value)}
@@ -813,9 +858,9 @@ export const NotasView: React.FC<NotasViewProps> = ({
                       </div>
 
                       <div className="tabular-nums text-2xl font-bold text-slate-900 dark:text-slate-100">
-                        {fmtVal(cur)}
+                        {isFinancial ? <PrivacyAmount>{fmtVal(cur)}</PrivacyAmount> : fmtVal(cur)}
                         <span className="ml-1 text-xs font-normal text-slate-500 dark:text-slate-400">
-                          / {fmtVal(g.target)}
+                          / {isFinancial ? <PrivacyAmount>{fmtVal(g.target)}</PrivacyAmount> : fmtVal(g.target)}
                         </span>
                       </div>
 
@@ -849,47 +894,78 @@ export const NotasView: React.FC<NotasViewProps> = ({
       {/* Tab: Notas & Personal */}
       {activeTab === 'notas' && (
         <div className="space-y-4">
-          {/* Quick Add / Form */}
+          {/* Quick Add / New Note Modal (Bottom Sheet on mobile, centered on desktop) */}
           {showAddForm && (
-            <SurfaceCard as="div" className="p-4 sm:p-5">
-              <form onSubmit={handleAddPostit} className="space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Nueva nota</span>
-                  <div className="inline-flex min-h-10 items-center gap-2.5 text-xs font-medium text-slate-600 dark:text-slate-400 select-none">
-                    <Pin size={13} strokeWidth={1.75} aria-hidden="true" className={notePinned ? 'text-[#4F46E5] dark:text-indigo-400' : ''} />
-                    <span id="new-note-pin-label">Fijar arriba</span>
-                    <CelestianSwitch
-                      checked={notePinned}
-                      onChange={setNotePinned}
-                      ariaLabelledBy="new-note-pin-label"
-                      size="sm"
-                    />
-                  </div>
+            <div
+              className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/60 p-0 backdrop-blur-xs sm:items-center sm:p-4 animate-in fade-in"
+              onClick={() => setShowAddForm(false)}
+            >
+              <div
+                ref={addModalRef}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="new-note-modal-title"
+                onClick={(e) => e.stopPropagation()}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') { event.stopPropagation(); setShowAddForm(false); }
+                  if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+                    event.preventDefault();
+                    addModalRef.current?.querySelector('form')?.requestSubmit();
+                  }
+                }}
+                className="w-full max-w-2xl max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-4 shadow-2xl dark:border-white/[0.07] dark:bg-[#0D111A]"
+              >
+                <div className="mx-auto h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />
+                <div className="flex items-center justify-between gap-2">
+                  <h3 id="new-note-modal-title" className="text-base font-semibold text-slate-900 dark:text-slate-100">Nueva nota</h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddForm(false)}
+                    aria-label="Cerrar nueva nota"
+                    className={`inline-flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 ${segmentedBtnBase}`}
+                  >
+                    <X size={17} strokeWidth={1.75} aria-hidden="true" />
+                  </button>
                 </div>
 
-                <input
-                  type="text"
-                  aria-label="Título de la nueva nota"
-                  value={noteTitle}
-                  onChange={(e) => setNoteTitle(e.target.value)}
-                  placeholder="Título (opcional)..."
-                  className={`${fieldClass} font-semibold`}
-                />
+                <form onSubmit={handleAddPostit} className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Ctrl/Cmd + Enter para guardar rápido</p>
+                    <div className="inline-flex min-h-10 items-center gap-2.5 text-xs font-medium text-slate-600 dark:text-slate-400 select-none">
+                      <Pin size={13} strokeWidth={1.75} aria-hidden="true" className={notePinned ? 'text-[#4F46E5] dark:text-indigo-400' : ''} />
+                      <span id="new-note-pin-label">Fijar arriba</span>
+                      <CelestianSwitch
+                        checked={notePinned}
+                        onChange={setNotePinned}
+                        ariaLabelledBy="new-note-pin-label"
+                        size="sm"
+                      />
+                    </div>
+                  </div>
 
-                <textarea
-                  aria-label="Contenido de la nueva nota"
-                  autoFocus
-                  value={noteContent}
-                  onChange={(e) => setNoteContent(e.target.value)}
-                  placeholder="Escribí el contenido de la nota..."
-                  rows={3}
-                  className="celestian-clean-field w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm leading-6 text-slate-900 placeholder:text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 resize-y"
-                  required
-                />
+                  <input
+                    type="text"
+                    aria-label="Título de la nueva nota"
+                    value={noteTitle}
+                    onChange={(e) => setNoteTitle(e.target.value)}
+                    placeholder="Título (opcional)..."
+                    className={`${fieldClass} font-semibold`}
+                  />
 
-                <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="w-full sm:flex-1"><TagEditor value={noteTags} onChange={setNoteTags} /></div>
-                  <div className="flex items-center justify-end gap-2">
+                  <textarea
+                    aria-label="Contenido de la nueva nota"
+                    autoFocus
+                    value={noteContent}
+                    onChange={(e) => setNoteContent(e.target.value)}
+                    placeholder="Escribí el contenido de la nota..."
+                    rows={5}
+                    className="celestian-clean-field w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm leading-6 text-slate-900 placeholder:text-slate-400 dark:border-white/[0.08] dark:bg-white/[0.03] dark:text-slate-100 resize-y"
+                    required
+                  />
+
+                  <TagEditor value={noteTags} onChange={setNoteTags} />
+
+                  <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
                     <button type="button" onClick={() => setShowAddForm(false)} className={secondaryBtnClass}>
                       Cancelar
                     </button>
@@ -897,9 +973,9 @@ export const NotasView: React.FC<NotasViewProps> = ({
                       Guardar nota
                     </button>
                   </div>
-                </div>
-              </form>
-            </SurfaceCard>
+                </form>
+              </div>
+            </div>
           )}
 
           {/* Search & Filter Bar */}
@@ -1040,10 +1116,24 @@ export const NotasView: React.FC<NotasViewProps> = ({
                       <div className="flex shrink-0 items-center gap-0.5">
                         <button
                           type="button"
+                          onClick={() => handleTogglePin(p.id, isPinned)}
+                          aria-label={`${isPinned ? 'Desfijar' : 'Fijar'} nota ${p.title || p.text.slice(0, 45)}`}
+                          aria-pressed={isPinned}
+                          title={isPinned ? 'Desfijar nota' : 'Fijar arriba'}
+                          className={`inline-flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 items-center justify-center rounded-xl transition-colors cursor-pointer ${segmentedBtnBase} ${
+                            isPinned
+                              ? 'text-[#4F46E5] bg-indigo-500/10 hover:bg-indigo-500/15 dark:text-indigo-300'
+                              : 'text-slate-400 hover:bg-slate-100 hover:text-[#4F46E5] dark:hover:bg-white/[0.06] dark:hover:text-indigo-300'
+                          }`}
+                        >
+                          <Pin size={15} strokeWidth={1.75} aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => handleStartEdit(p)}
                           aria-label={`Editar nota ${p.title || p.text.slice(0, 45)}`}
                           title="Editar nota"
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-[#4F46E5] dark:hover:bg-white/[0.06] dark:hover:text-indigo-300 cursor-pointer"
+                          className={`inline-flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-[#4F46E5] dark:hover:bg-white/[0.06] dark:hover:text-indigo-300 ${segmentedBtnBase}`}
                         >
                           <Pencil size={15} strokeWidth={1.75} aria-hidden="true" />
                         </button>
@@ -1052,7 +1142,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
                           onClick={() => handleDeletePostit(p.id)}
                           aria-label={`Eliminar nota ${p.title || p.text.slice(0, 45)}`}
                           title="Eliminar nota"
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 cursor-pointer"
+                          className={`inline-flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400 ${segmentedBtnBase}`}
                         >
                           <Trash2 size={15} strokeWidth={1.75} aria-hidden="true" />
                         </button>
@@ -1067,7 +1157,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
                             title="Más acciones"
                             aria-haspopup="menu"
                             aria-expanded={openNoteMenuId === p.id}
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#4F46E5] dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
+                            className={`inline-flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 ${segmentedBtnBase}`}
                           >
                             <MoreHorizontal size={18} strokeWidth={1.75} aria-hidden="true" />
                           </button>
@@ -1152,9 +1242,9 @@ export const NotasView: React.FC<NotasViewProps> = ({
             </div>
           )}
 
-          {/* Edit Note Modal */}
+          {/* Edit Note Modal (Bottom Sheet on mobile, centered on desktop) */}
           {editingNote && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs" onClick={closeEditor}>
+            <div className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/60 p-0 backdrop-blur-xs sm:items-center sm:p-4 animate-in fade-in" onClick={closeEditor}>
               <div
                 ref={editorRef}
                 role="dialog"
@@ -1171,15 +1261,16 @@ export const NotasView: React.FC<NotasViewProps> = ({
                     if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
                   }
                 }}
-                className="w-full max-w-3xl max-h-[90dvh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xl dark:border-white/[0.07] dark:bg-[#0D111A]"
+                className="w-full max-w-3xl max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-4 shadow-2xl dark:border-white/[0.07] dark:bg-[#0D111A]"
               >
+                <div className="mx-auto h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />
                 <div className="flex items-center justify-between gap-2">
                   <h3 id="note-editor-title" className="text-base font-semibold text-slate-900 dark:text-slate-100">Editar nota</h3>
                   <button
                     type="button"
                     onClick={closeEditor}
                     aria-label="Cerrar editor de nota"
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer"
+                    className={`inline-flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 ${segmentedBtnBase}`}
                   >
                     <X size={17} strokeWidth={1.75} aria-hidden="true" />
                   </button>
@@ -1187,7 +1278,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
 
                 <form onSubmit={handleSaveEdit} className="space-y-3">
                   {noteError && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{noteError}</p>}
-                  <p className="text-xs text-slate-500 dark:text-slate-400">Guardado manual · Ctrl+Enter para guardar</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Guardado manual · Ctrl/Cmd + Enter para guardar</p>
                   <div>
                     <label className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-400">
                       Título (opcional)
@@ -1383,7 +1474,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
                     aria-label={`${s.done ? 'Marcar pendiente' : 'Marcar comprado'}: ${s.text}`}
                     aria-pressed={s.done}
                     onClick={() => handleToggleShop(s.id)}
-                    className="group inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer"
+                    className={`group inline-flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 shrink-0 items-center justify-center rounded-full ${segmentedBtnBase}`}
                   >
                     <CompletionCheck checked={s.done} size="md" />
                   </button>
@@ -1502,6 +1593,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
                 <label className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Horas</label>
                 <input
                   type="number"
+                  inputMode="decimal"
                   step="0.1"
                   aria-label="Horas del directo"
                   value={streamHours}
@@ -1545,7 +1637,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
                         aria-label={`${item.done ? 'Desmarcar' : 'Marcar'} ${item.label}`}
                         aria-pressed={item.done}
                         onClick={() => saveToolChange((draft) => { const target = (draft.streaming?.preStreamChecklist || []).find((candidate) => candidate.id === item.id); if (target) target.done = !target.done; })}
-                        className="group inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F46E5] cursor-pointer"
+                        className={`group inline-flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 shrink-0 items-center justify-center rounded-full ${segmentedBtnBase}`}
                       >
                         <CompletionCheck checked={item.done} size="md" />
                       </button>
@@ -1635,6 +1727,68 @@ export const NotasView: React.FC<NotasViewProps> = ({
           </div>
         </div>
       )}
+      {/* Update Goal Value Modal (replaces native window.prompt with Block 30 bottom sheet) */}
+      {updatingGoal && (
+        <div
+          className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/60 p-0 backdrop-blur-xs sm:items-center sm:p-4 animate-in fade-in"
+          onClick={() => setUpdatingGoal(null)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="update-goal-title"
+            className="w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-4 shadow-2xl dark:border-white/[0.08] dark:bg-[#0D111A]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />
+            <div className="flex items-center justify-between gap-2">
+              <h3 id="update-goal-title" className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                Actualizar avance
+              </h3>
+              <button
+                type="button"
+                onClick={() => setUpdatingGoal(null)}
+                aria-label="Cerrar actualización de objetivo"
+                className={`inline-flex min-h-11 min-w-11 sm:min-h-10 sm:min-w-10 items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 ${segmentedBtnBase}`}
+              >
+                <X size={17} strokeWidth={1.75} aria-hidden="true" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveGoalValue} className="space-y-4">
+              <div>
+                <label htmlFor="update-goal-value" className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">
+                  Valor actual para «{updatingGoal.name}»
+                </label>
+                <input
+                  id="update-goal-value"
+                  type="number"
+                  inputMode="decimal"
+                  step="any"
+                  autoFocus
+                  required
+                  value={updatingGoalValue}
+                  onChange={(e) => setUpdatingGoalValue(e.target.value)}
+                  className={`${fieldClass} tabular-nums`}
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-3 dark:border-white/[0.06]">
+                <button type="button" onClick={() => setUpdatingGoal(null)} className={secondaryBtnClass}>
+                  Cancelar
+                </button>
+                <button type="submit" className={primaryBtnClass}>
+                  Guardar avance
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
+
+  if (privacyActive && !contextPrivacy) {
+    return <PrivacyProvider active={true}>{viewContent}</PrivacyProvider>;
+  }
+
+  return viewContent;
 };

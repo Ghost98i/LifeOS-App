@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Clock, ExternalLink, Filter, Pencil, Search, Trash2, User, X } from 'lucide-react';
 import { JobApplication, JobApplicationType } from '../types';
-import { fmtDate, todayISO } from '../lib/storage';
+import { fmtDate, formatMoney, todayISO } from '../lib/storage';
+import { maskFinancialText } from '../lib/financialPrivacy';
+import { PrivacyAmount, usePrivacyMode } from './PrivacyAmount';
 import {
   filterJobApplications,
   getNextJobKeyDate,
@@ -17,13 +19,14 @@ interface JobKanbanBoardProps {
   applications: JobApplication[];
   tipo: JobApplicationType;
   focusedAppId?: string | null;
+  privacyMode?: boolean;
   onSetEstado: (id: string, newEstado: JobApplication['estado']) => void;
   onEditApplication: (application: JobApplication) => void;
   onDeleteApplication: (id: string) => void;
 }
 
 const CLEAN_CONTROL_FOCUS =
-  'trabajo-clean-input outline-none focus:outline-none focus-visible:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/40 dark:focus:border-indigo-400 dark:focus:ring-indigo-400/40';
+  'celestian-clean-field trabajo-clean-input outline-none focus:outline-none focus-visible:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/40 dark:focus:border-indigo-400 dark:focus:ring-indigo-400/40';
 
 const CLEAN_BUTTON_FOCUS =
   'trabajo-clean-focus outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
@@ -46,10 +49,13 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
   applications,
   tipo,
   focusedAppId,
+  privacyMode = false,
   onSetEstado,
   onEditApplication,
   onDeleteApplication,
 }) => {
+  const contextPrivacy = usePrivacyMode();
+  const privacyActive = privacyMode || contextPrivacy;
   const columns = JOB_STAGES[tipo];
   const [draggedAppId, setDraggedAppId] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<JobApplication['estado'] | null>(null);
@@ -246,11 +252,20 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                       {app.puesto && (
                         <p className="break-words text-xs font-medium text-[var(--text-soft)]">{app.puesto}</p>
                       )}
-                      {app.source && (
-                        <div>
-                          <span className="inline-flex rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-soft)]">
-                            {app.source}
-                          </span>
+                      {(app.source || (typeof app.salaryExpectation === 'number' && app.salaryExpectation > 0)) && (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {app.source && (
+                            <span className="inline-flex rounded-md bg-[var(--surface-muted)] px-2 py-0.5 text-[11px] font-medium text-[var(--text-soft)]">
+                              {app.source}
+                            </span>
+                          )}
+                          {typeof app.salaryExpectation === 'number' && app.salaryExpectation > 0 && (
+                            <span className="inline-flex rounded-md bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">
+                              <PrivacyAmount>
+                                {formatMoney(app.salaryExpectation, app.salaryCurrency || 'UYU')}
+                              </PrivacyAmount>
+                            </span>
+                          )}
                         </div>
                       )}
                     </div>
@@ -264,9 +279,9 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                           <span className="break-words">{app.reclutador}</span>
                         </div>
                       )}
-                      {app.notas && <p className="break-words text-xs text-[var(--text-faint)]">{app.notas}</p>}
+                      {app.notas && <p className="break-words text-xs text-[var(--text-faint)]">{maskFinancialText(app.notas, privacyActive)}</p>}
                       {app.followUpNotes && (
-                        <p className="break-words text-xs text-[var(--text-soft)]">Seguimiento: {app.followUpNotes}</p>
+                        <p className="break-words text-xs text-[var(--text-soft)]">Seguimiento: {maskFinancialText(app.followUpNotes, privacyActive)}</p>
                       )}
                     </div>
                   )}
@@ -295,7 +310,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                     >
                       <span className="flex min-w-0 items-center gap-1.5 break-words">
                         <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                        <span>{app.nextAction || 'Seguimiento'}</span>
+                        <span>{maskFinancialText(app.nextAction || 'Seguimiento', privacyActive)}</span>
                       </span>
                       {app.nextActionDate && (
                         <span className="shrink-0 text-xs font-bold tabular-nums">{fmtDate(app.nextActionDate)}</span>
@@ -307,7 +322,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                     value={app.estado}
                     onChange={(event) => onSetEstado(app.id, event.target.value as JobApplication['estado'])}
                     aria-label={`Cambiar estado de ${app.empresa}`}
-                    className={`min-h-10 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/70 px-3 text-xs font-semibold text-[var(--text)] cursor-pointer ${CLEAN_CONTROL_FOCUS}`}
+                    className={`min-h-11 sm:min-h-10 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/70 px-3 text-xs font-semibold text-[var(--text)] cursor-pointer ${CLEAN_CONTROL_FOCUS}`}
                   >
                     {columns.map((stage) => (
                       <option key={stage.id} value={stage.id}>
@@ -324,7 +339,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                         onClick={() => onEditApplication(app)}
                         aria-label={`Editar postulación de ${app.empresa}`}
                         title="Editar postulación"
-                        className={`inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-soft)] transition-colors hover:bg-indigo-500/10 hover:text-[#4F46E5] dark:hover:text-[#818CF8] cursor-pointer ${CLEAN_BUTTON_FOCUS}`}
+                        className={`inline-flex min-h-11 min-w-11 sm:min-h-9 sm:min-w-9 items-center justify-center rounded-lg text-[var(--text-soft)] transition-colors hover:bg-indigo-500/10 hover:text-[#4F46E5] dark:hover:text-[#818CF8] cursor-pointer ${CLEAN_BUTTON_FOCUS}`}
                       >
                         <Pencil className="h-4 w-4" aria-hidden="true" />
                       </button>
@@ -333,7 +348,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                         onClick={() => onDeleteApplication(app.id)}
                         aria-label={`Eliminar postulación de ${app.empresa}`}
                         title="Eliminar postulación"
-                        className="trabajo-clean-focus inline-flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-soft)] transition-colors hover:bg-rose-500/10 hover:text-rose-600 outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-rose-400/70 dark:hover:text-rose-400 cursor-pointer"
+                        className="trabajo-clean-focus inline-flex min-h-11 min-w-11 sm:min-h-9 sm:min-w-9 items-center justify-center rounded-lg text-[var(--text-soft)] transition-colors hover:bg-rose-500/10 hover:text-rose-600 outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-rose-400/70 dark:hover:text-rose-400 cursor-pointer"
                       >
                         <Trash2 className="h-4 w-4" aria-hidden="true" />
                       </button>
@@ -425,11 +440,20 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                               {app.puesto}
                             </p>
                           )}
-                          {app.source && (
-                            <div className="pt-0.5">
-                              <span className="inline-flex rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-soft)]">
-                                {app.source}
-                              </span>
+                          {(app.source || (typeof app.salaryExpectation === 'number' && app.salaryExpectation > 0)) && (
+                            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                              {app.source && (
+                                <span className="inline-flex rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-soft)]">
+                                  {app.source}
+                                </span>
+                              )}
+                              {typeof app.salaryExpectation === 'number' && app.salaryExpectation > 0 && (
+                                <span className="inline-flex rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-emerald-700 dark:text-emerald-300">
+                                  <PrivacyAmount>
+                                    {formatMoney(app.salaryExpectation, app.salaryCurrency || 'UYU')}
+                                  </PrivacyAmount>
+                                </span>
+                              )}
                             </div>
                           )}
                         </div>
@@ -444,11 +468,11 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                               </div>
                             )}
                             {app.notas && (
-                              <p className="line-clamp-2 italic text-[var(--text-faint)] text-xs">{app.notas}</p>
+                              <p className="line-clamp-2 italic text-[var(--text-faint)] text-xs">{maskFinancialText(app.notas, privacyActive)}</p>
                             )}
                             {app.followUpNotes && (
                               <p className="line-clamp-2 text-[var(--text-soft)] text-xs">
-                                Seguimiento: {app.followUpNotes}
+                                Seguimiento: {maskFinancialText(app.followUpNotes, privacyActive)}
                               </p>
                             )}
                           </div>
@@ -482,7 +506,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                           >
                             <span className="flex min-w-0 flex-1 items-center gap-1.5">
                               <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                              <span className="truncate">{app.nextAction || 'Seguimiento'}</span>
+                              <span className="truncate">{maskFinancialText(app.nextAction || 'Seguimiento', privacyActive)}</span>
                             </span>
                             {app.nextActionDate && (
                               <span className="ml-1 shrink-0 text-xs font-bold tabular-nums">
