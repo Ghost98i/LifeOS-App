@@ -20,7 +20,7 @@ for (const resource of [...spaRoutes, '/index.html', '/creditos.html', '/manifes
   assert.equal(response.headers.get('x-frame-options'), 'DENY', resource);
   assert.equal(response.headers.get('x-content-type-options'), 'nosniff', resource);
   assert.equal(response.headers.get('referrer-policy'), 'strict-origin-when-cross-origin', resource);
-  assert.equal(response.headers.get('permissions-policy'), 'camera=(), microphone=(), payment=(), geolocation=(self)', resource);
+  assert.equal(response.headers.get('permissions-policy'), 'geolocation=(), camera=(), microphone=(), payment=()', resource);
   if (resource.startsWith('/assets/')) {
     assert.match(response.headers.get('cache-control'), /max-age=31536000.*immutable/, resource);
     assert.match(mime, /javascript/, resource);
