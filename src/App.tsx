@@ -1,7 +1,7 @@
 import { validateDurableCommercial } from './lib/commercialDurable';
 import { reconcileFinancePublication } from './lib/financeSyncReconciliation';
 import { assertCommercialTransition } from './lib/commercialTransition';
-import React, { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { PrivacyProvider } from './components/PrivacyAmount';
 import { ViewType, LifeOSState, DailyContextEntry } from './types';
 import { commercialHydrationBlock, changesStoredCommercial, defaultState, hasPersistedCommercial, loadRecoveryState, loadStoredState, parseBackupJSON, readStoredCommercial, saveRecoveryState, saveStoredState, todayISO } from './lib/storage';
@@ -103,36 +103,61 @@ import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { syncDocumentThemeColor } from './lib/pwaRecovery';
 import { showToast } from './lib/toast';
 import { addRemoteResaleVersion, includeResaleConflictModules, loadResaleConflict, saveResaleConflict, type ResaleConflictRecord } from './lib/resaleConflictRecovery';
-import {
-  buildResaleConflictReconciliationPreview,
-  confirmMatchingResaleConflict,
-  executeAuthorizedConflictReconciliation,
-  type ResaleConflictReconciliationPreview,
-} from './lib/resaleConflictResolution';
+import type { ResaleConflictReconciliationPreview } from './lib/resaleConflictResolution';
+import { lazyWithPreload } from './lib/lazyWithPreload';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { isAmbientSessionAttached, isAnyAmbientNoisePlaying, isSoundEnabled, stopAllAmbientNoise } from './lib/audio';
 
-const MobileQuickCapture = lazy(() => import('./components/MobileQuickCapture').then((module) => ({ default: module.MobileQuickCapture })));
-const GymRestOverlay = lazy(() => import('./components/GymRestOverlay').then((module) => ({ default: module.GymRestOverlay })));
-const StudyActiveOverlay = lazy(() => import('./components/StudyActiveOverlay').then((module) => ({ default: module.StudyActiveOverlay })));
-const AgendaView = lazy(() => import('./components/AgendaView').then((module) => ({ default: module.AgendaView })));
-const CalendarioView = lazy(() => import('./components/CalendarioView').then((module) => ({ default: module.CalendarioView })));
-const TrabajoView = lazy(() => import('./components/TrabajoView').then((module) => ({ default: module.TrabajoView })));
-const ReventaView = lazy(() => import('./components/ReventaView').then((module) => ({ default: module.ReventaView })));
-const FinanzasView = lazy(() => import('./components/FinanzasView').then((module) => ({ default: module.FinanzasView })));
-const GimnasioView = lazy(() => import('./components/GimnasioView').then((module) => ({ default: module.GimnasioView })));
-const EstudiosView = lazy(() => import('./components/EstudiosView').then((module) => ({ default: module.EstudiosView })));
-const NotasView = lazy(() => import('./components/NotasView').then((module) => ({ default: module.NotasView })));
-const IAView = lazy(() => import('./components/IAView').then((module) => ({ default: module.IAView })));
-const ConfigView = lazy(() => import('./components/ConfigView').then((module) => ({ default: module.ConfigView })));
-const CheckoutModal = lazy(() => import('./components/CheckoutModal').then(module => ({ default: module.CheckoutModal })));
-const GlobalSearchModal = lazy(() => import('./components/GlobalSearchModal').then(module => ({ default: module.GlobalSearchModal })));
-const CloudConflictModal = lazy(() => import('./components/CloudConflictModal').then(module => ({ default: module.CloudConflictModal })));
-const OnboardingView = lazy(() => import('./components/OnboardingView').then(module => ({ default: module.OnboardingView })));
-const UnlockDeviceModal = lazy(() => import('./components/UnlockDeviceModal').then(module => ({ default: module.UnlockDeviceModal })));
+const MobileQuickCapture = lazyWithPreload(() => import('./components/MobileQuickCapture').then((module) => ({ default: module.MobileQuickCapture })));
+const GymRestOverlay = lazyWithPreload(() => import('./components/GymRestOverlay').then((module) => ({ default: module.GymRestOverlay })));
+const StudyActiveOverlay = lazyWithPreload(() => import('./components/StudyActiveOverlay').then((module) => ({ default: module.StudyActiveOverlay })));
+const AgendaView = lazyWithPreload(() => import('./components/AgendaView').then((module) => ({ default: module.AgendaView })));
+const CalendarioView = lazyWithPreload(() => import('./components/CalendarioView').then((module) => ({ default: module.CalendarioView })));
+const TrabajoView = lazyWithPreload(() => import('./components/TrabajoView').then((module) => ({ default: module.TrabajoView })));
+const ReventaView = lazyWithPreload(() => import('./components/ReventaView').then((module) => ({ default: module.ReventaView })));
+const FinanzasView = lazyWithPreload(() => import('./components/FinanzasView').then((module) => ({ default: module.FinanzasView })));
+const GimnasioView = lazyWithPreload(() => import('./components/GimnasioView').then((module) => ({ default: module.GimnasioView })));
+const EstudiosView = lazyWithPreload(() => import('./components/EstudiosView').then((module) => ({ default: module.EstudiosView })));
+const NotasView = lazyWithPreload(() => import('./components/NotasView').then((module) => ({ default: module.NotasView })));
+const IAView = lazyWithPreload(() => import('./components/IAView').then((module) => ({ default: module.IAView })));
+const ConfigView = lazyWithPreload(() => import('./components/ConfigView').then((module) => ({ default: module.ConfigView })));
+const CheckoutModal = lazyWithPreload(() => import('./components/CheckoutModal').then((module) => ({ default: module.CheckoutModal })));
+const GlobalSearchModal = lazyWithPreload(() => import('./components/GlobalSearchModal').then((module) => ({ default: module.GlobalSearchModal })));
+const CloudConflictModal = lazyWithPreload(() => import('./components/CloudConflictModal').then((module) => ({ default: module.CloudConflictModal })));
+const OnboardingView = lazyWithPreload(() => import('./components/OnboardingView').then((module) => ({ default: module.OnboardingView })));
+const UnlockDeviceModal = lazyWithPreload(() => import('./components/UnlockDeviceModal').then((module) => ({ default: module.UnlockDeviceModal })));
+
+const PRELOADABLE_VIEWS: Partial<Record<ViewType, () => Promise<unknown>>> = {
+  agenda: AgendaView.preload,
+  calendario: CalendarioView.preload,
+  trabajo: TrabajoView.preload,
+  reventa: ReventaView.preload,
+  finanzas: FinanzasView.preload,
+  gimnasio: GimnasioView.preload,
+  estudios: EstudiosView.preload,
+  notas: NotasView.preload,
+  ia: IAView.preload,
+  config: ConfigView.preload,
+  checkout: CheckoutModal.preload,
+};
+
+function prefetchViewChunk(view: ViewType): void {
+  const loader = PRELOADABLE_VIEWS[view];
+  if (loader) {
+    void loader().catch(() => {});
+  }
+}
+
+function prefetchCaptureChunk(): void {
+  void MobileQuickCapture.preload().catch(() => {});
+}
+
+function prefetchSearchChunk(): void {
+  void GlobalSearchModal.preload().catch(() => {});
+}
 
 const dialogLoading = (label: string) => (
-  <div role="status" className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-4 text-sm">
+  <div role="status" className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-4 text-sm backdrop-blur-xs">
     <span className="rounded-2xl border border-slate-200/80 bg-white px-5 py-4 font-medium text-slate-900 shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:border-white/[0.07] dark:bg-[#0D111A] dark:text-slate-100 dark:shadow-none">
       {label}
     </span>
@@ -1817,6 +1842,7 @@ export default function App() {
       const targetModules = [...new Set<SyncModuleKey>(['resale', 'finance', ...record.modules])];
       const relevantRemote = Object.fromEntries(targetModules.filter((module) => module in fresh.moduleData)
         .map((module) => [module, fresh.moduleData[module]]));
+      const { confirmMatchingResaleConflict } = await import('./lib/resaleConflictResolution');
       const result = await confirmMatchingResaleConflict(record, localSnapshot, relevantRemote, fresh.remoteRevisions, {
         save: (next) => saveResaleConflict(user.uid, next),
         publish: (modules, revisions) => writeCloudModulesGuarded(user.uid, localSnapshot, modules, deviceIdRef.current, revisions, tombstonesRef.current),
@@ -1895,6 +1921,7 @@ export default function App() {
         // Conserva la vista sobre las versiones remotas ya guardadas.
       }
     }
+    const { buildResaleConflictReconciliationPreview } = await import('./lib/resaleConflictResolution');
     const preview = buildResaleConflictReconciliationPreview(activeRecord, stateRef.current);
     setResaleReconcilePreview(preview);
   };
@@ -1940,6 +1967,7 @@ export default function App() {
           .filter((module) => module in fresh.moduleData)
           .map((module) => [module, fresh.moduleData[module]])
       );
+      const { buildResaleConflictReconciliationPreview, executeAuthorizedConflictReconciliation } = await import('./lib/resaleConflictResolution');
       const localSnapshot = stateRef.current;
       const result = await executeAuthorizedConflictReconciliation(
         record,
@@ -2695,6 +2723,7 @@ export default function App() {
         currentView={currentView}
         state={state}
         onNavigate={handleNavigate}
+        onPrefetchView={prefetchViewChunk}
         onToggleTheme={handleToggleTheme}
         isOpenMobile={isOpenMobile}
         onCloseMobile={() => setIsOpenMobile(false)}
@@ -2710,6 +2739,9 @@ export default function App() {
           onSearch={(q) => { setSearchQuery(q); setIsSearchOpen(true); }}
           onOpenSearch={() => { setSearchQuery(''); setIsSearchOpen(true); }}
           onOpenCapture={() => { setQuickCaptureKind('tarea'); setIsQuickCaptureOpen(true); }}
+          onPrefetchSearch={prefetchSearchChunk}
+          onPrefetchCapture={prefetchCaptureChunk}
+          onPrefetchView={prefetchViewChunk}
           onTogglePrivacy={handleTogglePrivacy}
           cloudConfigured={cloudSyncConfigured}
           cloudUser={cloudUser}
@@ -2957,10 +2989,12 @@ export default function App() {
       <MobileNav
         currentView={currentView}
         onNavigate={handleNavigate}
+        onPrefetchView={prefetchViewChunk}
         onOpenCapture={() => {
           setQuickCaptureKind('tarea');
           setIsQuickCaptureOpen(true);
         }}
+        onPrefetchCapture={prefetchCaptureChunk}
         onOpenMore={() => setIsOpenMobile(true)}
         syncStatus={syncStatus}
         privacyMode={state.settings.privacyMode}

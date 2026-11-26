@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
   Bell,
@@ -32,9 +32,7 @@ import {
   nextAttentionDismissalTimestamp,
   type AttentionItem,
 } from '../lib/todayAttention';
-import { DismissedAttentionModal } from './DismissedAttentionModal';
-import { DailyStatusModal } from './DailyStatusModal';
-import { RecentActivityModal } from './RecentActivityModal';
+import { lazyWithPreload } from '../lib/lazyWithPreload';
 import { TodaySpotlightCard } from './TodaySpotlightCard';
 import { TodayRadarSection } from './TodayRadarSection';
 import { SectionHeader, SurfaceCard } from './ui/SurfacePrimitives';
@@ -49,9 +47,34 @@ import {
   toggleSkippedTodayKey,
   type TodayRadarMilestone,
 } from '../lib/todayControlCenter';
-import { contextForDate } from '../lib/contextInsights';
+import { contextForDate } from '../lib/contextSummary';
 import { startGymSession } from '../lib/gymFlows';
-import { startStudySession } from '../lib/studyFlows';
+
+const DailyStatusModal = lazyWithPreload(() =>
+  import('./DailyStatusModal').then((module) => ({ default: module.DailyStatusModal }))
+);
+const RecentActivityModal = lazyWithPreload(() =>
+  import('./RecentActivityModal').then((module) => ({ default: module.RecentActivityModal }))
+);
+const DismissedAttentionModal = lazyWithPreload(() =>
+  import('./DismissedAttentionModal').then((module) => ({ default: module.DismissedAttentionModal }))
+);
+
+export function preloadDashboardModals(): Promise<unknown> {
+  return Promise.all([
+    DailyStatusModal.preload(),
+    RecentActivityModal.preload(),
+    DismissedAttentionModal.preload(),
+  ]);
+}
+
+const dashboardModalFallback = (label: string) => (
+  <div role="status" className="fixed inset-0 z-50 grid place-items-center bg-black/55 p-4 text-sm backdrop-blur-xs">
+    <span className="rounded-2xl border border-slate-200/80 bg-white px-5 py-4 font-medium text-slate-900 shadow-lg dark:border-white/[0.08] dark:bg-[#0D111A] dark:text-slate-100 dark:shadow-none">
+      {label}
+    </span>
+  </div>
+);
 
 interface DashboardViewProps {
   state: LifeOSState;
@@ -513,16 +536,22 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   const handleStartStudyFromSpotlight = (subjectId?: string | null, subjectName?: string | null) => {
-    const saved = onUpdateState((draft) => {
-      if (!draft.study) return;
-      if (!draft.study.activeSession) {
-        draft.study.activeSession = startStudySession(25, subjectId ?? null, subjectName ?? null);
-      }
-    });
-    if (!saved) return;
-    playSound('click');
-    showToast('Bloque de estudio iniciado (25 min).', 'success');
-    onNavigate('estudios');
+    void import('../lib/studyFlows')
+      .then(({ startStudySession }) => {
+        const saved = onUpdateState((draft) => {
+          if (!draft.study) return;
+          if (!draft.study.activeSession) {
+            draft.study.activeSession = startStudySession(25, subjectId ?? null, subjectName ?? null);
+          }
+        });
+        if (!saved) return;
+        playSound('click');
+        showToast('Bloque de estudio iniciado (25 min).', 'success');
+        onNavigate('estudios');
+      })
+      .catch(() => {
+        onNavigate('estudios');
+      });
   };
 
   const handleToggleItem = (item: TodayItem, entryKey?: string): boolean => {
@@ -823,6 +852,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsStatusModalOpen(true)}
+                    onMouseEnter={() => { void DailyStatusModal.preload().catch(() => {}); }}
+                    onFocus={() => { void DailyStatusModal.preload().catch(() => {}); }}
                     aria-label="Registrar estado de hoy y ver evolución de 7 días"
                     className="inline-flex min-h-9 sm:min-h-7 items-center gap-1.5 whitespace-nowrap rounded-full border border-white/20 bg-slate-950/35 px-3 py-1 text-xs font-medium text-white/95 backdrop-blur-md transition hover:bg-slate-950/55 cursor-pointer"
                   >
@@ -833,6 +864,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsStatusModalOpen(true)}
+                    onMouseEnter={() => { void DailyStatusModal.preload().catch(() => {}); }}
+                    onFocus={() => { void DailyStatusModal.preload().catch(() => {}); }}
                     aria-label={`Estado de hoy: ${compactStatusText}. Abrir editor y evolución de 7 días`}
                     className="inline-flex min-h-10 sm:min-h-8 items-center gap-2.5 rounded-full border border-white/20 bg-slate-950/35 px-3 py-1 text-xs font-medium text-white backdrop-blur-md transition hover:bg-slate-950/55 cursor-pointer"
                   >
@@ -1117,30 +1150,42 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       )}
 
       {/* Modal bajo demanda: Estado diario + Evolución 7 días */}
-      <DailyStatusModal
-        open={isStatusModalOpen}
-        onClose={() => setIsStatusModalOpen(false)}
-        state={state}
-        onUpdateState={onUpdateState}
-        onNavigate={onNavigate}
-      />
+      {isStatusModalOpen && (
+        <Suspense fallback={dashboardModalFallback('Cargando estado diario…')}>
+          <DailyStatusModal
+            open={isStatusModalOpen}
+            onClose={() => setIsStatusModalOpen(false)}
+            state={state}
+            onUpdateState={onUpdateState}
+            onNavigate={onNavigate}
+          />
+        </Suspense>
+      )}
 
       {/* Modal bajo demanda: Actividad reciente */}
-      <RecentActivityModal
-        open={isActivityModalOpen}
-        onClose={() => setIsActivityModalOpen(false)}
-        state={state}
-        onNavigate={onNavigate}
-        onOpenNote={onOpenNote}
-      />
+      {isActivityModalOpen && (
+        <Suspense fallback={dashboardModalFallback('Cargando actividad reciente…')}>
+          <RecentActivityModal
+            open={isActivityModalOpen}
+            onClose={() => setIsActivityModalOpen(false)}
+            state={state}
+            onNavigate={onNavigate}
+            onOpenNote={onOpenNote}
+          />
+        </Suspense>
+      )}
 
-      <DismissedAttentionModal
-        open={showDismissedModal}
-        onClose={() => setShowDismissedModal(false)}
-        dismissedItems={dismissedAttentionItems}
-        onRestoreItem={handleRestoreAttentionItem}
-        onRestoreAll={handleRestoreAllDismissed}
-      />
+      {showDismissedModal && (
+        <Suspense fallback={dashboardModalFallback('Cargando avisos silenciados…')}>
+          <DismissedAttentionModal
+            open={showDismissedModal}
+            onClose={() => setShowDismissedModal(false)}
+            dismissedItems={dismissedAttentionItems}
+            onRestoreItem={handleRestoreAttentionItem}
+            onRestoreAll={handleRestoreAllDismissed}
+          />
+        </Suspense>
+      )}
     </div>
   );
 };

@@ -125,6 +125,7 @@ export default defineConfig(({ mode }) => {
             if (norm.includes('/firebase/') || norm.includes('/@firebase/')) return 'firebase-auth-vendor';
             if (norm.includes('/recharts/') || norm.includes('/d3-')) return 'charts-vendor';
             if (norm.includes('/@lottiefiles/')) return 'motion-vendor';
+            if (norm.includes('/lucide-react/')) return 'icons-vendor';
             if (norm.includes('/react/') || norm.includes('/react-dom/') || norm.includes('/scheduler/')) return 'react-vendor';
             return undefined;
           },

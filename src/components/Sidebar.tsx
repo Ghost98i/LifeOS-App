@@ -9,6 +9,7 @@ interface SidebarProps {
   currentView: ViewType;
   state: LifeOSState;
   onNavigate: (view: ViewType) => void;
+  onPrefetchView?: (view: ViewType) => void;
   onToggleTheme: () => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
@@ -32,6 +33,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentView,
   state,
   onNavigate,
+  onPrefetchView,
   onToggleTheme,
   isOpenMobile,
   onCloseMobile,
@@ -131,6 +133,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     onNavigate(item.id);
                     onCloseMobile();
                   }}
+                  onMouseEnter={() => onPrefetchView?.(item.id)}
+                  onFocus={() => onPrefetchView?.(item.id)}
                   aria-current={isActive ? 'page' : undefined}
                   className={`group relative flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm transition-all cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
                     isActive

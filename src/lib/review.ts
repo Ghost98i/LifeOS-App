@@ -1,6 +1,6 @@
 import type { LifeOSState, ViewType } from '../types';
 import { daysBetween, todayISO } from './storage';
-import { sleepSummary } from './contextInsights';
+import { sleepSummary } from './contextSummary';
 import { getCategoryName } from './financeCategories';
 import { isModuleEnabled } from './moduleVisibility';
 import { getCompletedGymSets, getPerformedGymVolume, isPerformedGymSession } from './gymMetrics';

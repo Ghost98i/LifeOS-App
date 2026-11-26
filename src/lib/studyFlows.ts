@@ -4,15 +4,7 @@ import { uid, todayISO, daysBetween } from './storage';
 /**
  * Formatea minutos de estudio en una duración legible en español (ej. "4 h 36 min", "45 min", "1 h").
  */
-export function formatStudyDuration(minutes: number): string {
-  if (!minutes || minutes <= 0) return '0 min';
-  const totalMins = Math.round(minutes);
-  const hours = Math.floor(totalMins / 60);
-  const mins = totalMins % 60;
-  if (hours === 0) return `${mins} min`;
-  if (mins === 0) return `${hours} h`;
-  return `${hours} h ${mins} min`;
-}
+export { formatStudyDuration } from './studyDuration';
 
 /**
  * Calcula la siguiente fase y ciclo de un flujo Pomodoro.
