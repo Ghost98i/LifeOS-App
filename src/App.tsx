@@ -127,6 +127,17 @@ const CloudConflictModal = lazyWithPreload(() => import('./components/CloudConfl
 const OnboardingView = lazyWithPreload(() => import('./components/OnboardingView').then((module) => ({ default: module.OnboardingView })));
 const UnlockDeviceModal = lazyWithPreload(() => import('./components/UnlockDeviceModal').then((module) => ({ default: module.UnlockDeviceModal })));
 
+// Warm the OnboardingView chunk immediately on first visit so fresh mobile loads don't stall on a second RTT.
+if (typeof window !== 'undefined') {
+  try {
+    if (!window.localStorage.getItem('lifeos-state-v1')) {
+      void OnboardingView.preload().catch(() => {});
+    }
+  } catch {
+    // Ignore storage access errors in restricted environments.
+  }
+}
+
 const PRELOADABLE_VIEWS: Partial<Record<ViewType, () => Promise<unknown>>> = {
   agenda: AgendaView.preload,
   calendario: CalendarioView.preload,

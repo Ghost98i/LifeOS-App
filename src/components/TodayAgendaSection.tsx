@@ -152,7 +152,7 @@ const AgendaBlockRow: React.FC<{
     if (temporalStatus === 'upcoming' && typeof minutesUntil === 'number' && minutesUntil > 0) {
       return {
         label: formatMinutesUntil(minutesUntil),
-        className: 'text-slate-400 dark:text-slate-400',
+        className: 'text-slate-600 dark:text-slate-400',
       };
     }
     return null;
@@ -177,7 +177,7 @@ const AgendaBlockRow: React.FC<{
           className={`text-[13px] font-medium tabular-nums ${
             isCurrent
               ? 'font-semibold text-indigo-600 dark:text-indigo-400'
-              : 'text-slate-400 dark:text-slate-500'
+              : 'text-slate-500 dark:text-slate-400'
           }`}
         >
           {entry.time || '—'}
@@ -228,7 +228,7 @@ const AgendaBlockRow: React.FC<{
             {entry.time && (
               <span
                 className={`font-medium tabular-nums sm:hidden ${
-                  isCurrent ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-400 dark:text-slate-500'
+                  isCurrent ? 'text-indigo-600 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'
                 }`}
               >
                 {entry.time}
@@ -548,7 +548,7 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
                         </button>
                         <div className="min-w-0">
                           <p className="text-xs font-medium text-slate-900 dark:text-slate-100 break-words">{task.text}</p>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">
                             <span>Programada el {fmtDate(task.date)}</span>
                             {isOverdue && (
                               <span className="font-semibold text-rose-600 dark:text-rose-400">
@@ -647,7 +647,7 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
 
               {resolvedUntimed.length > 0 && (
                 <div className={resolvedTimed.length > 0 ? 'border-t border-slate-100 pt-3 dark:border-white/[0.06]' : ''}>
-                  <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Sin horario fijo
                   </div>
                   <ListDivider>
@@ -707,7 +707,7 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
                       </button>
                       <div className="min-w-0">
                         <p className="text-xs font-medium text-slate-900 dark:text-slate-100 break-words">{task.text}</p>
-                        <p className="mt-0.5 text-[11px] text-slate-400 dark:text-slate-500">
+                        <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                           Programada el {fmtDate(task.date)}
                         </p>
                       </div>
@@ -744,7 +744,7 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
                 </h3>
               </div>
               {completedHabitsCount > 0 && (
-                <span className="text-xs font-medium tabular-nums text-slate-400 dark:text-slate-500">
+                <span className="text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">
                   {completedHabitsCount === 1 ? '1 hecho' : `${completedHabitsCount} hechos`}
                 </span>
               )}

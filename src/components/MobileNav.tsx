@@ -110,7 +110,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
   })();
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-[var(--border)] bg-[var(--nav-mobile)] shadow-[0_-12px_32px_-26px_rgba(15,23,42,.45)] backdrop-blur-xl md:hidden">
+    <nav aria-label="Navegación móvil" className="fixed inset-x-0 bottom-0 z-40 flex flex-col border-t border-[var(--border)] bg-[var(--nav-mobile)] shadow-[0_-12px_32px_-26px_rgba(15,23,42,.45)] backdrop-blur-xl md:hidden">
       {/* Micro-bar: Sync status LED & Privacy quick toggle */}
       <div className="flex items-center justify-between px-3.5 py-1 border-b border-[var(--border)]/35 text-[11px]">
         {cloudConfigured && !cloudUser && onCloudSignIn ? (
@@ -120,12 +120,12 @@ export const MobileNav: React.FC<MobileNavProps> = ({
             className="flex min-h-8 items-center gap-1.5 rounded-full px-1.5 cursor-pointer hover:opacity-90"
             title="Conectar con Google para sincronizar"
           >
-            <span className={`inline-block h-1.5 w-1.5 rounded-full ${syncLed.dotClass}`} />
+            <span aria-hidden="true" className={`inline-block h-1.5 w-1.5 rounded-full ${syncLed.dotClass}`} />
             <span className={syncLed.textColor}>{syncLed.label}</span>
           </button>
         ) : (
           <div className="flex min-h-8 items-center gap-1.5">
-            <span className={`inline-block h-1.5 w-1.5 rounded-full ${syncLed.dotClass}`} />
+            <span aria-hidden="true" className={`inline-block h-1.5 w-1.5 rounded-full ${syncLed.dotClass}`} />
             <span className={`font-medium ${syncLed.textColor}`}>{syncLed.label}</span>
           </div>
         )}
@@ -133,6 +133,7 @@ export const MobileNav: React.FC<MobileNavProps> = ({
           <button
             type="button"
             onClick={onTogglePrivacy}
+            aria-pressed={Boolean(privacyMode)}
             className={`flex min-h-8 items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold transition-all cursor-pointer ${
               privacyMode
                 ? 'bg-[#4F46E5]/12 text-[#4F46E5] dark:bg-[#4F46E5]/20 dark:text-[#818CF8] border border-[#4F46E5]/30'

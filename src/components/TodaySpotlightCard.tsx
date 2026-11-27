@@ -264,7 +264,7 @@ export const TodaySpotlightCard: React.FC<TodaySpotlightCardProps> = ({
                 </span>
               )}
               {spotlight.countdownLabel && (
-                <span className="text-slate-400 dark:text-slate-500">
+                <span className="text-slate-600 dark:text-slate-400">
                   · {spotlight.countdownLabel}
                 </span>
               )}

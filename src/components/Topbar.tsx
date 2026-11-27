@@ -183,15 +183,14 @@ export const Topbar: React.FC<TopbarProps> = ({
         onClick={onOpenSearch}
         onMouseEnter={onPrefetchSearch}
         onFocus={onPrefetchSearch}
-        className="hidden sm:flex h-9 items-center justify-between w-44 md:w-56 lg:w-72 px-3 py-1.5 text-xs lg:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:bg-[var(--surface-muted)] text-[var(--text-faint)] transition-all text-left shadow-2xs group cursor-pointer"
+        className="hidden sm:flex h-9 items-center justify-between w-44 md:w-56 lg:w-72 px-3 py-1.5 text-xs lg:text-sm rounded-xl bg-[var(--bg-elevated)] border border-[var(--border)] hover:border-[var(--border-hover)] hover:bg-[var(--surface-muted)] text-[var(--text-faint)] transition-all text-left shadow-2xs group cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70"
         title="Buscar y Paleta de Comandos (Ctrl + K o ⌘K)"
-        aria-label="Abrir Paleta de Comandos"
       >
         <span className="flex items-center gap-2 min-w-0 text-[var(--text-soft)] group-hover:text-[var(--text)] transition-colors">
           <AppIcon name="search" className="h-4 w-4 shrink-0 text-[var(--text-faint)] group-hover:text-[var(--text)] transition-colors" />
           <span className="truncate">Buscar o comandos…</span>
         </span>
-        <kbd className="hidden shrink-0 whitespace-nowrap sm:inline-flex items-center gap-0.5 rounded-md border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--text-faint)] shadow-2xs">
+        <kbd aria-hidden="true" className="hidden shrink-0 whitespace-nowrap sm:inline-flex items-center gap-0.5 rounded-md border border-[var(--border)] bg-[var(--card)] px-1.5 py-0.5 font-mono text-[10px] font-bold text-[var(--text-faint)] shadow-2xs">
           {typeof navigator !== 'undefined' && /Mac|iPhone|iPod|iPad/i.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K'}
         </kbd>
       </button>
@@ -302,7 +301,7 @@ export const Topbar: React.FC<TopbarProps> = ({
                   : 'Datos guardados en este dispositivo'
             }
           >
-            <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${syncLed.dotClass}`} />
+            <span aria-hidden="true" className={`inline-block h-2 w-2 rounded-full shrink-0 ${syncLed.dotClass}`} />
             {cloudConfigured && !cloudUser && syncStatus !== 'offline' ? (
               <span className="hidden sm:inline font-bold text-[11px] sm:text-xs">Conectar</span>
             ) : (
@@ -314,7 +313,7 @@ export const Topbar: React.FC<TopbarProps> = ({
               <p className="truncate text-xs font-extrabold text-[var(--text)]">{cloudUser.name || 'Cuenta Google'}</p>
               <p className="mt-0.5 truncate text-[10px] text-[var(--text-faint)]">{cloudUser.email}</p>
               <p className={`mt-3 flex items-center gap-2 text-xs font-semibold ${syncLed.textColor}`}>
-                <span className={`inline-block h-2 w-2 rounded-full ${syncLed.dotClass}`} />
+                <span aria-hidden="true" className={`inline-block h-2 w-2 rounded-full ${syncLed.dotClass}`} />
                 {syncLed.label}
               </p>
               {lastSyncedAt && <p className="mt-1 text-[10px] text-[var(--text-faint)]">Última confirmación: {lastSyncedAt}</p>}
@@ -339,12 +338,13 @@ export const Topbar: React.FC<TopbarProps> = ({
             type="button"
             onClick={onTogglePrivacy}
             title={state.settings.privacyMode ? "Privacidad activa (Shift + P) - Clic para mostrar saldos" : "Activar Privacidad (Shift + P) - Clic para ocultar montos"}
-            className={`hidden sm:flex h-8 w-8 xl:w-auto xl:px-2.5 items-center justify-center gap-1.5 rounded-[10px] text-xs font-semibold transition-all cursor-pointer ${
+            className={`hidden sm:flex h-8 w-8 xl:w-auto xl:px-2.5 items-center justify-center gap-1.5 rounded-[10px] text-xs font-semibold transition-all cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
               state.settings.privacyMode
                 ? 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-300 ring-1 ring-inset ring-indigo-500/35'
                 : 'text-[var(--text-soft)] hover:text-[var(--text)] hover:bg-[var(--surface-muted)]'
             }`}
             aria-label={state.settings.privacyMode ? "Desactivar Privacidad" : "Activar Privacidad"}
+            aria-pressed={Boolean(state.settings.privacyMode)}
           >
             <AppIcon name={state.settings.privacyMode ? 'eyeOff' : 'eye'} className="h-4 w-4" />
             <span className="hidden xl:inline">

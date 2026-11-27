@@ -960,9 +960,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               <div className="py-2">
                 <div className="flex items-center gap-2 px-4 py-2 sm:px-5">
                   <AppIcon name="clock" className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Con horario · {timed.length}
-                  </h4>
+                  </h3>
                 </div>
                 <ListDivider>
                   {timed.map((entry) => renderEntry(entry, item))}
@@ -974,9 +974,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               <div className="py-2">
                 <div className="flex items-center gap-2 px-4 py-2 sm:px-5">
                   <AppIcon name="calendar" className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Sin horario · {untimedScheduled.length}
-                  </h4>
+                  </h3>
                 </div>
                 <ListDivider>
                   {untimedScheduled.map((entry) => renderEntry(entry, item))}
@@ -988,9 +988,9 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               <div className="py-2">
                 <div className="flex items-center gap-2 px-4 py-2 sm:px-5">
                   <AppIcon name="repeat" className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     Rutinas del día · {untimedRoutines.length}
-                  </h4>
+                  </h3>
                 </div>
                 <ListDivider>
                   {untimedRoutines.map((entry) => renderEntry(entry, item))}
@@ -1193,7 +1193,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                     }}
                     aria-pressed={isSelected}
                     aria-current={isToday ? 'date' : undefined}
-                    aria-label={`${DAY_LABELS[item.day]} ${new Date(`${item.date}T12:00:00`).toLocaleDateString('es-UY', { day: 'numeric', month: 'long' })}: ${count} ${count === 1 ? 'actividad' : 'actividades'}`}
+                    title={`${DAY_LABELS[item.day]} ${new Date(`${item.date}T12:00:00`).toLocaleDateString('es-UY', { day: 'numeric', month: 'long' })}: ${count} ${count === 1 ? 'actividad' : 'actividades'}`}
                     className={`min-h-14 min-w-0 rounded-xl border px-0.5 py-2 text-center transition-colors sm:px-2.5 sm:py-2.5 cursor-pointer ${AGENDA_TAB_FOCUS} ${
                       isSelected
                         ? 'border-[#4F46E5] bg-indigo-50/70 text-[#4F46E5] dark:border-[#818CF8] dark:bg-indigo-500/15 dark:text-indigo-200'
@@ -1208,6 +1208,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                       {isToday && (
                         <span
                           data-today-dot="true"
+                          aria-hidden="true"
                           className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#4F46E5] dark:bg-[#818CF8]"
                           title="Hoy"
                         />
@@ -1217,8 +1218,16 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                       {Number(item.date.slice(-2))}
                     </span>
                     <span className="block text-[11px] font-medium tabular-nums sm:text-xs">
-                      {count === 0 ? '—' : count}{' '}
-                      <span className="hidden lg:inline">{count === 1 ? 'actividad' : 'actividades'}</span>
+                      <span aria-hidden={count === 0 ? 'true' : undefined}>{count === 0 ? '—' : count}</span>
+                      {count === 0 ? (
+                        <span className="sr-only">0 actividades</span>
+                      ) : (
+                        <>
+                          {' '}
+                          <span className="hidden lg:inline">{count === 1 ? 'actividad' : 'actividades'}</span>
+                          <span className="sr-only lg:hidden">{count === 1 ? 'actividad' : 'actividades'}</span>
+                        </>
+                      )}
                     </span>
                   </button>
                 );
@@ -1790,10 +1799,10 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                       return (
                         <div key={freq} className="py-2">
                           <div className="flex items-center justify-between px-4 py-1.5 sm:px-5">
-                            <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                               {FREQ_LABELS[freq]}
-                            </h4>
-                            <span className="text-xs font-medium tabular-nums text-slate-400 dark:text-slate-500">
+                            </h3>
+                            <span className="text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">
                               {items.length}
                             </span>
                           </div>

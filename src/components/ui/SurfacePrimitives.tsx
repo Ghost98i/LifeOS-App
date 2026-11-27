@@ -1,7 +1,7 @@
 import React from 'react';
 
 export interface SurfaceCardProps extends React.HTMLAttributes<HTMLElement> {
-  as?: 'section' | 'div' | 'aside';
+  as?: 'section' | 'div' | 'aside' | 'main';
   children: React.ReactNode;
 }
 
@@ -61,7 +61,7 @@ export const SectionHeader: React.FC<SectionHeaderProps> = ({
         {title}
       </h2>
       {count !== undefined && count !== null && count !== '' && (
-        <span className="shrink-0 text-xs font-medium tabular-nums text-slate-400 dark:text-slate-500">
+        <span className="shrink-0 text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">
           {count}
         </span>
       )}

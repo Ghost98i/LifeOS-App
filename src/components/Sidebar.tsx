@@ -104,7 +104,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <AppIcon name="x" className="h-4 w-4" /> Cerrar
         </button>
 
-        <nav className="flex flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pr-1">
+        <nav aria-label="Secciones principales" className="flex flex-1 flex-col gap-1 overflow-y-auto overscroll-contain pr-1">
           {items.map((item, idx) => {
             const isActive = currentView === item.id;
             const showPrincipalHeader = idx === 0;
@@ -114,17 +114,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             return (
               <React.Fragment key={item.id}>
                 {showPrincipalHeader && (
-                  <span className="mb-1 px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-faint)]/75">
+                  <span className="mb-1 px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-faint)]">
                     Principal
                   </span>
                 )}
                 {showOrganizarHeader && (
-                  <span className="mb-1 mt-4 px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-faint)]/75">
+                  <span className="mb-1 mt-4 px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-faint)]">
                     Organización
                   </span>
                 )}
                 {showSistemaHeader && (
-                  <span className="mb-1 mt-4 px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-faint)]/75">
+                  <span className="mb-1 mt-4 px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--text-faint)]">
                     Sistema
                   </span>
                 )}

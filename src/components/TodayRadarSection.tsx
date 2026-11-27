@@ -147,7 +147,7 @@ export const TodayRadarSection: React.FC<TodayRadarSectionProps> = ({
                               ? 'rounded-full bg-rose-500/12 px-2 py-0.5 text-rose-600 dark:text-rose-400'
                               : item.urgency === 'today'
                                 ? 'text-[#4F46E5] dark:text-[#818CF8]'
-                                : 'text-slate-400 dark:text-slate-500'
+                                : 'text-slate-600 dark:text-slate-400'
                           }`}
                         >
                           {item.countdownLabel}
@@ -206,7 +206,7 @@ export const TodayRadarSection: React.FC<TodayRadarSectionProps> = ({
               <span className="flex shrink-0 items-center gap-1.5 text-xs font-semibold tabular-nums text-slate-900 dark:text-slate-100 whitespace-nowrap">
                 {pulse.studySessionActive && (
                   <span className="inline-flex items-center gap-1 text-indigo-600 dark:text-indigo-400">
-                    <span className="h-1.5 w-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400" />
+                    <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-indigo-600 dark:bg-indigo-400" />
                     En curso
                   </span>
                 )}
