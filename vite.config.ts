@@ -66,6 +66,7 @@ export default defineConfig(({ mode }) => {
               globIgnores: ['**/.well-known/**', '**/cervino-panorama-*.webp'],
               navigateFallbackDenylist: [
                 /^\/\.well-known\//,
+                /^\/robots\.txt$/,
                 /^\/privacidad\.html$/,
                 /^\/eliminar-cuenta\.html$/,
                 /^\/creditos\.html$/,
@@ -113,6 +114,9 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': path.resolve(__dirname, '.'),
       },
+    },
+    esbuild: {
+      legalComments: 'none',
     },
     build: portable ? {} : {
       chunkSizeWarningLimit: 900,

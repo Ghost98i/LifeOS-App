@@ -844,7 +844,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 {getLocalGreeting(now, state.profile?.name || '')}
               </h1>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                <time dateTime={localDateIso} className="text-sm sm:text-[15px] font-normal text-white/80 hero-text-shadow">
+                <time dateTime={localDateIso} className="text-sm sm:text-[15px] font-normal text-white/90 hero-text-shadow">
                   {formattedFullDate}
                 </time>
 
@@ -1192,7 +1192,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
 export const DashboardSkeleton: React.FC = () => (
   <div role="status" aria-busy="true" aria-label="Cargando vista" className="mx-auto w-full space-y-5 animate-pulse">
-    <div className="h-[144px] rounded-2xl bg-[var(--hero-bg)]" />
+    <div className="min-h-[195px] sm:h-[230px] rounded-2xl bg-[var(--hero-bg)]" />
     <div className="h-[108px] rounded-2xl border border-slate-200/80 bg-white dark:border-white/[0.07] dark:bg-[#0D111A]" />
     <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.5fr)_minmax(300px,1fr)] lg:gap-6">
       <div className="h-[340px] rounded-2xl border border-slate-200/80 bg-white dark:border-white/[0.07] dark:bg-[#0D111A]" />

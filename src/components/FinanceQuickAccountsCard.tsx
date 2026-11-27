@@ -96,11 +96,23 @@ export const FinanceQuickAccountsCard: React.FC<FinanceQuickAccountsCardProps> =
                 </span>
                 <span>{preset.name}</span>
                 {preset.hint && (
-                  <span className="text-[10px] font-medium opacity-65">
+                  <span
+                    className={`text-[10px] font-medium ${
+                      isSelected
+                        ? 'text-indigo-700 dark:text-indigo-200'
+                        : 'text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
                     · {preset.hint}
                   </span>
                 )}
-                <span className="text-[10px] font-medium opacity-70">
+                <span
+                  className={`text-[10px] font-medium ${
+                    isSelected
+                      ? 'text-indigo-700 dark:text-indigo-200'
+                      : 'text-slate-600 dark:text-slate-300'
+                  }`}
+                >
                   {preset.currency}
                 </span>
               </button>
@@ -118,7 +130,7 @@ export const FinanceQuickAccountsCard: React.FC<FinanceQuickAccountsCardProps> =
               >
                 <span className="flex items-center justify-between gap-2 font-medium text-slate-700 dark:text-slate-300">
                   <span className="truncate">{preset.name}</span>
-                  <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+                  <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
                     {preset.currency}
                   </span>
                 </span>
@@ -131,7 +143,7 @@ export const FinanceQuickAccountsCard: React.FC<FinanceQuickAccountsCardProps> =
                     setBalances((prev) => ({ ...prev, [preset.id]: e.target.value }))
                   }
                   placeholder="0 · opcional"
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium tabular-nums text-slate-900 placeholder:text-slate-400 focus:border-[#4F46E5] focus:outline-hidden focus:ring-2 focus:ring-[#4F46E5]/20 dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium tabular-nums text-slate-900 placeholder:text-slate-500 focus:border-[#4F46E5] focus:outline-hidden focus:ring-2 focus:ring-[#4F46E5]/20 dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-400"
                 />
               </label>
             ))}

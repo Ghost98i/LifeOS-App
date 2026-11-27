@@ -5,6 +5,7 @@
     "appAssociation": "NONE",
     "rewrites": [
       { "source": "/.well-known/assetlinks.json", "destination": "/.well-known/assetlinks.json" },
+      { "source": "/robots.txt", "destination": "/robots.txt" },
       { "source": "/privacidad.html", "destination": "/privacidad.html" },
       { "source": "/eliminar-cuenta.html", "destination": "/eliminar-cuenta.html" },
       { "source": "/creditos.html", "destination": "/creditos.html" },

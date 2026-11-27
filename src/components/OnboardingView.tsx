@@ -144,7 +144,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({
   return (
     <div className="min-h-dvh bg-[var(--bg)] text-[var(--text)] flex flex-col justify-center items-center px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:p-8 antialiased selection:bg-[#4F46E5]/15 selection:text-[#4F46E5]">
       <SurfaceCard
-        as="aside"
+        as="main"
         className="w-full max-w-xl p-6 sm:p-8 flex flex-col gap-6 shadow-[0_8px_30px_rgba(15,23,42,0.06)] dark:shadow-none"
         aria-label="Configuración inicial"
       >
@@ -221,7 +221,7 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="Tu nombre o apodo"
-                className="celestian-clean-field w-full min-h-11 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-900 placeholder:text-slate-400 transition-colors dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500"
+                className="celestian-clean-field w-full min-h-11 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 transition-colors dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-400"
               />
             </div>
 
@@ -239,12 +239,12 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({
 
               {showGoogleEntry && (
                 <>
-                  <div className="flex items-center gap-3 py-0.5" aria-hidden="true">
-                    <span className="h-px flex-1 bg-slate-200/80 dark:bg-white/[0.08]" />
-                    <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                  <div className="flex items-center gap-3 py-0.5">
+                    <span className="h-px flex-1 bg-slate-200/80 dark:bg-white/[0.08]" aria-hidden="true" />
+                    <span className="text-[11px] font-medium text-slate-600 dark:text-slate-400">
                       o sincronizá tu cuenta
                     </span>
-                    <span className="h-px flex-1 bg-slate-200/80 dark:bg-white/[0.08]" />
+                    <span className="h-px flex-1 bg-slate-200/80 dark:bg-white/[0.08]" aria-hidden="true" />
                   </div>
 
                   <button
