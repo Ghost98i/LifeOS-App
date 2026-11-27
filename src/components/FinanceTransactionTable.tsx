@@ -487,7 +487,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
 
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                        <p className="finance-text-primary text-sm font-medium leading-snug break-words [overflow-wrap:anywhere]">
+                        <p className="finance-text-primary min-w-0 max-w-full text-sm font-medium leading-snug break-words [overflow-wrap:anywhere]">
                           <PrivateFinancialText>{displayLabel}</PrivateFinancialText>
                         </p>
                         {commercialMeta.isCommercial && (
@@ -514,7 +514,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                       </div>
 
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-[var(--finance-text-muted)] min-w-0">
-                        <span className="text-[var(--finance-text-secondary)]">
+                        <span className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-[var(--finance-text-secondary)]">
                           <PrivateFinancialText>{categoryName}</PrivateFinancialText>
                         </span>
 

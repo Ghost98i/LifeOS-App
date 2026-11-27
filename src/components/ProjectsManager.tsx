@@ -593,9 +593,9 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({
                 {/* Project Top Bar */}
                 <div className="flex flex-wrap items-start justify-between gap-2.5 border-b border-slate-100 pb-3 dark:border-white/[0.06]">
                   <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-[15px] font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100">
-                        {project.name}
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <h3 className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-[15px] font-semibold tracking-[-0.015em] text-slate-900 dark:text-slate-100">
+                        {maskFinancialText(project.name, privacyActive)}
                       </h3>
                       <span
                         className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold capitalize ${
@@ -613,7 +613,7 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({
                     </div>
 
                     {project.objective && (
-                      <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+                      <p className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-xs sm:text-sm text-slate-600 dark:text-slate-400">
                         <strong className="font-semibold text-slate-700 dark:text-slate-300">Objetivo:</strong> {maskFinancialText(project.objective, privacyActive)}
                       </p>
                     )}
@@ -759,11 +759,11 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({
                             >
                               <CompletionCheck checked={t.done} size="sm" />
                               <span
-                                className={`text-sm break-words ${
+                                className={`min-w-0 max-w-full text-sm break-words [overflow-wrap:anywhere] ${
                                   t.done ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-slate-100'
                                 }`}
                               >
-                                {t.text}
+                                {maskFinancialText(t.text, privacyActive)}
                               </span>
 
                               {!t.done && isBlocked && (

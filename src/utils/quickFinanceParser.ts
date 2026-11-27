@@ -583,11 +583,14 @@ export function parseQuickFinance(
   const accounts = options.accounts || [];
 
   // 7a. User explicitly mentioned account name
+  const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   for (const acc of accounts) {
     const normAcc = normalize(acc.name);
     const tokens = normAcc.split(/\s+/).filter((t) => t.length > 2);
     for (const token of tokens) {
-      const reg = new RegExp(`\\b${token}\\b`, 'i');
+      const escaped = escapeRegExp(token);
+      if (!escaped) continue;
+      const reg = new RegExp(`\\b${escaped}\\b`, 'i');
       if (reg.test(normalize(processed))) {
         matchedAccountId = acc.id;
         matchedAccountName = acc.name;
@@ -603,7 +606,7 @@ export function parseQuickFinance(
   if (!matchedAccountId) {
     for (const [canonicalAccount, keywords] of Object.entries(DEFAULT_ACCOUNT_KEYWORDS)) {
       for (const kw of keywords) {
-        const reg = new RegExp(`\\b${normalize(kw)}\\b`, 'i');
+        const reg = new RegExp(`\\b${escapeRegExp(normalize(kw))}\\b`, 'i');
         if (reg.test(normalize(processed))) {
           const found = accounts.find(
             (a) =>
@@ -664,7 +667,7 @@ export function parseQuickFinance(
   // 8a. Check against configured/default keyword map
   for (const [catName, keywords] of Object.entries(DEFAULT_CATEGORY_KEYWORDS)) {
     for (const kw of keywords) {
-      const reg = new RegExp(`\\b${normalize(kw)}\\b`, 'i');
+      const reg = new RegExp(`\\b${escapeRegExp(normalize(kw))}\\b`, 'i');
       if (reg.test(normalize(processed))) {
         const exactMatch = availableCategories.find(
           (c) => normalize(c.name) === normalize(catName) || normalize(c.name).includes(normalize(catName))
@@ -688,7 +691,7 @@ export function parseQuickFinance(
     for (const cat of availableCategories) {
       const normCat = normalize(cat.name);
       if (normCat.length > 2) {
-        const reg = new RegExp(`\\b${normCat}\\b`, 'i');
+        const reg = new RegExp(`\\b${escapeRegExp(normCat)}\\b`, 'i');
         if (reg.test(normalize(processed))) {
           matchedCategoryId = cat.id;
           matchedCategoryName = cat.name;

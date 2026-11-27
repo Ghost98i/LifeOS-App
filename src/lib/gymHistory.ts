@@ -41,7 +41,9 @@ function shiftDays(iso: string, days: number): string {
 }
 
 function shortDate(iso: string): string {
-  return dateFromISO(iso).toLocaleDateString('es-UY', { day: 'numeric', month: 'short' }).replace('.', '');
+  const date = dateFromISO(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('es-UY', { day: 'numeric', month: 'short' }).replace('.', '');
 }
 
 function weekTitle(monday: string, referenceMonday: string, customLabel?: string): string {
@@ -81,7 +83,10 @@ export function buildGymHistory(sessions: GymSession[], referenceDate = todayISO
   });
 
   const archivedMonths = [...archiveMap.entries()].sort(([a], [b]) => b.localeCompare(a)).map(([key, monthWeeks]) => {
-    const label = dateFromISO(`${key}-01`).toLocaleDateString('es-UY', { month: 'long', year: 'numeric' });
+    const monthDate = dateFromISO(`${key}-01`);
+    const label = Number.isNaN(monthDate.getTime())
+      ? key
+      : monthDate.toLocaleDateString('es-UY', { month: 'long', year: 'numeric' });
     return {
       key,
       label: label.charAt(0).toUpperCase() + label.slice(1),

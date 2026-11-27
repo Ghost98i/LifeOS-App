@@ -247,8 +247,8 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                   className="finance-surface-raised p-4 sm:p-5 rounded-2xl border border-[var(--finance-border)] flex flex-col justify-between gap-3.5 transition-all hover:border-[var(--finance-border-strong)] shadow-2xs"
                 >
                   {/* Top: Icon Badge + Name + Currency + Consistent Trash2 Delete Button */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="flex min-w-0 items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
                       <div
                         data-finance-account-icon={accountIconMeta.iconName}
                         className={`h-9 w-9 rounded-xl border flex items-center justify-center shrink-0 ${accountIconMeta.containerClass}`}
@@ -256,8 +256,8 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                       >
                         <AccountIcon className={`h-4 w-4 ${accountIconMeta.iconClass}`} strokeWidth={1.85} />
                       </div>
-                      <div className="flex items-center gap-2 flex-wrap min-w-0">
-                        <span className="font-bold text-sm text-[var(--finance-text-primary)] break-words [overflow-wrap:anywhere]">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0 flex-1">
+                        <span className="min-w-0 max-w-full font-bold text-sm text-[var(--finance-text-primary)] break-words [overflow-wrap:anywhere]">
                           <PrivateFinancialText>{account.name}</PrivateFinancialText>
                         </span>
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[var(--finance-surface-subtle)] text-[var(--finance-text-secondary)] shrink-0">
@@ -574,10 +574,10 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                       linkedAgreement ? 'opacity-75' : ''
                     }`}
                   >
-                    <div className="min-w-0 space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex min-w-0 items-center gap-2 flex-wrap">
                         <span
-                          className={`font-semibold ${
+                          className={`min-w-0 max-w-full font-semibold break-words [overflow-wrap:anywhere] ${
                             linkedAgreement ? 'text-[var(--finance-text-secondary)]' : 'text-[var(--finance-text-primary)]'
                           }`}
                         >

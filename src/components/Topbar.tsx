@@ -293,15 +293,17 @@ export const Topbar: React.FC<TopbarProps> = ({
             aria-expanded={cloudConfigured && cloudUser ? showCloudMenu : undefined}
             aria-haspopup={cloudConfigured && cloudUser ? 'menu' : undefined}
             className={`flex h-11 min-h-[44px] min-w-[44px] sm:h-9 sm:min-h-0 sm:min-w-9 items-center justify-center gap-1.5 rounded-xl border px-2 sm:px-2.5 text-xs font-semibold transition-all ${syncLed.badgeClass} ${cloudConfigured ? 'cursor-pointer hover:opacity-90' : 'cursor-default'}`}
-            aria-label={cloudConfigured && !cloudUser ? 'Conectar con Google' : `Sincronización: ${syncLed.label}`}
+            aria-label={cloudConfigured && !cloudUser && syncStatus !== 'offline' ? 'Conectar con Google' : `Sincronización: ${syncLed.label}`}
             title={
-              cloudConfigured
-                ? (!cloudUser ? 'Conectar con Google para sincronizar PC y celular' : (lastSyncedAt && syncStatus === 'synced' ? `${syncLed.label} · Última confirmación: ${lastSyncedAt}` : syncLed.label))
-                : 'Datos guardados en este dispositivo'
+              syncStatus === 'offline'
+                ? 'Sin conexión · Tus datos siguen guardándose en este dispositivo'
+                : cloudConfigured
+                  ? (!cloudUser ? 'Conectar con Google para sincronizar PC y celular' : (lastSyncedAt && syncStatus === 'synced' ? `${syncLed.label} · Última confirmación: ${lastSyncedAt}` : syncLed.label))
+                  : 'Datos guardados en este dispositivo'
             }
           >
             <span className={`inline-block h-2 w-2 rounded-full shrink-0 ${syncLed.dotClass}`} />
-            {cloudConfigured && !cloudUser ? (
+            {cloudConfigured && !cloudUser && syncStatus !== 'offline' ? (
               <span className="hidden sm:inline font-bold text-[11px] sm:text-xs">Conectar</span>
             ) : (
               <span className="hidden md:inline">{syncLed.label}</span>

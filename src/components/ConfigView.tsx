@@ -534,14 +534,21 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
     if (!file) return;
 
     const reader = new FileReader();
+    reader.onerror = () => {
+      showToast('No se pudo leer el archivo seleccionado.', 'error');
+      e.target.value = '';
+    };
     reader.onload = (event) => {
       try {
-        const text = event.target?.result as string;
+        const text = typeof event.target?.result === 'string' ? event.target.result : '';
         const summary = inspectBackupJSON(text);
         setImportPreview(summary);
         setImportFileName(file.name);
       } catch (error) {
-        showToast(error instanceof Error ? error.message : 'Error al validar el archivo JSON de backup.', 'error');
+        const message = error instanceof Error && /Celestian LifeOS|backup|esquema|registros/i.test(error.message)
+          ? error.message
+          : 'El archivo de backup está dañado o no es válido para Celestian LifeOS.';
+        showToast(message, 'error');
       } finally {
         e.target.value = '';
       }
@@ -802,9 +809,19 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                 </div>
               ) : (
                 <div className="space-y-3 border-t border-slate-100 pt-3.5 dark:border-white/[0.06]">
-                  <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                    Conectá Google para sincronizar entre tus dispositivos.
-                  </p>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                      {syncStatus === 'offline'
+                        ? 'Estás sin conexión. Tus datos siguen guardándose en este dispositivo y podrás conectar Google cuando vuelva internet.'
+                        : 'Conectá Google para sincronizar entre tus dispositivos.'}
+                    </p>
+                    {syncStatus === 'offline' && (
+                      <span className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold ${syncStatusMeta.textColor}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${syncStatusMeta.dotClass}`} />
+                        <span>Sin conexión · Local</span>
+                      </span>
+                    )}
+                  </div>
                   {onCloudSignIn && (
                     <button type="button" onClick={onCloudSignIn} className={primaryBtnClass}>
                       <Cloud size={15} strokeWidth={1.75} aria-hidden="true" />
