@@ -5,6 +5,8 @@ import {
   ChevronDown,
   Cloud,
   Download,
+  EyeOff,
+  GitMerge,
   Laptop,
   ShieldCheck,
   X,
@@ -17,6 +19,9 @@ import {
   type SyncModuleKey,
 } from '../lib/syncModel';
 import { summarizeModuleForReconciliation } from '../lib/resaleConflictResolution';
+import { maskFinancialText } from '../lib/financialPrivacy';
+import { triggerHaptic } from '../lib/haptics';
+import { usePrivacyMode } from './PrivacyAmount';
 import { CelestianSwitch } from './ui/CelestianSwitch';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 
@@ -45,6 +50,7 @@ export interface CloudConflictModalProps {
   moduleComparisons?: ConflictModuleComparison[];
   conflicts?: SyncConflictItem[];
   recommendedSide?: 'cloud' | 'local';
+  privacyMode?: boolean;
   isApplying?: boolean;
   errorMessage?: string | null;
   onUseCloud: () => void | Promise<void>;
@@ -53,6 +59,23 @@ export interface CloudConflictModalProps {
   onCombine?: () => void | Promise<void>;
   onExportConflict?: () => void;
   onClose?: () => void;
+}
+
+export function sanitizeConflictSummary(
+  text: string,
+  privacyActive: boolean,
+  isFinancialDetail = false
+): string {
+  if (!text || !privacyActive) return text;
+  let masked = maskFinancialText(text, true);
+  if (isFinancialDetail) {
+    masked = masked
+      .replace(/(Saldo\s*:\s*)[+−-]?\s*\$?\s*\d[\d.,]*/gi, '$1••••')
+      .replace(/(Monto\s*:\s*)[+−-]?\s*\$?\s*\d[\d.,]*/gi, '$1••••')
+      .replace(/(Importe\s*:\s*)[+−-]?\s*\$?\s*\d[\d.,]*/gi, '$1••••')
+      .replace(/^\s*[+−-]?\s*\d[\d.,]*\s*$/g, '••••');
+  }
+  return masked;
 }
 
 function compactHumanSummary(raw: string): string {
@@ -68,13 +91,16 @@ function compactHumanSummary(raw: string): string {
 
 function buildHumanSideHighlights(
   items: ConflictModuleComparison[],
-  side: 'local' | 'remote'
+  side: 'local' | 'remote',
+  privacyActive: boolean
 ): string[] {
   const differing = items.filter((item) => item.status !== 'identical');
   const source = differing.length > 0 ? differing : items;
   return source.slice(0, 4).map((item) => {
     const raw = side === 'remote' ? item.remoteSummary : item.localSummary;
-    return `${item.label}: ${compactHumanSummary(raw)}`;
+    const isFinancialModule = item.module === 'finance' || item.module === 'resale';
+    const safeRaw = sanitizeConflictSummary(raw, privacyActive, isFinancialModule);
+    return `${item.label}: ${compactHumanSummary(safeRaw)}`;
   });
 }
 
@@ -85,6 +111,7 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
   moduleComparisons,
   conflicts = [],
   recommendedSide = 'cloud',
+  privacyMode,
   isApplying = false,
   errorMessage = null,
   onUseCloud,
@@ -95,6 +122,10 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
   onClose,
 }) => {
   const dialogRef = useRef<HTMLDivElement | null>(null);
+  const contextPrivacy = usePrivacyMode();
+  const isPrivacyActive = Boolean(
+    privacyMode ?? (contextPrivacy || localState?.settings?.privacyMode)
+  );
   const [pendingAction, setPendingAction] = useState<'cloud' | 'local' | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [confirmAdvancedMix, setConfirmAdvancedMix] = useState(false);
@@ -153,12 +184,43 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
   useDialogFocus(true, dialogRef, handleClose);
 
   const cloudHighlights = useMemo(
-    () => buildHumanSideHighlights(comparisons, 'remote'),
-    [comparisons]
+    () => buildHumanSideHighlights(comparisons, 'remote', isPrivacyActive),
+    [comparisons, isPrivacyActive]
   );
   const localHighlights = useMemo(
-    () => buildHumanSideHighlights(comparisons, 'local'),
-    [comparisons]
+    () => buildHumanSideHighlights(comparisons, 'local', isPrivacyActive),
+    [comparisons, isPrivacyActive]
+  );
+
+  const sanitizedConflicts = useMemo(
+    () =>
+      conflicts.map((item) => {
+        const isFinancial =
+          item.module === 'finance' ||
+          item.module === 'resale' ||
+          item.entityType === 'account' ||
+          item.entityType === 'budget';
+        return {
+          ...item,
+          label: sanitizeConflictSummary(item.label, isPrivacyActive, isFinancial),
+          localSummary: sanitizeConflictSummary(item.localSummary, isPrivacyActive, isFinancial),
+          remoteSummary: sanitizeConflictSummary(item.remoteSummary, isPrivacyActive, isFinancial),
+        };
+      }),
+    [conflicts, isPrivacyActive]
+  );
+
+  const hasFinancialArea = useMemo(
+    () =>
+      comparisons.some((item) => item.module === 'finance' || item.module === 'resale') ||
+      conflicts.some(
+        (item) =>
+          item.module === 'finance' ||
+          item.module === 'resale' ||
+          item.entityType === 'account' ||
+          item.entityType === 'budget'
+      ),
+    [comparisons, conflicts]
   );
 
   const hasLinkedBusinessAndFinance =
@@ -166,6 +228,7 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
     differingComparisons.some((item) => item.module === 'finance');
 
   const handleSelectModuleChoice = (mod: SyncModuleKey, choice: 'local' | 'remote') => {
+    triggerHaptic('light');
     setModuleChoices((prev) => {
       const next = { ...prev, [mod]: choice };
       if ((mod === 'resale' || mod === 'finance') && hasLinkedBusinessAndFinance) {
@@ -178,6 +241,7 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
 
   const handleConfirmPendingAction = () => {
     if (isApplying || !pendingAction) return;
+    triggerHaptic('success');
     if (pendingAction === 'cloud') {
       void onUseCloud();
     } else {
@@ -187,6 +251,7 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
 
   const handleApplyAdvanced = () => {
     if (isApplying || !onApplyModuleChoices || !confirmAdvancedMix) return;
+    triggerHaptic('success');
     void onApplyModuleChoices(moduleChoices);
   };
 
@@ -200,7 +265,7 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
+      className="celestian-modal-backdrop fixed inset-0 z-[90] flex items-end justify-center sm:items-center bg-black/60 p-0 sm:p-4 backdrop-blur-xs"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) handleClose();
       }}
@@ -211,10 +276,15 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="cloud-conflict-title"
-        className="w-full max-w-2xl max-h-[90dvh] flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0D111A] outline-none"
+        className="celestian-modal-panel w-full sm:max-w-2xl max-h-[90dvh] flex flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl border-t sm:border border-slate-200/80 bg-white shadow-2xl dark:border-white/[0.08] dark:bg-[#0D111A] outline-none"
       >
+        <div
+          aria-hidden="true"
+          className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden"
+        />
+
         {/* Pinned Header */}
-        <header className="shrink-0 flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-6 sm:py-5 dark:border-white/[0.06]">
+        <header className="shrink-0 flex items-start justify-between gap-3 border-b border-slate-100 px-4 py-3.5 sm:px-6 sm:py-5 dark:border-white/[0.06]">
           <div className="flex items-start gap-3 min-w-0">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/12 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400">
               <AlertTriangle size={19} strokeWidth={1.75} aria-hidden="true" />
@@ -242,7 +312,7 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
               disabled={isApplying}
               aria-label="Cerrar"
               title="Cerrar"
-              className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer disabled:opacity-40 ${CLEAN_FOCUS}`}
+              className={`inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer disabled:opacity-40 ${CLEAN_FOCUS}`}
             >
               <X size={17} strokeWidth={1.75} aria-hidden="true" />
             </button>
@@ -250,13 +320,23 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
         </header>
 
         {/* Scrollable Body */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-6 sm:py-5 space-y-4">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5 space-y-4">
           {errorMessage && (
             <div
               role="alert"
               className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2.5 text-xs font-medium text-rose-700 dark:text-rose-300"
             >
-              {errorMessage}
+              {sanitizeConflictSummary(errorMessage, isPrivacyActive, hasFinancialArea)}
+            </div>
+          )}
+
+          {isPrivacyActive && hasFinancialArea && (
+            <div
+              data-privacy-conflict-notice="true"
+              className="flex items-center gap-2 rounded-xl border border-indigo-500/25 bg-[#4F46E5]/[0.06] px-3.5 py-2 text-xs font-medium text-[#4F46E5] dark:border-indigo-400/25 dark:bg-[#4F46E5]/15 dark:text-[#818CF8]"
+            >
+              <EyeOff size={14} strokeWidth={1.85} className="shrink-0" aria-hidden="true" />
+              <span>Modo Privacidad activo: los importes financieros se mantienen ocultos.</span>
             </div>
           )}
 
@@ -284,12 +364,12 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                       </span>
                     )}
                   </div>
-                  <div className="min-w-0 space-y-1">
+                  <div className="min-w-0 space-y-1.5">
                     <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 leading-tight">
                       Usar datos de la nube
                     </h3>
                     <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                      Ideal si entraste desde un dispositivo nuevo y querés traer tu información guardada.
+                      Conserva tu copia guardada en la nube y reemplaza los cambios locales de este dispositivo.
                     </p>
                   </div>
                 </div>
@@ -310,7 +390,7 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                 {pendingAction === 'cloud' ? (
                   <div className="space-y-2 rounded-xl border border-[#4F46E5]/25 bg-white/80 p-2.5 dark:border-[#818CF8]/25 dark:bg-[#0D111A]/60">
                     <p className="text-[11px] leading-snug font-medium text-slate-700 dark:text-slate-200">
-                      ¿Confirmás usar la nube? Se guarda respaldo local automático.
+                      ¿Confirmás usar la nube? Antes guardamos un respaldo local automático.
                     </p>
                     <div className="flex items-center gap-2">
                       <button
@@ -318,9 +398,10 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                         disabled={isApplying}
                         onClick={(event) => {
                           blurOnMouseClick(event);
+                          triggerHaptic('light');
                           setPendingAction(null);
                         }}
-                        className={`min-h-10 rounded-xl border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/[0.1] dark:bg-transparent dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer disabled:opacity-50 ${CLEAN_FOCUS}`}
+                        className={`min-h-[44px] rounded-xl border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/[0.1] dark:bg-transparent dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer disabled:opacity-50 ${CLEAN_FOCUS}`}
                       >
                         Volver
                       </button>
@@ -331,7 +412,7 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                           blurOnMouseClick(event);
                           handleConfirmPendingAction();
                         }}
-                        className={`flex-1 min-h-10 rounded-xl bg-[#4F46E5] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#4338CA] cursor-pointer disabled:opacity-50 ${CLEAN_FOCUS}`}
+                        className={`flex-1 min-h-[44px] rounded-xl bg-[#4F46E5] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#4338CA] cursor-pointer disabled:opacity-50 ${CLEAN_FOCUS}`}
                       >
                         {isApplying ? 'Aplicando…' : 'Sí, aplicar'}
                       </button>
@@ -343,9 +424,10 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                     disabled={isApplying}
                     onClick={(event) => {
                       blurOnMouseClick(event);
+                      triggerHaptic('light');
                       setPendingAction('cloud');
                     }}
-                    className={`w-full min-h-11 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50 ${CLEAN_FOCUS} ${
+                    className={`w-full min-h-[44px] rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50 ${CLEAN_FOCUS} ${
                       recommendedSide === 'cloud'
                         ? 'bg-[#4F46E5] text-white hover:bg-[#4338CA]'
                         : 'border border-slate-200/90 bg-white text-slate-900 hover:bg-slate-50 dark:border-white/[0.1] dark:bg-white/[0.04] dark:text-slate-100 dark:hover:bg-white/[0.08]'
@@ -385,12 +467,12 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                       </span>
                     )}
                   </div>
-                  <div className="min-w-0 space-y-1">
+                  <div className="min-w-0 space-y-1.5">
                     <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 leading-tight">
                       Conservar este dispositivo
                     </h3>
                     <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                      Ideal si trabajaste sin conexión acá y querés reemplazar lo que está en la nube.
+                      Conserva exactamente lo que tenés acá y reemplaza la versión guardada en la nube.
                     </p>
                   </div>
                 </div>
@@ -411,7 +493,7 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                 {pendingAction === 'local' ? (
                   <div className="space-y-2 rounded-xl border border-[#4F46E5]/25 bg-white/80 p-2.5 dark:border-[#818CF8]/25 dark:bg-[#0D111A]/60">
                     <p className="text-[11px] leading-snug font-medium text-slate-700 dark:text-slate-200">
-                      ¿Confirmás subir este dispositivo? Se respalda la nube antes.
+                      ¿Confirmás subir este dispositivo? Antes respaldamos la versión de la nube.
                     </p>
                     <div className="flex items-center gap-2">
                       <button
@@ -419,9 +501,10 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                         disabled={isApplying}
                         onClick={(event) => {
                           blurOnMouseClick(event);
+                          triggerHaptic('light');
                           setPendingAction(null);
                         }}
-                        className={`min-h-10 rounded-xl border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/[0.1] dark:bg-transparent dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer disabled:opacity-50 ${CLEAN_FOCUS}`}
+                        className={`min-h-[44px] rounded-xl border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-white/[0.1] dark:bg-transparent dark:text-slate-200 dark:hover:bg-white/[0.06] cursor-pointer disabled:opacity-50 ${CLEAN_FOCUS}`}
                       >
                         Volver
                       </button>
@@ -432,7 +515,7 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                           blurOnMouseClick(event);
                           handleConfirmPendingAction();
                         }}
-                        className={`flex-1 min-h-10 rounded-xl bg-[#4F46E5] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#4338CA] cursor-pointer disabled:opacity-50 ${CLEAN_FOCUS}`}
+                        className={`flex-1 min-h-[44px] rounded-xl bg-[#4F46E5] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#4338CA] cursor-pointer disabled:opacity-50 ${CLEAN_FOCUS}`}
                       >
                         {isApplying ? 'Aplicando…' : 'Sí, aplicar'}
                       </button>
@@ -444,9 +527,10 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                     disabled={isApplying}
                     onClick={(event) => {
                       blurOnMouseClick(event);
+                      triggerHaptic('light');
                       setPendingAction('local');
                     }}
-                    className={`w-full min-h-11 rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50 ${CLEAN_FOCUS} ${
+                    className={`w-full min-h-[44px] rounded-xl px-4 py-2.5 text-xs sm:text-sm font-semibold transition-colors cursor-pointer disabled:opacity-50 ${CLEAN_FOCUS} ${
                       recommendedSide === 'local'
                         ? 'bg-[#4F46E5] text-white hover:bg-[#4338CA]'
                         : 'border border-slate-200/90 bg-white text-slate-900 hover:bg-slate-50 dark:border-white/[0.1] dark:bg-white/[0.04] dark:text-slate-100 dark:hover:bg-white/[0.08]'
@@ -460,17 +544,61 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
           </div>
 
           {onCombine && (
-            <button
-              type="button"
-              disabled={isApplying}
-              onClick={(event) => {
-                blurOnMouseClick(event);
-                void onCombine();
-              }}
-              className={`w-full min-h-11 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-500/15 dark:text-emerald-300 cursor-pointer disabled:opacity-50 ${CLEAN_FOCUS}`}
-            >
-              Combinar cambios compatibles automáticamente
-            </button>
+            <div className="rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.07] p-3.5 space-y-2.5">
+              <div className="flex items-start gap-2.5">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                  <GitMerge size={16} strokeWidth={1.85} aria-hidden="true" />
+                </div>
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-xs font-semibold text-slate-900 dark:text-slate-100">
+                    Fusionar cambios compatibles
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
+                    Conserva los cambios no superpuestos de ambos dispositivos sin duplicar registros.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isApplying}
+                onClick={(event) => {
+                  blurOnMouseClick(event);
+                  triggerHaptic('success');
+                  void onCombine();
+                }}
+                className={`w-full min-h-[44px] rounded-xl border border-emerald-500/35 bg-emerald-600 px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 cursor-pointer disabled:opacity-50 ${CLEAN_FOCUS}`}
+              >
+                Combinar cambios compatibles automáticamente
+              </button>
+            </div>
+          )}
+
+          {sanitizedConflicts.length > 0 && (
+            <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 divide-y divide-slate-200/70 dark:border-white/[0.08] dark:bg-white/[0.02] dark:divide-white/[0.06]">
+              <div className="px-3.5 py-2 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
+                Resumen de diferencias puntuales ({sanitizedConflicts.length})
+              </div>
+              {sanitizedConflicts.slice(0, 3).map((item) => (
+                <div key={item.id} className="px-3.5 py-2.5 text-[11px] space-y-1">
+                  <div className="font-semibold text-slate-900 dark:text-slate-100">{item.label}</div>
+                  <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                    <span className="break-words text-slate-600 dark:text-slate-400">
+                      Este dispositivo:{' '}
+                      <strong className="text-slate-900 dark:text-slate-100">{item.localSummary}</strong>
+                    </span>
+                    <span className="break-words text-slate-600 dark:text-slate-400">
+                      Nube:{' '}
+                      <strong className="text-[#4F46E5] dark:text-[#818CF8]">{item.remoteSummary}</strong>
+                    </span>
+                  </div>
+                </div>
+              ))}
+              {sanitizedConflicts.length > 3 && (
+                <div className="px-3.5 py-2 text-[11px] text-slate-500 dark:text-slate-400">
+                  Hay {sanitizedConflicts.length - 3} diferencia(s) más disponibles en Opciones avanzadas.
+                </div>
+              )}
+            </div>
           )}
 
           {/* Secondary collapsible: Advanced options */}
@@ -480,9 +608,10 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
               aria-expanded={advancedOpen}
               onClick={(event) => {
                 blurOnMouseClick(event);
+                triggerHaptic('light');
                 setAdvancedOpen((prev) => !prev);
               }}
-              className={`flex w-full min-h-10 items-center justify-between gap-2 rounded-lg px-1 text-left text-xs font-semibold text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 cursor-pointer ${CLEAN_FOCUS}`}
+              className={`flex w-full min-h-[44px] items-center justify-between gap-2 rounded-lg px-1 text-left text-xs font-semibold text-slate-600 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 cursor-pointer ${CLEAN_FOCUS}`}
             >
               <span>Opciones avanzadas: revisar módulo por módulo</span>
               <ChevronDown
@@ -505,6 +634,9 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                   {comparisons.map((item) => {
                     const isIdentical = item.status === 'identical';
                     const choice = moduleChoices[item.module] ?? item.recommendedChoice;
+                    const isFinancialModule = item.module === 'finance' || item.module === 'resale';
+                    const safeRemote = sanitizeConflictSummary(item.remoteSummary, isPrivacyActive, isFinancialModule);
+                    const safeLocal = sanitizeConflictSummary(item.localSummary, isPrivacyActive, isFinancialModule);
                     return (
                       <div key={item.module} className="p-3 sm:p-3.5 space-y-2.5">
                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -527,7 +659,7 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                                   blurOnMouseClick(event);
                                   handleSelectModuleChoice(item.module, 'remote');
                                 }}
-                                className={`whitespace-nowrap rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${CLEAN_FOCUS} ${
+                                className={`min-h-[36px] sm:min-h-0 whitespace-nowrap rounded-md px-3 py-1.5 sm:px-2.5 sm:py-1 text-[11px] font-semibold transition-colors cursor-pointer ${CLEAN_FOCUS} ${
                                   choice === 'remote'
                                     ? 'bg-[#4F46E5] text-white'
                                     : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
@@ -541,7 +673,7 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                                   blurOnMouseClick(event);
                                   handleSelectModuleChoice(item.module, 'local');
                                 }}
-                                className={`whitespace-nowrap rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${CLEAN_FOCUS} ${
+                                className={`min-h-[36px] sm:min-h-0 whitespace-nowrap rounded-md px-3 py-1.5 sm:px-2.5 sm:py-1 text-[11px] font-semibold transition-colors cursor-pointer ${CLEAN_FOCUS} ${
                                   choice === 'local'
                                     ? 'bg-[#4F46E5] text-white'
                                     : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100'
@@ -557,13 +689,13 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                           <div className="min-w-0 rounded-lg border border-slate-200/70 bg-white px-2.5 py-2 dark:border-white/[0.06] dark:bg-[#0D111A]/60">
                             <span className="block font-semibold text-[#4F46E5] dark:text-[#818CF8]">En la nube</span>
                             <span className="mt-0.5 block break-words leading-snug text-slate-700 dark:text-slate-300">
-                              {item.remoteSummary}
+                              {safeRemote}
                             </span>
                           </div>
                           <div className="min-w-0 rounded-lg border border-slate-200/70 bg-white px-2.5 py-2 dark:border-white/[0.06] dark:bg-[#0D111A]/60">
                             <span className="block font-semibold text-slate-600 dark:text-slate-400">En este dispositivo</span>
                             <span className="mt-0.5 block break-words leading-snug text-slate-700 dark:text-slate-300">
-                              {item.localSummary}
+                              {safeLocal}
                             </span>
                           </div>
                         </div>
@@ -572,12 +704,12 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                   })}
                 </div>
 
-                {conflicts.length > 0 && (
+                {sanitizedConflicts.length > 0 && (
                   <div className="rounded-xl border border-slate-200/80 bg-slate-50/40 divide-y divide-slate-200/70 dark:border-white/[0.08] dark:bg-white/[0.015] dark:divide-white/[0.06]">
                     <div className="px-3 py-2 text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-                      Detalles puntuales ({conflicts.length})
+                      Detalles puntuales ({sanitizedConflicts.length})
                     </div>
-                    {conflicts.map((item) => (
+                    {sanitizedConflicts.map((item) => (
                       <div key={item.id} className="px-3 py-2.5 text-[11px] space-y-1">
                         <div className="font-semibold text-slate-900 dark:text-slate-100">{item.label}</div>
                         <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
@@ -619,7 +751,7 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                         blurOnMouseClick(event);
                         handleApplyAdvanced();
                       }}
-                      className={`w-full min-h-11 rounded-xl bg-[#4F46E5] px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] disabled:opacity-45 cursor-pointer ${CLEAN_FOCUS}`}
+                      className={`w-full min-h-[44px] rounded-xl bg-[#4F46E5] px-4 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] disabled:opacity-45 cursor-pointer ${CLEAN_FOCUS}`}
                     >
                       {isApplying ? 'Aplicando selección…' : 'Aplicar selección por módulo'}
                     </button>
@@ -634,7 +766,7 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
                         blurOnMouseClick(event);
                         onExportConflict();
                       }}
-                      className={`inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.1] dark:bg-transparent dark:text-slate-300 dark:hover:bg-white/[0.05] cursor-pointer ${CLEAN_FOCUS}`}
+                      className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.1] dark:bg-transparent dark:text-slate-300 dark:hover:bg-white/[0.05] cursor-pointer ${CLEAN_FOCUS}`}
                     >
                       <Download size={14} strokeWidth={1.75} aria-hidden="true" />
                       <span>Exportar copia del conflicto</span>
@@ -647,7 +779,7 @@ export const CloudConflictModal: React.FC<CloudConflictModalProps> = ({
         </div>
 
         {/* Pinned Automatic Backup Footer */}
-        <footer className="shrink-0 flex items-start gap-2.5 border-t border-slate-100 bg-slate-50/75 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 text-[11px] leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
+        <footer className="shrink-0 flex items-start gap-2.5 border-t border-slate-100 bg-slate-50/75 px-4 py-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 text-[11px] leading-relaxed text-slate-600 dark:border-white/[0.06] dark:bg-white/[0.02] dark:text-slate-400">
           <ShieldCheck size={15} strokeWidth={1.75} className="mt-0.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
           <span>
             Respaldo automático: antes de aplicar cualquier cambio, Celestian guarda una copia local de seguridad para que nunca pierdas información.

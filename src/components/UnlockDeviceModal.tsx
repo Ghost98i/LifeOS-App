@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   Check,
   Eye,
   EyeOff,
@@ -23,6 +24,7 @@ import {
   loadWrappedKeyEnvelope,
   type WrappedKeyEnvelope,
 } from '../lib/cryptoCore';
+import { triggerHaptic } from '../lib/haptics';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import { CompletionCheck } from './ui/CompletionCheck';
 
@@ -160,6 +162,7 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
         passwordInput,
         resolvedEnvelope || undefined
       );
+      triggerHaptic('success');
       showToast?.('Datos desbloqueados en este dispositivo.', 'success');
       setPasswordInput('');
       setIsUnlocking(false);
@@ -167,9 +170,14 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
       onUnlocked?.(res.envelope);
     } catch (err: any) {
       setIsUnlocking(false);
-      setUnlockError(
-        err?.message || 'Contraseña incorrecta. Revisala o usá tu clave de recuperación.'
-      );
+      triggerHaptic('warning');
+      const rawMsg = typeof err?.message === 'string' ? err.message.trim() : '';
+      const friendly = rawMsg
+        ? rawMsg.includes('Tus datos locales')
+          ? rawMsg
+          : `${rawMsg} Tus datos locales siguen a salvo.`
+        : 'Esa contraseña no coincide. Tus datos locales siguen a salvo; revisala o usá tu código de recuperación.';
+      setUnlockError(friendly);
     }
   };
 
@@ -189,6 +197,7 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
       setIsUnlocking(false);
       setRecoveryInput('');
       setLoadedFileName(null);
+      triggerHaptic('success');
       onUnlocked?.(res.envelope);
 
       if (!hasVaultPassword(res.envelope)) {
@@ -202,8 +211,12 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
       }
     } catch (err: any) {
       setIsUnlocking(false);
+      triggerHaptic('warning');
+      const rawMsg = typeof err?.message === 'string' ? err.message.trim() : '';
       setUnlockError(
-        err?.message || 'No pudimos validar esa clave. Revisá que esté completa o cargá tu archivo.'
+        rawMsg
+          ? `${rawMsg} Tus datos locales siguen a salvo.`
+          : 'No pudimos validar ese código. Tus datos locales siguen a salvo; revisá que esté completo o cargá tu archivo.'
       );
     }
   };
@@ -219,10 +232,12 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
         setRecoveryInput(key);
         setLoadedFileName(file.name);
         setUnlockError(null);
+        triggerHaptic('light');
         showToast?.('Archivo de recuperación cargado. Tocá Desbloquear para continuar.', 'info');
       } else {
         setLoadedFileName(null);
-        setUnlockError('No encontramos una clave válida dentro de ese archivo.');
+        triggerHaptic('warning');
+        setUnlockError('No encontramos un código válido dentro de ese archivo. Tus datos locales siguen a salvo.');
       }
       e.target.value = '';
     };
@@ -235,10 +250,12 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
     setUpgradeError(null);
 
     if (newVaultPassword.length < 8) {
+      triggerHaptic('warning');
       setUpgradeError('Elegí una contraseña de al menos 8 caracteres.');
       return;
     }
     if (newVaultPassword !== confirmVaultPassword) {
+      triggerHaptic('warning');
       setUpgradeError('Las contraseñas no coinciden.');
       return;
     }
@@ -250,28 +267,30 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
         currentRecoveryKey: legacyRecoverySecret,
       });
       setResolvedEnvelope(res.envelope);
+      triggerHaptic('success');
       onUnlocked?.(res.envelope);
       showToast?.('Contraseña de bóveda guardada. En tu próximo dispositivo entrás en 1 toque.', 'success');
       setIsSavingPassword(false);
       resetAndClose();
     } catch (err: any) {
       setIsSavingPassword(false);
+      triggerHaptic('warning');
       setUpgradeError(err?.message || 'No se pudo guardar la contraseña. Intentá de nuevo.');
     }
   };
 
   const fieldClass =
-    'celestian-clean-field w-full min-h-11 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
+    'celestian-clean-field w-full min-h-[44px] rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
   const primaryBtnClass =
-    `inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#4F46E5] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${CLEAN_FOCUS}`;
+    `inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[#4F46E5] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#4338CA] cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${CLEAN_FOCUS}`;
   const secondaryBtnClass =
-    `inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.1] dark:bg-transparent dark:text-slate-200 dark:hover:bg-white/[0.05] cursor-pointer disabled:opacity-45 ${CLEAN_FOCUS}`;
+    `inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-4 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.1] dark:bg-transparent dark:text-slate-200 dark:hover:bg-white/[0.05] cursor-pointer disabled:opacity-45 ${CLEAN_FOCUS}`;
   const closeBtnClass =
-    `inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer disabled:opacity-40 ${CLEAN_FOCUS}`;
+    `inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer disabled:opacity-40 ${CLEAN_FOCUS}`;
 
   return (
     <div
-      className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
+      className="celestian-modal-backdrop fixed inset-0 z-[95] flex items-end justify-center sm:items-center bg-black/60 p-0 sm:p-4 backdrop-blur-xs"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) resetAndClose();
       }}
@@ -282,8 +301,12 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="unlock-device-title"
-        className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 shadow-2xl space-y-5 dark:border-white/[0.08] dark:bg-[#0D111A] outline-none"
+        className="celestian-modal-panel w-full sm:max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border-t sm:border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 shadow-2xl space-y-5 dark:border-white/[0.08] dark:bg-[#0D111A] outline-none"
       >
+        <div
+          aria-hidden="true"
+          className="mx-auto -mt-1.5 mb-1 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden"
+        />
         {/* Post-unlock friendly step for legacy recovery-key-only accounts */}
         {legacyUnlockedEnvelope ? (
           <div className="space-y-4">
@@ -397,7 +420,7 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
                         if (upgradeError) setUpgradeError(null);
                       }}
                       placeholder="Elegí una contraseña fácil de guardar"
-                      className={`${fieldClass} pr-11`}
+                      className={`${fieldClass} pr-12`}
                       disabled={isSavingPassword}
                       autoFocus
                     />
@@ -405,10 +428,12 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
                       type="button"
                       onClick={(event) => {
                         blurOnMouseClick(event);
+                        triggerHaptic('light');
                         setShowNewPassword((v) => !v);
                       }}
                       aria-label={showNewPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                      className={`absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer ${CLEAN_FOCUS}`}
+                      aria-pressed={showNewPassword}
+                      className={`absolute right-0.5 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer ${CLEAN_FOCUS}`}
                     >
                       {showNewPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
                     </button>
@@ -457,7 +482,13 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
                 </p>
 
                 {upgradeError && (
-                  <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400">{upgradeError}</p>
+                  <div
+                    role="alert"
+                    className="flex items-start gap-2 rounded-xl border border-rose-500/25 bg-rose-500/[0.08] px-3.5 py-2.5 text-xs font-medium leading-relaxed text-rose-700 dark:text-rose-300"
+                  >
+                    <AlertTriangle size={15} strokeWidth={1.85} className="mt-0.5 shrink-0" aria-hidden="true" />
+                    <span>{upgradeError}</span>
+                  </div>
                 )}
 
                 <div className="flex flex-col-reverse gap-2 pt-3 border-t border-slate-100 sm:flex-row sm:justify-end dark:border-white/[0.06]">
@@ -556,7 +587,7 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
                         if (unlockError) setUnlockError(null);
                       }}
                       placeholder="Tu contraseña de bóveda"
-                      className={`${fieldClass} pr-11`}
+                      className={`${fieldClass} pr-12`}
                       disabled={isUnlocking}
                       autoFocus
                     />
@@ -564,18 +595,24 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
                       type="button"
                       onClick={(event) => {
                         blurOnMouseClick(event);
+                        triggerHaptic('light');
                         setShowPassword((prev) => !prev);
                       }}
                       aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                      className={`absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer ${CLEAN_FOCUS}`}
+                      aria-pressed={showPassword}
+                      className={`absolute right-0.5 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer ${CLEAN_FOCUS}`}
                     >
                       {showPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
                     </button>
                   </div>
                   {unlockError && (
-                    <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400 pt-0.5">
-                      {unlockError}
-                    </p>
+                    <div
+                      role="alert"
+                      className="flex items-start gap-2 rounded-xl border border-rose-500/25 bg-rose-500/[0.08] px-3.5 py-2.5 text-xs font-medium leading-relaxed text-rose-700 dark:text-rose-300"
+                    >
+                      <AlertTriangle size={15} strokeWidth={1.85} className="mt-0.5 shrink-0" aria-hidden="true" />
+                      <span>{unlockError}</span>
+                    </div>
                   )}
                 </div>
 
@@ -584,11 +621,12 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
                     type="button"
                     onClick={(event) => {
                       blurOnMouseClick(event);
+                      triggerHaptic('light');
                       setMode('recovery');
                       setUnlockError(null);
                     }}
                     disabled={isUnlocking}
-                    className={`inline-flex min-h-10 items-center justify-center rounded-lg px-2 text-xs font-medium text-slate-500 transition-colors hover:text-[#4F46E5] dark:text-slate-400 dark:hover:text-[#818CF8] cursor-pointer ${CLEAN_FOCUS}`}
+                    className={`inline-flex min-h-[44px] items-center justify-center rounded-lg px-2 text-xs font-medium text-slate-500 transition-colors hover:text-[#4F46E5] dark:text-slate-400 dark:hover:text-[#818CF8] cursor-pointer ${CLEAN_FOCUS}`}
                   >
                     Usar clave o archivo de recuperación
                   </button>
@@ -665,9 +703,13 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
                   />
 
                   {unlockError && (
-                    <p role="alert" className="text-xs font-semibold text-rose-600 dark:text-rose-400 pt-0.5">
-                      {unlockError}
-                    </p>
+                    <div
+                      role="alert"
+                      className="flex items-start gap-2 rounded-xl border border-rose-500/25 bg-rose-500/[0.08] px-3.5 py-2.5 text-xs font-medium leading-relaxed text-rose-700 dark:text-rose-300"
+                    >
+                      <AlertTriangle size={15} strokeWidth={1.85} className="mt-0.5 shrink-0" aria-hidden="true" />
+                      <span>{unlockError}</span>
+                    </div>
                   )}
                 </div>
 
@@ -677,11 +719,12 @@ export const UnlockDeviceModal: React.FC<UnlockDeviceModalProps> = ({
                       type="button"
                       onClick={(event) => {
                         blurOnMouseClick(event);
+                        triggerHaptic('light');
                         setMode('password');
                         setUnlockError(null);
                       }}
                       disabled={isUnlocking}
-                      className={`inline-flex min-h-10 items-center justify-center rounded-lg px-2 text-xs font-semibold text-[#4F46E5] transition-colors hover:underline dark:text-[#818CF8] cursor-pointer ${CLEAN_FOCUS}`}
+                      className={`inline-flex min-h-[44px] items-center justify-center rounded-lg px-2 text-xs font-semibold text-[#4F46E5] transition-colors hover:underline dark:text-[#818CF8] cursor-pointer ${CLEAN_FOCUS}`}
                     >
                       Usar contraseña de bóveda
                     </button>

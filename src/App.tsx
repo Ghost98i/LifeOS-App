@@ -3,7 +3,16 @@ import { assertCommercialTransition } from './lib/commercialTransition';
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { PrivacyProvider } from './components/PrivacyAmount';
 import { ViewType, LifeOSState, DailyContextEntry } from './types';
-import { commercialHydrationBlock, changesStoredCommercial, defaultState, hasPersistedCommercial, loadRecoveryState, loadStoredState, parseBackupJSON, readStoredCommercial, saveRecoveryState, saveStoredState, todayISO } from './lib/storage';
+import { commercialHydrationBlock, changesStoredCommercial, defaultState, getStorageKey, hasPersistedCommercial, loadRecoveryState, loadStoredState, parseBackupJSON, readStoredCommercial, saveRecoveryState, saveStoredState, todayISO } from './lib/storage';
+import {
+  TAB_SYNC_CHANNEL_NAME,
+  createTabInstanceId,
+  parseCrossTabStorageEvent,
+  readCrossTabStorageSnapshot,
+  reconcileCrossTabUpdate,
+  resolveOnlineSyncStatus,
+  type CrossTabMessage,
+} from './lib/crossTabSync';
 import {
   isModuleEnabled,
   isModuleHidden,
@@ -378,6 +387,16 @@ export default function App() {
   const retryTimeoutRef = useRef<number | null>(null);
   const retryAttemptRef = useRef<number>(0);
   const tabChannelRef = useRef<BroadcastChannel | null>(null);
+  const tabIdRef = useRef(createTabInstanceId());
+  const syncStatusRef = useRef<CloudSyncStatus>(syncStatus);
+  syncStatusRef.current = syncStatus;
+  const lastKnownSerializedRef = useRef<string | null>((() => {
+    try {
+      return typeof localStorage !== 'undefined' ? localStorage.getItem(getStorageKey(null)) : null;
+    } catch {
+      return null;
+    }
+  })());
   const initializedUserRef = useRef<string | null>(null);
   const legacyReadUserRef = useRef<string | null>(null);
   const conflictPendingRef = useRef(false);
@@ -422,45 +441,145 @@ export default function App() {
     showToast('La versión recibida de Finanzas podría perder movimientos o restaurar datos anteriores. Conservamos la copia local; revisá el conflicto.', 'error');
   }, [getCloudRuntime, traceFinanceSync]);
 
+  const rememberStorageSerialized = useCallback((userId: string | null, fallbackState?: LifeOSState) => {
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(getStorageKey(userId)) : null;
+      if (raw !== null) {
+        lastKnownSerializedRef.current = raw;
+        return raw;
+      }
+    } catch {
+      // ignore restricted storage
+    }
+    if (fallbackState) {
+      try {
+        const serialized = JSON.stringify(fallbackState);
+        lastKnownSerializedRef.current = serialized;
+        return serialized;
+      } catch {
+        return null;
+      }
+    }
+    lastKnownSerializedRef.current = null;
+    return null;
+  }, []);
+
+  const broadcastTabState = useCallback((nextState: LifeOSState, userId: string | null, serialized?: string | null) => {
+    if (!tabChannelRef.current) return;
+    try {
+      const message: CrossTabMessage = {
+        type: 'tab-state-update',
+        senderTabId: tabIdRef.current,
+        userId,
+        state: nextState,
+        serialized: serialized ?? undefined,
+        writtenAt: Date.now(),
+      };
+      tabChannelRef.current.postMessage(message);
+    } catch {
+      // ignore broadcast serialization error
+    }
+  }, []);
+
+  const absorbCrossTabState = useCallback((incomingState: LifeOSState, incomingSerialized: string, userId: string | null) => {
+    if (userId !== storageUserIdRef.current) return;
+    const runtime = getCloudRuntime();
+    let mergedTabTombstones: Record<string, number> | null = null;
+    const detectFinanceRegression =
+      runtime && userId
+        ? (localFinance: LifeOSState['finance'], remoteFinance: LifeOSState['finance']) => {
+            const tabTombstones = { ...runtime.syncMerge.loadTombstones(userId) };
+            for (const [id, timestamp] of Object.entries(tombstonesRef.current)) {
+              tabTombstones[id] = Math.max(tabTombstones[id] || 0, Number(timestamp));
+            }
+            mergedTabTombstones = tabTombstones;
+            return runtime.financeSnapshotIntegrity.detectFinanceSnapshotRegression(
+              localFinance,
+              remoteFinance,
+              tabTombstones
+            );
+          }
+        : undefined;
+
+    const result = reconcileCrossTabUpdate({
+      currentState: stateRef.current,
+      incomingState,
+      incomingSerialized,
+      lastKnownSerialized: lastKnownSerializedRef.current,
+      financeWriteBlocked: financeWriteBlockedRef.current,
+      detectFinanceRegression,
+    });
+
+    if (result.action === 'ignore') return;
+    if (result.action === 'noop_sync_marker') {
+      lastKnownSerializedRef.current = result.serialized;
+      return;
+    }
+    if (result.action === 'block_finance') {
+      blockFinanceConflict(incomingState, {}, result.conflicts as SyncConflictItem[]);
+      return;
+    }
+    if (result.action === 'block_resale') {
+      setResaleConflictReason(result.diagnostic);
+      resaleWriteBlockedRef.current = true;
+      setSyncStatus('conflict');
+      return;
+    }
+
+    if (mergedTabTombstones) {
+      tombstonesRef.current = mergedTabTombstones;
+    }
+    lastKnownSerializedRef.current = result.serialized;
+    stateRef.current = result.state;
+    setStateObj({ state: result.state, storageBackend: 'localStorage' });
+  }, [blockFinanceConflict, getCloudRuntime]);
+
+  const syncFromExternalStorage = useCallback(() => {
+    const activeUid = storageUserIdRef.current;
+    const snapshot = readCrossTabStorageSnapshot(activeUid);
+    if (!snapshot) return;
+    absorbCrossTabState(snapshot.state, snapshot.serialized, activeUid);
+  }, [absorbCrossTabState]);
+
   useEffect(() => {
-    if (typeof BroadcastChannel === 'undefined') return;
-    const channel = new BroadcastChannel('lifeos-tab-sync');
-    tabChannelRef.current = channel;
-    channel.onmessage = (event) => {
-      if (
-        event.data &&
-        event.data.type === 'tab-state-update' &&
-        event.data.userId === storageUserIdRef.current &&
-        event.data.state
-      ) {
-        if (financeWriteBlockedRef.current) return;
-        const runtime = getCloudRuntime();
-        if (runtime) {
-          const tabTombstones = { ...runtime.syncMerge.loadTombstones(event.data.userId) };
-          for (const [id, timestamp] of Object.entries(tombstonesRef.current)) tabTombstones[id] = Math.max(tabTombstones[id] || 0, Number(timestamp));
-          const financeConflicts = runtime.financeSnapshotIntegrity.detectFinanceSnapshotRegression(stateRef.current.finance, event.data.state.finance, tabTombstones);
-          if (financeConflicts.length) {
-            blockFinanceConflict(event.data.state, {}, financeConflicts);
+    const handleStorageEvent = (event: StorageEvent) => {
+      const activeUid = storageUserIdRef.current;
+      const parsed = parseCrossTabStorageEvent(event, activeUid);
+      if (!parsed) return;
+      absorbCrossTabState(parsed.state, parsed.serialized, activeUid);
+    };
+    window.addEventListener('storage', handleStorageEvent);
+
+    let channel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      channel = new BroadcastChannel(TAB_SYNC_CHANNEL_NAME);
+      tabChannelRef.current = channel;
+      channel.onmessage = (event: MessageEvent<CrossTabMessage>) => {
+        const payload = event.data;
+        if (!payload || payload.type !== 'tab-state-update' || !payload.state) return;
+        if (payload.senderTabId && payload.senderTabId === tabIdRef.current) return;
+        const incomingUserId = payload.userId ?? null;
+        if (incomingUserId !== storageUserIdRef.current) return;
+        let serialized = payload.serialized;
+        if (!serialized) {
+          try {
+            serialized = JSON.stringify(payload.state);
+          } catch {
             return;
           }
-          tombstonesRef.current = tabTombstones;
         }
-        const diagnostic = commercialHydrationBlock(stateRef.current, event.data.state);
-        if (diagnostic) {
-          setResaleConflictReason(diagnostic);
-          resaleWriteBlockedRef.current = true;
-          setSyncStatus('conflict');
-          return;
-        }
-        stateRef.current = event.data.state;
-        setStateObj({ state: event.data.state, storageBackend: 'localStorage' });
+        absorbCrossTabState(payload.state, serialized, incomingUserId);
+      };
+    }
+
+    return () => {
+      window.removeEventListener('storage', handleStorageEvent);
+      if (channel) {
+        channel.close();
+        tabChannelRef.current = null;
       }
     };
-    return () => {
-      channel.close();
-      tabChannelRef.current = null;
-    };
-  }, [blockFinanceConflict, getCloudRuntime]);
+  }, [absorbCrossTabState]);
 
   const applyRemoteState = (remoteState: LifeOSState, userId = storageUserIdRef.current) => {
     const runtime = getCloudRuntime();
@@ -492,6 +611,10 @@ export default function App() {
       blockResaleConflict(['resale'], 'No se pudo conservar de forma segura el estado remoto en este dispositivo.',
         runtime ? { resale: runtime.syncModel.syncModuleData(remoteState, 'resale') } : undefined, {});
       return false;
+    }
+    if (saved) {
+      const serialized = rememberStorageSerialized(userId, nextState);
+      broadcastTabState(nextState, userId, serialized);
     }
     stateRef.current = nextState;
     setStateObj({ state: nextState, storageBackend: saved ? 'localStorage' : 'ninguno' });
@@ -980,6 +1103,7 @@ export default function App() {
       showToast('No se pudo guardar en este dispositivo. La acción quedó detenida; conservá el contenido y reintentá.', 'error');
       return false;
     }
+    const serialized = rememberStorageSerialized(storageUserIdRef.current, draft);
     if (cloudUserRef.current && runtime) {
       const deletedIds = runtime.syncMerge.detectDeletedEntityIds(previous, draft);
       const restoredIds = runtime.syncMerge.detectRestoredEntityIds(previous, draft);
@@ -1018,17 +1142,7 @@ export default function App() {
       }
     }
 
-    if (tabChannelRef.current && storageUserIdRef.current) {
-      try {
-        tabChannelRef.current.postMessage({
-          type: 'tab-state-update',
-          userId: storageUserIdRef.current,
-          state: draft,
-        });
-      } catch {
-        // ignore broadcast serialization error
-      }
-    }
+    broadcastTabState(draft, storageUserIdRef.current, serialized);
 
     if (cloudUserRef.current && runtime) {
       queueCloudSave(draft, runtime.syncModel.changedSyncModules(previous, draft));
@@ -1223,6 +1337,7 @@ export default function App() {
           stateRef.current = cleanState;
           setStateObj({ state: cleanState, storageBackend: 'localStorage' });
         }
+        rememberStorageSerialized(user.uid, stateRef.current);
 
         if (readStoredCommercial(stateRef.current).status === 'blocked') {
           blockResaleConflict(['resale'], 'Los datos comerciales locales no superan la validación; permanecen guardados en este dispositivo.');
@@ -1261,6 +1376,7 @@ export default function App() {
         stateRef.current = local.state;
         setStateObj({ state: local.state, storageBackend: local.backend });
       }
+      rememberStorageSerialized(null, stateRef.current);
       if (readStoredCommercial(stateRef.current).status === 'blocked') {
         resaleWriteBlockedRef.current = true;
         setResaleConflictReason('Los datos comerciales locales no superan la validación; permanecen guardados en este dispositivo.');
@@ -1859,12 +1975,56 @@ export default function App() {
   }, [cloudUser, storageUserId, cloudRuntime]);
 
   useEffect(() => {
+    const computeRecoveryStatus = (isOnline: boolean, modulesToFlushCount: number) => {
+      const user = cloudUserRef.current;
+      const hasBlockedConflict =
+        resaleWriteBlockedRef.current ||
+        financeWriteBlockedRef.current ||
+        gymWriteBlockedRef.current ||
+        conflictPendingRef.current;
+      const runtime = getCloudRuntime();
+      const uid = user?.uid || storageUserIdRef.current;
+      const isVaultLocked = Boolean(
+        uid &&
+        hasWrappedKeyEnvelopeLocal(uid) &&
+        !(runtime?.cryptoCore.cryptoSession.isUnlocked(uid) ?? false) &&
+        syncStatusRef.current === 'locked'
+      );
+      const hasPendingRevisions = Object.values(pendingRevisionsRef.current).some(
+        (revs) => Array.isArray(revs) && revs.length > 0
+      );
+      return resolveOnlineSyncStatus({
+        isOnline,
+        cloudSyncConfigured,
+        hasCloudUser: Boolean(user),
+        isInitializedForUser: Boolean(user && initializedUserRef.current === user.uid),
+        hasBlockedConflict,
+        isVaultLocked,
+        hasModulesToFlush: modulesToFlushCount > 0,
+        hasPendingRevisions,
+        hasFailedModules: failedSyncModulesRef.current.size > 0,
+      });
+    };
+
     const handleOnline = () => {
-      if (resaleWriteBlockedRef.current) { setSyncStatus('conflict'); return; }
-      setSyncStatus(cloudUserRef.current ? 'connecting' : cloudSyncConfigured ? 'signed-out' : 'unavailable');
-      if (cloudUserRef.current && failedSyncModulesRef.current.size > 0) {
-        queueCloudSave(stateRef.current, [...failedSyncModulesRef.current]);
+      if (retryTimeoutRef.current !== null) {
+        window.clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
       }
+      retryAttemptRef.current = 0;
+
+      const user = cloudUserRef.current;
+      const modulesToFlush = user
+        ? [...new Set<SyncModuleKey>([...failedSyncModulesRef.current, ...queuedModulesRef.current])]
+        : [];
+      const nextStatus = computeRecoveryStatus(true, modulesToFlush.length);
+
+      if (user && modulesToFlush.length > 0 && nextStatus !== 'conflict' && nextStatus !== 'locked') {
+        queueCloudSave(stateRef.current, modulesToFlush);
+      } else {
+        setSyncStatus(nextStatus);
+      }
+
       if (!cloudAuthBootRequestedRef.current && cloudSyncConfigured && hasPendingCloudSessionHint()) {
         setCloudAuthBootRequested(true);
         void loadCloudRuntime()
@@ -1872,29 +2032,59 @@ export default function App() {
           .catch(() => {});
       }
     };
+
     const handleOffline = () => {
-      if (resaleWriteBlockedRef.current) { setSyncStatus('conflict'); return; }
-      setSyncStatus('offline');
+      if (retryTimeoutRef.current !== null) {
+        window.clearTimeout(retryTimeoutRef.current);
+        retryTimeoutRef.current = null;
+      }
+      const nextStatus = computeRecoveryStatus(false, 0);
+      setSyncStatus(nextStatus);
     };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && cloudUserRef.current && navigator.onLine) {
-        if (failedSyncModulesRef.current.size > 0) {
-          queueCloudSave(stateRef.current, [...failedSyncModulesRef.current]);
-        }
+
+    const handleForegroundReturn = () => {
+      if (document.visibilityState !== 'visible') return;
+      // 1. Absorb any changes saved by another tab while this tab was hidden/blurred
+      syncFromExternalStorage();
+
+      // 2. Reconcile connectivity & pending cloud work cleanly without duplicating listeners
+      const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
+      if (!isOnline) {
+        setSyncStatus(computeRecoveryStatus(false, 0));
+        return;
+      }
+
+      const user = cloudUserRef.current;
+      const modulesToFlush = user
+        ? [...new Set<SyncModuleKey>([...failedSyncModulesRef.current, ...queuedModulesRef.current])]
+        : [];
+      const nextStatus = computeRecoveryStatus(true, modulesToFlush.length);
+
+      if (user && modulesToFlush.length > 0 && nextStatus !== 'conflict' && nextStatus !== 'locked') {
+        queueCloudSave(stateRef.current, modulesToFlush);
+        return;
+      }
+
+      if (
+        syncStatusRef.current === 'offline' ||
+        (syncStatusRef.current === 'connecting' && nextStatus === 'synced')
+      ) {
+        setSyncStatus(nextStatus);
       }
     };
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleVisibilityChange);
+    document.addEventListener('visibilitychange', handleForegroundReturn);
+    window.addEventListener('focus', handleForegroundReturn);
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleVisibilityChange);
+      document.removeEventListener('visibilitychange', handleForegroundReturn);
+      window.removeEventListener('focus', handleForegroundReturn);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [syncFromExternalStorage]);
 
   const handleCloudSignIn = async () => {
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -1992,8 +2182,10 @@ export default function App() {
     lastDeletedUserIdRef.current = null;
     void import('./lib/accountDeletion').then(({ wipeLocalStateAfterDeletion }) => {
       const fresh = wipeLocalStateAfterDeletion(userId);
+      const serialized = rememberStorageSerialized(null, fresh);
       stateRef.current = fresh;
       setStateObj({ state: fresh, storageBackend: 'localStorage' });
+      broadcastTabState(fresh, null, serialized);
       setSyncStatus(cloudSyncConfigured ? 'signed-out' : 'unavailable');
     });
   };
@@ -2738,23 +2930,14 @@ export default function App() {
       return false;
     }
 
+    const importedSerialized = rememberStorageSerialized(storageUserIdRef.current, importedState);
     stateRef.current = importedState;
     setStateObj(() => ({
       state: importedState,
       storageBackend: 'localStorage',
     }));
 
-    if (tabChannelRef.current && storageUserIdRef.current) {
-      try {
-        tabChannelRef.current.postMessage({
-          type: 'tab-state-update',
-          userId: storageUserIdRef.current,
-          state: importedState,
-        });
-      } catch {
-        // ignore broadcast serialization error
-      }
-    }
+    broadcastTabState(importedState, storageUserIdRef.current, importedSerialized);
 
     if (cloudUserRef.current) {
       const runtime = getCloudRuntime();
@@ -3268,6 +3451,7 @@ export default function App() {
             remoteState={cloudConflict.remoteState}
             conflicts={cloudConflict.conflicts}
             recommendedSide={cloudConflict.recommendedSide ?? 'cloud'}
+            privacyMode={Boolean(state.settings.privacyMode)}
             onUseLocal={handleUseLocalState}
             onUseCloud={handleUseCloudState}
             onExportConflict={handleExportGenericConflict}
@@ -3286,6 +3470,7 @@ export default function App() {
                 ? 'cloud'
                 : 'local'
             }
+            privacyMode={Boolean(state.settings.privacyMode)}
             isApplying={resaleResolutionPending}
             errorMessage={resaleConflictReason || null}
             onUseCloud={() =>

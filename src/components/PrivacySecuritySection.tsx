@@ -660,13 +660,13 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
   const vaultPwMatches = vaultConfirmPw.length > 0 && vaultNewPw === vaultConfirmPw;
 
   const fieldClass =
-    'celestian-clean-field w-full min-h-11 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
+    'celestian-clean-field w-full min-h-[44px] rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 transition-colors dark:border-white/[0.1] dark:bg-white/[0.03] dark:text-slate-100 dark:placeholder:text-slate-500';
   const primaryBtnClass =
-    `inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] disabled:opacity-45 disabled:cursor-not-allowed cursor-pointer ${CLEAN_FOCUS}`;
+    `inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl bg-[#4F46E5] px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-[#4338CA] disabled:opacity-45 disabled:cursor-not-allowed cursor-pointer ${CLEAN_FOCUS}`;
   const secondaryBtnClass =
-    `inline-flex min-h-10 items-center justify-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.1] dark:bg-transparent dark:text-slate-200 dark:hover:bg-white/[0.05] cursor-pointer disabled:opacity-45 ${CLEAN_FOCUS}`;
+    `inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition-colors hover:bg-slate-50 dark:border-white/[0.1] dark:bg-transparent dark:text-slate-200 dark:hover:bg-white/[0.05] cursor-pointer disabled:opacity-45 ${CLEAN_FOCUS}`;
   const modalCloseBtnClass =
-    `inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer disabled:opacity-40 ${CLEAN_FOCUS}`;
+    `inline-flex h-11 w-11 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-white/[0.06] dark:hover:text-slate-100 cursor-pointer disabled:opacity-40 ${CLEAN_FOCUS}`;
 
   return (
     <SurfaceCard className="p-4 sm:p-5 space-y-4">
@@ -1038,7 +1038,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       {/* Guided 2-Step Activation Modal */}
       {wizardStep > 0 && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
+          className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center sm:items-center bg-black/60 p-0 sm:p-4 backdrop-blur-xs"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget && !isMigrating && !isProvisioning) setWizardStep(0);
           }}
@@ -1048,7 +1048,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
             role="dialog"
             aria-modal="true"
             aria-label="Activar candado privado adicional"
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 space-y-5 shadow-2xl"
+            className="celestian-modal-panel w-full sm:max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl p-5 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 space-y-5 shadow-2xl"
           >
             <div className="space-y-3.5 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
               <div className="flex items-start justify-between gap-3">
@@ -1153,7 +1153,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                         setShowSetupPassword((v) => !v);
                       }}
                       aria-label={showSetupPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                      className={`absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer ${CLEAN_FOCUS}`}
+                      className={`absolute right-0.5 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer ${CLEAN_FOCUS}`}
                     >
                       {showSetupPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
                     </button>
@@ -1358,7 +1358,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       {/* Safe Deactivation Confirmation Modal */}
       {isDisableModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
+          className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center sm:items-center bg-black/60 p-0 sm:p-4 backdrop-blur-xs"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget && !isDisabling) setIsDisableModalOpen(false);
           }}
@@ -1368,7 +1368,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
             role="dialog"
             aria-modal="true"
             aria-label="Desactivar candado privado adicional"
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 space-y-4 shadow-2xl"
+            className="celestian-modal-panel w-full sm:max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl p-5 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 space-y-4 shadow-2xl"
           >
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
               <div className="flex items-start gap-3 min-w-0">
@@ -1458,7 +1458,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       {/* Add / Change Vault Password Modal */}
       {isVaultPwModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
+          className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center sm:items-center bg-black/60 p-0 sm:p-4 backdrop-blur-xs"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget && !isSavingVaultPw) setIsVaultPwModalOpen(false);
           }}
@@ -1468,7 +1468,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
             role="dialog"
             aria-modal="true"
             aria-label={accountHasPassword ? 'Cambiar contraseña de bóveda' : 'Crear contraseña de bóveda'}
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 space-y-4 shadow-2xl"
+            className="celestian-modal-panel w-full sm:max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl p-5 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 space-y-4 shadow-2xl"
           >
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
               <div className="flex items-start gap-3 min-w-0">
@@ -1536,7 +1536,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                       setShowVaultCurrentSecret((v) => !v);
                     }}
                     aria-label={showVaultCurrentSecret ? 'Ocultar credencial actual' : 'Mostrar credencial actual'}
-                    className={`absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer ${CLEAN_FOCUS}`}
+                    className={`absolute right-0.5 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer ${CLEAN_FOCUS}`}
                   >
                     {showVaultCurrentSecret ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
                   </button>
@@ -1571,7 +1571,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
                       setShowVaultNewPw((v) => !v);
                     }}
                     aria-label={showVaultNewPw ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                    className={`absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer ${CLEAN_FOCUS}`}
+                    className={`absolute right-0.5 top-1/2 -translate-y-1/2 inline-flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer ${CLEAN_FOCUS}`}
                   >
                     {showVaultNewPw ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
                   </button>
@@ -1675,7 +1675,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       {/* Modal: Renovar código de respaldo (Rewrap) */}
       {isRewrapModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
+          className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center sm:items-center bg-black/60 p-0 sm:p-4 backdrop-blur-xs"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setIsRewrapModalOpen(false);
           }}
@@ -1685,7 +1685,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
             role="dialog"
             aria-modal="true"
             aria-label="Renovar código de respaldo"
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 space-y-4 shadow-2xl"
+            className="celestian-modal-panel w-full sm:max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl p-5 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 space-y-4 shadow-2xl"
           >
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
               <div className="flex items-start gap-3 min-w-0">
@@ -1834,7 +1834,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       {/* Resolve Pending Rotation Modal */}
       {isResolveModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
+          className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center sm:items-center bg-black/60 p-0 sm:p-4 backdrop-blur-xs"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setIsResolveModalOpen(false);
           }}
@@ -1844,7 +1844,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
             role="dialog"
             aria-modal="true"
             aria-label="Verificar nuevo código de respaldo"
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 space-y-4 shadow-2xl"
+            className="celestian-modal-panel w-full sm:max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl p-5 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 space-y-4 shadow-2xl"
           >
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
               <div className="flex items-start gap-3 min-w-0">
@@ -1930,7 +1930,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       {/* Download Recovery File Modal */}
       {isDownloadModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
+          className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center sm:items-center bg-black/60 p-0 sm:p-4 backdrop-blur-xs"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) setIsDownloadModalOpen(false);
           }}
@@ -1940,7 +1940,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
             role="dialog"
             aria-modal="true"
             aria-label="Descargar archivo de respaldo"
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 space-y-4 shadow-2xl"
+            className="celestian-modal-panel w-full sm:max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl p-5 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 space-y-4 shadow-2xl"
           >
             <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-4 dark:border-white/[0.06]">
               <div className="flex items-start gap-3 min-w-0">
@@ -2043,7 +2043,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
       {/* Account Deletion Confirmation Modal (untouched logic) */}
       {isDeleteOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3 sm:p-4 backdrop-blur-xs"
+          className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center sm:items-center bg-black/60 p-0 sm:p-4 backdrop-blur-xs"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget && !isDeleting) closeDeleteModal();
           }}
@@ -2054,7 +2054,7 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
             role="dialog"
             aria-modal="true"
             aria-label="Eliminar cuenta y datos"
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto space-y-4 rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-6 shadow-2xl dark:border-white/[0.08] dark:bg-[#0D111A] outline-none"
+            className="celestian-modal-panel w-full sm:max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain space-y-4 rounded-t-2xl sm:rounded-2xl border-t sm:border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 shadow-2xl dark:border-white/[0.08] dark:bg-[#0D111A] outline-none"
           >
             {deleteStage === 'confirm' ? (
               <>

@@ -130,12 +130,20 @@ export const Topbar: React.FC<TopbarProps> = ({
         badgeClass: 'text-[var(--text-soft)] hover:text-[var(--text)] border-[var(--border)] bg-[var(--card)]/80 hover:bg-[var(--surface-muted)]',
       };
     }
-    if (syncStatus === 'saving' || syncStatus === 'connecting') {
+    if (syncStatus === 'saving') {
       return {
         dotClass: 'bg-amber-400 animate-pulse',
         label: 'Guardando…',
         textColor: 'text-amber-700 dark:text-amber-400',
         badgeClass: 'text-amber-700 dark:text-amber-400 border-amber-500/30 bg-amber-500/10',
+      };
+    }
+    if (syncStatus === 'connecting') {
+      return {
+        dotClass: 'bg-indigo-500 dark:bg-indigo-400 animate-pulse',
+        label: 'Sincronizando…',
+        textColor: 'text-[#4F46E5] dark:text-[#818CF8]',
+        badgeClass: 'text-[#4F46E5] dark:text-[#818CF8] border-indigo-500/30 bg-indigo-500/10',
       };
     }
     if (syncStatus === 'conflict') {
@@ -329,7 +337,13 @@ export const Topbar: React.FC<TopbarProps> = ({
                 {syncLed.label}
               </p>
               {lastSyncedAt && <p className="mt-1 text-[10px] text-[var(--text-faint)]">Última confirmación: {lastSyncedAt}</p>}
-              <button onClick={() => { setShowCloudMenu(false); onCloudSignOut(); }} className="mt-3 w-full rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-bold text-[var(--text-soft)] hover:text-red-500 transition-colors">Cerrar sesión</button>
+              <button
+                type="button"
+                onClick={() => { setShowCloudMenu(false); onCloudSignOut(); }}
+                className="mt-3 min-h-[44px] sm:min-h-9 w-full rounded-xl border border-[var(--border)] px-3 py-2 text-xs font-bold text-[var(--text-soft)] hover:border-rose-500/35 hover:text-rose-600 dark:hover:text-rose-400 transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70"
+              >
+                Cerrar sesión
+              </button>
             </div>
           )}
         </div>
