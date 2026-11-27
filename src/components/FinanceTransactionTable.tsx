@@ -1,4 +1,3 @@
-import { maskFinancialText } from '../lib/financialPrivacy';
 import React, { useState, useMemo } from 'react';
 import { Pencil, SlidersHorizontal, Store, Trash2 } from 'lucide-react';
 import { Transaction, Account, FinanceCategoryInput } from '../types';
@@ -10,7 +9,7 @@ import { getCategoryName, getAllCategories } from '../lib/financeCategories';
 import { getFinanceAccountIcon, getFinanceCategoryIcon } from '../lib/financeIcons';
 import { identifyMerchant } from '../lib/merchantIdentity';
 import { AppIcon } from './AppIcon';
-import { PrivateFinancialText, PrivacyAmount, usePrivacyMode } from './PrivacyAmount';
+import { PrivateFinancialText, PrivacyAmount } from './PrivacyAmount';
 import { compareTransactionsChronologically, transactionTimeLabel } from '../lib/financeTransactionChronology';
 
 interface FinanceTransactionTableProps {
@@ -40,7 +39,6 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
   onDelete,
   totalGastadoAnio: _totalGastadoAnio,
 }) => {
-  const privateMode = usePrivacyMode();
   const [selectedAccount, setSelectedAccount] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedType, setSelectedType] = useState<TypeFilter>('all');
@@ -596,18 +594,7 @@ export const FinanceTransactionTable: React.FC<FinanceTransactionTableProps> = (
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
-                              if (
-                                confirm(
-                                  maskFinancialText(
-                                    `¿Eliminar movimiento "${displayLabel}"? El saldo se actualizará según los movimientos y conciliaciones existentes. No se puede deshacer.`,
-                                    privateMode
-                                  )
-                                )
-                              ) {
-                                onDelete(t.id);
-                              }
-                            }}
+                            onClick={() => onDelete(t.id)}
                             aria-label={`Eliminar movimiento ${displayLabel}`}
                             title="Eliminar movimiento"
                             className={`h-8 w-8 inline-flex items-center justify-center rounded-lg text-[var(--finance-text-muted)] hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer ${CLEAN_FOCUS_RING}`}

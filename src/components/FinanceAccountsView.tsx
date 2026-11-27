@@ -13,6 +13,7 @@ import {
 } from '../lib/calculations';
 import { FinanceAgreementsSection } from './FinanceAgreementsSection';
 import { maskFinancialText } from '../lib/financialPrivacy';
+import { requestConfirm } from '../lib/confirmDialog';
 
 const CLEAN_FOCUS_RING =
   'outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
@@ -269,9 +270,17 @@ export const FinanceAccountsView: React.FC<FinanceAccountsViewProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        if (confirm(maskFinancialText(`¿Eliminar la cuenta "${account.name}"? Solo se permite si no tiene movimientos registrados.`, Boolean(state.settings.privacyMode)))) {
-                          onDeleteAccount(account.id);
-                        }
+                        void requestConfirm({
+                          title: 'Eliminar cuenta financiera',
+                          message: maskFinancialText(
+                            `¿Eliminar la cuenta "${account.name}"? Solo se permite si no tiene movimientos registrados.`,
+                            Boolean(state.settings.privacyMode)
+                          ),
+                          confirmLabel: 'Eliminar cuenta',
+                          tone: 'danger',
+                        }).then((confirmed) => {
+                          if (confirmed) onDeleteAccount(account.id);
+                        });
                       }}
                       className={`h-8 w-8 inline-flex items-center justify-center -mr-1 -mt-0.5 rounded-lg text-[var(--finance-text-muted)] hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer transition-colors shrink-0 ${CLEAN_FOCUS_RING}`}
                       aria-label={maskFinancialText(`Eliminar cuenta ${account.name}`, Boolean(state.settings.privacyMode))}

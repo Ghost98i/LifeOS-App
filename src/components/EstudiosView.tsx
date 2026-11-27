@@ -2,6 +2,7 @@ import { getStudyWorkspace } from '../lib/studyWorkspace';
 import React, { useState, useEffect, useMemo } from 'react';
 import { GraduationCap, Play, Plus } from 'lucide-react';
 import { showToast } from '../lib/toast';
+import { requestConfirm } from '../lib/confirmDialog';
 import type { LifeOSState, Exam, Subject, StudyLog, StudyProgramKind, StudySessionPhase } from '../types';
 import { FocusTimer } from './FocusTimer';
 import { PageHeader } from './PageHeader';
@@ -355,7 +356,7 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
     setSubjectModalOpen(false);
   };
 
-  const handleDeleteSubject = (id: string) => {
+  const handleDeleteSubject = async (id: string) => {
     const check = canDeleteSubject(id, state);
     if (!check.canDelete) {
       setSubjectError(check.reason || 'Materia protegida contra eliminación.');
@@ -364,7 +365,13 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
     }
     setSubjectError(null);
     const sub = subjects.find((s) => s.id === id);
-    if (!window.confirm(`¿Eliminar la materia "${sub?.name || 'seleccionada'}"?`)) return;
+    const confirmed = await requestConfirm({
+      title: 'Eliminar materia',
+      message: `¿Eliminar la materia "${sub?.name || 'seleccionada'}"? Podrás deshacer esta acción desde el aviso inmediato.`,
+      confirmLabel: 'Eliminar materia',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     const removedSubject = sub ? structuredClone(sub) : null;
 
     const saved = saveStudyChange((draft) => {
@@ -509,7 +516,6 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
 
   const handleDeleteExam = (id: string) => {
     const existing = exams.find((ex) => ex.id === id);
-    if (!window.confirm('¿Eliminar este examen?')) return;
     const removedExam = existing ? structuredClone(existing) : null;
     const saved = saveStudyChange((draft) => {
       deleteExam(draft, id);
@@ -694,7 +700,6 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
 
   const handleDeleteStudy = (id: string) => {
     const existing = studyLogs.find((l) => l.id === id);
-    if (!window.confirm('¿Eliminar este registro de estudio?')) return;
     const removedLog = existing ? structuredClone(existing) : null;
     const saved = onUpdateState((draft) => {
       deleteStudyLog(draft, id);

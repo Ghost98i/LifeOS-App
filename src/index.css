@@ -319,6 +319,12 @@ body,
   min-height: 100dvh;
 }
 
+@media (pointer: fine) {
+  html {
+    scrollbar-gutter: stable;
+  }
+}
+
 body {
   background-color: var(--bg);
   color: var(--text);
@@ -646,7 +652,7 @@ button:active {
 @keyframes toast-enter {
   from {
     opacity: 0;
-    transform: translateY(-6px) scale(0.98);
+    transform: translateY(10px) scale(0.98);
   }
   to {
     opacity: 1;
@@ -655,7 +661,66 @@ button:active {
 }
 
 .toast-enter {
-  animation: toast-enter 180ms ease-out both;
+  animation: toast-enter 190ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ==========================================================================
+   Block 36 — Native-feeling GPU modal & bottom-sheet entrance animations
+   (transform + opacity only, CLS = 0, strict prefers-reduced-motion support)
+   ========================================================================== */
+@keyframes celestian-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes celestian-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes celestian-modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.celestian-modal-backdrop {
+  animation: celestian-backdrop-in 170ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.celestian-modal-panel {
+  animation: celestian-sheet-in 210ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (min-width: 640px) {
+  .celestian-modal-panel {
+    animation: celestian-modal-in 190ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .celestian-modal-backdrop,
+  .celestian-modal-panel,
+  .toast-enter {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
 }
 
 @keyframes shimmer {

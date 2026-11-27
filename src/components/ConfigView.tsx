@@ -1383,8 +1383,8 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
       {/* Modal 1: Revisar copia antes de importar */}
       {importPreview && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Revisar copia antes de importar" className="w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl">
+        <div className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4 backdrop-blur-xs">
+          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Revisar copia antes de importar" className="celestian-modal-panel w-full max-w-lg rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-4 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
@@ -1478,12 +1478,12 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
         return (
           <div
-            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4 backdrop-blur-xs"
+            className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4 backdrop-blur-xs"
             onMouseDown={(e) => {
               if (e.target === e.currentTarget && !isVerifyingReset) closeResetModal();
             }}
           >
-            <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Reiniciar datos" className="flex w-full max-w-md max-h-[90dvh] flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl p-0 shadow-2xl">
+            <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Reiniciar datos" className="celestian-modal-panel flex w-full max-w-md max-h-[90dvh] flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl p-0 shadow-2xl">
               <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
 
               <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-5 py-3.5 sm:px-6 sm:pt-5 dark:border-white/[0.06]">
@@ -1665,8 +1665,8 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
       {/* Modal 3: Confirmar Restauración de Copia de Recuperación */}
       {isRestoreModalOpen && recoveryInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Restaurar copia de emergencia" className="w-full max-w-md p-5 sm:p-6 space-y-4 shadow-2xl">
+        <div className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4 backdrop-blur-xs">
+          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Restaurar copia de emergencia" className="celestian-modal-panel w-full max-w-md rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-4 shadow-2xl">
             <div className="flex items-center gap-2.5">
               <RotateCcw size={18} strokeWidth={1.75} className="shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
               <div>
@@ -1712,8 +1712,8 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
       {/* Modal 4: Reparación de Saldos */}
       {isRepairModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Revisión y corrección de saldos" className="w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl">
+        <div className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4 backdrop-blur-xs">
+          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Revisión y corrección de saldos" className="celestian-modal-panel w-full max-w-lg rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-4 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
@@ -1806,8 +1806,8 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
 
       {/* Modal 5: Privacidad, condiciones y créditos */}
       {isAboutModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs" onClick={() => setIsAboutModalOpen(false)}>
-          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Privacidad, condiciones y créditos" className="w-full max-w-lg p-5 sm:p-6 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4 backdrop-blur-xs" onClick={() => setIsAboutModalOpen(false)}>
+          <SurfaceCard as="div" role="dialog" aria-modal="true" aria-label="Privacidad, condiciones y créditos" className="celestian-modal-panel w-full max-w-lg rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 pb-[max(1.25rem,env(safe-area-inset-bottom))] space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
                 <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">Privacidad, condiciones y créditos</h3>

@@ -13,6 +13,7 @@ import { getUnifiedTaskList } from '../lib/taskDependencies';
 import { routineScheduledFor } from '../lib/calculations';
 import { shouldPlayCompletionMotion } from '../lib/motion';
 import { playSound } from '../lib/audio';
+import { showToast } from '../lib/toast';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 import { CompletionCheck } from './ui/CompletionCheck';
@@ -196,11 +197,26 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
   };
 
   const deleteEvent = (id: string) => {
-    if (!calendarEnabled || !window.confirm('¿Eliminar este compromiso?')) return;
-    onUpdateState((draft) => {
+    if (!calendarEnabled) return;
+    const existing = (state.calendarEvents || []).find((item) => item.id === id);
+    const snapshot = existing ? structuredClone(existing) : null;
+    const saved = onUpdateState((draft) => {
       draft.calendarEvents = draft.calendarEvents.filter((item) => item.id !== id);
     });
+    if (!saved) return;
     setEventDraft(null);
+    showToast('Compromiso eliminado.', 'info', snapshot ? {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (onUpdateState((draft) => {
+          if (!draft.calendarEvents.some((item) => item.id === snapshot.id)) {
+            draft.calendarEvents.push(snapshot);
+          }
+        })) {
+          showToast('Compromiso restaurado.', 'success');
+        }
+      },
+    } : undefined);
   };
 
   // Editing state for Agenda Block
@@ -310,10 +326,27 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
   }, [templateAction]);
 
   const handleDeleteBlock = (day: DayKey, id: string) => {
-    onUpdateState((draft) => {
+    const existing = (state.agenda?.[day] || []).find((b) => b.id === id);
+    const snapshot = existing ? structuredClone(existing) : null;
+    const saved = onUpdateState((draft) => {
       if (!draft.agenda) draft.agenda = {} as any;
       if (!draft.agenda[day]) draft.agenda[day] = [];
       draft.agenda[day] = draft.agenda[day].filter((b) => b.id !== id);
+    });
+    if (!saved || !snapshot) return;
+    showToast('Bloque semanal eliminado.', 'info', {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (onUpdateState((draft) => {
+          if (!draft.agenda) draft.agenda = {} as any;
+          if (!draft.agenda[day]) draft.agenda[day] = [];
+          if (!draft.agenda[day].some((b) => b.id === snapshot.id)) {
+            draft.agenda[day].push(snapshot);
+          }
+        })) {
+          showToast('Bloque semanal restaurado.', 'success');
+        }
+      },
     });
   };
 
@@ -390,8 +423,24 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
   };
 
   const handleDeleteTask = (id: string) => {
-    onUpdateState((draft) => {
+    const existing = (state.tasksRecurring || []).find((t) => t.id === id);
+    const snapshot = existing ? structuredClone(existing) : null;
+    const saved = onUpdateState((draft) => {
       draft.tasksRecurring = (draft.tasksRecurring || []).filter((t) => t.id !== id);
+    });
+    if (!saved || !snapshot) return;
+    showToast('Rutina eliminada.', 'info', {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (onUpdateState((draft) => {
+          if (!draft.tasksRecurring) draft.tasksRecurring = [];
+          if (!draft.tasksRecurring.some((t) => t.id === snapshot.id)) {
+            draft.tasksRecurring.push(snapshot);
+          }
+        })) {
+          showToast('Rutina restaurada.', 'success');
+        }
+      },
     });
   };
 
@@ -1249,13 +1298,13 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       )}
 
       {weeklyDraft && (
-        <div className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4" onClick={closeWeeklyBlock}>
+        <div className="celestian-modal-backdrop fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4" onClick={closeWeeklyBlock}>
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="agenda-weekly-title"
             aria-describedby="agenda-weekly-hint"
-            className="max-h-[90dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
+            className="celestian-modal-panel max-h-[90dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />
@@ -1340,12 +1389,12 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       )}
 
       {eventDraft && (
-        <div className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4" onClick={() => setEventDraft(null)}>
+        <div className="celestian-modal-backdrop fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4" onClick={() => setEventDraft(null)}>
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="agenda-event-title"
-            className="max-h-[90dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
+            className="celestian-modal-panel max-h-[90dvh] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />
@@ -1438,12 +1487,12 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       )}
 
       {templateAction && (
-        <div className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4" onClick={closeTemplateAction}>
+        <div className="celestian-modal-backdrop fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4" onClick={closeTemplateAction}>
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="agenda-template-title"
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-4 shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
+            className="celestian-modal-panel w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-4 shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
             onClick={event => event.stopPropagation()}
           >
             <div className="mx-auto mb-1 h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />
@@ -1486,12 +1535,12 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       )}
 
       {editingTask && (
-        <div className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4" onClick={() => setEditingTask(null)}>
+        <div className="celestian-modal-backdrop fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4" onClick={() => setEditingTask(null)}>
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="agenda-edit-routine-title"
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
+            className="celestian-modal-panel w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
             onClick={event => event.stopPropagation()}
           >
             <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />
@@ -1564,14 +1613,14 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
       {/* Modal / Drawer for editing agenda block */}
       {editingBlock && (
         <div
-          className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4 animate-in fade-in"
+          className="celestian-modal-backdrop fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4"
           onClick={() => setEditingBlock(null)}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="edit-agenda-block-title"
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-4 shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
+            className="celestian-modal-panel w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-4 shadow-xl dark:border-white/[0.08] dark:bg-[#0D111A]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto mb-1 h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />

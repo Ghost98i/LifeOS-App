@@ -131,7 +131,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in"
+      className="celestian-modal-backdrop fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
       onClick={onClose}
     >
       <div
@@ -139,14 +139,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
         role="dialog"
         aria-modal="true"
         aria-labelledby="checkout-modal-title"
-        className="today-checkout-modal bg-[var(--card)] border border-[var(--border)] rounded-2xl max-w-xl w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6 space-y-4 shadow-2xl relative"
+        className="celestian-modal-panel today-checkout-modal bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl max-w-xl w-full max-h-[92dvh] overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6 space-y-4 shadow-2xl relative"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={onClose}
           aria-label="Cerrar modal"
-          className="absolute top-3 right-3 inline-flex h-9 w-9 items-center justify-center text-sm text-[var(--text-faint)] hover:text-[var(--text)] rounded-lg cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)]"
+          className="absolute top-3 right-3 inline-flex h-9 w-9 items-center justify-center text-sm text-[var(--text-faint)] hover:text-[var(--text)] rounded-lg cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70"
         >
           <AppIcon name="x" className="h-4 w-4" />
         </button>
@@ -238,7 +238,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
                 type="button"
                 disabled={summary.alreadyRolledOver}
                 onClick={handleRolloverPending}
-                className="shrink-0 min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 text-xs font-semibold text-[var(--blue)] hover:bg-[var(--surface-muted)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                className="shrink-0 min-h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 text-xs font-semibold text-[#4F46E5] dark:text-[#818CF8] hover:bg-[var(--surface-muted)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 {summary.alreadyRolledOver ? 'Ya reprogramadas' : 'Reprogramar pendientes a mañana'}
               </button>
@@ -262,7 +262,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
                       setTrainedSkipped(e.target.checked);
                       setTrainedSkippedTouched(true);
                     }}
-                    className="rounded-xs cursor-pointer accent-[var(--blue)]"
+                    className="rounded-xs cursor-pointer accent-[#4F46E5]"
                   />
                   <span>Hoy fue descanso</span>
                 </label>
@@ -282,7 +282,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
                     type="checkbox"
                     checked={studiedSkipped}
                     onChange={(e) => setStudiedSkipped(e.target.checked)}
-                    className="rounded-xs cursor-pointer accent-[var(--blue)]"
+                    className="rounded-xs cursor-pointer accent-[#4F46E5]"
                   />
                   <span>Sin estudio hoy</span>
                 </label>
@@ -302,7 +302,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
                     type="checkbox"
                     checked={expensesSkipped}
                     onChange={(e) => setExpensesSkipped(e.target.checked)}
-                    className="rounded-xs cursor-pointer accent-[var(--blue)]"
+                    className="rounded-xs cursor-pointer accent-[#4F46E5]"
                   />
                   <span>Sin gastos hoy</span>
                 </label>
@@ -326,7 +326,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
                   onClick={() => setSleepHours(h)}
                   className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
                     Number(sleepHours) === h
-                      ? 'bg-[var(--blue)] text-white border-[var(--blue)]'
+                      ? 'bg-[#4F46E5] text-white border-[#4F46E5]'
                       : 'bg-[var(--bg)] border-[var(--border)] text-[var(--text-soft)] hover:text-[var(--text)]'
                   }`}
                 >
@@ -342,7 +342,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
                 placeholder="Otro..."
                 value={sleepHours}
                 onChange={(e) => setSleepHours(e.target.value)}
-                className="w-16 px-2 py-1 text-xs rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden text-center tabular-nums ml-auto"
+                className="celestian-clean-field w-16 px-2 py-1 text-xs rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] text-center tabular-nums ml-auto"
               />
             </div>
           </div>
@@ -387,7 +387,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
                   onClick={() => setEnergyLevel(item.lvl)}
                   className={`py-1.5 px-1 rounded-xl border flex flex-col items-center justify-center gap-0.5 transition-all cursor-pointer ${
                     energyLevel === item.lvl
-                      ? 'bg-[var(--blue-soft)] border-[var(--blue)] text-[var(--blue)] dark:text-violet-200 font-bold'
+                      ? 'bg-indigo-500/12 border-[#4F46E5] text-[#4F46E5] dark:text-indigo-200 font-bold'
                       : 'bg-[var(--bg)] border-[var(--border)] text-[var(--text-soft)] hover:border-[var(--border-hover)] hover:text-[var(--text)]'
                   }`}
                 >
@@ -409,14 +409,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
               value={dailyNote}
               onChange={(e) => setDailyNote(e.target.value)}
               placeholder="Algo que quieras recordar de hoy"
-              className="w-full px-3 py-2 text-[13px] font-medium rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[var(--text)] focus:border-[var(--blue)] outline-hidden"
+              className="celestian-clean-field w-full px-3 py-2 text-[13px] font-medium rounded-lg bg-[var(--bg)] border border-[var(--border)] text-[var(--text)]"
             />
           </div>
 
           {/* Tomorrow Preview */}
           <div className="space-y-1 py-3">
             <div>
-              <span className="block text-[12px] font-semibold text-[var(--blue)] dark:text-violet-200">
+              <span className="block text-[12px] font-semibold text-[#4F46E5] dark:text-indigo-300">
                 Mañana · {tomorrowLabel}
               </span>
               <span className="block mt-1 text-[13px] font-medium text-[var(--text)]">
@@ -432,14 +432,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({ state, onUpdateSta
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2.5 bg-[var(--card-subtle)] border border-[var(--border)] text-[var(--text)] text-[13px] font-semibold rounded-xl hover:bg-[var(--surface-muted)] cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)]"
+            className="px-4 py-2.5 bg-[var(--card-subtle)] border border-[var(--border)] text-[var(--text)] text-[13px] font-semibold rounded-xl hover:bg-[var(--surface-muted)] cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70"
           >
             Cancelar
           </button>
           <button
             type="button"
             onClick={handleFinishCheckout}
-            className="px-4 py-2.5 bg-[#4F46E5] text-white text-[13px] font-bold rounded-xl hover:bg-[#4338CA] cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--blue)]"
+            className="px-4 py-2.5 bg-[#4F46E5] text-white text-[13px] font-bold rounded-xl hover:bg-[#4338CA] cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70"
           >
             Confirmar cierre
           </button>

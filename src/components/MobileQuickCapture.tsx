@@ -16,7 +16,8 @@ import { parseQuickFinance } from '../utils/quickFinanceParser';
 import { todayISO, uid, dayKeyFromDate, fmtDate } from '../lib/storage';
 import { startGymSession } from '../lib/gymFlows';
 import { nowTimeHHmm } from '../lib/gymMetrics';
-import { playSound } from '../lib/audio';
+import { playExpenseLogged, playSound } from '../lib/audio';
+import { triggerHaptic } from '../lib/haptics';
 import { showToast } from '../lib/toast';
 import { getActiveCategories } from '../lib/financeCategories';
 import { isModuleEnabled } from '../lib/moduleVisibility';
@@ -290,6 +291,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
         }
       }
       playSound('success');
+      triggerHaptic('success');
       showToast('Guardado en Bandeja de Entrada');
     } catch {
       // ignore
@@ -355,7 +357,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
             });
           });
           if (saved === false) throw new Error('No se pudo guardar. Conservamos el gasto para que puedas reintentar.');
-          playSound('coins');
+          playExpenseLogged();
           successMessage = 'Gasto registrado';
         } else {
           // Use parsed quick finance
@@ -389,7 +391,8 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
               });
             });
             if (saved === false) throw new Error('No se pudo guardar. Conservamos el gasto para que puedas reintentar.');
-            playSound('coins');
+            if (parsedFinance.type === 'ingreso') playSound('success');
+            else playExpenseLogged();
             successMessage = parsedFinance.type === 'ingreso' ? 'Ingreso registrado' : 'Gasto registrado';
           }
         }
@@ -436,6 +439,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
         successMessage = 'Recordatorio guardado';
       }
 
+      triggerHaptic('success');
       setFeedback({ type: 'success', text: successMessage });
       showToast(successMessage, 'success');
       setText('');
@@ -448,6 +452,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
       }, 220);
     } catch (error) {
       setIsSubmitting(false);
+      triggerHaptic('warning');
       setFeedback({ type: 'error', text: error instanceof Error ? error.message : 'No se pudo guardar.' });
     }
   };
@@ -567,7 +572,8 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
           setFeedback({ type: 'error', text: 'No se pudo guardar en este dispositivo.' });
           return;
         }
-        playSound(confirmFeedback.sound);
+        playSound(confirmFeedback.sound === 'coins' ? 'financeTap' : confirmFeedback.sound);
+        triggerHaptic('success');
         showToast(confirmFeedback.message, 'success');
         setUniversalInput('');
         onClose();
@@ -628,7 +634,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[80] flex items-end p-0 sm:items-center sm:p-4 justify-center bg-black/55 backdrop-blur-xs transition-opacity"
+      className="celestian-modal-backdrop fixed inset-0 z-[80] flex items-end p-0 sm:items-center sm:p-4 justify-center bg-black/55 backdrop-blur-xs"
       onClick={handleRequestClose}
     >
       <section
@@ -636,7 +642,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
         aria-modal="true"
         aria-label="Captura rápida"
         onKeyDown={handleDialogKeyDown}
-        className="relative flex w-full sm:max-w-lg max-h-[90dvh] flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-2xl transition-transform"
+        className="celestian-modal-panel relative flex w-full sm:max-w-lg max-h-[90dvh] flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
         <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
@@ -915,7 +921,8 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                         setFeedback({ type: 'error', text: 'No se pudo guardar en este dispositivo. El borrador sigue disponible.' });
                         return;
                       }
-                      playSound(confirmFeedback.sound);
+                      playSound(confirmFeedback.sound === 'coins' ? 'financeTap' : confirmFeedback.sound);
+                      triggerHaptic('success');
                       showToast(confirmFeedback.message);
                       setMobileDrafts((prev) => {
                         const next = prev.filter((d) => d.id !== draft.id);
@@ -958,6 +965,7 @@ export const MobileQuickCapture: React.FC<MobileQuickCaptureProps> = ({
                       }
                       if (count > 0) {
                         playSound('success');
+                        triggerHaptic('success');
                         showToast(`${count} elementos registrados.`);
                       }
                       setMobileDrafts((prev) => {

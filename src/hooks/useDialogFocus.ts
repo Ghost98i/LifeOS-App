@@ -11,7 +11,13 @@ export function useDialogFocus(open: boolean, container: RefObject<HTMLElement |
     if (!open || !dialog) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
+    const previousPaddingRight = document.body.style.paddingRight;
+    const scrollbarWidth = Math.max(0, window.innerWidth - document.documentElement.clientWidth);
     document.body.style.overflow = 'hidden';
+    if (scrollbarWidth > 0) {
+      const computedPadding = Number.parseFloat(window.getComputedStyle(document.body).paddingRight) || 0;
+      document.body.style.paddingRight = `${computedPadding + scrollbarWidth}px`;
+    }
     const focusable = () => Array.from<HTMLElement>(dialog.querySelectorAll<HTMLElement>(controls)).filter(element =>
       element.tabIndex >= 0 && !element.matches(':disabled') && element.getClientRects().length > 0 && !element.closest('[inert], [aria-hidden="true"]'));
     if (!dialog.contains(document.activeElement)) (focusable().find(element => element.matches('input, textarea, select')) || focusable()[0] || dialog).focus();
@@ -31,6 +37,7 @@ export function useDialogFocus(open: boolean, container: RefObject<HTMLElement |
     return () => {
       document.removeEventListener('keydown', keydown);
       document.body.style.overflow = previousOverflow;
+      document.body.style.paddingRight = previousPaddingRight;
       const target = previous?.isConnected && previous !== document.body && !dialog.contains(previous)
         ? previous : returnFocusSelector ? document.querySelector<HTMLElement>(returnFocusSelector) : null;
       target?.focus({ preventScroll: true });

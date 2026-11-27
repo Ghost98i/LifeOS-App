@@ -79,7 +79,9 @@ export function playSound(type: SoundType): void {
     if ((ctx.state as string) !== 'running') {
       void ctx.resume().then(() => {
         if (ctx.state === 'running' && isSoundEnabled()) playSound(type);
-      }).catch((err) => console.warn('Unable to resume interaction audio:', err));
+      }).catch(() => {
+        // Silently ignore autoplay-blocked resume before user gesture
+      });
       return;
     }
     const now = ctx.currentTime;
@@ -240,8 +242,8 @@ export function playSound(type: SoundType): void {
         osc.stop(now + idx * 0.12 + 0.82);
       });
     }
-  } catch (err) {
-    console.error('Error playing sound:', err);
+  } catch {
+    // Ignore Web Audio errors in blocked or unsupported contexts
   }
 }
 
@@ -306,8 +308,8 @@ export function playTimerCountdownTone(secondsLeft: number): void {
     oscT.start(now);
     oscS.stop(now + dur + 0.015);
     oscT.stop(now + dur + 0.015);
-  } catch (err) {
-    console.error('Error playing countdown sound:', err);
+  } catch {
+    // Ignore countdown Web Audio errors in blocked or unsupported contexts
   }
 }
 
@@ -436,6 +438,7 @@ function rampAmbientGain(param: AudioParam, value: number, ctx: AudioContext, se
 }
 
 export function startAmbientTrack(type: AmbientSoundType, volume = 0.5): void {
+  if (!isSoundEnabled()) return;
   const ctx = getAudioContext();
   if (!ctx) return;
   const existing = activeAmbientTracks.get(type);
@@ -494,6 +497,10 @@ export function getPlayingAmbientTracks(): AmbientSoundType[] {
 }
 
 export function playConfiguredAmbients(config: AmbientMixerConfig): void {
+  if (!isSoundEnabled()) {
+    stopAllAmbientNoise();
+    return;
+  }
   const types: AmbientSoundType[] = ['rain', 'brown', 'white'];
   // Prepare/start the next texture before fading the previous one. Buffer creation
   // on a slower device must not leave a gap after the previous source has stopped.

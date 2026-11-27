@@ -8,6 +8,8 @@ import { AppIcon } from './AppIcon';
 import { ContextualHelp } from './ContextualHelp';
 import { PrivateFinancialText, PrivacyInput, PrivacyAmount } from './PrivacyAmount';
 import { confirmedFinancialCurrency, formatPlannedAmount, PARTIAL_FINANCE_PROJECTION } from '../lib/financeCurrencyPolicy';
+import { showToast } from '../lib/toast';
+import { triggerHaptic } from '../lib/haptics';
 
 interface FinanceFutureViewProps {
   state: LifeOSState;
@@ -167,7 +169,8 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
     e.preventDefault();
     const parsed = parseDecimalInput(subAmount);
     if (parsed.error || parsed.value === null || parsed.value <= 0) {
-      alert(parsed.error || 'Importe inválido');
+      triggerHaptic('warning');
+      showToast(parsed.error || 'Importe inválido.', 'error');
       return;
     }
     if (!subName.trim()) return;

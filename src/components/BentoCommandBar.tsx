@@ -9,6 +9,7 @@ import {
   CaptureDraft,
 } from '../lib/quickCaptureDrafts';
 import { playSound } from '../lib/audio';
+import { triggerHaptic } from '../lib/haptics';
 import { showToast } from '../lib/toast';
 import { AppIcon } from './AppIcon';
 import { isModuleEnabled } from '../lib/moduleVisibility';
@@ -87,7 +88,8 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
         showToast('No se pudo guardar en este dispositivo. El borrador sigue disponible.', 'error');
         return;
       }
-      playSound(feedback.sound);
+      playSound(feedback.sound === 'coins' ? 'financeTap' : feedback.sound);
+      triggerHaptic('success');
       showToast(feedback.message);
       setDetectedDrafts((prev) => prev.filter((d) => d.id !== draft.id));
     } catch (err) {
@@ -126,6 +128,7 @@ export const BentoCommandBar: React.FC<BentoCommandBarProps> = ({
       }
       if (registeredCount > 0) {
         playSound('success');
+        triggerHaptic('success');
         showToast(`${registeredCount} elementos registrados.`);
       }
       setDetectedDrafts((prev) => prev.filter((d) => !confirmedIds.has(d.id)));

@@ -9,6 +9,7 @@ import {
   recordStudySession,
 } from '../lib/studyFlows';
 import { AppIcon } from './AppIcon';
+import { requestConfirm } from '../lib/confirmDialog';
 
 interface StudyActiveOverlayProps {
   state: LifeOSState;
@@ -116,8 +117,14 @@ export const StudyActiveOverlay: React.FC<StudyActiveOverlayProps> = ({
     });
   };
 
-  const handleDiscard = () => {
-    if (!window.confirm('¿Descartar esta sesión de enfoque sin registrar el tiempo?')) return;
+  const handleDiscard = async () => {
+    const confirmed = await requestConfirm({
+      title: 'Descartar sesión de enfoque',
+      message: '¿Descartar esta sesión sin registrar el tiempo transcurrido?',
+      confirmLabel: 'Descartar sesión',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     stopAllAmbientNoise();
     playSound('click');
     onUpdateState((draft) => {

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { triggerHaptic } from '../../lib/haptics';
 
 export type CompletionCheckSize = 'sm' | 'md';
 
@@ -48,6 +49,7 @@ export const CompletionCheck: React.FC<CompletionCheckProps> = ({
     prevCheckedRef.current = checked;
 
     if (!wasChecked && checked) {
+      triggerHaptic('success');
       setIsAnimating(true);
       const timer = setTimeout(() => {
         setIsAnimating(false);

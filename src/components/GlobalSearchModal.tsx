@@ -1022,7 +1022,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center bg-black/55 p-3 pt-[max(1rem,env(safe-area-inset-top))] sm:pt-[10vh] backdrop-blur-md transition-opacity duration-150 animate-in fade-in"
+      className="celestian-modal-backdrop fixed inset-0 z-[100] flex items-start justify-center bg-black/55 p-3 pt-[max(1rem,env(safe-area-inset-top))] sm:pt-[10vh] backdrop-blur-md"
       onClick={onClose}
     >
       <div
@@ -1030,7 +1030,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-label="Centro de mando de Celestian"
-        className="flex w-full max-w-2xl max-h-[90dvh] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl ring-1 ring-black/10 dark:ring-white/10 transition-all"
+        className="celestian-modal-panel flex w-full max-w-2xl max-h-[90dvh] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl ring-1 ring-black/10 dark:ring-white/10"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >

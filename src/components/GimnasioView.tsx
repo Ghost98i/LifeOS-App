@@ -88,7 +88,6 @@ import {
   previewExerciseHistoryPropagation,
   previewNormalizeGymHistory,
   reorderGymTemplateExercise,
-  requestGymSessionDeletion,
   applyGymRestTimerAdjustment,
   resolveNextRestTimer,
   resolveNextWorkoutPositionAfterSetCompletion,
@@ -102,7 +101,9 @@ import {
 } from '../lib/gymFlows';
 import { GymRestSettingsModal } from './GymRestSettingsModal';
 import { playSound } from '../lib/audio';
+import { triggerHaptic } from '../lib/haptics';
 import { showToast } from '../lib/toast';
+import { requestConfirm, requestPrompt } from '../lib/confirmDialog';
 import {
   getRoutineIdentity,
   ROUTINE_ICON_OPTIONS,
@@ -457,7 +458,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
   };
 
   // Workout sessions
-  const handleStartWorkout = (templateId?: string) => {
+  const handleStartWorkout = async (templateId?: string) => {
     const template = templateId
       ? state.gym.routineTemplates.find((routine) => routine.id === templateId)
       : null;
@@ -469,7 +470,15 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
       showToast('Agregá al menos un ejercicio a esta rutina antes de iniciarla.', 'error');
       return;
     }
-    if (isRestDayToday && !window.confirm('Hoy tenés un descanso registrado. ¿Querés entrenar de todos modos? El descanso seguirá registrado.')) return;
+    if (isRestDayToday) {
+      const confirmed = await requestConfirm({
+        title: 'Descanso registrado hoy',
+        message: 'Hoy tenés un descanso registrado. ¿Querés entrenar de todos modos? El descanso seguirá registrado.',
+        confirmLabel: 'Entrenar igual',
+        tone: 'primary',
+      });
+      if (!confirmed) return;
+    }
     const today = todayISO();
     let result: ReturnType<typeof startGymSession> | null = null;
     const saved = onUpdateState((draft) => {
@@ -529,6 +538,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
         : null,
     };
     playSound('success');
+    triggerHaptic('success');
     setCompletedSummarySession(summaryPayload);
   };
 
@@ -570,9 +580,17 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     }
   };
 
-  const handleDeleteSession = (id: string) => {
+  const handleDeleteSession = async (id: string) => {
     const session = state.gym.sessions.find((candidate) => candidate.id === id);
-    if (!session || !requestGymSessionDeletion(session, (message) => window.confirm(message))) return;
+    if (!session) return;
+    const label = session.status === 'completed' ? 'histórica' : 'activa';
+    const confirmed = await requestConfirm({
+      title: `Eliminar sesión ${label}`,
+      message: `¿Eliminar esta sesión ${label}? Esta acción no se puede deshacer.`,
+      confirmLabel: 'Eliminar sesión',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     const saved = onUpdateState((draft) => {
       deleteGymSession(draft.gym, id, storageUserId);
     });
@@ -656,6 +674,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     });
     if (saved && completedSetKey) {
       playSound('success');
+      triggerHaptic('success');
       setSetCompletionMotion((current) => ({
         setKey: completedSetKey as string,
         nonce: (current?.nonce || 0) + 1,
@@ -779,9 +798,16 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     );
   };
 
-  const handleDeleteTemplate = (id: string) => {
+  const handleDeleteTemplate = async (id: string) => {
     const template = state.gym.routineTemplates.find((candidate) => candidate.id === id);
-    if (!template || !window.confirm(`¿Eliminar la plantilla "${template.name}"? El historial no se eliminará.`)) return;
+    if (!template) return;
+    const confirmed = await requestConfirm({
+      title: 'Eliminar rutina',
+      message: `¿Eliminar la plantilla "${template.name}"? Tu historial de entrenamientos no se verá afectado.`,
+      confirmLabel: 'Eliminar rutina',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     const snapshot = structuredClone(template);
     const saved = onUpdateState((draft) => {
       deleteGymTemplate(draft.gym, id);
@@ -826,9 +852,15 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     });
   };
 
-  const handleSaveSessionAsTemplate = (session: GymSession) => {
+  const handleSaveSessionAsTemplate = async (session: GymSession) => {
     const defaultName = session.weekLabel ? `Rutina ${session.weekLabel}` : `Rutina del ${fmtDate(session.date)}`;
-    const name = window.prompt('Nombre para la nueva plantilla de rutina:', defaultName);
+    const name = await requestPrompt({
+      title: 'Guardar como plantilla de rutina',
+      message: 'Elegí un nombre para reutilizar esta estructura en futuros entrenamientos.',
+      defaultValue: defaultName,
+      placeholder: 'Ej: Empuje A',
+      confirmLabel: 'Guardar plantilla',
+    });
     if (!name || !name.trim()) return;
 
     const saved = onUpdateState((draft) => {
@@ -976,15 +1008,19 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     return true;
   };
 
-  const handleNormalizeAllHistory = () => {
+  const handleNormalizeAllHistory = async () => {
     const preview = previewNormalizeGymHistory(state.gym);
     if (preview.affectedSessionIds.length === 0) {
       showToast('El historial completado ya está normalizado.', 'info');
       return;
     }
-    if (!window.confirm(
-      `Se corregirán ${preview.affectedExerciseCount} ejercicios en ${preview.affectedSessionIds.length} sesiones completadas. ¿Continuar?`
-    )) return;
+    const confirmed = await requestConfirm({
+      title: 'Normalizar historial de gimnasio',
+      message: `Se corregirán ${preview.affectedExerciseCount} ejercicios en ${preview.affectedSessionIds.length} sesiones completadas. ¿Continuar?`,
+      confirmLabel: 'Normalizar',
+      tone: 'primary',
+    });
+    if (!confirmed) return;
     const saved = onUpdateState((draft) => {
       const current = previewNormalizeGymHistory(draft.gym);
       draft.gym.sessions = current.updatedSessions;
@@ -993,7 +1029,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
     showToast(`Historial normalizado: ${preview.affectedExerciseCount} ejercicios corregidos.`);
   };
 
-  const handlePropagateExerciseToHistory = (
+  const handlePropagateExerciseToHistory = async (
     exerciseName: string,
     config: { equipment: ExerciseEquipment; barWeight: number; muscleGroup?: MuscleGroup | string }
   ) => {
@@ -1002,9 +1038,13 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
       showToast(`El historial completado de "${exerciseName}" ya usa esta configuración.`, 'info');
       return;
     }
-    if (!window.confirm(
-      `Se actualizará "${exerciseName}" en ${preview.affectedSessionIds.length} sesiones completadas. ¿Continuar?`
-    )) return;
+    const confirmed = await requestConfirm({
+      title: 'Actualizar historial del ejercicio',
+      message: `Se actualizará "${exerciseName}" en ${preview.affectedSessionIds.length} sesiones completadas. ¿Continuar?`,
+      confirmLabel: 'Actualizar',
+      tone: 'primary',
+    });
+    if (!confirmed) return;
     const saved = onUpdateState((draft) => {
       const current = previewExerciseHistoryPropagation(draft.gym, exerciseName, config);
       draft.gym.sessions = current.updatedSessions;

@@ -23,6 +23,7 @@ import { getDayCyclePeriod, getLocalGreeting } from '../lib/alpineDayCycle';
 import { dayKeyFromDate, fmtDate, todayISO, uid } from '../lib/storage';
 import { getTodayAgendaEntries, getPastPendingExtras, getFutureScheduledExtras } from '../lib/todayOverview';
 import { showToast } from '../lib/toast';
+import { requestConfirm } from '../lib/confirmDialog';
 import { isModuleEnabled } from '../lib/moduleVisibility';
 import { TodayAgendaSection } from './TodayAgendaSection';
 import {
@@ -554,14 +555,16 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       });
   };
 
-  const handleToggleItem = (item: TodayItem, entryKey?: string): boolean => {
+  const handleToggleItem = async (item: TodayItem, entryKey?: string): Promise<boolean> => {
     if (!item.done && item.isBlocked && item.blockingTaskNames?.length) {
-      const blockers = item.blockingTaskNames.map((name) => `• ${name}`).join('\n');
-      if (
-        !window.confirm(
-          `Esta tarea depende de requisitos aún no completados:\n\n${blockers}\n\n¿Deseas marcarla como completada de todos modos?`
-        )
-      ) {
+      const confirmed = await requestConfirm({
+        title: 'Tarea con requisitos pendientes',
+        message: 'Esta tarea depende de requisitos aún no completados. ¿Querés marcarla como completada de todos modos?',
+        details: item.blockingTaskNames,
+        confirmLabel: 'Completar igual',
+        tone: 'primary',
+      });
+      if (!confirmed) {
         return false;
       }
     }
@@ -628,7 +631,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       }
       return;
     }
-    if (entry.todayItem) handleToggleItem(entry.todayItem, entry.key);
+    if (entry.todayItem) void handleToggleItem(entry.todayItem, entry.key);
   };
 
   const handleMoveEntryToTomorrow = (entry: TodayAgendaEntry) => {
@@ -743,20 +746,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   };
 
   const isMovingAllPastRef = useRef(false);
-  const handleMoveAllPastToToday = () => {
+  const handleMoveAllPastToToday = async () => {
     if (isMovingAllPastRef.current || !pastPendingExtras.length) return;
     const count = pastPendingExtras.length;
-    let confirmed = false;
-    try {
-      confirmed =
-        typeof window !== 'undefined' && typeof window.confirm === 'function'
-          ? window.confirm(
-              `¿Mover ${count === 1 ? 'la tarea pendiente anterior' : `las ${count} tareas pendientes anteriores`} a la agenda de hoy?\n\nLas fechas límite (si las tienen) no se modificarán.`
-            )
-          : true;
-    } catch {
-      confirmed = true;
-    }
+    const confirmed = await requestConfirm({
+      title: 'Mover tareas pendientes a hoy',
+      message: `¿Mover ${count === 1 ? 'la tarea pendiente anterior' : `las ${count} tareas pendientes anteriores`} a la agenda de hoy?\n\nLas fechas límite (si las tienen) no se modificarán.`,
+      confirmLabel: 'Mover a hoy',
+      tone: 'primary',
+    });
     if (!confirmed) return;
 
     isMovingAllPastRef.current = true;

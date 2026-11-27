@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ViewType, LifeOSState } from '../types';
 import { isSoundEnabled, setSoundEnabled, playSound } from '../lib/audio';
+import { triggerHaptic } from '../lib/haptics';
 import type { CloudSyncStatus, CloudUser } from '../lib/cloudSync';
 import { preloadCloudSync } from '../lib/cloudSyncLoader';
 import { CelestianMark } from './visual/CelestianMark';
@@ -106,6 +107,7 @@ export const Topbar: React.FC<TopbarProps> = ({
     const next = !isSoundEnabled();
     setSoundOn(next);
     setSoundEnabled(next);
+    triggerHaptic('light');
     if (next) playSound('click');
   };
 

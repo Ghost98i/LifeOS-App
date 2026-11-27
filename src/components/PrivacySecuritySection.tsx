@@ -26,6 +26,7 @@ import { CelestianSwitch } from './ui/CelestianSwitch';
 import { CompletionCheck } from './ui/CompletionCheck';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import { showToast } from '../lib/toast';
+import { requestConfirm } from '../lib/confirmDialog';
 import { getHumanModuleLabel, SYNC_MODULES } from '../lib/syncModel';
 import {
   provisionZeroKnowledgeKeys,
@@ -596,9 +597,12 @@ export const PrivacySecuritySection: React.FC<PrivacySecuritySectionProps> = ({
 
   const handleForgetDevice = async () => {
     if (!storageUserId) return;
-    const confirmed = window.confirm(
-      '¿Bloquear y olvidar este dispositivo?\n\nPara volver a ver o sincronizar tus datos acá, tendrás que ingresar tu contraseña de bóveda o tu código de respaldo.'
-    );
+    const confirmed = await requestConfirm({
+      title: 'Bloquear y olvidar este dispositivo',
+      message: 'Para volver a ver o sincronizar tus datos acá, tendrás que ingresar tu contraseña de bóveda o tu código de respaldo.',
+      confirmLabel: 'Bloquear dispositivo',
+      tone: 'danger',
+    });
     if (!confirmed) return;
 
     await forgetDeviceTrust(storageUserId);
