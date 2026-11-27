@@ -18,6 +18,7 @@ import {
 import type { LucideIcon } from 'lucide-react';
 import type { LifeOSState, ViewType } from '../types';
 import type { CloudSyncStatus, CloudUser } from '../lib/cloudSync';
+import { preloadCloudSync } from '../lib/cloudSyncLoader';
 import {
   DEFAULT_ONBOARDING_MODULE_IDS,
   ONBOARDING_MODULES,
@@ -250,6 +251,9 @@ export const OnboardingView: React.FC<OnboardingViewProps> = ({
                   <button
                     type="button"
                     disabled={isConnectingGoogle}
+                    onPointerEnter={() => { void preloadCloudSync(); }}
+                    onFocus={() => { void preloadCloudSync(); }}
+                    onTouchStart={() => { void preloadCloudSync(); }}
                     onClick={(event) => {
                       blurOnMouseClick(event);
                       playSound('click');

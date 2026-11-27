@@ -1,6 +1,7 @@
 import React from 'react';
 import type { LifeOSState, ViewType } from '../types';
 import type { CloudSyncStatus } from '../lib/cloudSync';
+import { preloadCloudSync } from '../lib/cloudSyncLoader';
 import { AppIcon } from './AppIcon';
 import { getMobileNavSlots } from '../lib/moduleVisibility';
 
@@ -116,6 +117,9 @@ export const MobileNav: React.FC<MobileNavProps> = ({
         {cloudConfigured && !cloudUser && onCloudSignIn ? (
           <button
             type="button"
+            onPointerEnter={() => { void preloadCloudSync(); }}
+            onFocus={() => { void preloadCloudSync(); }}
+            onTouchStart={() => { void preloadCloudSync(); }}
             onClick={onCloudSignIn}
             className="flex min-h-8 items-center gap-1.5 rounded-full px-1.5 cursor-pointer hover:opacity-90"
             title="Conectar con Google para sincronizar"

@@ -40,6 +40,7 @@ import {
   todayISO,
 } from '../lib/storage';
 import { getOrCreateDeviceId, type CloudSyncStatus, type CloudUser } from '../lib/cloudSync';
+import { preloadCloudSync } from '../lib/cloudSyncLoader';
 import {
   cryptoSession,
   hasVaultPassword,
@@ -823,7 +824,14 @@ export const ConfigView: React.FC<ConfigViewProps> = ({
                     )}
                   </div>
                   {onCloudSignIn && (
-                    <button type="button" onClick={onCloudSignIn} className={primaryBtnClass}>
+                    <button
+                      type="button"
+                      onPointerEnter={() => { void preloadCloudSync(); }}
+                      onFocus={() => { void preloadCloudSync(); }}
+                      onTouchStart={() => { void preloadCloudSync(); }}
+                      onClick={onCloudSignIn}
+                      className={primaryBtnClass}
+                    >
                       <Cloud size={15} strokeWidth={1.75} aria-hidden="true" />
                       <span>Conectar con Google</span>
                     </button>
