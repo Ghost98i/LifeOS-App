@@ -43,6 +43,7 @@ import {
   formatRelativeTime,
 } from '../lib/notesFlows';
 import { showToast } from '../lib/toast';
+import { requestConfirm } from '../lib/confirmDialog';
 import { isStreamingEnabled } from '../lib/moduleVisibility';
 import { ProjectsManager } from './ProjectsManager';
 import { PrivacyAmount, PrivateFinancialText, PrivacyProvider, usePrivacyMode } from './PrivacyAmount';
@@ -349,11 +350,25 @@ export const NotasView: React.FC<NotasViewProps> = ({
     } catch (error) { setNoteError(error instanceof Error ? error.message : 'No se pudo guardar la nota.'); }
     return false;
   };
-  const closeEditor = () => {
-    if (editingNote && (editTitle !== (editingNote.title || '') || editText !== editingNote.text
-      || editTags !== (editingNote.tags?.join(', ') || '') || editPinned !== Boolean(editingNote.pinned)
-      || editArchived !== Boolean(editingNote.archived))
-      && !window.confirm('Hay cambios sin guardar. ¿Descartarlos y cerrar?')) return;
+  const closeEditor = async () => {
+    const hasUnsaved = Boolean(
+      editingNote && (
+        editTitle !== (editingNote.title || '') ||
+        editText !== editingNote.text ||
+        editTags !== (editingNote.tags?.join(', ') || '') ||
+        editPinned !== Boolean(editingNote.pinned) ||
+        editArchived !== Boolean(editingNote.archived)
+      )
+    );
+    if (hasUnsaved) {
+      const confirmed = await requestConfirm({
+        title: 'Descartar cambios sin guardar',
+        message: 'Editaste esta nota pero todavía no guardaste los cambios. ¿Querés descartarlos y cerrar?',
+        confirmLabel: 'Descartar y cerrar',
+        tone: 'danger',
+      });
+      if (!confirmed) return;
+    }
     setEditingNote(null); setNoteError('');
   };
   React.useEffect(() => {
@@ -447,12 +462,20 @@ export const NotasView: React.FC<NotasViewProps> = ({
     showToast('Nota convertida en tarea para Hoy', 'success');
   };
 
-  const handleDeletePostit = (id: string) => {
+  const handleDeletePostit = async (id: string) => {
     const note = state.notes?.postits.find((item) => item.id === id);
     const placed = currentPlacements.some((p) => p.noteId === id);
-    if ((note?.pinned || placed) && !window.confirm(placed
-      ? `Eliminar esta nota${note?.pinned ? ' fijada' : ''} también retirará su colocación local en Gimnasio. ¿Continuar?`
-      : 'Esta nota está fijada. ¿Querés eliminarla definitivamente?')) return;
+    if (note?.pinned || placed) {
+      const confirmed = await requestConfirm({
+        title: placed ? 'Eliminar nota colocada en Gimnasio' : 'Eliminar nota fijada',
+        message: placed
+          ? `Eliminar esta nota${note?.pinned ? ' fijada' : ''} también retirará su colocación local en Gimnasio. ¿Querés continuar?`
+          : 'Esta nota está fijada arriba. ¿Querés eliminarla?',
+        confirmLabel: 'Eliminar nota',
+        tone: 'danger',
+      });
+      if (!confirmed) return;
+    }
     const snapshot = note ? structuredClone(note) : null;
     const saved = saveNoteChange((draft) => {
       deleteNote(draft, id);
@@ -897,7 +920,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
           {/* Quick Add / New Note Modal (Bottom Sheet on mobile, centered on desktop) */}
           {showAddForm && (
             <div
-              className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/60 p-0 backdrop-blur-xs sm:items-center sm:p-4 animate-in fade-in"
+              className="celestian-modal-backdrop fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/60 p-0 backdrop-blur-xs sm:items-center sm:p-4"
               onClick={() => setShowAddForm(false)}
             >
               <div
@@ -913,7 +936,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
                     addModalRef.current?.querySelector('form')?.requestSubmit();
                   }
                 }}
-                className="w-full max-w-2xl max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-4 shadow-2xl dark:border-white/[0.07] dark:bg-[#0D111A]"
+                className="celestian-modal-panel w-full max-w-2xl max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-4 shadow-2xl dark:border-white/[0.07] dark:bg-[#0D111A]"
               >
                 <div className="mx-auto h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />
                 <div className="flex items-center justify-between gap-2">
@@ -1248,7 +1271,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
 
           {/* Edit Note Modal (Bottom Sheet on mobile, centered on desktop) */}
           {editingNote && (
-            <div className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/60 p-0 backdrop-blur-xs sm:items-center sm:p-4 animate-in fade-in" onClick={closeEditor}>
+            <div className="celestian-modal-backdrop fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/60 p-0 backdrop-blur-xs sm:items-center sm:p-4" onClick={() => { void closeEditor(); }}>
               <div
                 ref={editorRef}
                 role="dialog"
@@ -1256,7 +1279,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
                 aria-labelledby="note-editor-title"
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(event) => {
-                  if (event.key === 'Escape') { event.stopPropagation(); closeEditor(); }
+                  if (event.key === 'Escape') { event.stopPropagation(); void closeEditor(); }
                   if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); editorRef.current?.querySelector('form')?.requestSubmit(); }
                   if (event.key === 'Tab') {
                     const controls = Array.from(editorRef.current?.querySelectorAll('button:not(:disabled), input, textarea, select') || []) as HTMLElement[];
@@ -1265,7 +1288,7 @@ export const NotasView: React.FC<NotasViewProps> = ({
                     if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
                   }
                 }}
-                className="w-full max-w-3xl max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-4 shadow-2xl dark:border-white/[0.07] dark:bg-[#0D111A]"
+                className="celestian-modal-panel w-full max-w-3xl max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-4 shadow-2xl dark:border-white/[0.07] dark:bg-[#0D111A]"
               >
                 <div className="mx-auto h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />
                 <div className="flex items-center justify-between gap-2">
@@ -1734,14 +1757,14 @@ export const NotasView: React.FC<NotasViewProps> = ({
       {/* Update Goal Value Modal (replaces native window.prompt with Block 30 bottom sheet) */}
       {updatingGoal && (
         <div
-          className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/60 p-0 backdrop-blur-xs sm:items-center sm:p-4 animate-in fade-in"
+          className="celestian-modal-backdrop fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/60 p-0 backdrop-blur-xs sm:items-center sm:p-4"
           onClick={() => setUpdatingGoal(null)}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="update-goal-title"
-            className="w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-4 shadow-2xl dark:border-white/[0.08] dark:bg-[#0D111A]"
+            className="celestian-modal-panel w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-4 shadow-2xl dark:border-white/[0.08] dark:bg-[#0D111A]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />

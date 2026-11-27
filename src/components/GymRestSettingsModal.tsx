@@ -118,7 +118,7 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[130] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4 backdrop-blur-xs animate-in fade-in"
+      className="celestian-modal-backdrop fixed inset-0 z-[130] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4 backdrop-blur-xs"
       onClick={onClose}
     >
       <div
@@ -128,7 +128,7 @@ export const GymRestSettingsModal: React.FC<GymRestSettingsModalProps> = ({
         aria-modal="true"
         aria-labelledby="gym-rest-settings-title"
         data-gym-rest-settings
-        className="flex max-h-[90dvh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl"
+        className="celestian-modal-panel flex max-h-[90dvh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />

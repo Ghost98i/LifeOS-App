@@ -42,6 +42,7 @@ import { DashboardSkeleton } from './components/DashboardSkeleton';
 import type { CaptureKind } from './components/MobileQuickCapture';
 import { MobileNav } from './components/MobileNav';
 import { ToastViewport } from './components/ToastViewport';
+import { CelestianConfirmHost } from './components/CelestianConfirmHost';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { syncDocumentThemeColor } from './lib/pwaRecovery';
 import { showToast } from './lib/toast';
@@ -3322,6 +3323,7 @@ export default function App() {
         onForceSync={cloudUser ? () => { void handleForceSync(); } : undefined}
       /></Suspense>}
       <ToastViewport />
+      <CelestianConfirmHost />
       {isGymOverlayActive && (
         <Suspense fallback={null}>
           <GymRestOverlay state={state} onUpdateState={updateState} onOpenGym={() => handleNavigate('gimnasio')} />

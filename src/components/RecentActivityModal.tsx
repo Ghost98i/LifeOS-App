@@ -117,7 +117,7 @@ export const RecentActivityModal: React.FC<RecentActivityModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="recent-activity-modal-title"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4"
+      className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -125,7 +125,7 @@ export const RecentActivityModal: React.FC<RecentActivityModalProps> = ({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-slate-200/80 bg-white shadow-2xl sm:rounded-2xl dark:border-white/[0.08] dark:bg-[#0D111A]"
+        className="celestian-modal-panel relative flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-slate-200/80 bg-white shadow-2xl sm:rounded-2xl dark:border-white/[0.08] dark:bg-[#0D111A]"
       >
         <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-white/[0.06]">
           <div className="flex items-center gap-2">

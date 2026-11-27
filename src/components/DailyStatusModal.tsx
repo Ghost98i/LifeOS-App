@@ -29,7 +29,7 @@ export const DailyStatusModal: React.FC<DailyStatusModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="daily-status-modal-title"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4"
+      className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4"
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -37,7 +37,7 @@ export const DailyStatusModal: React.FC<DailyStatusModalProps> = ({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className="relative flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-slate-200/80 bg-white shadow-xl dark:border-white/[0.07] dark:bg-[#0D111A] dark:shadow-none sm:rounded-2xl"
+        className="celestian-modal-panel relative flex max-h-[90dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-slate-200/80 bg-white shadow-xl dark:border-white/[0.07] dark:bg-[#0D111A] dark:shadow-none sm:rounded-2xl"
       >
         <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-5 py-3.5 dark:border-white/[0.06] sm:px-6">

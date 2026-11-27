@@ -225,11 +225,25 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({
   };
 
   const handleDeleteEvent = (id: string) => {
+    const existing = (state.calendarEvents || []).find((e) => e.id === id);
+    const snapshot = existing ? structuredClone(existing) : null;
     const saved = onUpdateState((draft) => {
       draft.calendarEvents = (draft.calendarEvents || []).filter((e) => e.id !== id);
     });
     if (!saved) return;
-    showToast('Acontecimiento eliminado.', 'info');
+    showToast('Acontecimiento eliminado.', 'info', snapshot ? {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (onUpdateState((draft) => {
+          if (!draft.calendarEvents) draft.calendarEvents = [];
+          if (!draft.calendarEvents.some((e) => e.id === snapshot.id)) {
+            draft.calendarEvents.push(snapshot);
+          }
+        })) {
+          showToast('Acontecimiento restaurado.', 'success');
+        }
+      },
+    } : undefined);
   };
 
   const handleConfirmFinancialFromCalendar = (item: CalendarDisplayItem) => {
@@ -698,7 +712,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({
       {/* Add / Edit Event Modal */}
       {showEventModal && (
         <div
-          className="fixed inset-0 z-50 !m-0 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          className="celestian-modal-backdrop fixed inset-0 z-50 !m-0 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs"
           onClick={() => setShowEventModal(false)}
         >
           <div
@@ -706,7 +720,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({
             aria-modal="true"
             aria-labelledby="event-form-title"
             ref={eventDialogRef}
-            className="bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl p-5 pb-[max(1rem,env(safe-area-inset-bottom))] max-w-md w-full max-h-[90dvh] overflow-y-auto overscroll-contain shadow-2xl space-y-4"
+            className="celestian-modal-panel bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl p-5 pb-[max(1rem,env(safe-area-inset-bottom))] max-w-md w-full max-h-[90dvh] overflow-y-auto overscroll-contain shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto mb-1 h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />
@@ -837,14 +851,14 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({
       {/* Selected Item Details Modal (for financial commitments, exams, etc.) */}
       {selectedItem && (
         <div
-          className="fixed inset-0 z-50 !m-0 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          className="celestian-modal-backdrop fixed inset-0 z-50 !m-0 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs"
           onClick={() => setSelectedItem(null)}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="calendar-item-title"
-            className="bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl p-5 pb-[max(1rem,env(safe-area-inset-bottom))] max-w-md w-full max-h-[90dvh] overflow-y-auto overscroll-contain shadow-2xl space-y-4"
+            className="celestian-modal-panel bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl p-5 pb-[max(1rem,env(safe-area-inset-bottom))] max-w-md w-full max-h-[90dvh] overflow-y-auto overscroll-contain shadow-2xl space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto mb-1 h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />

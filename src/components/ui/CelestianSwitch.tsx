@@ -1,4 +1,5 @@
 import React from 'react';
+import { triggerHaptic } from '../../lib/haptics';
 
 export interface CelestianSwitchProps {
   checked: boolean;
@@ -41,7 +42,10 @@ export const CelestianSwitch: React.FC<CelestianSwitchProps> = ({
       aria-labelledby={ariaLabelledBy}
       disabled={disabled}
       data-celestian-switch="true"
-      onClick={() => onChange(!checked)}
+      onClick={() => {
+        triggerHaptic('light');
+        onChange(!checked);
+      }}
       className={`relative inline-flex ${trackSize} shrink-0 items-center rounded-full transition-colors duration-200 motion-reduce:transition-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-[#0D111A] disabled:opacity-45 disabled:cursor-not-allowed cursor-pointer ${
         checked
           ? 'bg-[#4F46E5] dark:bg-[#4F46E5]'

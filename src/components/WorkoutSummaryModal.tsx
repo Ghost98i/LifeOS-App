@@ -71,7 +71,7 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-xs animate-in fade-in"
+      className="celestian-modal-backdrop fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-xs"
       onClick={onClose}
     >
       <div
@@ -80,7 +80,7 @@ export const WorkoutSummaryModal: React.FC<WorkoutSummaryModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="workout-summary-title"
-        className="gym-summary-modal flex flex-col w-full sm:max-w-lg max-h-[90dvh] rounded-t-2xl sm:rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-2xl overflow-hidden"
+        className="celestian-modal-panel gym-summary-modal flex flex-col w-full sm:max-w-lg max-h-[90dvh] rounded-t-2xl sm:rounded-2xl bg-[var(--card)] border border-[var(--border)] shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />

@@ -601,14 +601,14 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
 
       {formOpen && (
         <div
-          className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4 animate-in fade-in"
+          className="celestian-modal-backdrop fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4"
           onClick={closeForm}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="job-form-title"
-            className="w-full max-w-3xl max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:p-5"
+            className="celestian-modal-panel w-full max-w-3xl max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />

@@ -10,6 +10,7 @@ import type {
 import { AppIcon } from './AppIcon';
 import { useDialogFocus } from '../hooks/useDialogFocus';
 import { showToast } from '../lib/toast';
+import { requestConfirm } from '../lib/confirmDialog';
 import { fmtDate, todayISO, uid } from '../lib/storage';
 import { playSound } from '../lib/audio';
 import {
@@ -314,11 +315,26 @@ export const StudyPracticeSection: React.FC<StudyPracticeSectionProps> = ({
   };
 
   const handleDeleteQuestion = (id: string) => {
-    if (!window.confirm('¿Eliminar esta pregunta del banco de repaso?')) return;
+    const existing = questions.find((q) => q.id === id);
+    const snapshot = existing ? structuredClone(existing) : null;
     const saved = onUpdateState((draft) => {
       deleteStudyQuestion(draft, id);
     });
-    if (saved) showToast('Pregunta eliminada.', 'info');
+    if (!saved) return;
+    showToast('Pregunta eliminada.', 'info', snapshot ? {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (onUpdateState((draft) => {
+          if (!draft.study) draft.study = { subjects: [], exams: [], studyLog: [] };
+          if (!draft.study.questions) draft.study.questions = [];
+          if (!draft.study.questions.some((q) => q.id === snapshot.id)) {
+            draft.study.questions.unshift({ ...snapshot, updatedAt: Date.now() });
+          }
+        })) {
+          showToast('Pregunta restaurada.', 'success');
+        }
+      },
+    } : undefined);
   };
 
   const handleStartPractice = () => {
@@ -353,8 +369,14 @@ export const StudyPracticeSection: React.FC<StudyPracticeSectionProps> = ({
     setShowingFeedback(false);
   };
 
-  const handleCancelActivePractice = () => {
-    if (!window.confirm('¿Abandonar esta sesión de repaso sin guardar?')) return;
+  const handleCancelActivePractice = async () => {
+    const confirmed = await requestConfirm({
+      title: 'Abandonar sesión de repaso',
+      message: 'Se perderá el progreso de esta sesión sin guardar resultados.',
+      confirmLabel: 'Abandonar',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
     onUpdateState((draft) => {
       draft.study.activePracticeSession = null;
     });

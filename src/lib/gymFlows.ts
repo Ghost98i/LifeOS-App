@@ -308,10 +308,10 @@ export function deleteGymTemplateExercise(
 
 export function requestGymSessionDeletion(
   session: GymSession,
-  confirm: (message: string) => boolean
+  confirmAction: (message: string) => boolean
 ): boolean {
   const label = session.status === 'completed' ? 'histórica' : 'activa';
-  return confirm(`¿Eliminar esta sesión ${label}? Esta acción no se puede deshacer.`);
+  return confirmAction(`¿Eliminar esta sesión ${label}? Esta acción no se puede deshacer.`);
 }
 
 export interface AddExerciseToSessionInput {

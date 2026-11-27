@@ -9,6 +9,7 @@ import {
   FinancialCommitmentFrequency,
 } from '../types';
 import { playExpenseLogged, playSound } from '../lib/audio';
+import { triggerHaptic } from '../lib/haptics';
 import { confirmedFinancialCurrency, formatPlannedAmount, requireFinancialCurrency } from '../lib/financeCurrencyPolicy';
 import {
   todayISO,
@@ -353,6 +354,7 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
       } else {
         playExpenseLogged();
       }
+      triggerHaptic('success');
       setIsTxModalOpen(false);
       setEditingTx(null);
       showToast(editingTx ? 'Movimiento actualizado.' : `${data.type === 'ingreso' ? 'Ingreso' : 'Gasto'} guardado.`);
@@ -586,11 +588,26 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   };
 
   const handleDeleteSubscription = (id: string) => {
+    const existing = (state.finance?.subscriptions || []).find((s) => s.id === id);
+    const snapshot = existing ? structuredClone(existing) : null;
     if (onUpdateState((draft) => {
       if (!draft.finance) return;
       draft.finance.subscriptions = (draft.finance.subscriptions || []).filter((s) => s.id !== id);
     }) === false) return;
-    showToast('Suscripción eliminada.', 'info');
+    showToast('Suscripción eliminada.', 'info', snapshot ? {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (onUpdateState((draft) => {
+          if (!draft.finance) return;
+          if (!draft.finance.subscriptions) draft.finance.subscriptions = [];
+          if (!draft.finance.subscriptions.some((s) => s.id === snapshot.id)) {
+            draft.finance.subscriptions.push(snapshot);
+          }
+        }) !== false) {
+          showToast('Suscripción restaurada.', 'success');
+        }
+      },
+    } : undefined);
   };
 
   const handleAddDebt = (name: string, amountVal: number, monthlyPaymentVal: number, dueDateVal: string | null) => {
@@ -609,11 +626,26 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   };
 
   const handleDeleteDebt = (id: string) => {
+    const existing = (state.finance?.debts || []).find((d) => d.id === id);
+    const snapshot = existing ? structuredClone(existing) : null;
     if (onUpdateState((draft) => {
       if (!draft.finance) return;
       draft.finance.debts = (draft.finance.debts || []).filter((d) => d.id !== id);
     }) === false) return;
-    showToast('Deuda eliminada.', 'info');
+    showToast('Deuda eliminada.', 'info', snapshot ? {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (onUpdateState((draft) => {
+          if (!draft.finance) return;
+          if (!draft.finance.debts) draft.finance.debts = [];
+          if (!draft.finance.debts.some((d) => d.id === snapshot.id)) {
+            draft.finance.debts.push(snapshot);
+          }
+        }) !== false) {
+          showToast('Deuda restaurada.', 'success');
+        }
+      },
+    } : undefined);
   };
 
   const handleAddInvestment = (name: string, amountVal: number) => {
@@ -630,11 +662,26 @@ export const FinanzasView: React.FC<FinanzasViewProps> = ({
   };
 
   const handleDeleteInvestment = (id: string) => {
+    const existing = (state.finance?.investments || []).find((i) => i.id === id);
+    const snapshot = existing ? structuredClone(existing) : null;
     if (onUpdateState((draft) => {
       if (!draft.finance) return;
       draft.finance.investments = (draft.finance.investments || []).filter((i) => i.id !== id);
     }) === false) return;
-    showToast('Inversión eliminada.', 'info');
+    showToast('Inversión eliminada.', 'info', snapshot ? {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (onUpdateState((draft) => {
+          if (!draft.finance) return;
+          if (!draft.finance.investments) draft.finance.investments = [];
+          if (!draft.finance.investments.some((i) => i.id === snapshot.id)) {
+            draft.finance.investments.push(snapshot);
+          }
+        }) !== false) {
+          showToast('Inversión restaurada.', 'success');
+        }
+      },
+    } : undefined);
   };
 
   // Commitments Operations

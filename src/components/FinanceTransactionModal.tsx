@@ -5,6 +5,8 @@ import { Transaction, Account } from '../types';
 import { todayISO, fmtDate, parseDecimalInput, uid } from '../lib/storage';
 import { isExpenseBiasedCategory, resolveDefaultCategoryForType } from '../lib/financeIcons';
 import { AppIcon } from './AppIcon';
+import { showToast } from '../lib/toast';
+import { triggerHaptic } from '../lib/haptics';
 
 export interface FinanceTransactionModalProps {
   open: boolean;
@@ -43,6 +45,7 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
   const normalizedInitialType: 'gasto' | 'ingreso' = initialType === 'ingreso' ? 'ingreso' : 'gasto';
   const [type, setType] = useState<'gasto' | 'ingreso'>(editingTransaction?.type ?? normalizedInitialType);
   const [amount, setAmount] = useState(editingTransaction ? String(editingTransaction.amount) : '');
+  const [formError, setFormError] = useState<string | null>(null);
   const [category, setCategory] = useState(() =>
     editingTransaction
       ? editingTransaction.category
@@ -121,13 +124,20 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
     e.preventDefault();
     const parsed = parseDecimalInput(amount);
     if (parsed.error || parsed.value === null || parsed.value <= 0) {
-      alert(parsed.error || 'Ingresá un importe válido mayor a cero.');
+      const msg = parsed.error || 'Ingresá un importe válido mayor a cero.';
+      setFormError(msg);
+      triggerHaptic('warning');
+      showToast(msg, 'error');
       return;
     }
     if (!accountId) {
-      alert('Elegí una cuenta.');
+      const msg = 'Elegí una cuenta para registrar el movimiento.';
+      setFormError(msg);
+      triggerHaptic('warning');
+      showToast(msg, 'error');
       return;
     }
+    setFormError(null);
 
     onSubmit({
       id: editingTransaction?.id || (operationId.current ??= globalThis.crypto?.randomUUID?.() || uid()),
@@ -152,12 +162,12 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
       role="dialog"
       aria-modal="true"
       aria-labelledby="finance-tx-title"
-      className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+      className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative flex w-full max-w-lg max-h-[90dvh] flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl transition-all">
+      <div className="celestian-modal-panel relative flex w-full max-w-lg max-h-[90dvh] flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl">
         <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
 
         {/* Header — Unified icon direction with Hero quick actions */}
@@ -195,6 +205,11 @@ export const FinanceTransactionModal: React.FC<FinanceTransactionModalProps> = (
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 sm:px-6 space-y-4">
+          {formError && (
+            <div role="alert" className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-2.5 text-xs font-semibold text-rose-600 dark:text-rose-300">
+              {formError}
+            </div>
+          )}
           {/* Segmented Type Picker */}
           <div className="grid grid-cols-2 gap-1 p-1 bg-[var(--surface-muted)] rounded-xl border border-[var(--border)]">
             <button

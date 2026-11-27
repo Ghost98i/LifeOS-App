@@ -15,6 +15,9 @@ import { fmtDate, formatMoney, parseDecimalInput, roundMoney, todayISO } from '.
 import { AppIcon } from './AppIcon';
 import { PrivateFinancialText, PrivacyInput, PrivacyAmount } from './PrivacyAmount';
 import { maskFinancialText } from '../lib/financialPrivacy';
+import { requestConfirm } from '../lib/confirmDialog';
+import { playExpenseLogged } from '../lib/audio';
+import { triggerHaptic } from '../lib/haptics';
 
 interface FinanceAgreementsSectionProps {
   state: LifeOSState;
@@ -365,6 +368,8 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
         ? '••••'
         : formatMoney(parsedAmt.value, payingAgreement.currency);
       setPayingAgreement(null);
+      playExpenseLogged();
+      triggerHaptic('success');
       onShowToast?.(`Abono registrado: -${formattedPaid} a ${agreementName}.`, 'success');
     } catch (err: any) {
       setPayError(err.message || 'Error al registrar el abono.');
@@ -373,8 +378,14 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
     }
   };
 
-  const handleDelete = (id: string, title: string) => {
-    if (window.confirm(`¿Seguro que querés eliminar el acuerdo "${title}"? Los movimientos registrados en tus cuentas no se borrarán, pero se desvincularán del acuerdo.`)) {
+  const handleDelete = async (id: string, title: string) => {
+    const confirmed = await requestConfirm({
+      title: 'Eliminar acuerdo',
+      message: `¿Seguro que querés eliminar el acuerdo "${title}"? Los movimientos registrados en tus cuentas no se borrarán, pero se desvincularán del acuerdo.`,
+      confirmLabel: 'Eliminar acuerdo',
+      tone: 'danger',
+    });
+    if (confirmed) {
       onUpdateState((draft) => {
         deleteFinancingAgreement(draft, id);
       });

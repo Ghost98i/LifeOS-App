@@ -121,7 +121,7 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+      className="celestian-modal-backdrop fixed inset-0 z-[130] flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs"
       onClick={onClose}
     >
       <div
@@ -131,7 +131,7 @@ export const FinanceReconcileModal: React.FC<FinanceReconcileModalProps> = ({
         aria-labelledby="finance-reconcile-title"
         aria-describedby="finance-reconcile-description"
         tabIndex={-1}
-        className="bg-[var(--card)] border border-[var(--border)] rounded-2xl p-4 sm:p-6 max-w-md w-full space-y-4 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto"
+        className="celestian-modal-panel bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl p-4 sm:p-6 pb-[max(1rem,env(safe-area-inset-bottom))] max-w-md w-full space-y-4 shadow-2xl max-h-[90dvh] overflow-y-auto overscroll-contain"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

@@ -22,6 +22,7 @@ import { CompletionCheck } from './ui/CompletionCheck';
 import { daysBetween, fmtDate, todayISO, uid } from '../lib/storage';
 import { playSound } from '../lib/audio';
 import { showToast } from '../lib/toast';
+import { requestConfirm } from '../lib/confirmDialog';
 import { maskFinancialText } from '../lib/financialPrivacy';
 import { usePrivacyMode } from './PrivacyAmount';
 import { sendProjectNextStepToToday, sendProjectTaskToToday } from '../lib/projectFlows';
@@ -187,13 +188,36 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({
     showToast(`Estado cambiado a ${PROJECT_STATUS_LABELS[newStatus]}.`);
   };
 
-  const handleDeleteProject = (id: string) => {
-    if (!window.confirm('¿Seguro que querés eliminar este proyecto?')) return;
+  const handleDeleteProject = async (id: string) => {
+    const project = (state.projects || []).find((x) => x.id === id);
+    const taskCount = project?.tasks?.length || 0;
+    const confirmed = await requestConfirm({
+      title: 'Eliminar proyecto',
+      message: project
+        ? `¿Seguro que querés eliminar "${project.title}"${taskCount > 0 ? ` junto con sus ${taskCount} ${taskCount === 1 ? 'subtarea' : 'subtareas'}` : ''}?`
+        : '¿Seguro que querés eliminar este proyecto?',
+      confirmLabel: 'Eliminar proyecto',
+      tone: 'danger',
+    });
+    if (!confirmed) return;
+    const snapshot = project ? structuredClone(project) : null;
     const saved = onUpdateState((draft) => {
       draft.projects = (draft.projects || []).filter((x) => x.id !== id);
     });
     if (saved === false) return;
-    showToast('Proyecto eliminado.', 'info');
+    showToast('Proyecto eliminado.', 'info', snapshot ? {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (onUpdateState((draft) => {
+          if (!draft.projects) draft.projects = [];
+          if (!draft.projects.some((p) => p.id === snapshot.id)) {
+            draft.projects.push(snapshot);
+          }
+        }) !== false) {
+          showToast(`Proyecto "${snapshot.title}" restaurado.`, 'success');
+        }
+      },
+    } : undefined);
   };
 
   const handleSendNextStepToToday = (project: Project) => {
@@ -256,16 +280,20 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({
     setTaskInputs((prev) => ({ ...prev, [projectId]: '' }));
   };
 
-  const handleToggleTask = (projectId: string, taskId: string) => {
+  const handleToggleTask = async (projectId: string, taskId: string) => {
     const taskMap = getUnifiedTaskMap(state);
     const task = taskMap.get(taskId);
 
     if (task && !task.done) {
       const blockers = getBlockingTasks(task, taskMap);
       if (blockers.length > 0) {
-        const proceed = window.confirm(
-          `Esta tarea depende de:\n${blockers.map((b) => `• ${b.text}`).join('\n')}\n\n¿Deseas marcarla como completada de todos modos?`
-        );
+        const proceed = await requestConfirm({
+          title: 'Tarea con requisitos pendientes',
+          message: 'Esta tarea depende de requisitos aún no completados. ¿Querés marcarla como completada de todos modos?',
+          details: blockers.map((b) => b.text),
+          confirmLabel: 'Completar igual',
+          tone: 'primary',
+        });
         if (!proceed) return;
       }
       const unblocks = getUnblockedCountIfCompleted(taskId, taskMap);
@@ -332,6 +360,9 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({
   };
 
   const handleDeleteTask = (projectId: string, taskId: string) => {
+    const existingProject = (state.projects || []).find((x) => x.id === projectId);
+    const existingTask = existingProject?.tasks?.find((task) => task.id === taskId);
+    const snapshot = existingTask ? structuredClone(existingTask) : null;
     const saved = onUpdateState((draft) => {
       const p = (draft.projects || []).find((x) => x.id === projectId);
       if (p && p.tasks) {
@@ -339,7 +370,23 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({
         p.updatedAt = todayISO();
       }
     });
-    if (saved === false) return;
+    if (saved === false || !snapshot) return;
+    showToast('Subtarea eliminada.', 'info', {
+      actionLabel: 'Deshacer',
+      onAction: () => {
+        if (onUpdateState((draft) => {
+          const p = (draft.projects || []).find((x) => x.id === projectId);
+          if (!p) return;
+          if (!p.tasks) p.tasks = [];
+          if (!p.tasks.some((task) => task.id === snapshot.id)) {
+            p.tasks.push(snapshot);
+            p.updatedAt = todayISO();
+          }
+        }) !== false) {
+          showToast('Subtarea restaurada.', 'success');
+        }
+      },
+    });
   };
 
   const handleResolveBlocker = (projectId: string) => {
@@ -417,14 +464,14 @@ export const ProjectsManager: React.FC<ProjectsManagerProps> = ({
       {/* Create / Edit Project Modal (Bottom Sheet on mobile, centered on desktop) */}
       {showCreateForm && (
         <div
-          className="fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4 animate-in fade-in"
+          className="celestian-modal-backdrop fixed inset-0 z-50 !m-0 flex items-end justify-center bg-black/55 p-0 backdrop-blur-xs sm:items-center sm:p-4"
           onClick={resetForm}
         >
           <div
             role="dialog"
             aria-modal="true"
             aria-labelledby="project-form-title"
-            className="w-full max-w-2xl max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl dark:border-white/[0.08] dark:bg-[#0D111A] sm:p-5"
+            className="celestian-modal-panel w-full max-w-2xl max-h-[90dvh] overflow-y-auto overscroll-contain rounded-t-2xl sm:rounded-2xl border border-slate-200/80 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl dark:border-white/[0.08] dark:bg-[#0D111A] sm:p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-slate-300 dark:bg-white/20 sm:hidden" aria-hidden="true" />

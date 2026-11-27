@@ -4,6 +4,7 @@ import type { LifeOSState } from '../types';
 import { addTransfer, deleteTransfer } from '../lib/financeFlows';
 import { fmtDate, formatMoney, parseDecimalInput, todayISO } from '../lib/storage';
 import { playExpenseLogged } from '../lib/audio';
+import { triggerHaptic } from '../lib/haptics';
 import { showToast } from '../lib/toast';
 import { AppIcon } from './AppIcon';
 import { PrivateFinancialText, PrivacyInput, PrivacyAmount } from './PrivacyAmount';
@@ -109,6 +110,7 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
       });
       if (saved === false) return;
       playExpenseLogged();
+      triggerHaptic('success');
       showToast('Transferencia guardada sin alterar ingresos ni gastos.');
       onClose();
     } catch (error) {
@@ -134,7 +136,7 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+      className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs"
       onClick={onClose}
     >
       <div
@@ -142,7 +144,7 @@ export const FinanceTransferModal: React.FC<FinanceTransferModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="finance-transfer-title"
-        className="flex w-full max-w-md max-h-[90dvh] flex-col overflow-hidden bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl shadow-2xl"
+        className="celestian-modal-panel flex w-full max-w-md max-h-[90dvh] flex-col overflow-hidden bg-[var(--card)] border border-[var(--border)] rounded-t-2xl sm:rounded-2xl shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />

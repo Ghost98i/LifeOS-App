@@ -67,14 +67,14 @@ export const DismissedAttentionModal: React.FC<DismissedAttentionModalProps> = (
       role="dialog"
       aria-modal="true"
       aria-labelledby="dismissed-attention-title"
-      className="fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs animate-fadeIn"
+      className="celestian-modal-backdrop fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4 bg-black/60 backdrop-blur-xs"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div
         ref={modalRef}
-        className="relative flex w-full max-w-lg max-h-[90dvh] flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl transition-all"
+        className="celestian-modal-panel relative flex w-full max-w-lg max-h-[90dvh] flex-col overflow-hidden rounded-t-2xl sm:rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-2xl"
       >
         <div aria-hidden="true" className="mx-auto mt-2.5 mb-0.5 h-1 w-10 shrink-0 rounded-full bg-slate-300/80 dark:bg-white/20 sm:hidden" />
 
