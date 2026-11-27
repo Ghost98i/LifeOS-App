@@ -1,5 +1,4 @@
 import { validateDurableCommercial } from './lib/commercialDurable';
-import { reconcileFinancePublication } from './lib/financeSyncReconciliation';
 import { assertCommercialTransition } from './lib/commercialTransition';
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { PrivacyProvider } from './components/PrivacyAmount';
@@ -11,91 +10,35 @@ import {
   isUserPendingOnboarding,
   computeHiddenTabsFromSelection,
 } from './lib/moduleVisibility';
-import {
-  cloudSyncConfigured,
-  cloudStatusWithLocalChanges,
-  getLastCloudUserId,
-  getOrCreateDeviceId,
-  hasMeaningfulData,
-  fetchFreshCloudModules,
-  isCloudPaired,
-  isFirestorePermissionDenied,
-  loadCloudBaselineData,
-  loadCloudBaselines,
-  loadCloudRevisions,
-  markCloudPaired,
-  markLastCloudUserId,
-  observeCloudUser,
-  readLegacyCloudState,
-  CloudRevisionConflict,
-  CloudProtocolConflict,
-  CloudSyncSuspendedError,
-  ResaleRevisionConflict,
-  ResaleProtocolConflict,
-  deleteCloudAccountAndAuth,
-  isCloudSyncSuspended,
-  resumeCloudSync,
-  saveCloudBaselineData,
-  saveCloudBaselines,
-  saveCloudRevisions,
-  saveSyncRecoverySnapshot,
-  signInToCloud,
-  signOutFromCloud,
-  subscribeCloudModules,
-  suspendCloudSync,
-  writeCloudModulesGuarded,
-  type CloudSyncStatus,
-  type CloudUser,
-} from './lib/cloudSync';
-import {
-  SYNC_MODULES,
-  applySyncModule,
-  buildStateFromModules,
-  changedSyncModules,
-  decideInitialSyncAction,
-  extractPureModuleData,
-  isCleanOrOnboardingOnlyState,
-  mergeSyncModuleWithConflicts,
-  syncDataFingerprint,
-  syncModuleData,
-  syncModuleFingerprint,
-  type SyncBaselineMap,
-  type SyncConflictItem,
-  type SyncModuleKey,
-  type SyncRevisionMap,
+import type { CloudSyncStatus, CloudUser } from './lib/cloudSync';
+import type {
+  SyncBaselineMap,
+  SyncConflictItem,
+  SyncModuleKey,
+  SyncRevisionMap,
 } from './lib/syncModel';
+import type { WrappedKeyEnvelope } from './lib/cryptoCore';
 import {
-  decodeCloudModuleData,
-  cryptoSession,
-  loadWrappedKeyEnvelope,
-  saveWrappedKeyEnvelope,
-  clearWrappedKeyEnvelope,
-  encodeVaultPasswordInfo,
-  RECOVERY_KDF_BASE_INFO,
-  type WrappedKeyEnvelope,
-  CURRENT_KEY_FORMAT_VERSION,
-  CURRENT_CRYPTO_VERSION,
-  CRYPTO_ALGORITHM,
-} from './lib/cryptoCore';
-import {
-  tryUnlockWithDeviceTrust,
-} from './lib/deviceTrust';
-import {
-  detectDeletedEntityIds,
-  detectRestoredEntityIds,
-  detectGymSessionConflicts,
-  loadTombstones,
-  saveTombstones,
-} from './lib/syncMerge';
+  clearOAuthRedirectPending,
+  getLoadedCloudRuntime,
+  getLoadedCloudSync,
+  getOrCreateLocalDeviceId,
+  hasPendingCloudSessionHint,
+  hasWrappedKeyEnvelopeLocal,
+  isCloudSyncConfigured,
+  loadCloudRuntime,
+  markOAuthRedirectPending,
+  preloadCloudSync,
+  type CloudSyncRuntime,
+} from './lib/cloudSyncLoader';
 import { nextFinanceDeletionTimestamp } from './lib/financeRevision';
-import { detectFinanceSnapshotRegression } from './lib/financeSnapshotIntegrity';
 import { stampGymMutation } from './lib/gymSync';
 
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { Sidebar } from './components/Sidebar';
 import { Topbar } from './components/Topbar';
 
-import { DashboardView, DashboardSkeleton } from './components/DashboardView';
+import { DashboardSkeleton } from './components/DashboardSkeleton';
 import type { CaptureKind } from './components/MobileQuickCapture';
 import { MobileNav } from './components/MobileNav';
 import { ToastViewport } from './components/ToastViewport';
@@ -108,6 +51,7 @@ import { lazyWithPreload } from './lib/lazyWithPreload';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { isAmbientSessionAttached, isAnyAmbientNoisePlaying, isSoundEnabled, stopAllAmbientNoise } from './lib/audio';
 
+const DashboardView = lazyWithPreload(() => import('./components/DashboardView').then((module) => ({ default: module.DashboardView })));
 const MobileQuickCapture = lazyWithPreload(() => import('./components/MobileQuickCapture').then((module) => ({ default: module.MobileQuickCapture })));
 const GymRestOverlay = lazyWithPreload(() => import('./components/GymRestOverlay').then((module) => ({ default: module.GymRestOverlay })));
 const StudyActiveOverlay = lazyWithPreload(() => import('./components/StudyActiveOverlay').then((module) => ({ default: module.StudyActiveOverlay })));
@@ -127,10 +71,14 @@ const CloudConflictModal = lazyWithPreload(() => import('./components/CloudConfl
 const OnboardingView = lazyWithPreload(() => import('./components/OnboardingView').then((module) => ({ default: module.OnboardingView })));
 const UnlockDeviceModal = lazyWithPreload(() => import('./components/UnlockDeviceModal').then((module) => ({ default: module.UnlockDeviceModal })));
 
-// Warm the OnboardingView chunk immediately on first visit so fresh mobile loads don't stall on a second RTT.
+// Warm the active landing chunk immediately so fresh or returning mobile loads don't stall on a second RTT.
 if (typeof window !== 'undefined') {
   try {
-    if (!window.localStorage.getItem('lifeos-state-v1')) {
+    const hasExistingData =
+      Boolean(window.localStorage.getItem('lifeos-state-v1')) || hasPendingCloudSessionHint();
+    if (hasExistingData) {
+      void DashboardView.preload().catch(() => {});
+    } else {
       void OnboardingView.preload().catch(() => {});
     }
   } catch {
@@ -139,6 +87,7 @@ if (typeof window !== 'undefined') {
 }
 
 const PRELOADABLE_VIEWS: Partial<Record<ViewType, () => Promise<unknown>>> = {
+  dashboard: DashboardView.preload,
   agenda: AgendaView.preload,
   calendario: CalendarioView.preload,
   trabajo: TrabajoView.preload,
@@ -196,14 +145,31 @@ export default function App() {
   const [initialFocusId, setInitialFocusId] = useState<string | null>(null);
   const [initialAgendaDate, setInitialAgendaDate] = useState<string | null>(null);
   const [focusNonce, setFocusNonce] = useState(0);
+  const cloudSyncConfigured = isCloudSyncConfigured();
+  const [cloudRuntime, setCloudRuntime] = useState<CloudSyncRuntime | null>(() => getLoadedCloudRuntime());
+  const [cloudAuthBootRequested, setCloudAuthBootRequested] = useState(false);
+  const cloudRuntimeRef = useRef<CloudSyncRuntime | null>(cloudRuntime);
+  cloudRuntimeRef.current = cloudRuntime;
+  const cloudAuthBootRequestedRef = useRef(cloudAuthBootRequested);
+  cloudAuthBootRequestedRef.current = cloudAuthBootRequested;
+  const getCloudRuntime = useCallback((): CloudSyncRuntime | null => {
+    const current = cloudRuntimeRef.current ?? getLoadedCloudRuntime();
+    if (current && !cloudRuntimeRef.current) {
+      cloudRuntimeRef.current = current;
+    }
+    return current;
+  }, []);
+
   const [cloudUser, setCloudUser] = useState<CloudUser | null>(null);
   const [storageUserId, setStorageUserId] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<CloudSyncStatus>(() =>
     typeof navigator !== 'undefined' && !navigator.onLine
       ? 'offline'
-      : cloudSyncConfigured
-        ? 'connecting'
-        : 'unavailable'
+      : !cloudSyncConfigured
+        ? 'unavailable'
+        : hasPendingCloudSessionHint()
+          ? 'connecting'
+          : 'signed-out'
   );
   const [failedSyncModules, setFailedSyncModules] = useState<SyncModuleKey[]>([]);
   const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
@@ -211,15 +177,17 @@ export default function App() {
   const [, setCryptoSessionNonce] = useState(0);
 
   useEffect(() => {
-    return cryptoSession.subscribe(() => {
+    if (!cloudRuntime) return;
+    return cloudRuntime.cryptoCore.cryptoSession.subscribe(() => {
       setCryptoSessionNonce((n) => n + 1);
     });
-  }, []);
+  }, [cloudRuntime]);
 
   const effectiveCloudUserId = cloudUser?.uid || storageUserId;
+  const loadedCryptoSession = getCloudRuntime()?.cryptoCore.cryptoSession;
   const isCryptoLockError = (syncStatus === 'error' || syncStatus === 'locked') && (
     Boolean(syncErrorMessage && (syncErrorMessage.includes('Desbloqueá la sesión') || syncErrorMessage.toLowerCase().includes('desbloqueá') || syncErrorMessage.toLowerCase().includes('sesión'))) ||
-    Boolean(effectiveCloudUserId && !cryptoSession.isUnlocked(effectiveCloudUserId) && Boolean(loadWrappedKeyEnvelope(effectiveCloudUserId)))
+    Boolean(effectiveCloudUserId && !(loadedCryptoSession?.isUnlocked(effectiveCloudUserId) ?? false) && hasWrappedKeyEnvelopeLocal(effectiveCloudUserId))
   );
 
   const [cloudConflict, setCloudConflict] = useState<{
@@ -263,53 +231,78 @@ export default function App() {
         if ('syncStatus' in opts && opts.syncStatus) setSyncStatus(opts.syncStatus);
         if ('lastSyncedAt' in opts) setLastSyncedAt(opts.lastSyncedAt ?? null);
         if (opts.e2eeActive) {
-          const info = opts.e2eeHasVaultPassword === false
-            ? RECOVERY_KDF_BASE_INFO
-            : encodeVaultPasswordInfo({
-                iterations: 600000,
-                salt: 'c3ludGhldGljLXB3LXNhbHQ=',
-                iv: 'c3ludGhldGljLXB3LWl2',
-                ciphertext: 'c3ludGhldGljLXB3LWNpcGhlcnRleHQtZGF0YS1iYXNlNjQ=',
-              });
-          const envelope: WrappedKeyEnvelope = {
-            keyFormatVersion: CURRENT_KEY_FORMAT_VERSION,
-            cryptoVersion: CURRENT_CRYPTO_VERSION,
-            algorithm: CRYPTO_ALGORITHM,
-            wrappedMdek: {
-              iv: 'c3ludGhldGljLWl2LTEyYg==',
-              ciphertext: 'c3ludGhldGljLWNpcGhlcnRleHQtZGF0YS1iYXNlNjQ=',
-            },
-            kdf: {
-              algorithm: 'HKDF-SHA-256',
-              salt: 'c3ludGhldGljLXNhbHQtMTZi',
-              info,
-            },
-            aad: `keyFormatVersion:1|userId:${uid}`,
-            createdAt: new Date().toISOString(),
+          const applySyntheticE2EE = (runtime: CloudSyncRuntime) => {
+            const {
+              RECOVERY_KDF_BASE_INFO,
+              encodeVaultPasswordInfo,
+              CURRENT_KEY_FORMAT_VERSION,
+              CURRENT_CRYPTO_VERSION,
+              CRYPTO_ALGORITHM,
+              saveWrappedKeyEnvelope,
+              cryptoSession,
+            } = runtime.cryptoCore;
+            const info = opts.e2eeHasVaultPassword === false
+              ? RECOVERY_KDF_BASE_INFO
+              : encodeVaultPasswordInfo({
+                  iterations: 600000,
+                  salt: 'c3ludGhldGljLXB3LXNhbHQ=',
+                  iv: 'c3ludGhldGljLXB3LWl2',
+                  ciphertext: 'c3ludGhldGljLXB3LWNpcGhlcnRleHQtZGF0YS1iYXNlNjQ=',
+                });
+            const envelope: WrappedKeyEnvelope = {
+              keyFormatVersion: CURRENT_KEY_FORMAT_VERSION,
+              cryptoVersion: CURRENT_CRYPTO_VERSION,
+              algorithm: CRYPTO_ALGORITHM,
+              wrappedMdek: {
+                iv: 'c3ludGhldGljLWl2LTEyYg==',
+                ciphertext: 'c3ludGhldGljLWNpcGhlcnRleHQtZGF0YS1iYXNlNjQ=',
+              },
+              kdf: {
+                algorithm: 'HKDF-SHA-256',
+                salt: 'c3ludGhldGljLXNhbHQtMTZi',
+                info,
+              },
+              aad: `keyFormatVersion:1|userId:${uid}`,
+              createdAt: new Date().toISOString(),
+            };
+            saveWrappedKeyEnvelope(envelope, uid);
+            (window as any).__LIFEOS_SYNTHETIC_CLOUD_ENVELOPE__ = {
+              ...((window as any).__LIFEOS_SYNTHETIC_CLOUD_ENVELOPE__ || {}),
+              [uid]: envelope,
+            };
+            (window as any).__LIFEOS_SYNTHETIC_CAPABILITY__ = {
+              ...((window as any).__LIFEOS_SYNTHETIC_CAPABILITY__ || {}),
+              [uid]: {
+                version: 1,
+                minimumSyncProtocolVersion: 2,
+                encryptionState: 'encrypted',
+                encryptedModules: [...runtime.syncModel.SYNC_MODULES],
+                updatedAt: new Date().toISOString(),
+              },
+            };
+            if (opts.e2eeUnlocked) {
+              cryptoSession.setUnlocked({ type: 'secret', extractable: false } as any, uid);
+            } else {
+              cryptoSession.lock();
+            }
           };
-          saveWrappedKeyEnvelope(envelope, uid);
-          (window as any).__LIFEOS_SYNTHETIC_CLOUD_ENVELOPE__ = {
-            ...((window as any).__LIFEOS_SYNTHETIC_CLOUD_ENVELOPE__ || {}),
-            [uid]: envelope,
-          };
-          (window as any).__LIFEOS_SYNTHETIC_CAPABILITY__ = {
-            ...((window as any).__LIFEOS_SYNTHETIC_CAPABILITY__ || {}),
-            [uid]: {
-              version: 1,
-              minimumSyncProtocolVersion: 2,
-              encryptionState: 'encrypted',
-              encryptedModules: [...SYNC_MODULES],
-              updatedAt: new Date().toISOString(),
-            },
-          };
-          if (opts.e2eeUnlocked) {
-            cryptoSession.setUnlocked({ type: 'secret', extractable: false } as any, uid);
+          const loaded = getCloudRuntime();
+          if (loaded) {
+            applySyntheticE2EE(loaded);
           } else {
-            cryptoSession.lock();
+            void loadCloudRuntime().then((runtime) => {
+              setCloudRuntime(runtime);
+              applySyntheticE2EE(runtime);
+            }).catch(() => {});
           }
         } else if (opts.e2eeActive === false) {
-          clearWrappedKeyEnvelope(uid);
-          cryptoSession.lock();
+          const loaded = getCloudRuntime();
+          if (loaded) {
+            loaded.cryptoCore.clearWrappedKeyEnvelope(uid);
+            loaded.cryptoCore.cryptoSession.lock();
+          } else {
+            try { localStorage.removeItem(`lifeos-wrapped-mdek-v1:${uid}`); } catch {}
+          }
           if ((window as any).__LIFEOS_SYNTHETIC_CLOUD_ENVELOPE__) {
             delete (window as any).__LIFEOS_SYNTHETIC_CLOUD_ENVELOPE__[uid];
           }
@@ -360,7 +353,7 @@ export default function App() {
         }
       };
     }
-  }, []);
+  }, [getCloudRuntime]);
   const [resaleRecoveryStatus, setResaleRecoveryStatus] = useState<'none' | 'saved' | 'failed'>('none');
   const [resaleConflictReason, setResaleConflictReason] = useState(() => readStoredCommercial(state).status === 'blocked'
     ? 'Los datos comerciales locales no superan la validación; permanecen guardados en este dispositivo.' : '');
@@ -395,7 +388,7 @@ export default function App() {
   const resaleConflictRecordRef = useRef<ResaleConflictRecord | null>(null);
   const resaleResolutionInProgressRef = useRef(false);
   const consecutiveDivergenceCountRef = useRef<number>(0);
-  const deviceIdRef = useRef(getOrCreateDeviceId());
+  const deviceIdRef = useRef(getOrCreateLocalDeviceId());
   const isImportingBackupRef = useRef(false);
   const importBackupTimeoutRef = useRef<number | null>(null);
 
@@ -416,16 +409,17 @@ export default function App() {
     financeWriteBlockedRef.current = true;
     conflictPendingRef.current = true;
     queuedModulesRef.current.add('finance');
-    if (userId) {
-      saveSyncRecoverySnapshot(userId, 'local', stateRef.current);
-      saveSyncRecoverySnapshot(userId, 'remote', remoteState);
-      if (baselineDataRef.current.finance) saveSyncRecoverySnapshot(userId, 'base', buildStateFromModules(baselineDataRef.current));
+    const runtime = getCloudRuntime();
+    if (userId && runtime) {
+      runtime.cloudSync.saveSyncRecoverySnapshot(userId, 'local', stateRef.current);
+      runtime.cloudSync.saveSyncRecoverySnapshot(userId, 'remote', remoteState);
+      if (baselineDataRef.current.finance) runtime.cloudSync.saveSyncRecoverySnapshot(userId, 'base', runtime.syncModel.buildStateFromModules(baselineDataRef.current));
     }
     setIsCloudConflictDismissed(false);
     setCloudConflict({ remoteState, modules: ['finance'], remoteRevisions, conflicts, recommendedSide: 'local' });
     setSyncStatus('conflict');
     showToast('La versión recibida de Finanzas podría perder movimientos o restaurar datos anteriores. Conservamos la copia local; revisá el conflicto.', 'error');
-  }, [traceFinanceSync]);
+  }, [getCloudRuntime, traceFinanceSync]);
 
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;
@@ -439,14 +433,17 @@ export default function App() {
         event.data.state
       ) {
         if (financeWriteBlockedRef.current) return;
-        const tabTombstones = { ...loadTombstones(event.data.userId) };
-        for (const [id, timestamp] of Object.entries(tombstonesRef.current)) tabTombstones[id] = Math.max(tabTombstones[id] || 0, Number(timestamp));
-        const financeConflicts = detectFinanceSnapshotRegression(stateRef.current.finance, event.data.state.finance, tabTombstones);
-        if (financeConflicts.length) {
-          blockFinanceConflict(event.data.state, {}, financeConflicts);
-          return;
+        const runtime = getCloudRuntime();
+        if (runtime) {
+          const tabTombstones = { ...runtime.syncMerge.loadTombstones(event.data.userId) };
+          for (const [id, timestamp] of Object.entries(tombstonesRef.current)) tabTombstones[id] = Math.max(tabTombstones[id] || 0, Number(timestamp));
+          const financeConflicts = runtime.financeSnapshotIntegrity.detectFinanceSnapshotRegression(stateRef.current.finance, event.data.state.finance, tabTombstones);
+          if (financeConflicts.length) {
+            blockFinanceConflict(event.data.state, {}, financeConflicts);
+            return;
+          }
+          tombstonesRef.current = tabTombstones;
         }
-        tombstonesRef.current = tabTombstones;
         const diagnostic = commercialHydrationBlock(stateRef.current, event.data.state);
         if (diagnostic) {
           setResaleConflictReason(diagnostic);
@@ -462,12 +459,13 @@ export default function App() {
       channel.close();
       tabChannelRef.current = null;
     };
-  }, [blockFinanceConflict]);
+  }, [blockFinanceConflict, getCloudRuntime]);
 
   const applyRemoteState = (remoteState: LifeOSState, userId = storageUserIdRef.current) => {
+    const runtime = getCloudRuntime();
     const diagnostic = commercialHydrationBlock(stateRef.current, remoteState);
     if (diagnostic) {
-      blockResaleConflict(['resale'], diagnostic, { resale: syncModuleData(remoteState, 'resale') }, {});
+      blockResaleConflict(['resale'], diagnostic, runtime ? { resale: runtime.syncModel.syncModuleData(remoteState, 'resale') } : undefined, {});
       return false;
     }
     const localTimer = stateRef.current.gym.activeTimer ?? null;
@@ -479,19 +477,19 @@ export default function App() {
       },
     };
     const saved = saveStoredState(nextState, userId);
-    if (!saved && syncModuleFingerprint(stateRef.current, 'gym') !== syncModuleFingerprint(nextState, 'gym')) {
+    if (!saved && runtime && runtime.syncModel.syncModuleFingerprint(stateRef.current, 'gym') !== runtime.syncModel.syncModuleFingerprint(nextState, 'gym')) {
       setSyncStatus('error');
       showToast('No se pudo guardar la versión recibida de Gimnasio. Se conservó la copia local.', 'error');
       return false;
     }
-    if (!saved && syncModuleFingerprint(stateRef.current, 'finance') !== syncModuleFingerprint(nextState, 'finance')) {
+    if (!saved && runtime && runtime.syncModel.syncModuleFingerprint(stateRef.current, 'finance') !== runtime.syncModel.syncModuleFingerprint(nextState, 'finance')) {
       setSyncStatus('error');
       showToast('No se pudo guardar la versión recibida de Finanzas. Se conservó la copia local.', 'error');
       return false;
     }
     if (!saved && (readStoredCommercial(nextState).status !== 'absent' || readStoredCommercial(stateRef.current).status !== 'absent' || hasPersistedCommercial(userId))) {
       blockResaleConflict(['resale'], 'No se pudo conservar de forma segura el estado remoto en este dispositivo.',
-        { resale: syncModuleData(remoteState, 'resale') }, {});
+        runtime ? { resale: runtime.syncModel.syncModuleData(remoteState, 'resale') } : undefined, {});
       return false;
     }
     stateRef.current = nextState;
@@ -501,12 +499,12 @@ export default function App() {
 
   const persistRevisionMap = (userId: string, revisions: SyncRevisionMap) => {
     revisionsRef.current = revisions;
-    saveCloudRevisions(userId, revisions);
+    getCloudRuntime()?.cloudSync.saveCloudRevisions(userId, revisions);
   };
 
   const persistBaselines = (userId: string, baselines: SyncBaselineMap) => {
     baselinesRef.current = baselines;
-    saveCloudBaselines(userId, baselines);
+    getCloudRuntime()?.cloudSync.saveCloudBaselines(userId, baselines);
   };
 
   const optimisticRevisionMap = (): SyncRevisionMap => {
@@ -528,11 +526,12 @@ export default function App() {
     expectedRevisions: SyncRevisionMap = revisionsRef.current
   ) => {
     const userId = cloudUserRef.current?.uid;
+    const runtime = getCloudRuntime();
     const affected = [...new Set<SyncModuleKey>(['resale', ...modules])];
     resaleWriteBlockedRef.current = true;
     affected.forEach((module) => queuedModulesRef.current.add(module));
-    if (!userId) { setResaleRecoveryStatus('failed'); setSyncStatus('conflict'); return; }
-    const localModules = Object.fromEntries(affected.map((module) => [module, syncModuleData(stateRef.current, module)]));
+    if (!userId || !runtime) { setResaleRecoveryStatus('failed'); setSyncStatus('conflict'); return; }
+    const localModules = Object.fromEntries(affected.map((module) => [module, runtime.syncModel.syncModuleData(stateRef.current, module)]));
     const baseModules = Object.fromEntries(affected.filter((module) => module in baselineDataRef.current).map((module) => [module, baselineDataRef.current[module]]));
     const baseRevisions = Object.fromEntries(affected.filter((module) => module in expectedRevisions).map((module) => [module, expectedRevisions[module]])) as SyncRevisionMap;
     const record = resaleConflictRecordRef.current
@@ -559,13 +558,14 @@ export default function App() {
 
   const blockGymConflict = (remoteState: LifeOSState, remoteRevisions: SyncRevisionMap, conflicts: SyncConflictItem[]) => {
     const userId = cloudUserRef.current?.uid;
+    const runtime = getCloudRuntime();
     gymWriteBlockedRef.current = true;
     queuedModulesRef.current.add('gym');
-    if (userId) {
-      saveSyncRecoverySnapshot(userId, 'local', stateRef.current);
-      saveSyncRecoverySnapshot(userId, 'remote', remoteState);
+    if (userId && runtime) {
+      runtime.cloudSync.saveSyncRecoverySnapshot(userId, 'local', stateRef.current);
+      runtime.cloudSync.saveSyncRecoverySnapshot(userId, 'remote', remoteState);
       if (baselineDataRef.current.gym) {
-        saveSyncRecoverySnapshot(userId, 'base', buildStateFromModules({ gym: baselineDataRef.current.gym }));
+        runtime.cloudSync.saveSyncRecoverySnapshot(userId, 'base', runtime.syncModel.buildStateFromModules({ gym: baselineDataRef.current.gym }));
       }
     }
     setIsCloudConflictDismissed(false);
@@ -574,6 +574,26 @@ export default function App() {
   };
 
   const flushCloudSave = () => {
+    const runtime = getCloudRuntime();
+    if (!runtime) return;
+    const {
+      cloudSync: {
+        isCloudSyncSuspended,
+        writeCloudModulesGuarded,
+        CloudSyncSuspendedError,
+        CloudRevisionConflict,
+        CloudProtocolConflict,
+        ResaleRevisionConflict,
+        ResaleProtocolConflict,
+        isFirestorePermissionDenied,
+        fetchFreshCloudModules,
+        cloudStatusWithLocalChanges,
+        saveCloudBaselineData,
+      },
+      syncModel: { buildStateFromModules, syncModuleData },
+      syncMerge: { saveTombstones },
+      financeSyncReconciliation: { reconcileFinancePublication },
+    } = runtime;
     if (isCloudSyncSuspended()) {
       queuedModulesRef.current.clear();
       queuedStateRef.current = null;
@@ -732,7 +752,7 @@ export default function App() {
                     return;
                   }
                   for (const [id, timestamp] of Object.entries(fresh.tombstones)) {
-                    tombstonesRef.current[id] = Math.max(tombstonesRef.current[id] || 0, timestamp);
+                    tombstonesRef.current[id] = Math.max(tombstonesRef.current[id] || 0, Number(timestamp));
                   }
                   saveTombstones(user.uid, tombstonesRef.current);
                   const result = reconcileFinancePublication(stateRef.current, fresh.moduleData.finance, fresh.remoteRevisions.finance, baselineDataRef.current.finance, tombstonesRef.current);
@@ -882,7 +902,8 @@ export default function App() {
   };
 
   const queueCloudSave = (nextState: LifeOSState, modules: SyncModuleKey[]) => {
-    if (isCloudSyncSuspended()) return;
+    const runtime = getCloudRuntime();
+    if (!runtime || runtime.cloudSync.isCloudSyncSuspended()) return;
     const user = cloudUserRef.current;
     if (!cloudSyncConfigured || !user || modules.length === 0 || storageUserIdRef.current !== user.uid) return;
     if (nextState.resale.commercial?.business && modules.some(module => module === 'resale' || module === 'finance')) {
@@ -917,13 +938,14 @@ export default function App() {
     const previous = stateRef.current;
     const draft = structuredClone(previous) as LifeOSState;
     updater(draft);
-    if (financeWriteBlockedRef.current && syncModuleFingerprint(previous, 'finance') !== syncModuleFingerprint(draft, 'finance')) {
+    const runtime = getCloudRuntime();
+    if (financeWriteBlockedRef.current && runtime && runtime.syncModel.syncModuleFingerprint(previous, 'finance') !== runtime.syncModel.syncModuleFingerprint(draft, 'finance')) {
       showToast('Revisá el conflicto de Finanzas antes de registrar otro movimiento. Conservá el formulario para reintentar.', 'error');
       return false;
     }
     if (commercialCommand) {
       if (!cloudUserRef.current || storageUserIdRef.current !== cloudUserRef.current.uid
-        || !cryptoSession.isUnlocked(cloudUserRef.current.uid) || resaleWriteBlockedRef.current)
+        || !runtime?.cryptoCore.cryptoSession.isUnlocked(cloudUserRef.current.uid) || resaleWriteBlockedRef.current)
         throw new Error('Mi negocio requiere una sesión desbloqueada y sin conflictos pendientes.');
       assertCommercialTransition(previous, draft);
     }
@@ -932,7 +954,7 @@ export default function App() {
       return false;
     }
     stampGymMutation(previous.gym, draft.gym, deviceIdRef.current);
-    if (resaleResolutionInProgressRef.current && changedSyncModules(previous, draft).some((module) => module === 'resale' || module === 'finance')) {
+    if (resaleResolutionInProgressRef.current && runtime && runtime.syncModel.changedSyncModules(previous, draft).some((module) => module === 'resale' || module === 'finance')) {
       showToast('Esperá a que termine la revisión de Mi negocio antes de cambiar sus operaciones o Finanzas.', 'info');
       return false;
     }
@@ -957,26 +979,28 @@ export default function App() {
       showToast('No se pudo guardar en este dispositivo. La acción quedó detenida; conservá el contenido y reintentá.', 'error');
       return false;
     }
-    const deletedIds = detectDeletedEntityIds(previous, draft);
-    const restoredIds = detectRestoredEntityIds(previous, draft);
-    if ((deletedIds.length > 0 || restoredIds.length > 0) && cloudUserRef.current) {
-      const currentTombstones = tombstonesRef.current;
-      let tombstonesChanged = false;
-      if (deletedIds.length > 0) {
-        const deletionTime = Date.now();
-        for (const id of deletedIds) {
-          currentTombstones[id] = nextFinanceDeletionTimestamp(previous, id, deletionTime);
-        }
-        tombstonesChanged = true;
-      }
-      for (const id of restoredIds) {
-        if (id in currentTombstones) {
-          delete currentTombstones[id];
+    if (cloudUserRef.current && runtime) {
+      const deletedIds = runtime.syncMerge.detectDeletedEntityIds(previous, draft);
+      const restoredIds = runtime.syncMerge.detectRestoredEntityIds(previous, draft);
+      if (deletedIds.length > 0 || restoredIds.length > 0) {
+        const currentTombstones = tombstonesRef.current;
+        let tombstonesChanged = false;
+        if (deletedIds.length > 0) {
+          const deletionTime = Date.now();
+          for (const id of deletedIds) {
+            currentTombstones[id] = nextFinanceDeletionTimestamp(previous, id, deletionTime);
+          }
           tombstonesChanged = true;
         }
-      }
-      if (tombstonesChanged) {
-        saveTombstones(cloudUserRef.current.uid, currentTombstones);
+        for (const id of restoredIds) {
+          if (id in currentTombstones) {
+            delete currentTombstones[id];
+            tombstonesChanged = true;
+          }
+        }
+        if (tombstonesChanged) {
+          runtime.syncMerge.saveTombstones(cloudUserRef.current.uid, currentTombstones);
+        }
       }
     }
     stateRef.current = draft;
@@ -1005,7 +1029,9 @@ export default function App() {
       }
     }
 
-    queueCloudSave(draft, changedSyncModules(previous, draft));
+    if (cloudUserRef.current && runtime) {
+      queueCloudSave(draft, runtime.syncModel.changedSyncModules(previous, draft));
+    }
     return saved;
   };
   const updateStateRef = useRef(updateState);
@@ -1052,10 +1078,84 @@ export default function App() {
     return () => window.removeEventListener('lifeos-sound-preference', handleSoundPref);
   }, []);
 
+  // Local-First post-paint cloud activation:
+  // - Returning cloud users / OAuth redirects boot Firebase right after the first paint.
+  // - First-visit / 100% local users defer chunk preload to post-LCP idle (~3s) and never
+  //   initialize Firebase Auth until they interact with "Conectar con Google".
   useEffect(() => {
     if (!cloudSyncConfigured) return;
+    let cancelled = false;
+
+    if (hasPendingCloudSessionHint()) {
+      let timerId: number | null = null;
+      const rafId = window.requestAnimationFrame(() => {
+        timerId = window.setTimeout(() => {
+          if (cancelled) return;
+          setCloudAuthBootRequested(true);
+          void loadCloudRuntime()
+            .then((runtime) => {
+              if (!cancelled) setCloudRuntime(runtime);
+            })
+            .catch(() => {
+              if (!cancelled) {
+                setSyncStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'signed-out');
+              }
+            });
+        }, 0);
+      });
+      return () => {
+        cancelled = true;
+        window.cancelAnimationFrame(rafId);
+        if (timerId !== null) window.clearTimeout(timerId);
+      };
+    }
+
+    let idleId: number | null = null;
+    const win = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout?: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    const delayId = window.setTimeout(() => {
+      if (cancelled || (typeof navigator !== 'undefined' && !navigator.onLine)) return;
+      const warm = () => {
+        if (!cancelled && (typeof navigator === 'undefined' || navigator.onLine)) {
+          void preloadCloudSync();
+        }
+      };
+      if (typeof win.requestIdleCallback === 'function') {
+        idleId = win.requestIdleCallback(warm, { timeout: 2000 });
+      } else {
+        warm();
+      }
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(delayId);
+      if (idleId !== null && typeof win.cancelIdleCallback === 'function') {
+        win.cancelIdleCallback(idleId);
+      }
+    };
+  }, [cloudSyncConfigured]);
+
+  useEffect(() => {
+    if (!cloudSyncConfigured || !cloudAuthBootRequested || !cloudRuntime) return;
+    const {
+      cloudSync: {
+        observeCloudUser,
+        getLastCloudUserId,
+        loadCloudRevisions,
+        loadCloudBaselines,
+        loadCloudBaselineData,
+        markLastCloudUserId,
+      },
+      cryptoCore: { cryptoSession },
+      deviceTrust: { tryUnlockWithDeviceTrust },
+      syncMerge: { loadTombstones },
+    } = cloudRuntime;
     setSyncStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'connecting');
     return observeCloudUser((user) => {
+      clearOAuthRedirectPending();
       const previousUser = cloudUserRef.current;
 
       // Si el usuario es el mismo (ej. renovación de credenciales o evento interno), solo actualizamos datos y evitamos reiniciar la sincronización
@@ -1165,10 +1265,39 @@ export default function App() {
         setResaleConflictReason('Los datos comerciales locales no superan la validación; permanecen guardados en este dispositivo.');
       }
     });
-  }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloudSyncConfigured, cloudAuthBootRequested, cloudRuntime]);
 
   useEffect(() => {
-    if (!cloudSyncConfigured || !cloudUser || storageUserId !== cloudUser.uid) return;
+    if (!cloudSyncConfigured || !cloudRuntime || !cloudUser || storageUserId !== cloudUser.uid) return;
+    const {
+      cloudSync: {
+        CloudProtocolConflict,
+        cloudStatusWithLocalChanges,
+        isCloudPaired,
+        markCloudPaired,
+        readLegacyCloudState,
+        saveCloudBaselineData,
+        saveSyncRecoverySnapshot,
+        subscribeCloudModules,
+      },
+      cryptoCore: { cryptoSession, decodeCloudModuleData },
+      deviceTrust: { tryUnlockWithDeviceTrust },
+      syncModel: {
+        SYNC_MODULES,
+        applySyncModule,
+        buildStateFromModules,
+        decideInitialSyncAction,
+        extractPureModuleData,
+        mergeSyncModuleWithConflicts,
+        syncDataFingerprint,
+        syncModuleData,
+        syncModuleFingerprint,
+      },
+      syncMerge: { detectGymSessionConflicts, saveTombstones },
+      financeSyncReconciliation: { reconcileFinancePublication },
+      financeSnapshotIntegrity: { detectFinanceSnapshotRegression },
+    } = cloudRuntime;
     conflictPendingRef.current = false;
 
     const storeRevisions = (next: SyncRevisionMap) => persistRevisionMap(cloudUser.uid, next);
@@ -1726,7 +1855,7 @@ export default function App() {
   // The upload queue reads current values from refs; resubscribing on every
   // render would duplicate Firestore listeners.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cloudUser, storageUserId]);
+  }, [cloudUser, storageUserId, cloudRuntime]);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -1734,6 +1863,12 @@ export default function App() {
       setSyncStatus(cloudUserRef.current ? 'connecting' : cloudSyncConfigured ? 'signed-out' : 'unavailable');
       if (cloudUserRef.current && failedSyncModulesRef.current.size > 0) {
         queueCloudSave(stateRef.current, [...failedSyncModulesRef.current]);
+      }
+      if (!cloudAuthBootRequestedRef.current && cloudSyncConfigured && hasPendingCloudSessionHint()) {
+        setCloudAuthBootRequested(true);
+        void loadCloudRuntime()
+          .then((runtime) => setCloudRuntime(runtime))
+          .catch(() => {});
       }
     };
     const handleOffline = () => {
@@ -1767,9 +1902,26 @@ export default function App() {
       return;
     }
     setSyncStatus('connecting');
+    markOAuthRedirectPending();
+    setCloudAuthBootRequested(true);
     try {
-      await signInToCloud();
+      const preloaded = getLoadedCloudSync();
+      if (preloaded) {
+        if (!getCloudRuntime()) {
+          void loadCloudRuntime()
+            .then((runtime) => setCloudRuntime(runtime))
+            .catch(() => {});
+        }
+        // Invoke directly while still inside the user-gesture turn so browsers don't block signInWithPopup.
+        await preloaded.signInToCloud();
+      } else {
+        const runtime = await loadCloudRuntime();
+        setCloudRuntime(runtime);
+        await runtime.cloudSync.signInToCloud();
+      }
+      clearOAuthRedirectPending();
     } catch (error) {
+      clearOAuthRedirectPending();
       const rawMsg = error instanceof Error ? error.message : String(error || '');
       const isNetworkFailure =
         (typeof navigator !== 'undefined' && !navigator.onLine) ||
@@ -1786,7 +1938,8 @@ export default function App() {
 
   const handleCloudSignOut = async () => {
     try {
-      await signOutFromCloud();
+      const runtime = getCloudRuntime() ?? await loadCloudRuntime();
+      await runtime.cloudSync.signOutFromCloud();
     } catch {
       setSyncStatus('error');
     }
@@ -1797,6 +1950,8 @@ export default function App() {
     if (!userId) {
       throw new Error('No hay una cuenta de Google conectada en este dispositivo.');
     }
+    const runtime = getCloudRuntime() ?? await loadCloudRuntime();
+    const { suspendCloudSync, deleteCloudAccountAndAuth, signOutFromCloud, resumeCloudSync } = runtime.cloudSync;
     // Stop every autosave before touching Firestore: a late flush must never
     // recreate the documents we are about to delete.
     suspendCloudSync();
@@ -1844,9 +1999,10 @@ export default function App() {
 
   const handleExportResaleConflict = () => {
     const record = resaleConflictRecordRef.current;
-    if (!record) { showToast('No hay una copia del conflicto disponible para exportar.', 'error'); return; }
+    const runtime = getCloudRuntime();
+    if (!record || !runtime) { showToast('No hay una copia del conflicto disponible para exportar.', 'error'); return; }
     try {
-      const currentLocal = Object.fromEntries(record.modules.map((module) => [module, syncModuleData(stateRef.current, module)]));
+      const currentLocal = Object.fromEntries(record.modules.map((module) => [module, runtime.syncModel.syncModuleData(stateRef.current, module)]));
       const contents = JSON.stringify({ ...record, currentLocal, exportedAt: new Date().toISOString() }, null, 2);
       const url = URL.createObjectURL(new Blob([contents], { type: 'application/json' }));
       const link = document.createElement('a');
@@ -1866,7 +2022,13 @@ export default function App() {
     if (!user || !record || !resaleWriteBlockedRef.current || resaleResolutionInProgressRef.current) return;
     resaleResolutionInProgressRef.current = true;
     setResaleResolutionPending(true);
+    let runtime: CloudSyncRuntime | null = null;
     try {
+      runtime = getCloudRuntime() ?? await loadCloudRuntime();
+      const {
+        cloudSync: { fetchFreshCloudModules, writeCloudModulesGuarded, saveCloudBaselineData, markCloudPaired },
+        syncModel: { syncModuleFingerprint, syncModuleData, syncDataFingerprint },
+      } = runtime;
       const fresh = await fetchFreshCloudModules(user.uid);
       if (cloudUserRef.current?.uid !== user.uid) return;
       if (fresh.lockedModules.length || fresh.corruptedModules.length) {
@@ -1919,7 +2081,8 @@ export default function App() {
       }
       showToast('Tus datos volvieron a sincronizarse correctamente.', 'success');
     } catch (error) {
-      setResaleConflictReason(error instanceof ResaleRevisionConflict
+      const isRevisionConflict = Boolean(runtime && error instanceof runtime.cloudSync.ResaleRevisionConflict);
+      setResaleConflictReason(isRevisionConflict
         ? 'La nube volvió a cambiar mientras confirmábamos. Revisá nuevamente.'
         : 'No se pudo completar la confirmación. Tus datos siguen guardados en este dispositivo.');
       setSyncStatus('conflict');
@@ -1939,7 +2102,8 @@ export default function App() {
     const user = cloudUserRef.current;
     if (user && navigator.onLine) {
       try {
-        const fresh = await fetchFreshCloudModules(user.uid);
+        const runtime = getCloudRuntime() ?? await loadCloudRuntime();
+        const fresh = await runtime.cloudSync.fetchFreshCloudModules(user.uid);
         if (cloudUserRef.current?.uid === user.uid && !fresh.lockedModules.length && !fresh.corruptedModules.length) {
           const relevantRemote = Object.fromEntries(
             record.modules
@@ -1962,13 +2126,14 @@ export default function App() {
   };
 
   const handleExportGenericConflict = () => {
-    if (!cloudConflict) return;
+    const runtime = getCloudRuntime();
+    if (!cloudConflict || !runtime) return;
     try {
       const payload = {
         exportedAt: new Date().toISOString(),
         modules: cloudConflict.modules,
-        local: Object.fromEntries(cloudConflict.modules.map((mod) => [mod, syncModuleData(stateRef.current, mod)])),
-        remote: Object.fromEntries(cloudConflict.modules.map((mod) => [mod, syncModuleData(cloudConflict.remoteState, mod)])),
+        local: Object.fromEntries(cloudConflict.modules.map((mod) => [mod, runtime.syncModel.syncModuleData(stateRef.current, mod)])),
+        remote: Object.fromEntries(cloudConflict.modules.map((mod) => [mod, runtime.syncModel.syncModuleData(cloudConflict.remoteState, mod)])),
       };
       const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }));
       const link = document.createElement('a');
@@ -1990,7 +2155,13 @@ export default function App() {
     if (!user || !record || !resaleWriteBlockedRef.current || resaleResolutionInProgressRef.current) return;
     resaleResolutionInProgressRef.current = true;
     setResaleResolutionPending(true);
+    let runtime: CloudSyncRuntime | null = null;
     try {
+      runtime = getCloudRuntime() ?? await loadCloudRuntime();
+      const {
+        cloudSync: { fetchFreshCloudModules, saveSyncRecoverySnapshot, saveCloudBaselineData, writeCloudModulesGuarded, markCloudPaired },
+        syncModel: { syncModuleFingerprint, syncModuleData },
+      } = runtime;
       const fresh = await fetchFreshCloudModules(user.uid);
       if (cloudUserRef.current?.uid !== user.uid) return;
       if (fresh.lockedModules.length || fresh.corruptedModules.length) {
@@ -2081,7 +2252,8 @@ export default function App() {
       setLastSyncedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
       showToast('Listo. Se aplicó tu elección y guardamos un respaldo automático en este dispositivo.', 'success');
     } catch (error) {
-      setResaleConflictReason(error instanceof ResaleRevisionConflict
+      const isRevisionConflict = Boolean(runtime && error instanceof runtime.cloudSync.ResaleRevisionConflict);
+      setResaleConflictReason(isRevisionConflict
         ? 'La nube volvió a cambiar mientras aplicábamos tu elección. Intentá nuevamente.'
         : 'No se pudo completar el cambio. Tus datos siguen a salvo en este dispositivo.');
       setSyncStatus('conflict');
@@ -2111,6 +2283,11 @@ export default function App() {
     showToast('Consultando tus datos en la nube…', 'info');
     try {
       setSyncStatus('connecting');
+      const runtime = getCloudRuntime() ?? await loadCloudRuntime();
+      const {
+        cloudSync: { fetchFreshCloudModules, isCloudPaired, hasMeaningfulData, saveCloudBaselineData, markCloudPaired, saveSyncRecoverySnapshot },
+        syncModel: { SYNC_MODULES, buildStateFromModules, syncModuleData, isCleanOrOnboardingOnlyState, syncModuleFingerprint, syncDataFingerprint },
+      } = runtime;
       const fresh = await fetchFreshCloudModules(cloudUser.uid);
       if (!isCurrentSession()) return;
       if (fresh.lockedModules.length || fresh.corruptedModules.length) {
@@ -2234,13 +2411,15 @@ export default function App() {
     if (financeWriteBlockedRef.current) { setSyncStatus('conflict'); return; }
     if (resaleWriteBlockedRef.current) { setSyncStatus('conflict'); return; }
     if (gymWriteBlockedRef.current) { setSyncStatus('conflict'); return; }
+    const runtime = getCloudRuntime();
+    if (!runtime) return;
     setSyncErrorMessage(null);
     retryAttemptRef.current = 0;
     if (retryTimeoutRef.current !== null) {
       window.clearTimeout(retryTimeoutRef.current);
       retryTimeoutRef.current = null;
     }
-    const modules = failedSyncModules.length ? failedSyncModules : [...SYNC_MODULES];
+    const modules = failedSyncModules.length ? failedSyncModules : [...runtime.syncModel.SYNC_MODULES];
     queueCloudSave(stateRef.current, modules);
   };
 
@@ -2253,7 +2432,12 @@ export default function App() {
   };
 
   const handleUseLocalState = () => {
-    if (!cloudUser || !cloudConflict) return;
+    const runtime = getCloudRuntime();
+    if (!cloudUser || !cloudConflict || !runtime) return;
+    const {
+      cloudSync: { saveSyncRecoverySnapshot, saveCloudBaselineData, markCloudPaired },
+      syncModel: { SYNC_MODULES, syncModuleFingerprint, syncModuleData },
+    } = runtime;
     if (cloudConflict.modules.includes('resale') || resaleWriteBlockedRef.current) return;
     if ((cloudConflict.modules.includes('gym') || cloudConflict.modules.includes('finance')) && !saveSyncRecoverySnapshot(cloudUser.uid, 'remote', cloudConflict.remoteState)) {
       setSyncStatus('conflict');
@@ -2288,7 +2472,12 @@ export default function App() {
   };
 
   const handleUseCloudState = () => {
-    if (!cloudUser || !cloudConflict) return;
+    const runtime = getCloudRuntime();
+    if (!cloudUser || !cloudConflict || !runtime) return;
+    const {
+      cloudSync: { saveSyncRecoverySnapshot, saveCloudBaselineData, markCloudPaired },
+      syncModel: { SYNC_MODULES, applySyncModule, syncModuleFingerprint, syncModuleData },
+    } = runtime;
     if (cloudConflict.modules.includes('resale') || resaleWriteBlockedRef.current) return;
     if ((cloudConflict.modules.includes('gym') || cloudConflict.modules.includes('finance')) && !saveSyncRecoverySnapshot(cloudUser.uid, 'local', stateRef.current)) {
       setSyncStatus('conflict');
@@ -2567,19 +2756,22 @@ export default function App() {
     }
 
     if (cloudUserRef.current) {
-      const user = cloudUserRef.current;
-      pendingRevisionsRef.current = {};
-      failedSyncModulesRef.current.clear();
-      setFailedSyncModules([]);
-      consecutiveDivergenceCountRef.current = 0;
-      const nextBaselines = { ...baselinesRef.current };
-      SYNC_MODULES.forEach((mod) => {
-        nextBaselines[mod] = syncModuleFingerprint(importedState, mod);
-        baselineDataRef.current[mod] = syncModuleData(importedState, mod);
-      });
-      persistBaselines(user.uid, nextBaselines);
-      saveCloudBaselineData(user.uid, baselineDataRef.current);
-      queueCloudSave(importedState, [...SYNC_MODULES]);
+      const runtime = getCloudRuntime();
+      if (runtime) {
+        const user = cloudUserRef.current;
+        pendingRevisionsRef.current = {};
+        failedSyncModulesRef.current.clear();
+        setFailedSyncModules([]);
+        consecutiveDivergenceCountRef.current = 0;
+        const nextBaselines = { ...baselinesRef.current };
+        runtime.syncModel.SYNC_MODULES.forEach((mod) => {
+          nextBaselines[mod] = runtime.syncModel.syncModuleFingerprint(importedState, mod);
+          baselineDataRef.current[mod] = runtime.syncModel.syncModuleData(importedState, mod);
+        });
+        persistBaselines(user.uid, nextBaselines);
+        runtime.cloudSync.saveCloudBaselineData(user.uid, baselineDataRef.current);
+        queueCloudSave(importedState, [...runtime.syncModel.SYNC_MODULES]);
+      }
     }
     showToast('Backup importado correctamente. Copia anterior guardada en recuperación.', 'success');
     return true;
@@ -2599,17 +2791,20 @@ export default function App() {
       Object.assign(draft, def);
     })) return false;
     if (cloudUserRef.current) {
-      const user = cloudUserRef.current;
-      pendingRevisionsRef.current = {};
-      failedSyncModulesRef.current.clear();
-      setFailedSyncModules([]);
-      consecutiveDivergenceCountRef.current = 0;
-      const nextBaselines = { ...baselinesRef.current };
-      SYNC_MODULES.forEach((mod) => {
-        nextBaselines[mod] = syncModuleFingerprint(def, mod);
-      });
-      persistBaselines(user.uid, nextBaselines);
-      queueCloudSave(def, [...SYNC_MODULES]);
+      const runtime = getCloudRuntime();
+      if (runtime) {
+        const user = cloudUserRef.current;
+        pendingRevisionsRef.current = {};
+        failedSyncModulesRef.current.clear();
+        setFailedSyncModules([]);
+        consecutiveDivergenceCountRef.current = 0;
+        const nextBaselines = { ...baselinesRef.current };
+        runtime.syncModel.SYNC_MODULES.forEach((mod) => {
+          nextBaselines[mod] = runtime.syncModel.syncModuleFingerprint(def, mod);
+        });
+        persistBaselines(user.uid, nextBaselines);
+        queueCloudSave(def, [...runtime.syncModel.SYNC_MODULES]);
+      }
     }
     showToast('Datos reiniciados a los valores por defecto. Copia anterior guardada en recuperación.', 'info');
     return true;
@@ -2634,13 +2829,16 @@ export default function App() {
       Object.assign(draft, recovery.state);
     })) return false;
     if (cloudUserRef.current) {
-      const user = cloudUserRef.current;
-      const nextBaselines = { ...baselinesRef.current };
-      SYNC_MODULES.forEach((mod) => {
-        nextBaselines[mod] = syncModuleFingerprint(recovery.state, mod);
-      });
-      persistBaselines(user.uid, nextBaselines);
-      queueCloudSave(recovery.state, [...SYNC_MODULES]);
+      const runtime = getCloudRuntime();
+      if (runtime) {
+        const user = cloudUserRef.current;
+        const nextBaselines = { ...baselinesRef.current };
+        runtime.syncModel.SYNC_MODULES.forEach((mod) => {
+          nextBaselines[mod] = runtime.syncModel.syncModuleFingerprint(recovery.state, mod);
+        });
+        persistBaselines(user.uid, nextBaselines);
+        queueCloudSave(recovery.state, [...runtime.syncModel.SYNC_MODULES]);
+      }
     }
     showToast('Copia de recuperación restaurada con éxito.', 'success');
     return true;

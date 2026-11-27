@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ViewType, LifeOSState } from '../types';
 import { isSoundEnabled, setSoundEnabled, playSound } from '../lib/audio';
 import type { CloudSyncStatus, CloudUser } from '../lib/cloudSync';
+import { preloadCloudSync } from '../lib/cloudSyncLoader';
 import { CelestianMark } from './visual/CelestianMark';
 import { AppIcon, type AppIconName } from './AppIcon';
 import { isModuleEnabled } from '../lib/moduleVisibility';
@@ -280,6 +281,15 @@ export const Topbar: React.FC<TopbarProps> = ({
         <div ref={cloudMenuContainerRef} className="relative shrink-0">
           <button
             type="button"
+            onPointerEnter={() => {
+              if (cloudConfigured && !cloudUser) void preloadCloudSync();
+            }}
+            onFocus={() => {
+              if (cloudConfigured && !cloudUser) void preloadCloudSync();
+            }}
+            onTouchStart={() => {
+              if (cloudConfigured && !cloudUser) void preloadCloudSync();
+            }}
             onClick={() => {
               if (cloudConfigured) {
                 if (cloudUser) {
