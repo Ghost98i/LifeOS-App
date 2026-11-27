@@ -39,14 +39,42 @@ export default defineConfig(({ mode }) => {
               background_color: '#07090E',
               display: 'standalone',
               display_override: ['window-controls-overlay', 'standalone'],
-              orientation: 'portrait',
+              orientation: 'any',
+              launch_handler: {
+                client_mode: 'focus-existing',
+              },
               start_url: '/',
               scope: '/',
-              categories: ['productivity', 'lifestyle', 'finance'],
+              categories: ['productivity', 'finance', 'fitness', 'lifestyle'],
               shortcuts: [
-                { name: 'Hoy', short_name: 'Hoy', url: '/?view=dashboard', icons: [{ src: '/lifeos-icon-192.png', sizes: '192x192', type: 'image/png' }] },
-                { name: 'Finanzas', short_name: 'Finanzas', url: '/?view=finanzas', icons: [{ src: '/lifeos-icon-192.png', sizes: '192x192', type: 'image/png' }] },
-                { name: 'Gimnasio', short_name: 'Gimnasio', url: '/?view=gimnasio', icons: [{ src: '/lifeos-icon-192.png', sizes: '192x192', type: 'image/png' }] },
+                {
+                  name: 'Captura rápida',
+                  short_name: 'Capturar',
+                  description: 'Agregar tarea, gasto o nota al instante',
+                  url: '/?shortcut=capture',
+                  icons: [{ src: '/lifeos-icon-192.png', sizes: '192x192', type: 'image/png' }],
+                },
+                {
+                  name: 'Gimnasio',
+                  short_name: 'Gimnasio',
+                  description: 'Abrir rutinas y registro de entrenamiento',
+                  url: '/?shortcut=gimnasio',
+                  icons: [{ src: '/lifeos-icon-192.png', sizes: '192x192', type: 'image/png' }],
+                },
+                {
+                  name: 'Finanzas',
+                  short_name: 'Finanzas',
+                  description: 'Consultar cuentas, gastos y presupuestos',
+                  url: '/?shortcut=finanzas',
+                  icons: [{ src: '/lifeos-icon-192.png', sizes: '192x192', type: 'image/png' }],
+                },
+                {
+                  name: 'Resumen de Hoy',
+                  short_name: 'Hoy',
+                  description: 'Ver prioridades y foco del día',
+                  url: '/?shortcut=hoy',
+                  icons: [{ src: '/lifeos-icon-192.png', sizes: '192x192', type: 'image/png' }],
+                },
               ],
               icons: [
                 { src: '/lifeos-icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
@@ -54,16 +82,32 @@ export default defineConfig(({ mode }) => {
                 { src: '/icon-192-maskable.png', sizes: '192x192', type: 'image/png', purpose: 'maskable' },
                 { src: '/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
               ],
+              screenshots: [
+                {
+                  src: '/screenshots/desktop-hoy.png',
+                  sizes: '1280x720',
+                  type: 'image/png',
+                  form_factor: 'wide',
+                  label: 'Resumen diario de Celestian LifeOS en escritorio',
+                },
+                {
+                  src: '/screenshots/mobile-hoy.png',
+                  sizes: '390x844',
+                  type: 'image/png',
+                  form_factor: 'narrow',
+                  label: 'Resumen diario de Celestian LifeOS en móvil',
+                },
+              ],
             },
             workbox: {
               // Keep the actual interface available offline, including local fonts
-              // and the existing gym/completion artwork. The five Cervino panoramas
-              // and dotLottie WASM runtime are large assets: they stay out of the
-              // install-time precache and are cached on demand by runtimeCaching below.
+              // and the existing gym/completion artwork. The five Cervino panoramas,
+              // store screenshots, and dotLottie WASM runtime stay out of the
+              // install-time precache so the Service Worker stays lean.
               globPatterns: ['**/*.{js,css,html,woff2,png,webp,svg,lottie,json}'],
               // Digital Asset Links and public legal/info pages must never be
               // swallowed by the SPA navigation fallback.
-              globIgnores: ['**/.well-known/**', '**/cervino-panorama-*.webp'],
+              globIgnores: ['**/.well-known/**', '**/cervino-panorama-*.webp', '**/screenshots/**'],
               navigateFallbackDenylist: [
                 /^\/\.well-known\//,
                 /^\/robots\.txt$/,

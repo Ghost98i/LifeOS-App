@@ -54,6 +54,11 @@ import { ToastViewport } from './components/ToastViewport';
 import { CelestianConfirmHost } from './components/CelestianConfirmHost';
 import { PwaUpdatePrompt } from './components/PwaUpdatePrompt';
 import { syncDocumentThemeColor } from './lib/pwaRecovery';
+import {
+  clearShortcutFromHistory,
+  parsePwaShortcut,
+  resolvePwaShortcutEffect,
+} from './lib/pwaShortcuts';
 import { showToast } from './lib/toast';
 import { addRemoteResaleVersion, includeResaleConflictModules, loadResaleConflict, saveResaleConflict, type ResaleConflictRecord } from './lib/resaleConflictRecovery';
 import type { ResaleConflictReconciliationPreview } from './lib/resaleConflictResolution';
@@ -371,6 +376,7 @@ export default function App() {
   const [resaleReconcilePreview, setResaleReconcilePreview] = useState<ResaleConflictReconciliationPreview | null>(null);
 
   const stateRef = useRef(state);
+  const initialStorageBackendRef = useRef(storageBackend);
   const cloudUserRef = useRef<CloudUser | null>(null);
   const cloudSessionEpochRef = useRef(0);
   const storageUserIdRef = useRef<string | null>(null);
@@ -2723,7 +2729,27 @@ export default function App() {
   }, [state.settings.privacyMode]);
 
   useEffect(() => {
-    const action = new URLSearchParams(window.location.search).get('action');
+    const params = new URLSearchParams(window.location.search);
+    const onboardingDone = !isUserPendingOnboarding(stateRef.current, initialStorageBackendRef.current);
+
+    if (params.has('shortcut')) {
+      const shortcut = parsePwaShortcut(window.location.search);
+      clearShortcutFromHistory(window);
+      const resolution = resolvePwaShortcutEffect(shortcut, stateRef.current, { onboardingDone });
+      if (resolution.kind === 'open-capture') {
+        prefetchCaptureChunk();
+        setQuickCaptureKind('tarea');
+        setIsQuickCaptureOpen(true);
+      } else if (resolution.kind === 'navigate') {
+        prefetchViewChunk(resolution.view);
+        setCurrentView(resolution.view);
+      }
+      return;
+    }
+
+    if (!onboardingDone) return;
+
+    const action = params.get('action');
     if (action === 'capture') {
       setQuickCaptureKind('tarea');
       setIsQuickCaptureOpen(true);
@@ -2732,10 +2758,16 @@ export default function App() {
       setQuickCaptureKind('nota');
       setIsQuickCaptureOpen(true);
     }
-    if (action === 'gym') setCurrentView('gimnasio');
-    const viewParam = new URLSearchParams(window.location.search).get('view');
-    if (viewParam && ['dashboard', 'agenda', 'calendario', 'trabajo', 'reventa', 'finanzas', 'gimnasio', 'estudios', 'notas', 'ia', 'config'].includes(viewParam)) {
-      setCurrentView(viewParam as ViewType);
+    if (action === 'gym' && isModuleEnabled(stateRef.current, 'gimnasio')) {
+      setCurrentView('gimnasio');
+    }
+    const viewParam = params.get('view');
+    if (
+      viewParam &&
+      ['dashboard', 'agenda', 'calendario', 'trabajo', 'reventa', 'finanzas', 'gimnasio', 'estudios', 'notas', 'ia', 'config'].includes(viewParam)
+    ) {
+      const targetView = isModuleHidden(stateRef.current, viewParam) ? 'dashboard' : (viewParam as ViewType);
+      setCurrentView(targetView);
     }
   }, []);
 

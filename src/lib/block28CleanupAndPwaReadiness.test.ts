@@ -71,7 +71,7 @@ test('Bloque 28.2: vite.config.ts define manifest PWA completo para Lighthouse, 
   assert.match(viteConfig, /scope:\s*'\/'/);
   assert.match(viteConfig, /display:\s*'standalone'/);
   assert.match(viteConfig, /display_override:\s*\['window-controls-overlay',\s*'standalone'\]/);
-  assert.match(viteConfig, /categories:\s*\['productivity',\s*'lifestyle',\s*'finance'\]/);
+  assert.match(viteConfig, /categories:\s*\['productivity',\s*'finance',\s*'fitness',\s*'lifestyle'\]/);
   assert.match(viteConfig, /theme_color:\s*'#07090E'/);
   assert.match(viteConfig, /background_color:\s*'#07090E'/);
 
@@ -106,12 +106,12 @@ test('Bloque 28.2: vite.config.ts define manifest PWA completo para Lighthouse, 
     assert.equal(dims.height, icon.size, `${icon.src}: alto debe ser ${icon.size}`);
   }
 
-  // 3 shortcuts útiles apuntando a /?view=... con ícono existente
-  for (const view of ['dashboard', 'finanzas', 'gimnasio']) {
+  // 4 shortcuts útiles apuntando a /?shortcut=... con ícono existente
+  for (const shortcut of ['capture', 'gimnasio', 'finanzas', 'hoy']) {
     assert.match(
       viteConfig,
-      new RegExp(`url:\\s*'/\\?view=${view}'`),
-      `Falta shortcut para /?view=${view}`
+      new RegExp(`url:\\s*'/\\?shortcut=${shortcut}'`),
+      `Falta shortcut para /?shortcut=${shortcut}`
     );
   }
 });

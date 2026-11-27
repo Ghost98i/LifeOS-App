@@ -17,19 +17,22 @@
         "headers": [
           { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
           { "key": "X-Content-Type-Options", "value": "nosniff" },
-          { "key": "X-Frame-Options", "value": "DENY" },
           { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-          { "key": "Permissions-Policy", "value": "geolocation=(), camera=(), microphone=(), payment=()" },
+          { "key": "X-Frame-Options", "value": "DENY" },
+          { "key": "Cross-Origin-Opener-Policy", "value": "same-origin-allow-popups" },
+          { "key": "Permissions-Policy", "value": "geolocation=(), camera=(), microphone=(), payment=(), usb=(), interest-cohort=()" },
+          { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
           {
             "key": "Content-Security-Policy",
-            "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; script-src-elem 'self' https://apis.google.com/js/api.js https://apis.google.com/_/scs/abc-static/_/js/; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com; img-src 'self' data: https://lh3.googleusercontent.com; font-src 'self'; frame-src https://*.firebaseapp.com https://accounts.google.com; object-src 'none'; base-uri 'self';"
+            "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'wasm-unsafe-eval'; script-src-elem 'self' https://apis.google.com/js/api.js https://apis.google.com/_/scs/abc-static/_/js/; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://lh3.googleusercontent.com https://*.googleusercontent.com; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com https://lifeosanywhere.firebaseapp.com https://lifeosanywhere.web.app; frame-src 'self' https://lifeosanywhere.firebaseapp.com https://accounts.google.com https://apis.google.com; worker-src 'self' blob:; manifest-src 'self'"
           }
         ]
       },
       {
-        "regex": "^[/\\\\]\\.well-known[/\\\\]assetlinks\\.json$",
+        "regex": "^[/\\\\]\\.well-known[/\\\\].*",
         "headers": [
-          { "key": "Content-Type", "value": "application/json; charset=utf-8" }
+          { "key": "Content-Type", "value": "application/json; charset=utf-8" },
+          { "key": "Cache-Control", "value": "public, max-age=300" }
         ]
       },
       {

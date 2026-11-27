@@ -542,7 +542,7 @@ test('Seguridad & Hosting — Validación estática de CSP y Permissions-Policy 
   assert.equal(assetLinksRewrite?.destination, '/.well-known/assetlinks.json');
   const assetLinksHeaders = effectiveHeaders('/.well-known/assetlinks.json');
   assert.equal(assetLinksHeaders['content-type'], 'application/json; charset=utf-8');
-  assert.equal(assetLinksHeaders['cache-control'], 'no-cache, no-store, must-revalidate');
+  assert.equal(assetLinksHeaders['cache-control'], 'public, max-age=300');
   const assetLinks = JSON.parse(fs.readFileSync(path.resolve(process.cwd(), 'public/.well-known/assetlinks.json'), 'utf8'));
   assert.equal(assetLinks[0].relation[0], 'delegate_permission/common.handle_all_urls');
   assert.equal(assetLinks[0].target.namespace, 'android_app');
