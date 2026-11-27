@@ -45,7 +45,7 @@ import {
 import { showToast } from '../lib/toast';
 import { isStreamingEnabled } from '../lib/moduleVisibility';
 import { ProjectsManager } from './ProjectsManager';
-import { PrivacyAmount, PrivacyProvider, usePrivacyMode } from './PrivacyAmount';
+import { PrivacyAmount, PrivateFinancialText, PrivacyProvider, usePrivacyMode } from './PrivacyAmount';
 import { CompletionCheck } from './ui/CompletionCheck';
 import { CelestianSwitch } from './ui/CelestianSwitch';
 import { ListDivider, SectionHeader, SurfaceCard } from './ui/SurfacePrimitives';
@@ -1109,7 +1109,9 @@ export const NotasView: React.FC<NotasViewProps> = ({
                         {isPinned && <Pin size={15} strokeWidth={1.75} aria-label="Nota fijada" className="mt-1 shrink-0 text-[#4F46E5] dark:text-indigo-400" />}
                         {p.title && (
                           <button type="button" onClick={() => handleStartEdit(p)} className="min-w-0 flex-1 text-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#4F46E5]" aria-label={`Abrir nota ${p.title}`}>
-                            <h3 className="text-[15px] font-semibold leading-snug tracking-[-0.015em] text-slate-900 dark:text-slate-100 break-words">{p.title}</h3>
+                            <h3 className="text-[15px] font-semibold leading-snug tracking-[-0.015em] text-slate-900 dark:text-slate-100 break-words [overflow-wrap:anywhere]">
+                              <PrivateFinancialText>{p.title}</PrivateFinancialText>
+                            </h3>
                           </button>
                         )}
                       </div>
@@ -1193,19 +1195,21 @@ export const NotasView: React.FC<NotasViewProps> = ({
                     </div>
 
                     <button type="button" onClick={() => handleStartEdit(p)} className="min-w-0 text-left cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#4F46E5]" aria-label={`Abrir contenido de la nota ${p.title || p.text.slice(0, 45)}`}>
-                      <span className="line-clamp-5 text-sm leading-6 text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words">{p.text}</span>
+                      <span className="line-clamp-5 text-sm leading-6 text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                        <PrivateFinancialText>{p.text}</PrivateFinancialText>
+                      </span>
                     </button>
 
                     {/* Footer: Tags and Relative Date */}
                     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs dark:border-white/[0.06]">
                       {p.tags && p.tags.length > 0 ? (
-                        <div className="flex flex-wrap items-center gap-1.5">
+                        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
                           {p.tags.map((tag) => (
                             <button
                               key={tag}
                               type="button"
                               onClick={() => setNoteSearch(tag)}
-                              className="min-h-10 rounded-lg border border-slate-200/80 bg-slate-50 px-2.5 text-xs font-medium text-slate-600 hover:border-[#4F46E5] hover:text-[#4F46E5] dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-indigo-300 cursor-pointer"
+                              className="min-h-10 max-w-full truncate rounded-lg border border-slate-200/80 bg-slate-50 px-2.5 text-xs font-medium text-slate-600 hover:border-[#4F46E5] hover:text-[#4F46E5] dark:border-white/[0.08] dark:bg-white/[0.04] dark:text-slate-300 dark:hover:text-indigo-300 cursor-pointer"
                               title={`Filtrar por #${tag}`}
                             >
                               #{tag}

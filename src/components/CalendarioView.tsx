@@ -6,7 +6,7 @@ import {
   formatMoney,
   uid,
 } from '../lib/storage';
-import { PrivacyAmount } from './PrivacyAmount';
+import { PrivacyAmount, PrivateFinancialText } from './PrivacyAmount';
 import {
   EVENT_TYPE_META,
   calendarItemsOnDate,
@@ -37,9 +37,13 @@ const CAL_CLEAN_FOCUS =
   'outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/70';
 
 function formatNaturalDate(iso: string, isToday = false): string {
-  if (!iso) return '';
-  const parts = iso.split('-').map(Number);
+  if (!iso || typeof iso !== 'string') return '';
+  const parts = iso.slice(0, 10).split('-').map(Number);
+  if (parts.length < 3 || parts.some((n) => !Number.isFinite(n))) return '';
   const date = new Date(parts[0], parts[1] - 1, parts[2], 12, 0, 0);
+  if (Number.isNaN(date.getTime()) || date.getFullYear() !== parts[0] || date.getMonth() !== parts[1] - 1 || date.getDate() !== parts[2]) {
+    return '';
+  }
   const weekday = date.toLocaleDateString('es-UY', { weekday: 'short' }).replace(/\.$/, '');
   const monthName = date.toLocaleDateString('es-UY', { month: 'short' }).replace(/\.$/, '').toLocaleLowerCase('es-UY');
   const capitalizedWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
@@ -473,7 +477,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({
                           className={`flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium truncate ${itemPillTone(item, isSelected)}${item.isDone ? ' opacity-45 line-through' : ''}`}
                         >
                           <AppIcon name={itemIconName(item.type)} className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{item.time && `${item.time} `}{item.name}</span>
+                          <span className="truncate">{item.time && `${item.time} `}<PrivateFinancialText>{item.name}</PrivateFinancialText></span>
                         </div>
                       ))}
                       {items.length > 2 && (
@@ -543,8 +547,8 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({
                         }}
                         className={`min-w-0 flex-1 rounded-lg text-left cursor-pointer ${CAL_CLEAN_FOCUS}`}
                       >
-                        <span className={`block text-sm font-medium leading-snug text-[var(--text)] ${item.isDone ? 'line-through opacity-60' : ''}`}>
-                          {item.name}
+                        <span className={`block break-words [overflow-wrap:anywhere] text-sm font-medium leading-snug text-[var(--text)] ${item.isDone ? 'line-through opacity-60' : ''}`}>
+                          <PrivateFinancialText>{item.name}</PrivateFinancialText>
                         </span>
                         <span className="mt-0.5 block text-xs text-[var(--text-soft)]">
                           {item.time && <span className="font-semibold tabular-nums text-[#4F46E5] dark:text-indigo-300">{item.time} · </span>}
@@ -629,7 +633,10 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({
               <ListDivider>
                 {upcoming.map((e) => {
                   const isEventToday = e.occursOn === todayIso;
-                  const occurrence = new Date(`${e.occursOn}T12:00:00`).toLocaleDateString('es-UY', { day: 'numeric', month: 'short', year: 'numeric' });
+                  const occurrenceDate = new Date(`${e.occursOn}T12:00:00`);
+                  const occurrence = Number.isNaN(occurrenceDate.getTime())
+                    ? ''
+                    : occurrenceDate.toLocaleDateString('es-UY', { day: 'numeric', month: 'short', year: 'numeric' });
                   const sourceEvent = (state.calendarEvents || []).find((ev) => ev.id === e.id);
 
                   return (
@@ -645,7 +652,7 @@ export const CalendarioView: React.FC<CalendarioViewProps> = ({
                         <AppIcon name={itemIconName(e.type)} className="h-4 w-4 shrink-0 text-[#4F46E5] dark:text-indigo-300" />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium text-[var(--text)] transition-colors group-hover:text-[#4F46E5] dark:group-hover:text-indigo-300">
-                            {e.name}
+                            <PrivateFinancialText>{e.name}</PrivateFinancialText>
                           </span>
                           <span
                             className={`mt-0.5 block tabular-nums text-[11px] font-semibold ${isEventToday ? 'text-[#4F46E5] dark:text-indigo-300' : 'text-[var(--text-soft)]'}`}

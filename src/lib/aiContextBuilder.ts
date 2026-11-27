@@ -35,6 +35,7 @@ import {
 import { getCategoryName } from './financeCategories';
 import { deriveCashflowProjection } from './financeCashflow';
 import { goalCurrentValue } from './calculations';
+import { maskFinancialText } from './financialPrivacy';
 
 export type AIGoalId =
   | 'organizar_dia'
@@ -2320,7 +2321,8 @@ export function buildAIContextPrompt(
     }
 
     if (content) {
-      dataSections.push(`### ${sectionTitle}\n${content}`);
+      const safeContent = options.hideExactAmounts ? maskFinancialText(content, true) : content;
+      dataSections.push(`### ${sectionTitle}\n${safeContent}`);
     }
   }
 

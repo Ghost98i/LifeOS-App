@@ -54,13 +54,13 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
   return (
     <div className="finance-surface border border-[var(--finance-border)] rounded-2xl p-3 sm:p-4 space-y-3">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex min-w-0 items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400 font-bold text-xs shrink-0">
             <AppIcon name="inbox" className="h-4 w-4" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
               <h3 className="font-extrabold text-sm text-[var(--finance-text-primary)]">
                 Atención requerida
               </h3>
@@ -106,9 +106,9 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
               key={att.commitment.id}
               className="p-3.5 rounded-xl border border-[var(--finance-border)] bg-[var(--finance-surface-subtle)] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
             >
-              <div className="min-w-0 space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-bold text-sm text-[var(--finance-text-primary)] break-words">
+              <div className="min-w-0 flex-1 space-y-1">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <span className="min-w-0 max-w-full font-bold text-sm text-[var(--finance-text-primary)] break-words [overflow-wrap:anywhere]">
                     <PrivateFinancialText>{att.commitment.name}</PrivateFinancialText>
                   </span>
                   <span
@@ -167,8 +167,8 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                 className="p-3.5 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/30 space-y-2.5"
               >
                 {/* Top Row: Movement Meta */}
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 flex-wrap text-xs">
+                <div className="flex min-w-0 flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-2">
+                  <div className="flex min-w-0 flex-1 items-center gap-2 flex-wrap text-xs">
                     <span
                       className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
                         tx.type === 'ingreso'
@@ -184,7 +184,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                     </PrivacyAmount>
 
                     <span className="text-[var(--text-faint)]">·</span>
-                    <span className="font-semibold text-[var(--text)]">
+                    <span className="min-w-0 max-w-full font-semibold text-[var(--text)] break-words [overflow-wrap:anywhere]">
                       <PrivateFinancialText>{tx.note || tx.category}</PrivateFinancialText>
                     </span>
 
@@ -194,7 +194,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                     {account && (
                       <>
                         <span className="text-[var(--text-faint)]">·</span>
-                        <span className="text-[var(--text-soft)]"><PrivateFinancialText>{account.name}</PrivateFinancialText></span>
+                        <span className="min-w-0 max-w-full text-[var(--text-soft)] break-words [overflow-wrap:anywhere]"><PrivateFinancialText>{account.name}</PrivateFinancialText></span>
                       </>
                     )}
                   </div>
@@ -226,8 +226,8 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                 <div className="space-y-1.5 pt-1 border-t border-[var(--border)]/50">
                   <p className="text-[11px] text-[var(--text-soft)]">Este movimiento ya está contabilizado. Revisarlo u ocultar el aviso conserva su efecto en el saldo.</p>
                   {item.reasons.map((r: ReviewReason, idx: number) => (
-                    <div key={idx} className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                      <div className="flex items-center gap-1.5 flex-wrap">
+                    <div key={idx} className="flex min-w-0 flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex min-w-0 flex-1 items-center gap-1.5 flex-wrap">
                         <span
                           className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
                             r.code === 'possible_duplicate' || r.code === 'missing_account' || r.code === 'suspicious_amount'
@@ -239,7 +239,7 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                         >
                           {r.label}
                         </span>
-                        <span className="text-[var(--text-soft)] text-[11px]"><PrivateFinancialText>{r.description}</PrivateFinancialText></span>
+                        <span className="min-w-0 max-w-full text-[var(--text-soft)] text-[11px] break-words [overflow-wrap:anywhere]"><PrivateFinancialText>{r.description}</PrivateFinancialText></span>
                       </div>
 
                       {/* Targeted One-Click Quick Fixes */}
@@ -321,11 +321,11 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                       {item.matchResult.candidates.map((cand) => (
                         <div
                           key={cand.targetId}
-                          className="p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] flex flex-wrap items-center justify-between gap-2 text-xs"
+                          className="p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] flex min-w-0 flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-2 text-xs"
                         >
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-[var(--text)]"><PrivateFinancialText>{cand.name}</PrivateFinancialText></span>
+                          <div className="min-w-0 flex-1 space-y-0.5">
+                            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+                              <span className="min-w-0 max-w-full font-bold text-[var(--text)] break-words [overflow-wrap:anywhere]"><PrivateFinancialText>{cand.name}</PrivateFinancialText></span>
                               <span className="text-[var(--text-faint)]">·</span>
                               <PrivacyAmount as="span" className="font-bold tabular-nums text-[var(--text)]">
                                 {formatMoney(cand.amount, cand.currency || 'UYU')}
@@ -334,9 +334,9 @@ export const FinanceReviewInbox: React.FC<FinanceReviewInboxProps> = ({
                               <span className="text-[11px] text-[var(--text-soft)]">{cand.cycleLabel}</span>
                             </div>
                             {cand.reasons.length > 0 && (
-                              <div className="flex items-center gap-1 flex-wrap text-[10px] text-[var(--text-soft)]">
+                              <div className="flex min-w-0 items-center gap-1 flex-wrap text-[10px] text-[var(--text-soft)]">
                                 {cand.reasons.map((r, i) => (
-                                  <span key={i} className="px-1.5 py-0.5 rounded bg-[var(--surface-muted)] text-[var(--text-soft)]">
+                                  <span key={i} className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] px-1.5 py-0.5 rounded bg-[var(--surface-muted)] text-[var(--text-soft)]">
                                     <PrivateFinancialText>{r}</PrivateFinancialText>
                                   </span>
                                 ))}

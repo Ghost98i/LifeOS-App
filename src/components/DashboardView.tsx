@@ -839,8 +839,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           {/* Bottom row: saludo + fecha + estado a la izquierda | reloj protagonista + barra 24h a la derecha */}
           <div className="mt-4 flex flex-col gap-3 sm:mt-0 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
             {/* Abajo a la izquierda */}
-            <div className="min-w-0 space-y-1.5">
-              <h1 className="text-[26px] sm:text-[34px] font-semibold tracking-[-0.025em] text-white leading-[1.08] hero-text-shadow">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <h1 className="max-w-full break-words [overflow-wrap:anywhere] text-[26px] sm:text-[34px] font-semibold tracking-[-0.025em] text-white leading-[1.08] hero-text-shadow">
                 {getLocalGreeting(now, state.profile?.name || '')}
               </h1>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -1124,11 +1124,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     onClick={() => (onOpenNote ? onOpenNote(note.id) : onNavigate('notas'))}
                     className="min-w-0 flex-1 text-left cursor-pointer"
                   >
-                    <p className="line-clamp-1 text-sm font-semibold text-slate-900 group-hover:text-indigo-600 dark:text-slate-100 dark:group-hover:text-indigo-400">
+                    <p className="line-clamp-1 break-words [overflow-wrap:anywhere] text-sm font-semibold text-slate-900 group-hover:text-indigo-600 dark:text-slate-100 dark:group-hover:text-indigo-400">
                       {isPrivate ? 'Nota fijada' : title}
                     </p>
                     {!isPrivate && excerpt && (
-                      <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                      <p className="mt-1 line-clamp-2 break-words [overflow-wrap:anywhere] text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                         {excerpt}
                       </p>
                     )}

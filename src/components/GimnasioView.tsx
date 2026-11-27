@@ -1599,7 +1599,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                                   : exercise.equipment === 'corporal' ? 'Peso corporal' : 'Sin carga fijada';
                                 return (
                                   <li key={exercise.id || `${exercise.name}-${exerciseIndex}`} className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2">
-                                    <span className="min-w-0 flex-1 text-sm font-medium text-[var(--text)]">{exerciseIndex + 1}. {exercise.name}</span>
+                                    <span className="min-w-0 flex-1 break-words [overflow-wrap:anywhere] text-sm font-medium text-[var(--text)]">{exerciseIndex + 1}. {exercise.name}</span>
                                     <span className="shrink-0 text-xs tabular-nums text-[var(--text-soft)]">
                                       {exercise.sets?.length || 1} series · {firstSet?.reps ?? 10} reps · {loadLabel}
                                     </span>
@@ -2365,8 +2365,8 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                   </span>
                   <div className="min-w-0">
                     <h2 className="text-sm font-bold text-[var(--text)]">Evolución por ejercicio</h2>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--text-soft)]">
-                      <span className="font-semibold text-[var(--text)]">{activeExerciseMetric.exerciseName}</span>
+                    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--text-soft)]">
+                      <span className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] font-semibold text-[var(--text)]">{activeExerciseMetric.exerciseName}</span>
                       <span>·</span>
                       <button
                         type="button"
@@ -2380,12 +2380,12 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                   </div>
                 </div>
 
-                <div className="ml-auto flex items-center gap-2">
+                <div className="ml-auto flex w-full min-w-0 max-w-full items-center gap-2 sm:w-auto sm:max-w-[260px]">
                   <select
                     aria-label="Elegir ejercicio"
                     value={activeExerciseMetric.key}
                     onChange={(e) => setSelectedExercise(e.target.value)}
-                    className="min-h-10 min-w-48 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-xs font-bold text-[var(--text)] outline-none focus:border-[var(--blue)]"
+                    className="min-h-10 w-full min-w-0 max-w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-xs font-bold text-[var(--text)] outline-none focus:border-[var(--blue)]"
                   >
                     {gymProgress.exercises.map((exercise) => (
                       <option key={exercise.key} value={exercise.key}>{exercise.exerciseName}</option>
@@ -2477,7 +2477,7 @@ export const GimnasioView: React.FC<GimnasioViewProps> = ({
                   </div>
                 </div>
               ) : (
-                <p data-gym-progress-low-data className="rounded-xl bg-[var(--surface-muted)] px-3.5 py-2.5 text-xs text-[var(--text-soft)]">
+                <p data-gym-progress-low-data className="min-w-0 break-words [overflow-wrap:anywhere] rounded-xl bg-[var(--surface-muted)] px-3.5 py-2.5 text-xs text-[var(--text-soft)]">
                   Registrá otra sesión de {activeExercise} para ver el gráfico de carga.
                 </p>
               )}
@@ -3740,11 +3740,11 @@ const LatestWorkoutSession: React.FC<WorkoutSessionCardProps & { initiallyExpand
         </dl>
 
         <div className="mt-3.5 flex flex-col gap-2 rounded-xl bg-[var(--surface-muted)] px-3.5 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-          <p className="min-w-0 text-xs text-[var(--text-soft)]">
+          <p className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-xs text-[var(--text-soft)]">
             {presentation.bestSet ? (
               <>
                 <span className="font-bold text-[var(--text-faint)]">Mejor serie: </span>
-                <span className="font-semibold text-[var(--text)]">
+                <span className="font-semibold text-[var(--text)] break-words [overflow-wrap:anywhere]">
                   {presentation.bestSet.exerciseName} · <strong className="tabular-nums">{presentation.bestSet.weight} kg × {presentation.bestSet.reps}</strong>
                 </span>
               </>

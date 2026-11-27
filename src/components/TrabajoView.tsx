@@ -1113,7 +1113,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                     >
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-[var(--text)]">
-                          {maskFinancialText(application.nextAction || 'Seguimiento', privacyActive)} · {application.empresa}
+                          {maskFinancialText(application.nextAction || 'Seguimiento', privacyActive)} · {maskFinancialText(application.empresa, privacyActive)}
                         </p>
                         <p
                           className={`mt-0.5 text-xs ${
@@ -1127,7 +1127,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                       <button
                         type="button"
                         onClick={() => openEditForm(application)}
-                        aria-label={`Editar postulación de ${application.empresa}`}
+                        aria-label={`Editar postulación de ${maskFinancialText(application.empresa, privacyActive)}`}
                         title="Editar postulación"
                         className={`inline-flex min-h-11 min-w-11 sm:min-h-9 sm:min-w-9 shrink-0 items-center justify-center rounded-xl text-[var(--text-soft)] transition-colors hover:bg-indigo-500/10 hover:text-[#4F46E5] dark:hover:text-[#818CF8] cursor-pointer ${CLEAN_TAB_FOCUS}`}
                       >
@@ -1235,8 +1235,8 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-1.5">
-                                <h3 className="break-words text-sm font-bold text-[var(--text)]">
-                                  {application.empresa}
+                                <h3 className="break-words [overflow-wrap:anywhere] text-sm font-bold text-[var(--text)]">
+                                  {maskFinancialText(application.empresa, privacyActive)}
                                 </h3>
                                 {application.source && (
                                   <span className="inline-flex rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-soft)]">
@@ -1252,8 +1252,8 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                                 )}
                               </div>
                               {application.puesto && (
-                                <p className="mt-0.5 break-words text-xs text-[var(--text-soft)]">
-                                  {application.puesto}
+                                <p className="mt-0.5 break-words [overflow-wrap:anywhere] text-xs text-[var(--text-soft)]">
+                                  {maskFinancialText(application.puesto, privacyActive)}
                                 </p>
                               )}
                             </div>
@@ -1283,7 +1283,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                                 </span>
                               )}
                               {application.nextAction && (
-                                <span className="text-xs text-[var(--text-soft)]">
+                                <span className="min-w-0 max-w-full text-xs text-[var(--text-soft)] break-words [overflow-wrap:anywhere]">
                                   Seguimiento: {maskFinancialText(application.nextAction, privacyActive)}
                                   {application.nextActionDate ? ` · ${fmtDate(application.nextActionDate)}` : ''}
                                 </span>
@@ -1292,7 +1292,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                           )}
 
                           <select
-                            aria-label={`Estado de ${application.empresa}`}
+                            aria-label={`Estado de ${maskFinancialText(application.empresa, privacyActive)}`}
                             value={application.estado}
                             onChange={(e) => handleSetEstado(application.id, e.target.value as JobApplication['estado'])}
                             className={`min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 text-sm font-medium text-[var(--text)] cursor-pointer ${CLEAN_CONTROL_FOCUS}`}
@@ -1324,7 +1324,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() => openEditForm(application)}
-                                aria-label={`Editar postulación de ${application.empresa}`}
+                                aria-label={`Editar postulación de ${maskFinancialText(application.empresa, privacyActive)}`}
                                 title="Editar postulación"
                                 className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[var(--text-soft)] transition-colors hover:bg-indigo-500/10 hover:text-[#4F46E5] dark:hover:text-[#818CF8] cursor-pointer ${CLEAN_TAB_FOCUS}`}
                               >
@@ -1333,7 +1333,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleDeleteApplication(application.id)}
-                                aria-label={`Eliminar postulación de ${application.empresa}`}
+                                aria-label={`Eliminar postulación de ${maskFinancialText(application.empresa, privacyActive)}`}
                                 title="Eliminar postulación"
                                 className="trabajo-clean-focus inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-[var(--text-soft)] transition-colors hover:bg-rose-500/10 hover:text-rose-600 outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-rose-400/70 dark:hover:text-rose-400 cursor-pointer"
                               >
@@ -1384,7 +1384,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                             )}
                             <td className="px-3.5 py-3 font-bold text-[var(--text)]">
                               <div className="flex flex-wrap items-center gap-2">
-                                <span>{application.empresa}</span>
+                                <span className="break-words [overflow-wrap:anywhere]">{maskFinancialText(application.empresa, privacyActive)}</span>
                                 {application.source && (
                                   <span className="inline-flex rounded-md bg-[var(--surface-muted)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-soft)]">
                                     {application.source}
@@ -1411,7 +1411,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                               </div>
                             </td>
                             <td className="px-3.5 py-3 text-[var(--text-soft)]">
-                              {application.puesto}
+                              <span className="break-words [overflow-wrap:anywhere]">{maskFinancialText(application.puesto, privacyActive)}</span>
                               {application.notas && (
                                 <p className="mt-1 max-w-xs truncate text-xs text-[var(--text-faint)]">
                                   {maskFinancialText(application.notas, privacyActive)}
@@ -1425,7 +1425,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                             </td>
                             <td className="px-3.5 py-3">
                               <select
-                                aria-label={`Estado de ${application.empresa}`}
+                                aria-label={`Estado de ${maskFinancialText(application.empresa, privacyActive)}`}
                                 value={application.estado}
                                 onChange={(e) =>
                                   handleSetEstado(application.id, e.target.value as JobApplication['estado'])
@@ -1472,7 +1472,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => openEditForm(application)}
-                                  aria-label={`Editar postulación de ${application.empresa}`}
+                                  aria-label={`Editar postulación de ${maskFinancialText(application.empresa, privacyActive)}`}
                                   title="Editar postulación"
                                   className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-soft)] transition-colors hover:bg-indigo-500/10 hover:text-[#4F46E5] dark:hover:text-[#818CF8] cursor-pointer ${CLEAN_TAB_FOCUS}`}
                                 >
@@ -1481,7 +1481,7 @@ export const TrabajoView: React.FC<TrabajoViewProps> = ({
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteApplication(application.id)}
-                                  aria-label={`Eliminar postulación de ${application.empresa}`}
+                                  aria-label={`Eliminar postulación de ${maskFinancialText(application.empresa, privacyActive)}`}
                                   title="Eliminar postulación"
                                   className="trabajo-clean-focus inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-soft)] transition-colors hover:bg-rose-500/10 hover:text-rose-600 outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-rose-400/70 dark:hover:text-rose-400 cursor-pointer"
                                 >

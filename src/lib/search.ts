@@ -226,22 +226,23 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
       )
     );
 
-    Object.entries(state.agenda || {}).forEach(([day, blocks]) =>
+    Object.entries(state.agenda || {}).forEach(([day, blocks]) => {
+      if (!Array.isArray(blocks)) return;
       blocks.forEach((item) =>
         consider(
           {
             id: `agenda-${item.id}`,
             icon: '',
             iconName: 'calendar',
-            title: item.activity,
+            title: maskFinancialText(item.activity || '', privacyMode),
             subtitle: `${day} · ${item.time}`,
             view: 'agenda',
             category: 'calendar',
           },
           [day, item.time]
         )
-      )
-    );
+      );
+    });
   }
 
   // 3. Transacciones y Finanzas (Módulo 'finanzas')
@@ -494,14 +495,14 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
           id: `job-${item.id}`,
           icon: '',
           iconName: 'briefcase',
-          title: `${typeLabel} · ${item.empresa} · ${item.puesto}`,
+          title: maskFinancialText(`${typeLabel} · ${item.empresa} · ${item.puesto}`, privacyMode),
           subtitle: `Estado: ${getJobStageLabel(type, item.estado)}${item.nextAction ? ` · ${maskFinancialText(item.nextAction, privacyMode)}` : ''}`,
           view: 'trabajo',
           focusId: 'qa-focus-trabajo',
           category: 'jobs',
         },
         [item.empresa, item.puesto, item.estado, typeLabel, type === 'concurso' ? 'concurso llamado público' : 'empleo trabajo'],
-        [item.notas, item.nextAction, item.reclutador]
+        privacyMode ? [item.reclutador] : [item.notas, item.nextAction, item.reclutador]
       );
     });
 
@@ -511,14 +512,14 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
           id: `job-op-${item.id}`,
           icon: '',
           iconName: 'briefcase',
-          title: `${item.empresa} · ${item.puesto || 'Oportunidad'}`,
+          title: maskFinancialText(`${item.empresa} · ${item.puesto || 'Oportunidad'}`, privacyMode),
           subtitle: 'Oportunidad laboral',
           view: 'trabajo',
           focusId: 'qa-focus-trabajo',
           category: 'jobs',
         },
         [item.empresa, item.puesto || 'Oportunidad', 'empleo', 'trabajo'],
-        [item.nota]
+        privacyMode ? [] : [item.nota]
       )
     );
   }
@@ -586,8 +587,8 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
   if (isModuleEnabled(state, 'gimnasio')) {
     const exerciseCatalog = new Map<string, { name: string; muscleGroup?: string; lastDate?: string }>();
     (state.gym?.routineTemplates || []).forEach((tpl) => {
-      tpl.exercises.forEach((ex) => {
-        const key = ex.name.trim().toLowerCase();
+      (Array.isArray(tpl.exercises) ? tpl.exercises : []).forEach((ex) => {
+        const key = (ex?.name || '').trim().toLowerCase();
         if (key && !exerciseCatalog.has(key)) {
           exerciseCatalog.set(key, { name: ex.name, muscleGroup: ex.muscleGroup });
         }
@@ -595,8 +596,8 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
     });
 
     (state.gym?.sessions || []).forEach((session) => {
-      session.exercises.forEach((ex) => {
-        const key = ex.name.trim().toLowerCase();
+      (Array.isArray(session.exercises) ? session.exercises : []).forEach((ex) => {
+        const key = (ex?.name || '').trim().toLowerCase();
         if (key) {
           const existing = exerciseCatalog.get(key);
           if (!existing) {
@@ -624,7 +625,8 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
     });
 
     (state.gym?.sessions || []).forEach((item) => {
-      const exerciseNames = item.exercises.map((e) => e.name).join(', ') || 'Entrenamiento';
+      const exercises = Array.isArray(item.exercises) ? item.exercises : [];
+      const exerciseNames = exercises.map((e) => e.name).filter(Boolean).join(', ') || 'Entrenamiento';
       consider(
         {
           id: `gym-${item.id}`,
@@ -636,11 +638,12 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
           category: 'gym',
         },
         ['sesion', 'gym', 'entrenamiento'],
-        [item.date, ...item.exercises.map((e) => e.muscleGroup)]
+        [item.date, ...exercises.map((e) => e.muscleGroup)]
       );
     });
 
-    (state.gym?.routineTemplates || []).forEach((item) =>
+    (state.gym?.routineTemplates || []).forEach((item) => {
+      const exercises = Array.isArray(item.exercises) ? item.exercises : [];
       consider(
         {
           id: `template-${item.id}`,
@@ -651,9 +654,9 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
           view: 'gimnasio',
           category: 'gym',
         },
-        ['plantilla', 'rutina', ...item.exercises.map((e) => e.name)]
-      )
-    );
+        ['plantilla', 'rutina', ...exercises.map((e) => e.name)]
+      );
+    });
 
     (state.gym?.weight || []).forEach((item) =>
       consider(
@@ -680,7 +683,7 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
           id: `event-${item.id}`,
           icon: '',
           iconName: 'calendarDays',
-          title: item.name,
+          title: maskFinancialText(item.name || '', privacyMode),
           subtitle: `Evento (${item.type}) · ${item.date}`,
           view: 'calendario',
           category: 'calendar',
@@ -693,10 +696,11 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
   // 9. Notas (Módulo 'notas')
   if (isModuleEnabled(state, 'notas')) {
     (state.notes?.postits || []).forEach((item) => {
+      const rawText = typeof item.text === 'string' ? item.text : '';
       const title = item.title?.trim();
-      const firstLine = item.text.trim().split('\n')[0]?.trim() || '';
+      const firstLine = rawText.trim().split('\n')[0]?.trim() || '';
       const displayTitle = maskFinancialText(title || firstLine.slice(0, 60) || 'Nota sin título', privacyMode);
-      const displaySubtitle = maskFinancialText(title ? item.text.slice(0, 60) : `Nota · ${item.date}`, privacyMode);
+      const displaySubtitle = maskFinancialText(title ? rawText.slice(0, 60) : `Nota · ${item.date}`, privacyMode);
       const tagsString = (item.tags || []).join(' ');
 
       consider(
@@ -712,7 +716,7 @@ export function searchLifeOS(state: LifeOSState, rawQuery: string): SearchResult
           badge: item.archived ? 'Archivada' : item.pinned ? 'Fijada' : undefined,
         },
         [tagsString, 'nota'],
-        [item.text, item.date]
+        privacyMode ? [item.date] : [rawText, item.date]
       );
     });
 

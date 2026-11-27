@@ -294,7 +294,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-x-4 text-[11px] text-[var(--finance-text-muted)]">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-[var(--finance-text-muted)]">
             <span className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
               <span>Cobros:</span>
@@ -601,13 +601,13 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                     <div
                       key={com.id}
                       id={`commitment-${com.id}`}
-                      className={`finance-future-row py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-2 text-xs transition-all rounded-xl px-1.5 ${
+                      className={`finance-future-row py-2.5 first:pt-0 last:pb-0 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 text-xs transition-all rounded-xl px-1.5 ${
                         com.active ? 'opacity-100' : 'opacity-50'
                       }`}
                     >
-                      <div className="min-w-0 space-y-0.5">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-semibold text-sm text-[var(--finance-text-primary)] break-words [overflow-wrap:anywhere]"><PrivateFinancialText>{com.name}</PrivateFinancialText></span>
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="flex min-w-0 items-center gap-1.5 flex-wrap">
+                          <span className="min-w-0 max-w-full font-semibold text-sm text-[var(--finance-text-primary)] break-words [overflow-wrap:anywhere]"><PrivateFinancialText>{com.name}</PrivateFinancialText></span>
                           <span className="text-[10px] tabular-nums px-1.5 py-0.2 rounded bg-[var(--finance-surface-subtle)] text-[var(--finance-text-secondary)] border border-[var(--finance-border)]">
                             {freqLabels[com.frequency] || com.frequency}
                           </span>
@@ -719,13 +719,13 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
                 {sortedIncomes.map((inc) => (
                   <div
                     key={inc.id}
-                    className={`finance-future-row py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-2 text-xs transition-opacity ${
+                    className={`finance-future-row py-2.5 first:pt-0 last:pb-0 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 text-xs transition-opacity ${
                       inc.active ? 'opacity-100' : 'opacity-50'
                     }`}
                   >
-                    <div className="min-w-0 space-y-0.5">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="font-semibold text-sm text-[var(--finance-text-primary)] break-words [overflow-wrap:anywhere]"><PrivateFinancialText>{inc.name}</PrivateFinancialText></span>
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <div className="flex min-w-0 items-center gap-1.5 flex-wrap">
+                        <span className="min-w-0 max-w-full font-semibold text-sm text-[var(--finance-text-primary)] break-words [overflow-wrap:anywhere]"><PrivateFinancialText>{inc.name}</PrivateFinancialText></span>
                         <span className="text-[10px] tabular-nums px-1.5 py-0.2 rounded bg-[var(--finance-surface-subtle)] text-[var(--finance-text-secondary)] border border-[var(--finance-border)]">
                           {freqLabels[inc.frequency] || inc.frequency}
                         </span>
@@ -798,9 +798,9 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
 
         {/* Sub-block: Suscripciones y Servicios Recurrentes (Lista densa sin carditis) */}
         <div className="border-t border-[var(--finance-border)] pt-5 space-y-3">
-          <div className="flex items-center justify-between pb-1">
-            <div>
-              <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-1">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                 <h3 className="text-sm font-extrabold text-[var(--finance-text-primary)]">
                   Suscripciones
                 </h3>
@@ -818,7 +818,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
             <button
               type="button"
               onClick={() => setIsAddSubOpen(true)}
-              className={`finance-control px-2.5 py-1 text-xs font-bold rounded-xl border flex items-center gap-1 cursor-pointer transition-all hover:border-[var(--finance-border-strong)] min-h-[34px] ${CLEAN_FOCUS_RING}`}
+              className={`finance-control shrink-0 px-2.5 py-1 text-xs font-bold rounded-xl border flex items-center gap-1 cursor-pointer transition-all hover:border-[var(--finance-border-strong)] min-h-[34px] ${CLEAN_FOCUS_RING}`}
             >
               <AppIcon name="plus" className="h-3.5 w-3.5" />
               <span>Suscripción</span>
@@ -826,7 +826,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
           </div>
 
           {subscriptions.length === 0 ? (
-            <div className="p-3 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] text-xs text-[var(--finance-text-muted)] flex items-center justify-between">
+            <div className="p-3 rounded-xl bg-[var(--finance-surface-subtle)] border border-[var(--finance-border)] text-xs text-[var(--finance-text-muted)] flex flex-wrap items-center justify-between gap-2">
               <span>Sin suscripciones registradas</span>
               <button
                 type="button"
@@ -841,7 +841,7 @@ export const FinanceFutureView: React.FC<FinanceFutureViewProps> = ({
               {subscriptions.map((sub) => (
                 <div
                   key={sub.id}
-                  className="py-2.5 flex items-center justify-between gap-3 text-xs hover:bg-[var(--finance-surface-hover)] px-2 -mx-2 rounded-lg transition-colors"
+                  className="py-2.5 flex items-center justify-between gap-3 text-xs hover:bg-[var(--finance-surface-hover)] px-2 rounded-lg transition-colors"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="h-6 w-6 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 font-bold text-[10px]">

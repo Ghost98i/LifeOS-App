@@ -187,7 +187,13 @@ export default function App() {
   const [focusNonce, setFocusNonce] = useState(0);
   const [cloudUser, setCloudUser] = useState<CloudUser | null>(null);
   const [storageUserId, setStorageUserId] = useState<string | null>(null);
-  const [syncStatus, setSyncStatus] = useState<CloudSyncStatus>(cloudSyncConfigured ? 'connecting' : 'unavailable');
+  const [syncStatus, setSyncStatus] = useState<CloudSyncStatus>(() =>
+    typeof navigator !== 'undefined' && !navigator.onLine
+      ? 'offline'
+      : cloudSyncConfigured
+        ? 'connecting'
+        : 'unavailable'
+  );
   const [failedSyncModules, setFailedSyncModules] = useState<SyncModuleKey[]>([]);
   const [syncErrorMessage, setSyncErrorMessage] = useState<string | null>(null);
   const [isCryptoUnlockOpen, setIsCryptoUnlockOpen] = useState(false);
@@ -1037,7 +1043,7 @@ export default function App() {
 
   useEffect(() => {
     if (!cloudSyncConfigured) return;
-    setSyncStatus('connecting');
+    setSyncStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'connecting');
     return observeCloudUser((user) => {
       const previousUser = cloudUserRef.current;
 
@@ -1137,7 +1143,7 @@ export default function App() {
       tombstonesRef.current = {};
       setStorageUserId(null);
       setCloudUser(null);
-      setSyncStatus('signed-out');
+      setSyncStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'signed-out');
       if (previousUser) {
         const local = loadStoredState();
         stateRef.current = local.state;
@@ -1719,7 +1725,10 @@ export default function App() {
         queueCloudSave(stateRef.current, [...failedSyncModulesRef.current]);
       }
     };
-    const handleOffline = () => setSyncStatus(cloudUserRef.current ? 'offline' : cloudSyncConfigured ? 'signed-out' : 'unavailable');
+    const handleOffline = () => {
+      if (resaleWriteBlockedRef.current) { setSyncStatus('conflict'); return; }
+      setSyncStatus('offline');
+    };
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && cloudUserRef.current && navigator.onLine) {
         if (failedSyncModulesRef.current.size > 0) {
@@ -1741,12 +1750,26 @@ export default function App() {
   }, []);
 
   const handleCloudSignIn = async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      setSyncStatus('offline');
+      showToast('Estás sin conexión. Tus datos siguen guardándose en este dispositivo.', 'info');
+      return;
+    }
     setSyncStatus('connecting');
     try {
       await signInToCloud();
     } catch (error) {
-      setSyncStatus('signed-out');
-      showToast(error instanceof Error ? error.message : 'No se pudo iniciar sesión con Google.', 'error');
+      const rawMsg = error instanceof Error ? error.message : String(error || '');
+      const isNetworkFailure =
+        (typeof navigator !== 'undefined' && !navigator.onLine) ||
+        /network-request-failed|failed to fetch|offline|network error/i.test(rawMsg);
+      setSyncStatus(isNetworkFailure ? 'offline' : 'signed-out');
+      showToast(
+        isNetworkFailure
+          ? 'Estás sin conexión. Tus datos siguen guardándose en este dispositivo.'
+          : (error instanceof Error ? error.message : 'No se pudo iniciar sesión con Google.'),
+        isNetworkFailure ? 'info' : 'error'
+      );
     }
   };
 

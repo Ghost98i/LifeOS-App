@@ -235,7 +235,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                   <div className="flex min-w-0 items-start justify-between gap-2">
                     <div className="min-w-0 flex-1 space-y-1">
                       <div className="flex min-w-0 items-start justify-between gap-2">
-                        <h4 className="text-sm font-bold leading-snug text-[var(--text)] break-words">{app.empresa}</h4>
+                        <h4 className="text-sm font-bold leading-snug text-[var(--text)] break-words [overflow-wrap:anywhere]">{maskFinancialText(app.empresa, privacyActive)}</h4>
                         {safeHref && (
                           <a
                             href={safeHref}
@@ -250,7 +250,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                         )}
                       </div>
                       {app.puesto && (
-                        <p className="break-words text-xs font-medium text-[var(--text-soft)]">{app.puesto}</p>
+                        <p className="break-words [overflow-wrap:anywhere] text-xs font-medium text-[var(--text-soft)]">{maskFinancialText(app.puesto, privacyActive)}</p>
                       )}
                       {(app.source || (typeof app.salaryExpectation === 'number' && app.salaryExpectation > 0)) && (
                         <div className="flex flex-wrap items-center gap-1.5">
@@ -272,16 +272,16 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                   </div>
 
                   {(app.reclutador || app.notas || app.followUpNotes) && (
-                    <div className="space-y-1 text-xs text-[var(--text-soft)]">
+                    <div className="min-w-0 space-y-1 text-xs text-[var(--text-soft)]">
                       {app.reclutador && (
-                        <div className="flex items-center gap-1.5 text-[var(--text-faint)]">
+                        <div className="flex min-w-0 items-center gap-1.5 text-[var(--text-faint)]">
                           <User className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                          <span className="break-words">{app.reclutador}</span>
+                          <span className="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">{app.reclutador}</span>
                         </div>
                       )}
-                      {app.notas && <p className="break-words text-xs text-[var(--text-faint)]">{maskFinancialText(app.notas, privacyActive)}</p>}
+                      {app.notas && <p className="break-words [overflow-wrap:anywhere] text-xs text-[var(--text-faint)]">{maskFinancialText(app.notas, privacyActive)}</p>}
                       {app.followUpNotes && (
-                        <p className="break-words text-xs text-[var(--text-soft)]">Seguimiento: {maskFinancialText(app.followUpNotes, privacyActive)}</p>
+                        <p className="break-words [overflow-wrap:anywhere] text-xs text-[var(--text-soft)]">Seguimiento: {maskFinancialText(app.followUpNotes, privacyActive)}</p>
                       )}
                     </div>
                   )}
@@ -308,9 +308,9 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                           : 'bg-[var(--surface-muted)] text-[var(--text-soft)]'
                       }`}
                     >
-                      <span className="flex min-w-0 items-center gap-1.5 break-words">
-                        <Clock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                        <span>{maskFinancialText(app.nextAction || 'Seguimiento', privacyActive)}</span>
+                      <span className="flex min-w-0 flex-1 items-start gap-1.5 break-words [overflow-wrap:anywhere]">
+                        <Clock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <span className="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">{maskFinancialText(app.nextAction || 'Seguimiento', privacyActive)}</span>
                       </span>
                       {app.nextActionDate && (
                         <span className="shrink-0 text-xs font-bold tabular-nums">{fmtDate(app.nextActionDate)}</span>
@@ -321,7 +321,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                   <select
                     value={app.estado}
                     onChange={(event) => onSetEstado(app.id, event.target.value as JobApplication['estado'])}
-                    aria-label={`Cambiar estado de ${app.empresa}`}
+                    aria-label={`Cambiar estado de ${maskFinancialText(app.empresa, privacyActive)}`}
                     className={`min-h-11 sm:min-h-10 w-full min-w-0 rounded-xl border border-[var(--border)] bg-[var(--surface-muted)]/70 px-3 text-xs font-semibold text-[var(--text)] cursor-pointer ${CLEAN_CONTROL_FOCUS}`}
                   >
                     {columns.map((stage) => (
@@ -337,7 +337,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                       <button
                         type="button"
                         onClick={() => onEditApplication(app)}
-                        aria-label={`Editar postulación de ${app.empresa}`}
+                        aria-label={`Editar postulación de ${maskFinancialText(app.empresa, privacyActive)}`}
                         title="Editar postulación"
                         className={`inline-flex min-h-11 min-w-11 sm:min-h-9 sm:min-w-9 items-center justify-center rounded-lg text-[var(--text-soft)] transition-colors hover:bg-indigo-500/10 hover:text-[#4F46E5] dark:hover:text-[#818CF8] cursor-pointer ${CLEAN_BUTTON_FOCUS}`}
                       >
@@ -346,7 +346,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                       <button
                         type="button"
                         onClick={() => onDeleteApplication(app.id)}
-                        aria-label={`Eliminar postulación de ${app.empresa}`}
+                        aria-label={`Eliminar postulación de ${maskFinancialText(app.empresa, privacyActive)}`}
                         title="Eliminar postulación"
                         className="trabajo-clean-focus inline-flex min-h-11 min-w-11 sm:min-h-9 sm:min-w-9 items-center justify-center rounded-lg text-[var(--text-soft)] transition-colors hover:bg-rose-500/10 hover:text-rose-600 outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-rose-400/70 dark:hover:text-rose-400 cursor-pointer"
                       >
@@ -418,8 +418,8 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                         {/* Card Header: Company, Link, Role & Source */}
                         <div className="space-y-1">
                           <div className="flex items-start justify-between gap-2">
-                            <h4 className="line-clamp-2 break-words text-sm font-bold leading-snug text-[var(--text)]">
-                              {app.empresa}
+                            <h4 className="line-clamp-2 break-words [overflow-wrap:anywhere] text-sm font-bold leading-snug text-[var(--text)]">
+                              {maskFinancialText(app.empresa, privacyActive)}
                             </h4>
                             {safeHref && (
                               <a
@@ -436,8 +436,8 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                             )}
                           </div>
                           {app.puesto && (
-                            <p className="line-clamp-2 break-words text-xs font-medium text-[var(--text-soft)]">
-                              {app.puesto}
+                            <p className="line-clamp-2 break-words [overflow-wrap:anywhere] text-xs font-medium text-[var(--text-soft)]">
+                              {maskFinancialText(app.puesto, privacyActive)}
                             </p>
                           )}
                           {(app.source || (typeof app.salaryExpectation === 'number' && app.salaryExpectation > 0)) && (
@@ -524,7 +524,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                             onSetEstado(app.id, e.target.value as JobApplication['estado']);
                           }}
                           onClick={(e) => e.stopPropagation()}
-                          aria-label={`Cambiar estado de ${app.empresa}`}
+                          aria-label={`Cambiar estado de ${maskFinancialText(app.empresa, privacyActive)}`}
                           className={`min-h-9 w-full min-w-0 rounded-lg border border-[var(--border)] bg-[var(--surface-muted)]/70 px-2.5 py-1.5 text-xs font-semibold text-[var(--text)] cursor-pointer ${CLEAN_CONTROL_FOCUS}`}
                         >
                           {columns.map((stage) => (
@@ -545,7 +545,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                                 e.stopPropagation();
                                 onEditApplication(app);
                               }}
-                              aria-label={`Editar postulación de ${app.empresa}`}
+                              aria-label={`Editar postulación de ${maskFinancialText(app.empresa, privacyActive)}`}
                               title="Editar postulación"
                               className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-soft)] transition-colors hover:bg-indigo-500/10 hover:text-[#4F46E5] dark:hover:text-[#818CF8] cursor-pointer ${CLEAN_BUTTON_FOCUS}`}
                             >
@@ -557,7 +557,7 @@ export const JobKanbanBoard: React.FC<JobKanbanBoardProps> = ({
                                 e.stopPropagation();
                                 onDeleteApplication(app.id);
                               }}
-                              aria-label={`Eliminar postulación de ${app.empresa}`}
+                              aria-label={`Eliminar postulación de ${maskFinancialText(app.empresa, privacyActive)}`}
                               title="Eliminar postulación"
                               className="trabajo-clean-focus inline-flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-soft)] transition-colors hover:bg-rose-500/10 hover:text-rose-600 outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-rose-400/70 dark:hover:text-rose-400 cursor-pointer"
                             >

@@ -117,9 +117,10 @@ export function uid(): string {
 }
 
 export function localISODate(d: Date): string {
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const safe = d instanceof Date && !Number.isNaN(d.getTime()) ? d : new Date();
+  const year = safe.getFullYear();
+  const month = String(safe.getMonth() + 1).padStart(2, '0');
+  const day = String(safe.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 
@@ -304,13 +305,18 @@ export function fmtMoney(n: number | string | undefined | null): string {
 }
 
 export function fmtDate(iso?: string | null): string {
-  if (!iso) return '';
-  const parts = iso.split('-');
-  if (parts.length < 3) return iso;
-  const year = parseInt(parts[0], 10);
-  const month = parseInt(parts[1], 10) - 1;
-  const day = parseInt(parts[2], 10);
+  if (!iso || typeof iso !== 'string') return '';
+  const trimmed = iso.trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(trimmed);
+  if (!match) return '';
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10) - 1;
+  const day = parseInt(match[3], 10);
+  if (month < 0 || month > 11 || day < 1 || day > 31) return '';
   const d = new Date(year, month, day);
+  if (Number.isNaN(d.getTime()) || d.getFullYear() !== year || d.getMonth() !== month || d.getDate() !== day) {
+    return '';
+  }
   return d.toLocaleDateString('es-UY', { day: '2-digit', month: 'short' });
 }
 
@@ -328,9 +334,11 @@ export function clamp(n: number, min: number, max: number): number {
 }
 
 export function daysBetween(a: string, b: string): number {
+  if (typeof a !== 'string' || typeof b !== 'string') return 0;
   const da = new Date(a.slice(0, 10) + 'T00:00:00');
   const db = new Date(b.slice(0, 10) + 'T00:00:00');
   const ms = db.getTime() - da.getTime();
+  if (!Number.isFinite(ms)) return 0;
   return Math.round(ms / 86400000);
 }
 
@@ -347,8 +355,24 @@ export function dayKeyFromDate(d: Date): DayKey {
   return DAYS[idx];
 }
 
+function parseStrictLocalDate(iso: string): Date | null {
+  if (!iso || typeof iso !== 'string') return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso.trim());
+  if (!match) return null;
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10) - 1;
+  const day = parseInt(match[3], 10);
+  if (month < 0 || month > 11 || day < 1 || day > 31) return null;
+  const d = new Date(year, month, day);
+  if (Number.isNaN(d.getTime()) || d.getFullYear() !== year || d.getMonth() !== month || d.getDate() !== day) {
+    return null;
+  }
+  return d;
+}
+
 export function withinCurrentWeek(iso: string): boolean {
-  const d = new Date(iso + 'T00:00:00');
+  const d = parseStrictLocalDate(iso);
+  if (!d) return false;
   const mon = isoWeekMonday(new Date());
   const sun = new Date(mon);
   sun.setDate(sun.getDate() + 6);
@@ -356,12 +380,14 @@ export function withinCurrentWeek(iso: string): boolean {
 }
 
 export function sameMonth(iso: string, ref: Date): boolean {
-  const d = new Date(iso + 'T00:00:00');
+  const d = parseStrictLocalDate(iso);
+  if (!d) return false;
   return d.getMonth() === ref.getMonth() && d.getFullYear() === ref.getFullYear();
 }
 
 export function sameYear(iso: string, ref: Date): boolean {
-  const d = new Date(iso + 'T00:00:00');
+  const d = parseStrictLocalDate(iso);
+  if (!d) return false;
   return d.getFullYear() === ref.getFullYear();
 }
 
@@ -767,15 +793,19 @@ export function pruneAttentionDismissals(
   return pruned;
 }
 
+function isPlainRecord(value: unknown): value is Record<string, any> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
 export function normalizeStoredState(raw: unknown): LifeOSState {
   const def = defaultState();
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+  if (!isPlainRecord(raw)) {
     return def;
   }
   const candidate = raw as Partial<LifeOSState> & Record<string, any>;
 
   // Profile
-  const rawProfile: any = candidate.profile || {};
+  const rawProfile: any = isPlainRecord(candidate.profile) ? candidate.profile : {};
   let bodyCompositionSex: 'male' | 'female' | null = null;
   if (rawProfile.bodyCompositionSex === 'male' || rawProfile.bodyCompositionSex === 'female') {
     bodyCompositionSex = rawProfile.bodyCompositionSex;
@@ -787,16 +817,18 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
   };
 
   // Notes & possessions
-  const rawNotes: any = candidate.notes || {};
+  const rawNotes: any = isPlainRecord(candidate.notes) ? candidate.notes : {};
   const possessions = Array.isArray(rawNotes.possessions)
-    ? rawNotes.possessions.map((item: any) => ({
-        id: typeof item.id === 'string' ? item.id : uid(),
-        name: typeof item.name === 'string' ? item.name : '',
-        category: (typeof item.category === 'string' && item.category.trim()) ? item.category : 'Otros',
-        location: typeof item.location === 'string' ? item.location : undefined,
-        receivedAt: typeof item.receivedAt === 'string' ? item.receivedAt : null,
-        note: typeof item.note === 'string' ? item.note : undefined,
-      }))
+    ? rawNotes.possessions
+        .filter(isPlainRecord)
+        .map((item: any) => ({
+          id: typeof item.id === 'string' ? item.id : uid(),
+          name: typeof item.name === 'string' ? item.name : '',
+          category: (typeof item.category === 'string' && item.category.trim()) ? item.category : 'Otros',
+          location: typeof item.location === 'string' ? item.location : undefined,
+          receivedAt: typeof item.receivedAt === 'string' ? item.receivedAt : null,
+          note: typeof item.note === 'string' ? item.note : undefined,
+        }))
     : [];
 
   const postits = Array.isArray(rawNotes.postits)
@@ -819,26 +851,27 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
 
   const notes = {
     postits,
-    shopping: Array.isArray(rawNotes.shopping) ? rawNotes.shopping : [],
-    links: Array.isArray(rawNotes.links) ? rawNotes.links : [],
+    shopping: Array.isArray(rawNotes.shopping) ? rawNotes.shopping.filter(isPlainRecord) : [],
+    links: Array.isArray(rawNotes.links) ? rawNotes.links.filter(isPlainRecord) : [],
     possessions,
   };
 
   // Finance
-  const rawFinance: any = candidate.finance || {};
-  const rawTransactions = Array.isArray(rawFinance.transactions) ? rawFinance.transactions : [];
+  const rawFinance: any = isPlainRecord(candidate.finance) ? candidate.finance : {};
+  const rawTransactions = Array.isArray(rawFinance.transactions) ? rawFinance.transactions.filter(isPlainRecord) : [];
+  const rawTransfersSafe = Array.isArray(rawFinance.transfers) ? rawFinance.transfers.filter(isPlainRecord) : [];
   const categories = normalizeCategories(rawFinance.categories, rawTransactions);
   const finance = {
-    transactions: Array.isArray(rawFinance.transactions) ? rawFinance.transactions : [],
-    transfers: Array.isArray(rawFinance.transfers) ? rawFinance.transfers : [],
-    reconciliations: Array.isArray(rawFinance.reconciliations) ? rawFinance.reconciliations : [],
+    transactions: rawTransactions,
+    transfers: rawTransfersSafe,
+    reconciliations: Array.isArray(rawFinance.reconciliations) ? rawFinance.reconciliations.filter(isPlainRecord) : [],
     categories,
-    budgets: (rawFinance.budgets && typeof rawFinance.budgets === 'object') ? rawFinance.budgets : {},
+    budgets: isPlainRecord(rawFinance.budgets) ? rawFinance.budgets : {},
     monthlyBudgets: (() => {
-      const mb = (rawFinance.monthlyBudgets && typeof rawFinance.monthlyBudgets === 'object') ? rawFinance.monthlyBudgets : {};
+      const mb = isPlainRecord(rawFinance.monthlyBudgets) ? rawFinance.monthlyBudgets : {};
       const normalized: Record<string, any> = {};
       for (const [k, v] of Object.entries(mb)) {
-        if (!v || typeof v !== 'object') continue;
+        if (!isPlainRecord(v)) continue;
         const cfg = v as any;
         const cur = String(cfg.currency || (k.includes(':') ? k.split(':')[1] : 'UYU')).trim().toUpperCase();
         const m = String(cfg.month || (k.includes(':') ? k.split(':')[0] : k)).trim();
@@ -847,31 +880,34 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
           month: m,
           currency: cur,
           globalLimit: typeof cfg.globalLimit === 'number' && Number.isFinite(cfg.globalLimit) && cfg.globalLimit > 0 ? cfg.globalLimit : null,
-          categoryLimits: (cfg.categoryLimits && typeof cfg.categoryLimits === 'object') ? { ...cfg.categoryLimits } : {},
+          categoryLimits: isPlainRecord(cfg.categoryLimits) ? { ...cfg.categoryLimits } : {},
         };
       }
       return normalized;
     })(),
     accounts: Array.isArray(rawFinance.accounts)
-      ? rawFinance.accounts.map((acc: any) => {
+      ? rawFinance.accounts.filter(isPlainRecord).map((acc: any) => {
           const id = typeof acc.id === 'string' ? acc.id : uid();
           const name = typeof acc.name === 'string' ? acc.name : 'Cuenta';
-          const balance = Number(acc.balance || 0);
+          const parsedBalance = Number(acc.balance ?? 0);
+          const balance = Number.isFinite(parsedBalance) ? parsedBalance : 0;
           let initialBalance = typeof acc.initialBalance === 'number' && Number.isFinite(acc.initialBalance)
             ? acc.initialBalance
             : undefined;
           if (initialBalance === undefined) {
-            const rawTxs = Array.isArray(rawFinance.transactions) ? rawFinance.transactions : [];
-            const rawTransfers = Array.isArray(rawFinance.transfers) ? rawFinance.transfers : [];
             let delta = 0;
-            for (const tx of rawTxs) {
+            for (const tx of rawTransactions) {
               if (tx.accountId !== id) continue;
-              if (tx.type === 'ingreso') delta += Number(tx.amount || 0);
-              else delta -= Number(tx.amount || 0);
+              const amt = Number(tx.amount ?? 0);
+              if (!Number.isFinite(amt)) continue;
+              if (tx.type === 'ingreso') delta += amt;
+              else delta -= amt;
             }
-            for (const tr of rawTransfers) {
-              if (tr.toAccountId === id) delta += Number(tr.amount || 0);
-              if (tr.fromAccountId === id) delta -= Number(tr.amount || 0);
+            for (const tr of rawTransfersSafe) {
+              const amt = Number(tr.amount ?? 0);
+              if (!Number.isFinite(amt)) continue;
+              if (tr.toAccountId === id) delta += amt;
+              if (tr.fromAccountId === id) delta -= amt;
             }
             initialBalance = Math.round((balance - delta) * 100) / 100;
           }
@@ -885,9 +921,9 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
           };
         })
       : def.finance.accounts,
-    debts: Array.isArray(rawFinance.debts) ? rawFinance.debts : [],
-    investments: Array.isArray(rawFinance.investments) ? rawFinance.investments : [],
-    subscriptions: Array.isArray(rawFinance.subscriptions) ? rawFinance.subscriptions : [],
+    debts: Array.isArray(rawFinance.debts) ? rawFinance.debts.filter(isPlainRecord) : [],
+    investments: Array.isArray(rawFinance.investments) ? rawFinance.investments.filter(isPlainRecord) : [],
+    subscriptions: Array.isArray(rawFinance.subscriptions) ? rawFinance.subscriptions.filter(isPlainRecord) : [],
     expectedIncomes: Array.isArray(rawFinance.expectedIncomes)
       ? rawFinance.expectedIncomes
           .filter((inc: any) => inc && typeof inc === 'object' && String(inc.name || '').trim().length > 0 && Number(inc.amount || 0) > 0)
@@ -958,7 +994,13 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
               ...(typeof c.installmentAmount === 'number' && Number.isFinite(c.installmentAmount) && c.installmentAmount > 0
                 ? { installmentAmount: roundMoney(c.installmentAmount) }
                 : c.installmentAmount === null ? { installmentAmount: null } : {}),
-              dueDay: typeof c.dueDay === 'number' && Number.isFinite(c.dueDay) ? Math.max(1, Math.min(31, Math.round(c.dueDay))) : (typeof c.nextDueDate === 'string' ? new Date(`${c.nextDueDate}T12:00:00`).getDate() : null),
+              dueDay: typeof c.dueDay === 'number' && Number.isFinite(c.dueDay)
+                ? Math.max(1, Math.min(31, Math.round(c.dueDay)))
+                : (() => {
+                    if (typeof c.nextDueDate !== 'string') return null;
+                    const parsedDay = new Date(`${c.nextDueDate}T12:00:00`).getDate();
+                    return Number.isFinite(parsedDay) ? parsedDay : null;
+                  })(),
               notes: typeof c.notes === 'string' ? c.notes : undefined,
               ...(typeof c.lastSettledTxId === 'string' ? { lastSettledTxId: c.lastSettledTxId } : c.lastSettledTxId === null ? { lastSettledTxId: null } : {}),
               ...(Array.isArray(c.settledTxIds) ? { settledTxIds: c.settledTxIds.filter((id: any) => typeof id === 'string') } : {}),
@@ -1006,12 +1048,12 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
   };
 
   // Jobs
-  const rawJobs: any = candidate.jobs || {};
+  const rawJobs: any = isPlainRecord(candidate.jobs) ? candidate.jobs : {};
   const jobs = {
-    opportunities: Array.isArray(rawJobs.opportunities) ? rawJobs.opportunities : [],
+    opportunities: Array.isArray(rawJobs.opportunities) ? rawJobs.opportunities.filter(isPlainRecord) : [],
     applications: Array.isArray(rawJobs.applications)
       ? rawJobs.applications
-          .filter((app: any) => app && typeof app === 'object')
+          .filter(isPlainRecord)
           .map((app: any) => {
             const { followUpNotes: rawFollowUp, keyDates: rawKeyDates, source: rawSource, ...rest } = app;
             const trimmedSource = typeof rawSource === 'string' ? rawSource.trim() : '';
@@ -1027,18 +1069,18 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
   };
 
   // Gym
-  const gym = migrateGym(candidate.gym);
+  const gym = migrateGym(isPlainRecord(candidate.gym) ? candidate.gym : undefined);
 
   // Projects normalization
   const projects = Array.isArray(candidate.projects)
-    ? candidate.projects.map((p: any) => ({
+    ? candidate.projects.filter(isPlainRecord).map((p: any) => ({
         id: typeof p.id === 'string' ? p.id : uid(),
         name: typeof p.name === 'string' ? p.name : 'Proyecto sin título',
         objective: typeof p.objective === 'string' ? p.objective : '',
         status: ['activo', 'en_pausa', 'completado', 'cancelado'].includes(p.status) ? p.status : 'activo',
         nextStep: typeof p.nextStep === 'string' ? p.nextStep : '',
         tasks: Array.isArray(p.tasks)
-          ? p.tasks.map((t: any) => ({
+          ? p.tasks.filter(isPlainRecord).map((t: any) => ({
               id: typeof t.id === 'string' ? t.id : uid(),
               text: typeof t.text === 'string' ? t.text : '',
               done: Boolean(t.done),
@@ -1058,7 +1100,7 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
 
   // Inbox normalization
   const inbox = Array.isArray(candidate.inbox)
-    ? candidate.inbox.map((item: any) => ({
+    ? candidate.inbox.filter(isPlainRecord).map((item: any) => ({
         id: typeof item.id === 'string' ? item.id : uid(),
         text: typeof item.text === 'string' ? item.text : '',
         createdAt: typeof item.createdAt === 'string' ? item.createdAt : new Date().toISOString(),
@@ -1070,7 +1112,7 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
 
   // TodayExtras normalization
   const todayExtras = Array.isArray(candidate.todayExtras)
-    ? candidate.todayExtras.map((x: any) => ({
+    ? candidate.todayExtras.filter(isPlainRecord).map((x: any) => ({
         id: typeof x.id === 'string' ? x.id : uid(),
         date: typeof x.date === 'string' ? x.date : todayISO(),
         text: typeof x.text === 'string' ? x.text : '',
@@ -1086,18 +1128,22 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
       }))
     : [];
 
+  const rawStudy: any = isPlainRecord(candidate.study) ? candidate.study : {};
+  const rawStreaming: any = isPlainRecord(candidate.streaming) ? candidate.streaming : {};
+  const rawResale: any = isPlainRecord(candidate.resale) ? candidate.resale : {};
+
   return {
     ...def,
     ...candidate,
     schemaVersion: CURRENT_SCHEMA_VERSION,
     profile,
     agenda: (() => {
-      const rawAgenda = candidate.agenda || {};
+      const rawAgenda = isPlainRecord(candidate.agenda) ? candidate.agenda : {};
       const normalized: typeof def.agenda = { ...def.agenda };
       for (const day of DAYS) {
         const rawBlocks = rawAgenda[day];
         normalized[day] = Array.isArray(rawBlocks)
-          ? rawBlocks.map((b: any) => ({
+          ? rawBlocks.filter(isPlainRecord).map((b: any) => ({
               id: typeof b.id === 'string' ? b.id : uid(),
               time: typeof b.time === 'string' ? b.time : '09:00',
               activity: typeof b.activity === 'string' ? b.activity : '',
@@ -1108,20 +1154,20 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
       }
       return normalized;
     })(),
-    tasksRecurring: Array.isArray(candidate.tasksRecurring) ? candidate.tasksRecurring : def.tasksRecurring,
-    taskLog: candidate.taskLog && typeof candidate.taskLog === 'object' ? candidate.taskLog : {},
+    tasksRecurring: Array.isArray(candidate.tasksRecurring) ? candidate.tasksRecurring.filter(isPlainRecord) : def.tasksRecurring,
+    taskLog: isPlainRecord(candidate.taskLog) ? candidate.taskLog : {},
     todayExtras,
-    dailyPriorities: Array.isArray(candidate.dailyPriorities) ? candidate.dailyPriorities : [],
-    dailyContext: Array.isArray(candidate.dailyContext) ? candidate.dailyContext : [],
+    dailyPriorities: Array.isArray(candidate.dailyPriorities) ? candidate.dailyPriorities.filter(isPlainRecord) : [],
+    dailyContext: Array.isArray(candidate.dailyContext) ? candidate.dailyContext.filter(isPlainRecord) : [],
     finance,
     gym,
     study: {
       ...def.study,
-      ...(candidate.study || {}),
-      ...(Array.isArray(candidate.study?.programs)
+      ...rawStudy,
+      ...(Array.isArray(rawStudy.programs)
         ? {
-            programs: candidate.study.programs
-              .filter((p: any) => p && typeof p.name === 'string' && p.name.trim())
+            programs: rawStudy.programs
+              .filter((p: any) => isPlainRecord(p) && typeof p.name === 'string' && p.name.trim())
               .map((p: any): StudyProgram => {
                 const validKinds: StudyProgramKind[] = ['carrera', 'curso', 'certificacion', 'autoestudio'];
                 const kind: StudyProgramKind = validKinds.includes(p.kind) ? p.kind : 'carrera';
@@ -1137,8 +1183,8 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
               }),
           }
         : {}),
-      subjects: Array.isArray(candidate.study?.subjects)
-        ? candidate.study.subjects.map((sub: any) => ({
+      subjects: Array.isArray(rawStudy.subjects)
+        ? rawStudy.subjects.filter(isPlainRecord).map((sub: any) => ({
             ...sub,
             ...(typeof sub?.programId === 'string' && sub.programId.trim()
               ? { programId: sub.programId.trim() }
@@ -1148,10 +1194,10 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
             ...(Array.isArray(sub?.topics)
               ? {
                   topics: sub.topics
-                    .filter((t: any) => t && typeof t.title === 'string' && t.title.trim())
+                    .filter((t: any) => isPlainRecord(t) && typeof t.title === 'string' && t.title.trim())
                     .map((t: any) => {
                       let practice: StudyTopicPracticeStats | undefined;
-                      if (t.practice && typeof t.practice === 'object') {
+                      if (isPlainRecord(t.practice)) {
                         const attempts = typeof t.practice.attempts === 'number' && Number.isFinite(t.practice.attempts)
                           ? Math.max(0, Math.round(t.practice.attempts))
                           : 0;
@@ -1183,13 +1229,13 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
               : {}),
           }))
         : [],
-      exams: Array.isArray(candidate.study?.exams)
-        ? candidate.study.exams.map((ex: any) => ({
+      exams: Array.isArray(rawStudy.exams)
+        ? rawStudy.exams.filter(isPlainRecord).map((ex: any) => ({
             ...ex,
             ...(Array.isArray(ex?.topics)
               ? {
                   topics: ex.topics
-                    .filter((t: any) => t && typeof t.title === 'string' && t.title.trim())
+                    .filter((t: any) => isPlainRecord(t) && typeof t.title === 'string' && t.title.trim())
                     .map((t: any) => ({
                       id: typeof t.id === 'string' && t.id ? t.id : uid(),
                       title: t.title.trim(),
@@ -1200,16 +1246,16 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
               : {}),
           }))
         : [],
-      studyLog: Array.isArray(candidate.study?.studyLog) ? candidate.study.studyLog : [],
-      activeSession: candidate.study?.activeSession || null,
-      questions: Array.isArray(candidate.study?.questions)
-        ? candidate.study.questions.reduce<StudyQuestion[]>((acc, q: any) => {
-            if (!q || typeof q !== 'object') return acc;
+      studyLog: Array.isArray(rawStudy.studyLog) ? rawStudy.studyLog.filter(isPlainRecord) : [],
+      activeSession: isPlainRecord(rawStudy.activeSession) ? rawStudy.activeSession : null,
+      questions: Array.isArray(rawStudy.questions)
+        ? (rawStudy.questions as unknown[]).reduce<StudyQuestion[]>((acc, q: any) => {
+            if (!isPlainRecord(q)) return acc;
             const prompt = typeof q.prompt === 'string' ? q.prompt.trim() : '';
             const subjectId = typeof q.subjectId === 'string' ? q.subjectId.trim() : '';
             if (!prompt || !subjectId || !Array.isArray(q.options)) return acc;
             const options = q.options
-              .filter((o: any) => o && typeof o === 'object' && typeof o.text === 'string' && o.text.trim())
+              .filter((o: any) => isPlainRecord(o) && typeof o.text === 'string' && o.text.trim())
               .map((o: any) => ({
                 id: typeof o.id === 'string' && o.id ? o.id : uid(),
                 text: o.text.trim(),
@@ -1233,15 +1279,15 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
             return acc;
           }, [])
         : [],
-      practiceAttempts: Array.isArray(candidate.study?.practiceAttempts)
-        ? candidate.study.practiceAttempts.reduce<StudyPracticeAttempt[]>((acc, att: any) => {
-            if (!att || typeof att !== 'object') return acc;
+      practiceAttempts: Array.isArray(rawStudy.practiceAttempts)
+        ? (rawStudy.practiceAttempts as unknown[]).reduce<StudyPracticeAttempt[]>((acc, att: any) => {
+            if (!isPlainRecord(att)) return acc;
             const subjectId = typeof att.subjectId === 'string' ? att.subjectId.trim() : '';
             const date = typeof att.date === 'string' ? att.date.trim().slice(0, 10) : '';
             if (!subjectId || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return acc;
             const answers = Array.isArray(att.answers)
               ? att.answers
-                  .filter((a: any) => a && typeof a === 'object' && typeof a.questionId === 'string' && typeof a.optionId === 'string')
+                  .filter((a: any) => isPlainRecord(a) && typeof a.questionId === 'string' && typeof a.optionId === 'string')
                   .map((a: any) => ({
                     questionId: a.questionId,
                     optionId: a.optionId,
@@ -1268,8 +1314,8 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
           }, [])
         : [],
       activePracticeSession: (() => {
-        const s = candidate.study?.activePracticeSession;
-        if (!s || typeof s !== 'object' || Array.isArray(s)) return null;
+        const s = rawStudy.activePracticeSession;
+        if (!isPlainRecord(s)) return null;
         if (typeof s.id !== 'string' || !s.id || typeof s.subjectId !== 'string' || !s.subjectId) return null;
         if (!Array.isArray(s.questionIds) || s.questionIds.length === 0) return null;
         const questionIds = s.questionIds.filter((id: any) => typeof id === 'string' && id.length > 0);
@@ -1286,7 +1332,7 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
             : 0,
           answers: Array.isArray(s.answers)
             ? s.answers
-                .filter((a: any) => a && typeof a === 'object' && typeof a.questionId === 'string' && typeof a.optionId === 'string')
+                .filter((a: any) => isPlainRecord(a) && typeof a.questionId === 'string' && typeof a.optionId === 'string')
                 .map((a: any) => ({
                   questionId: a.questionId,
                   optionId: a.optionId,
@@ -1303,22 +1349,27 @@ export function normalizeStoredState(raw: unknown): LifeOSState {
     },
     streaming: {
       ...def.streaming,
-      ...(candidate.streaming || {}),
-      sessions: Array.isArray(candidate.streaming?.sessions) ? candidate.streaming.sessions : [],
-      preStreamChecklist: Array.isArray(candidate.streaming?.preStreamChecklist) ? candidate.streaming.preStreamChecklist : [],
-      contentPipeline: Array.isArray(candidate.streaming?.contentPipeline) ? candidate.streaming.contentPipeline : [],
+      ...rawStreaming,
+      sessions: Array.isArray(rawStreaming.sessions) ? rawStreaming.sessions.filter(isPlainRecord) : [],
+      preStreamChecklist: Array.isArray(rawStreaming.preStreamChecklist) ? rawStreaming.preStreamChecklist.filter(isPlainRecord) : [],
+      contentPipeline: Array.isArray(rawStreaming.contentPipeline) ? rawStreaming.contentPipeline.filter(isPlainRecord) : [],
     },
     jobs,
     // Preserve an optional commercial payload verbatim, including malformed data, for recovery.
-    resale: { ...def.resale, ...(candidate.resale || {}) },
-    ideas: Array.isArray(candidate.ideas) ? candidate.ideas : [],
-    calendarEvents: Array.isArray(candidate.calendarEvents) ? candidate.calendarEvents : [],
-    goals: Array.isArray(candidate.goals) ? candidate.goals : [],
+    resale: {
+      ...def.resale,
+      ...rawResale,
+      opportunities: Array.isArray(rawResale.opportunities) ? rawResale.opportunities.filter(isPlainRecord) : [],
+      inventory: Array.isArray(rawResale.inventory) ? rawResale.inventory.filter(isPlainRecord) : [],
+    },
+    ideas: Array.isArray(candidate.ideas) ? candidate.ideas.filter(isPlainRecord) : [],
+    calendarEvents: Array.isArray(candidate.calendarEvents) ? candidate.calendarEvents.filter(isPlainRecord) : [],
+    goals: Array.isArray(candidate.goals) ? candidate.goals.filter(isPlainRecord) : [],
     projects,
     inbox,
     notes,
     settings: (() => {
-      const rawSettings: any = candidate.settings || {};
+      const rawSettings: any = isPlainRecord(candidate.settings) ? candidate.settings : {};
       let onboardingCompleted: boolean;
       if (typeof rawSettings.onboardingCompleted === 'boolean') {
         onboardingCompleted = rawSettings.onboardingCompleted;
@@ -1452,26 +1503,130 @@ function getDefaultRecoveryDescription(action: RecoveryAction): string {
 }
 
 export function parseBackupJSON(text: string): LifeOSState {
+  if (typeof text !== 'string' || !text.trim()) {
+    throw new Error('El archivo está vacío o no parece pertenecer a Celestian LifeOS.');
+  }
   let parsed: any;
   try {
     parsed = JSON.parse(text);
   } catch {
-    throw new Error('El archivo no parece pertenecer a Celestian LifeOS.');
+    throw new Error('El archivo no tiene un formato JSON válido o no parece pertenecer a Celestian LifeOS.');
   }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+  if (!isPlainRecord(parsed)) {
     throw new Error('El archivo no parece pertenecer a Celestian LifeOS.');
   }
 
   // Support envelope: { meta: ..., state: ... } or { state: ... }
-  const candidate = parsed.state && typeof parsed.state === 'object' && !Array.isArray(parsed.state)
-    ? parsed.state
-    : parsed;
+  if ('state' in parsed && parsed.state !== undefined && !isPlainRecord(parsed.state)) {
+    throw new Error('El archivo de backup está dañado o tiene una estructura incompatible con Celestian LifeOS.');
+  }
+  const candidate = isPlainRecord(parsed.state) ? parsed.state : parsed;
 
   const knownKeys = ['profile', 'agenda', 'finance', 'gym', 'notes', 'tasksRecurring', 'study', 'streaming', 'jobs', 'resale', 'schemaVersion'];
   const hasRecognizedKey = knownKeys.some((k) => k in candidate);
   if (!hasRecognizedKey) {
     throw new Error('El archivo no parece pertenecer a Celestian LifeOS.');
   }
+
+  const objectModuleKeys = ['profile', 'agenda', 'finance', 'gym', 'notes', 'study', 'streaming', 'jobs', 'resale', 'settings', 'taskLog', 'checkoutLog'];
+  for (const key of objectModuleKeys) {
+    if (key in candidate && candidate[key] !== undefined && candidate[key] !== null && !isPlainRecord(candidate[key])) {
+      throw new Error('El archivo de backup está dañado o tiene una estructura incompatible con Celestian LifeOS.');
+    }
+  }
+
+  const arrayRootKeys = ['tasksRecurring', 'todayExtras', 'dailyPriorities', 'dailyContext', 'ideas', 'calendarEvents', 'goals', 'projects', 'inbox'];
+  for (const key of arrayRootKeys) {
+    if (key in candidate && candidate[key] !== undefined && candidate[key] !== null) {
+      if (!Array.isArray(candidate[key])) {
+        throw new Error('El archivo de backup está dañado o tiene una estructura incompatible con Celestian LifeOS.');
+      }
+      if (candidate[key].some((item: unknown) => !isPlainRecord(item))) {
+        throw new Error('El archivo de backup contiene registros dañados o incompletos y no se puede importar.');
+      }
+    }
+  }
+
+  if ('schemaVersion' in candidate && candidate.schemaVersion !== undefined && candidate.schemaVersion !== null) {
+    if (typeof candidate.schemaVersion !== 'number' || !Number.isFinite(candidate.schemaVersion) || candidate.schemaVersion < 1) {
+      throw new Error('El archivo de backup tiene una versión de esquema inválida.');
+    }
+  }
+
+  const nestedRecordArrays: Array<[string, string]> = [
+    ['finance', 'transactions'],
+    ['finance', 'accounts'],
+    ['finance', 'transfers'],
+    ['finance', 'commitments'],
+    ['finance', 'agreements'],
+    ['notes', 'postits'],
+    ['notes', 'shopping'],
+    ['notes', 'links'],
+    ['notes', 'possessions'],
+    ['gym', 'sessions'],
+    ['study', 'subjects'],
+    ['study', 'exams'],
+    ['jobs', 'applications'],
+    ['resale', 'inventory'],
+  ];
+  for (const [mod, field] of nestedRecordArrays) {
+    const modObj = candidate[mod];
+    if (isPlainRecord(modObj) && field in modObj && modObj[field] !== undefined && modObj[field] !== null) {
+      if (!Array.isArray(modObj[field])) {
+        throw new Error('El archivo de backup está dañado o tiene una estructura incompatible con Celestian LifeOS.');
+      }
+      if (modObj[field].some((item: unknown) => !isPlainRecord(item))) {
+        throw new Error('El archivo de backup contiene registros dañados o incompletos y no se puede importar.');
+      }
+    }
+  }
+
+  if (isPlainRecord(candidate.agenda)) {
+    for (const day of DAYS) {
+      const blocks = candidate.agenda[day];
+      if (blocks !== undefined && blocks !== null) {
+        if (!Array.isArray(blocks) || blocks.some((item: unknown) => !isPlainRecord(item))) {
+          throw new Error('El archivo de backup está dañado o tiene una estructura incompatible con Celestian LifeOS.');
+        }
+      }
+    }
+  }
+
+  if (isPlainRecord(candidate.finance)) {
+    const rawTx = candidate.finance.transactions;
+    if (Array.isArray(rawTx)) {
+      for (const tx of rawTx) {
+        const amt = typeof tx.amount === 'number' ? tx.amount : Number(tx.amount);
+        if (!Number.isFinite(amt)) {
+          throw new Error('El archivo de backup contiene registros financieros con importes inválidos y no se puede importar.');
+        }
+        if (tx.date !== undefined && tx.date !== null && typeof tx.date !== 'string') {
+          throw new Error('El archivo de backup contiene registros financieros con fechas inválidas y no se puede importar.');
+        }
+      }
+    }
+    const rawTr = candidate.finance.transfers;
+    if (Array.isArray(rawTr)) {
+      for (const tr of rawTr) {
+        const amt = typeof tr.amount === 'number' ? tr.amount : Number(tr.amount);
+        if (!Number.isFinite(amt)) {
+          throw new Error('El archivo de backup contiene transferencias con importes inválidos y no se puede importar.');
+        }
+      }
+    }
+    const rawAccs = candidate.finance.accounts;
+    if (Array.isArray(rawAccs)) {
+      for (const acc of rawAccs) {
+        if (acc.balance !== undefined && acc.balance !== null) {
+          const bal = typeof acc.balance === 'number' ? acc.balance : Number(acc.balance);
+          if (!Number.isFinite(bal)) {
+            throw new Error('El archivo de backup contiene cuentas con saldos inválidos y no se puede importar.');
+          }
+        }
+      }
+    }
+  }
+
   const normalized = normalizeStoredState(candidate);
   if (candidate?.settings?.onboardingCompleted === undefined) {
     normalized.settings.onboardingCompleted = true;

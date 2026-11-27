@@ -438,13 +438,13 @@ export const FinanceAgreementsSection: React.FC<FinanceAgreementsSectionProps> =
                 className="rounded-2xl border border-[var(--finance-border)] bg-[var(--finance-surface-subtle)] p-3.5 sm:p-4 space-y-3 transition-all"
               >
                 {/* Main Card Info */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-bold text-sm text-[var(--finance-text-primary)]">
+                <div className="flex min-w-0 flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex min-w-0 items-center gap-2 flex-wrap">
+                      <span className="min-w-0 max-w-full font-bold text-sm text-[var(--finance-text-primary)] break-words [overflow-wrap:anywhere]">
                         <PrivateFinancialText>{agreement.title}</PrivateFinancialText>
                       </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-500/10 text-[var(--finance-text-secondary)]">
+                      <span className="min-w-0 max-w-full text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-500/10 text-[var(--finance-text-secondary)] break-words [overflow-wrap:anywhere]">
                         <PrivateFinancialText>{agreement.creditorName}</PrivateFinancialText>
                       </span>
                       <span className="text-[9px] font-black px-1.5 py-0.2 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">

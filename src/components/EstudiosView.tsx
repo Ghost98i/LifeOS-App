@@ -1128,10 +1128,10 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
           hasWorkspaceActivity ? 'p-4 sm:p-5 space-y-4' : 'px-4 py-3 sm:px-5 sm:py-3.5 space-y-2'
         }`}
       >
-        <div className="flex flex-wrap items-center justify-between gap-2.5">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2.5">
           <h2 className="text-base font-semibold text-[var(--text)]">Para estudiar</h2>
-          <label className="flex items-center gap-2 text-sm text-[var(--text-soft)]">Materia
-            <select aria-label="Materia del espacio de estudio" value={selectedSubjectFilter || ''} onChange={(event) => setSelectedSubjectFilter(event.target.value || null)} className={`${hasWorkspaceActivity ? 'min-h-11' : 'min-h-9'} max-w-[230px] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-[var(--text)]`}>
+          <label className="flex min-w-0 max-w-full items-center gap-2 text-sm text-[var(--text-soft)]">Materia
+            <select aria-label="Materia del espacio de estudio" value={selectedSubjectFilter || ''} onChange={(event) => setSelectedSubjectFilter(event.target.value || null)} className={`${hasWorkspaceActivity ? 'min-h-11' : 'min-h-9'} w-full min-w-0 max-w-[230px] rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 text-[var(--text)]`}>
               <option value="">Todas las materias</option>{scopedSubjects.map((subject) => <option key={subject.id} value={subject.id}>{subject.name}</option>)}
             </select>
           </label>
@@ -1152,10 +1152,10 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
               const cardDisplay = getExamCardDisplay(exam, subjects);
               const proxLabel = prep.daysUntil === 0 ? 'Hoy' : prep.daysUntil === 1 ? 'Mañana' : `En ${prep.daysUntil} d`;
               return (
-                <div key={exam.id} className="flex items-center justify-between gap-3">
-                  <button type="button" onClick={() => openEditExamModal(exam)} className="min-w-0 py-1.5 text-left text-sm text-[var(--text)] hover:text-[#4F46E5] dark:hover:text-[#A5A0FF] transition-colors cursor-pointer">
-                    <span className="block font-semibold break-words">{cardDisplay.primaryTitle}</span>
-                    <span className="text-xs text-[var(--text-soft)]">
+                <div key={exam.id} className="flex min-w-0 items-center justify-between gap-3">
+                  <button type="button" onClick={() => openEditExamModal(exam)} className="min-w-0 flex-1 py-1.5 text-left text-sm text-[var(--text)] hover:text-[#4F46E5] dark:hover:text-[#A5A0FF] transition-colors cursor-pointer">
+                    <span className="block font-semibold break-words [overflow-wrap:anywhere]">{cardDisplay.primaryTitle}</span>
+                    <span className="block text-xs text-[var(--text-soft)] break-words [overflow-wrap:anywhere]">
                       {cardDisplay.typeLabel ? `${cardDisplay.typeLabel} · ` : ''}
                       {fmtDate(exam.date)}{exam.time ? ' · ' + exam.time : ''} · {proxLabel}
                       {prep.totalTopics > 0 ? ` · ${prep.completedTopics}/${prep.totalTopics} temas` : ''}
@@ -1213,9 +1213,9 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
           )}
         </div>
         {notesVisible && !showWorkspaceNotesColumn && (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-[var(--border)]/60 pt-3 text-xs text-[var(--text-faint)]">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 border-t border-[var(--border)]/60 pt-3 text-xs text-[var(--text-faint)]">
             <span className="font-medium text-[var(--text-soft)]">Apuntes en Notas:</span>
-            <span>
+            <span className="min-w-0 max-w-full break-words [overflow-wrap:anywhere]">
               {workspace.subject
                 ? `Todavía no hay notas con la etiqueta #${workspace.subject.name}.`
                 : `Etiquetá una nota con el nombre de una materia${scopedSubjects[0] ? ` (ej. #${scopedSubjects[0].name})` : ''} para ver tus apuntes acá.`}
@@ -1413,11 +1413,11 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                       <button
                         type="button"
                         onClick={() => setSelectedSubjectFilter(isSelected ? null : s.id)}
-                        className="min-w-[165px] flex-1 text-left cursor-pointer group"
+                        className="min-w-0 max-w-full flex-1 text-left cursor-pointer group"
                         title={isSelected ? 'Quitar filtro' : `Filtrar evaluaciones de ${s.name}`}
                       >
                         <span className="flex flex-wrap items-center gap-1.5 min-w-0">
-                          <span className="font-semibold text-[15px] leading-snug text-[var(--text)] group-hover:text-[#4F46E5] dark:group-hover:text-[#A5A0FF] break-words">
+                          <span className="min-w-0 max-w-full font-semibold text-[15px] leading-snug text-[var(--text)] group-hover:text-[#4F46E5] dark:group-hover:text-[#A5A0FF] break-words [overflow-wrap:anywhere]">
                             {s.name}
                           </span>
                           {!selectedProgramFilter && programs.length > 0 && (
@@ -1638,13 +1638,13 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                           type="button"
                           onClick={() => openEditExamModal(e)}
                           title={`Editar ${cardDisplay.primaryTitle}`}
-                          className="text-left font-semibold text-[15px] text-[var(--text)] hover:text-[#4F46E5] dark:hover:text-[#A5A0FF] transition-colors leading-snug break-words cursor-pointer"
+                          className="max-w-full text-left font-semibold text-[15px] text-[var(--text)] hover:text-[#4F46E5] dark:hover:text-[#A5A0FF] transition-colors leading-snug break-words [overflow-wrap:anywhere] cursor-pointer"
                         >
                           {cardDisplay.primaryTitle}
                         </button>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--text-soft)] mt-1">
+                        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-[var(--text-soft)] mt-1">
                           {cardDisplay.typeLabel && (
-                            <span className="inline-flex items-center whitespace-nowrap rounded-md border border-[var(--border)]/80 bg-[var(--bg)] px-1.5 py-0.5 text-[12px] font-medium text-[var(--text-soft)]">
+                            <span className="inline-block max-w-full break-words [overflow-wrap:anywhere] rounded-md border border-[var(--border)]/80 bg-[var(--bg)] px-1.5 py-0.5 text-[12px] font-medium text-[var(--text-soft)]">
                               {cardDisplay.typeLabel}
                             </span>
                           )}
@@ -1923,8 +1923,8 @@ export const EstudiosView: React.FC<EstudiosViewProps> = ({
                     className="flex items-center justify-between gap-2.5 py-3 text-sm hover:bg-[var(--surface-muted)]/40 px-2 rounded-xl transition-colors"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="font-semibold text-sm text-[var(--text)] break-words">
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="min-w-0 max-w-full font-semibold text-sm text-[var(--text)] break-words [overflow-wrap:anywhere]">
                           {getSubjectDisplayName(l.subjectId, subjects, l.subjectName)}
                         </span>
                         <span className="tabular-nums whitespace-nowrap font-bold text-xs px-2 py-0.5 rounded-md bg-[#4F46E5]/10 text-[#4F46E5] dark:bg-[#4F46E5]/20 dark:text-[#A5A0FF]">

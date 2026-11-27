@@ -265,6 +265,9 @@ export function formatRelativeTime(dateString?: string): string {
     const [y2, m2, d2] = dateString.split('-').map(Number);
     const dt1 = new Date(y1, m1 - 1, d1);
     const dt2 = new Date(y2, m2 - 1, d2);
+    if (Number.isNaN(dt2.getTime()) || dt2.getFullYear() !== y2 || dt2.getMonth() !== m2 - 1 || dt2.getDate() !== d2) {
+      return '';
+    }
     const diffDays = Math.round((dt1.getTime() - dt2.getTime()) / (1000 * 60 * 60 * 24));
     if (diffDays === 1) return 'Ayer';
     if (diffDays > 1 && diffDays < 7) return `Hace ${diffDays} d`;

@@ -16,6 +16,7 @@ import { playSound } from '../lib/audio';
 import { PageHeader } from './PageHeader';
 import { AppIcon } from './AppIcon';
 import { CompletionCheck } from './ui/CompletionCheck';
+import { PrivateFinancialText } from './PrivacyAmount';
 import { SurfaceCard, SectionHeader, ListDivider } from './ui/SurfacePrimitives';
 import { agendaWeek, editedWeeklyBlockTime, isCurrentWeek, parseLocalDateISO, shiftWeek, validatePunctualEvent, validateWeeklyBlock, weekDates } from '../lib/agendaWeek';
 import { isModuleEnabled } from '../lib/moduleVisibility';
@@ -602,7 +603,7 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
               completed ? 'text-[var(--text-soft)] line-through' : 'text-[var(--text)]'
             }`}
           >
-            {entry.label}
+            <PrivateFinancialText>{entry.label}</PrivateFinancialText>
           </span>
         </div>
       );
@@ -646,11 +647,11 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
         )}
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
           <span
-            className={`break-words [overflow-wrap:anywhere] text-sm font-medium ${
+            className={`min-w-0 max-w-full break-words [overflow-wrap:anywhere] text-sm font-medium ${
               completed ? 'text-[var(--text-soft)] line-through' : 'text-[var(--text)]'
             }`}
           >
-            {entry.label}
+            <PrivateFinancialText>{entry.label}</PrivateFinancialText>
           </span>
           {chip}
         </div>
@@ -1801,16 +1802,16 @@ export const AgendaView: React.FC<AgendaViewProps> = ({
                               const completedToday = Boolean(state.taskLog?.[todayIso]?.[t.id]);
                               const scheduledToday = routineScheduledFor(state, t, todayIso);
                               return (
-                                <div key={t.id} className="flex items-center justify-between gap-2.5 px-4 py-2.5 text-sm text-[var(--text)] transition-colors hover:bg-slate-50/70 dark:hover:bg-white/[0.02] sm:px-5">
-                                  <div className="flex min-w-0 items-center gap-2.5">
+                                <div key={t.id} className="flex min-w-0 items-center justify-between gap-2.5 px-4 py-2.5 text-sm text-[var(--text)] transition-colors hover:bg-slate-50/70 dark:hover:bg-white/[0.02] sm:px-5">
+                                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
                                     {scheduledToday || completedToday ? (
                                       todayCompletionButton(t.id, t.name, completedToday)
                                     ) : (
                                       <span aria-hidden="true" className="h-6 w-6 shrink-0" />
                                     )}
-                                    <div className="min-w-0">
-                                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                        <span className={`break-words font-medium ${completedToday ? 'text-[var(--text-soft)] line-through' : ''}`}>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                                        <span className={`min-w-0 max-w-full break-words [overflow-wrap:anywhere] font-medium ${completedToday ? 'text-[var(--text-soft)] line-through' : ''}`}>
                                           {t.name}
                                         </span>
                                         {t.time && <span className="text-xs font-semibold tabular-nums text-[#4F46E5] dark:text-[#818CF8]">{t.time}</span>}

@@ -21,6 +21,7 @@ import { formatMinutesUntil, type TodayControlBlock } from '../lib/todayControlC
 import type { TodayExtra } from '../types';
 import { fmtDate, todayISO } from '../lib/storage';
 import { CompletionCheck } from './ui/CompletionCheck';
+import { PrivateFinancialText } from './PrivacyAmount';
 import { focusTargetElement } from '../lib/navigationFocus';
 import { ListDivider, SectionHeader, SurfaceCard } from './ui/SurfacePrimitives';
 
@@ -209,13 +210,13 @@ const AgendaBlockRow: React.FC<{
         className={`min-w-0 text-left cursor-pointer ${mutedMetaClass}`}
       >
         <span
-          className={`block text-[14px] leading-snug break-words ${
+          className={`block text-[14px] leading-snug break-words [overflow-wrap:anywhere] ${
             isMuted
               ? 'font-normal text-slate-500 line-through decoration-slate-400/70 dark:text-slate-400 dark:decoration-slate-500/80'
               : 'font-semibold text-slate-900 dark:text-slate-100'
           }`}
         >
-          {entry.label}
+          <PrivateFinancialText>{entry.label}</PrivateFinancialText>
         </span>
 
         {hasSubRow && (
@@ -749,21 +750,23 @@ export const TodayAgendaSection: React.FC<TodayAgendaSectionProps> = ({
               )}
             </div>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 min-w-0">
               {resolvedHabits.map((habit) => (
                 <button
                   key={habit.key}
                   type="button"
                   onClick={() => onToggle(habit)}
                   aria-pressed={habit.done}
-                  className={`group inline-flex min-h-9 items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition active:scale-[0.97] cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
+                  className={`group inline-flex min-h-9 max-w-full min-w-0 items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-medium transition active:scale-[0.97] cursor-pointer outline-none focus:outline-none focus:ring-0 focus-visible:ring-2 focus-visible:ring-indigo-400/70 ${
                     habit.done
                       ? 'border-[#4F46E5]/20 bg-[#4F46E5]/[0.05] text-slate-500 dark:border-[#818CF8]/20 dark:bg-indigo-500/[0.08] dark:text-slate-400'
                       : 'border-slate-200/90 bg-white text-slate-800 hover:border-[#4F46E5]/45 hover:text-[#4F46E5] dark:border-white/[0.09] dark:bg-white/[0.02] dark:text-slate-200 dark:hover:border-[#818CF8]/45 dark:hover:text-[#818CF8]'
                   }`}
                 >
                   <CompletionCheck checked={habit.done} size="sm" />
-                  <span className={habit.done ? 'line-through' : ''}>{habit.label}</span>
+                  <span className={`min-w-0 truncate ${habit.done ? 'line-through' : ''}`}>
+                    <PrivateFinancialText>{habit.label}</PrivateFinancialText>
+                  </span>
                 </button>
               ))}
             </div>

@@ -365,7 +365,7 @@ export function extractRelativeDate(
   const inNDaysMatch = cleaned.match(/\b(?:dentro\s+de|en)\s+(\d+)\s+d[ií]as?\b/i);
   if (inNDaysMatch) {
     const daysOffset = parseInt(inNDaysMatch[1], 10);
-    if (!isNaN(daysOffset)) {
+    if (!isNaN(daysOffset) && daysOffset >= 0 && daysOffset <= 3650) {
       resolvedDate = computeRelativeDate(today, daysOffset);
       resolvedLabel = `En ${daysOffset} días · ${fmtDate(resolvedDate)}`;
       cleaned = cleaned.replace(inNDaysMatch[0], ' ');

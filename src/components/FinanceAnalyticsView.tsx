@@ -60,8 +60,10 @@ function shiftMonth(monthIso: string, delta: number): string {
 }
 
 function formatMonthTitle(monthIso: string): string {
-  const [y, m] = monthIso.split('-').map((v) => parseInt(v, 10));
+  const [y, m] = (monthIso || '').split('-').map((v) => parseInt(v, 10));
+  if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return monthIso || '';
   const d = new Date(Date.UTC(y, m - 1, 15));
+  if (Number.isNaN(d.getTime())) return monthIso || '';
   const raw = d.toLocaleDateString('es-UY', { month: 'long', year: 'numeric', timeZone: 'UTC' });
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
